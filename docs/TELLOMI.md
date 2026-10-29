@@ -19,7 +19,8 @@ python3 Tellomi/check_server_config.py
 
 | Field | Default | Why |
 | --- | --- | --- |
-| `seeds.production` / `seeds.testing` | datacenter `1` → `127.0.0.1` | Teamgram docker publishes one datacenter. The iOS Simulator shares the Mac's network, so `127.0.0.1` is the host. A phone needs that machine's LAN address. |
+| `seeds.production` / `seeds.testing` | datacenter `1` → `8.137.39.82` | The Tellomi dev Teamgram server. TCP port stays `10443`. Dev login SMS code is `12345`. |
+| `local_docker_seed` | `127.0.0.1` | Not dialed. For Teamgram docker on the same machine, put this host in `seeds` instead and regenerate the header. The iOS Simulator reaches the host at `127.0.0.1`. |
 | `seed_port` | `10443` | gnetway's published TCP port (`docker-compose.yaml` maps `10443:10443`). Not 443. |
 | `default_datacenter_id` | `1` | The first connection, including release builds. Upstream opened datacenter 2 in release; Teamgram does not have that datacenter. |
 | `public_keys` | one PKCS#1 PEM, production and testing | The public half of the development key Teamgram ships as `teamgramd/bin/server_pkcs1.key`. |

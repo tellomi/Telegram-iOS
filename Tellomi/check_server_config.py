@@ -159,8 +159,12 @@ def check_keys(config: dict) -> None:
         fail("Telegram backup discovery must stay disabled for the Teamgram default")
     for environment in ("production", "testing"):
         hosts = config["seeds"][environment]["1"]
-        if hosts != ["127.0.0.1"]:
-            fail(f"{environment} seeds are not the local docker default")
+        if hosts != ["8.137.39.82"]:
+            fail(f"{environment} seeds are not the Tellomi dev server")
+    if config.get("local_docker_seed") != "127.0.0.1":
+        fail("local docker seed option is not 127.0.0.1")
+    if "127.0.0.1" in json.dumps(config["seeds"]):
+        fail("127.0.0.1 is documented only and must not be an active seed")
         pems = config["public_keys"][environment]
         if len(pems) != 1:
             fail(f"{environment} must ship one public key")

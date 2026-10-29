@@ -1,19 +1,20 @@
 {
-  "_comment": "The only place that decides which MTProto server this client talks to. Edit this file, then run: python3 Tellomi/generate_server_config.py. See docs/TELLOMI.md. Defaults match a local Teamgram docker deployment: gnetway TCP published on port 10443, datacenter id 1, and the development RSA key that teamgram-server ships (teamgramd/bin/server_pkcs1.key, gnetway.yaml KeyFingerprint 12240908862933197005). 127.0.0.1 reaches that port from the iOS Simulator, which shares the Mac's network. A physical device needs the host's LAN address instead. Do not commit a private key.",
+  "_comment": "The only place that decides which MTProto server this client talks to. Edit this file, then run: python3 Tellomi/generate_server_config.py. See docs/TELLOMI.md. The active seeds are the Tellomi dev Teamgram server at 8.137.39.82, TCP port 10443, datacenter 1, with Teamgram's development RSA key (gnetway.yaml KeyFingerprint 12240908862933197005). Dev login SMS code on that server is 12345. local_docker_seed is not dialed. To use Teamgram docker on the same machine, put 127.0.0.1 in seeds instead (the iOS Simulator reaches the host there) and regenerate the header. Do not commit a private key.",
   "default_datacenter_id": 1,
   "seed_port": 10443,
+  "local_docker_seed": "127.0.0.1",
   "disable_telegram_backup_discovery": true,
   "rsa_fingerprint_sha1_tail_big_endian": "14798846482072068265",
   "rsa_fingerprint_sha1_tail_little_endian": "12240908862933197005",
   "seeds": {
     "production": {
       "1": [
-        "127.0.0.1"
+        "8.137.39.82"
       ]
     },
     "testing": {
       "1": [
-        "127.0.0.1"
+        "8.137.39.82"
       ]
     }
   },
