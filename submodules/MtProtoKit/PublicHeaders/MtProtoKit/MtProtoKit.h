@@ -62,4 +62,5 @@
 #import <MtProtoKit/MTBindKeyMessageService.h>
 #import <MtProtoKit/MTQuickAck.h>
 #import <MtProtoKit/MTFileBasedKeychain.h>
+#import <MtProtoKit/TellomiServerConfig.h>
 

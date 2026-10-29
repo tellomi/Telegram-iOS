@@ -27,6 +27,8 @@
 #import "MTServerDhParamsMessage.h"
 #import "MTSetClientDhParamsResponseMessage.h"
 
+#import <MtProtoKit/TellomiServerConfig.h>
+
 @interface MTDatacenterAuthPublicKey : NSObject
 
 @property (nonatomic, strong, readonly) NSString *publicKey;
@@ -50,37 +52,25 @@
 @end
 
 static NSArray<MTDatacenterAuthPublicKey *> *defaultPublicKeys(bool isProduction) {
-    static NSArray<MTDatacenterAuthPublicKey *> *testingPublicKeys = nil;
-    static NSArray<MTDatacenterAuthPublicKey *> *productionPublicKeys = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        testingPublicKeys = @[
-            [[MTDatacenterAuthPublicKey alloc] initWithPublicKey:@"-----BEGIN RSA PUBLIC KEY-----\n"
-             "MIIBCgKCAQEAyMEdY1aR+sCR3ZSJrtztKTKqigvO/vBfqACJLZtS7QMgCGXJ6XIR\n"
-             "yy7mx66W0/sOFa7/1mAZtEoIokDP3ShoqF4fVNb6XeqgQfaUHd8wJpDWHcR2OFwv\n"
-             "plUUI1PLTktZ9uW2WE23b+ixNwJjJGwBDJPQEQFBE+vfmH0JP503wr5INS1poWg/\n"
-             "j25sIWeYPHYeOrFp/eXaqhISP6G+q2IeTaWTXpwZj4LzXq5YOpk4bYEQ6mvRq7D1\n"
-             "aHWfYmlEGepfaYR8Q0YqvvhYtMte3ITnuSJs171+GDqpdKcSwHnd6FudwGO4pcCO\n"
-             "j4WcDuXc2CTHgH8gFTNhp/Y8/SpDOhvn9QIDAQAB\n"
-             "-----END RSA PUBLIC KEY-----"]
-        ];
-
-        productionPublicKeys = @[
-            [[MTDatacenterAuthPublicKey alloc] initWithPublicKey:@"-----BEGIN RSA PUBLIC KEY-----\n"
-             "MIIBCgKCAQEA6LszBcC1LGzyr992NzE0ieY+BSaOW622Aa9Bd4ZHLl+TuFQ4lo4g\n"
-             "5nKaMBwK/BIb9xUfg0Q29/2mgIR6Zr9krM7HjuIcCzFvDtr+L0GQjae9H0pRB2OO\n"
-             "62cECs5HKhT5DZ98K33vmWiLowc621dQuwKWSQKjWf50XYFw42h21P2KXUGyp2y/\n"
-             "+aEyZ+uVgLLQbRA1dEjSDZ2iGRy12Mk5gpYc397aYp438fsJoHIgJ2lgMv5h7WY9\n"
-             "t6N/byY9Nw9p21Og3AoXSL2q/2IJ1WRUhebgAdGVMlV1fkuOQoEzR7EdpqtQD9Cs\n"
-             "5+bfo3Nhmcyvk5ftB0WkJ9z6bNZ7yxrP8wIDAQAB\n"
-             "-----END RSA PUBLIC KEY-----"]
-        ];
-    });
-    if (isProduction) {
-        return productionPublicKeys;
-    } else {
-        return testingPublicKeys;
+    NSMutableArray<MTDatacenterAuthPublicKey *> *keys = [[NSMutableArray alloc] init];
+    for (NSString *pem in TellomiServerPublicKeys(isProduction)) {
+        [keys addObject:[[MTDatacenterAuthPublicKey alloc] initWithPublicKey:pem]];
     }
+    return keys;
+}
+
+/// Teamgram's gnetway does not compute this fingerprint. It sends the decimal
+/// from gnetway.yaml, which is SHA1[12:20] read little-endian. `MTRsaFingerprint`
+/// reads those same eight bytes big-endian. Either value selects the same key.
+static uint64_t MTDatacenterAuthFingerprintByteSwap(uint64_t fingerprint) {
+    return ((fingerprint & 0x00000000000000ffULL) << 56) |
+        ((fingerprint & 0x000000000000ff00ULL) << 40) |
+        ((fingerprint & 0x0000000000ff0000ULL) << 24) |
+        ((fingerprint & 0x00000000ff000000ULL) << 8) |
+        ((fingerprint & 0x000000ff00000000ULL) >> 8) |
+        ((fingerprint & 0x0000ff0000000000ULL) >> 24) |
+        ((fingerprint & 0x00ff000000000000ULL) >> 40) |
+        ((fingerprint & 0xff00000000000000ULL) >> 56);
 }
 
 NSArray<NSString *> *MTDatacenterAuthDefaultPublicKeys(bool isProduction) {
@@ -91,16 +81,29 @@ NSArray<NSString *> *MTDatacenterAuthDefaultPublicKeys(bool isProduction) {
     return result;
 }
 
-static MTDatacenterAuthPublicKey *selectPublicKey(id<EncryptionProvider> encryptionProvider, NSArray<NSNumber *> *fingerprints, NSArray<MTDatacenterAuthPublicKey *> *publicKeys) {
+static MTDatacenterAuthPublicKey *selectPublicKey(id<EncryptionProvider> encryptionProvider, NSArray<NSNumber *> *fingerprints, NSArray<MTDatacenterAuthPublicKey *> *publicKeys, uint64_t *announcedFingerprint) {
     NSMutableArray<NSNumber *> *keyFingerprints = [[NSMutableArray alloc] init];
     for (MTDatacenterAuthPublicKey *key in publicKeys) {
         [keyFingerprints addObject:@([key fingerprintWithEncryptionProvider:encryptionProvider])];
     }
-    
-    for (NSNumber *nFingerprint in fingerprints) {
-        for (NSUInteger i = 0; i < publicKeys.count; i++) {
-            if ([nFingerprint unsignedLongLongValue] == [keyFingerprints[i] unsignedLongLongValue]) {
-                return publicKeys[i];
+
+    // Exact match first, so a Telegram fingerprint (big-endian) still wins
+    // over a coincidental byte-swap of a different key.
+    for (int pass = 0; pass < 2; pass++) {
+        for (NSNumber *nFingerprint in fingerprints) {
+            uint64_t remote = [nFingerprint unsignedLongLongValue];
+            for (NSUInteger i = 0; i < publicKeys.count; i++) {
+                uint64_t local = [keyFingerprints[i] unsignedLongLongValue];
+                bool matches = pass == 0 ? remote == local : remote == MTDatacenterAuthFingerprintByteSwap(local);
+                if (matches) {
+                    if (announcedFingerprint != NULL) {
+                        // Echo the value the server announced. Teamgram looks the
+                        // key up by the decimal in gnetway.yaml, not by the
+                        // big-endian fingerprint this client computes.
+                        *announcedFingerprint = remote;
+                    }
+                    return publicKeys[i];
+                }
             }
         }
     }
@@ -547,7 +550,8 @@ static NSData *encryptRSAModernPadding(id<EncryptionProvider> encryptionProvider
         
         if ([_nonce isEqualToData:resPqMessage.nonce])
         {
-            MTDatacenterAuthPublicKey *publicKey = selectPublicKey(_encryptionProvider, resPqMessage.serverPublicKeyFingerprints, _publicKeys);
+            uint64_t announcedFingerprint = 0;
+            MTDatacenterAuthPublicKey *publicKey = selectPublicKey(_encryptionProvider, resPqMessage.serverPublicKeyFingerprints, _publicKeys, &announcedFingerprint);
             
             if (publicKey == nil && mtProto.cdn && !_cdnPublicKeysRefetched)
             {
@@ -568,6 +572,7 @@ static NSData *encryptRSAModernPadding(id<EncryptionProvider> encryptionProvider
                     MTLog(@"[MTDatacenterAuthMessageService#%p no CDN key matches the server after a refetch, using the only CDN key the main datacenter gave]", self);
                 }
                 publicKey = _publicKeys[0];
+                announcedFingerprint = [resPqMessage.serverPublicKeyFingerprints[0] unsignedLongLongValue];
             }
             
             if (publicKey == nil)
@@ -626,7 +631,11 @@ static NSData *encryptRSAModernPadding(id<EncryptionProvider> encryptionProvider
                 } while (q > 0);
                 _dhQ = qBytes;
                 
-                _dhPublicKeyFingerprint = [publicKey fingerprintWithEncryptionProvider:_encryptionProvider];
+                if (announcedFingerprint != 0) {
+                    _dhPublicKeyFingerprint = (int64_t)announcedFingerprint;
+                } else {
+                    _dhPublicKeyFingerprint = [publicKey fingerprintWithEncryptionProvider:_encryptionProvider];
+                }
                 
                 uint8_t nonceBytes[32];
                 if (SecRandomCopyBytes(kSecRandomDefault, 32, nonceBytes) != errSecSuccess) {

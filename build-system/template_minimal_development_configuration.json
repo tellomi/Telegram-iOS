@@ -1,14 +1,15 @@
 {
-	"bundle_id": "org.{! a random string !}.Telegram",
-	"api_id": "{! get one at https://my.telegram.org/apps !}",
-	"api_hash": "{! get one at https://my.telegram.org/apps !}",
-	"team_id": "{! check README.md !}",
-	"app_center_id": "0",
+	"bundle_id": "com.tellomi.app",
+	"app_name": "Tellomi",
+	"api_id": "100001",
+	"api_hash": "74656c6c6f6d69000000000000000000",
+	"team_id": "TELL0MIDEV",
+	"app_center_id": "",
 	"is_internal_build": "true",
 	"is_appstore_build": "false",
 	"appstore_id": "0",
-	"app_specific_url_scheme": "tg",
-	"premium_iap_product_id": "",
+	"app_specific_url_scheme": "tellomi",
+	"premium_iap_product_id": "com.tellomi.app.premium.monthly",
 	"enable_siri": false,
 	"enable_icloud": false
 }

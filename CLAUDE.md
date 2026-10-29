@@ -2,6 +2,8 @@
 
 This file provides guidance to AI assistants when working with code in this repository.
 
+This checkout is the Tellomi fork. The app name, bundle id (`com.tellomi.app`), API credentials and MTProto server are described in [`docs/TELLOMI.md`](docs/TELLOMI.md). Simulator recipes below that mention `ph.telegra.Telegraph` are the upstream bundle id; a Tellomi build uses `com.tellomi.app`.
+
 ## Build
 
 The app is built using Bazel via the `Make.py` wrapper. There is no selective per-module build — the only supported invocation builds the full `Telegram/Telegram` target.

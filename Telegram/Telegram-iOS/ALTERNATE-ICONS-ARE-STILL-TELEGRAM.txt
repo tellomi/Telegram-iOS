@@ -1,0 +1,6 @@
+PLACEHOLDER NOTE
+
+The PNG sets in AppIcons.xcassets, DefaultAppIcon.xcassets and the *.alticon
+folders are still Telegram's icons. The home-screen icon is
+TellomiPlaceholder.icon instead. Replace these files before a public release.
+See docs/TELLOMI.md.

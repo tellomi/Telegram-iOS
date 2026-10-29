@@ -392,11 +392,9 @@ public func accountWithId(accountManager: AccountManager<TelegramAccountManagerT
                             }
                         }
                         
-                        #if DEBUG
-                        let initialDatacenterId: Int = 1
-                        #else
-                        let initialDatacenterId: Int = 2
-                        #endif
+                        // Release used to open datacenter 2. Tellomi's server has the
+                        // id in Tellomi/tellomi-server.json (1 for a stock Teamgram docker).
+                        let initialDatacenterId = Int(TellomiDefaultDatacenterId())
                         
                         return initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: initialDatacenterId, keychain: keychain, basePath: path, testingEnvironment: beginWithTestingEnvironment, languageCode: localizationSettings?.primaryComponent.languageCode, proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
                         |> map { network -> AccountResult in
