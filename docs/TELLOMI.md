@@ -15,11 +15,12 @@ python3 Tellomi/check_server_config.py
 
 `submodules/MtProtoKit/Sources/TellomiServerConfigJSON.h` is generated. Do not edit it. MtProtoKit has no app bundle to read the JSON from at runtime, so the generator turns the file into one Objective-C string.
 
-### Defaults (local Teamgram docker)
+### Defaults (Tellomi dev server)
 
 | Field | Default | Why |
 | --- | --- | --- |
-| `seeds.production` / `seeds.testing` | datacenter `1` → `8.137.39.82` | The Tellomi dev Teamgram server. TCP port stays `10443`. Dev login SMS code is `12345`. |
+| `seeds.production` / `seeds.testing` | datacenter `1` → `api.tellomi.cn` | DNS-only name for the Tellomi dev Teamgram server. TCP port stays `10443`. Dev login SMS code is `12345`. The direct seed dial passes this string to `GCDAsyncSocket` `connectToHost:`, which resolves it with `getaddrinfo`. |
+| `seed_address_a_record` | `8.137.39.82` | Not dialed. The address `api.tellomi.cn` currently resolves to. A SOCKS proxy encodes the destination with `inet_aton` (`MTTcpConnection` `requestSocksConnection`) and needs this literal instead of the hostname. |
 | `local_docker_seed` | `127.0.0.1` | Not dialed. For Teamgram docker on the same machine, put this host in `seeds` instead and regenerate the header. The iOS Simulator reaches the host at `127.0.0.1`. |
 | `seed_port` | `10443` | gnetway's published TCP port (`docker-compose.yaml` maps `10443:10443`). Not 443. |
 | `default_datacenter_id` | `1` | The first connection, including release builds. Upstream opened datacenter 2 in release; Teamgram does not have that datacenter. |
