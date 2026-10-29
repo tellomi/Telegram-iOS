@@ -13,6 +13,7 @@ Nothing from those three variables is written to stdout or stderr.
 
 import argparse
 import base64
+import http.client
 import json
 import os
 import pathlib
@@ -27,6 +28,8 @@ import urllib.parse
 import urllib.request
 
 API = "https://api.appstoreconnect.apple.com"
+API_ATTEMPTS = 5
+API_TIMEOUT_SECONDS = 120
 APP_GROUP = "group.{bundle_id}"
 
 
@@ -124,30 +127,61 @@ def make_jwt(key_id, issuer_id, p8_path):
     return "{}.{}".format(signing_input.decode(), b64url(der_ecdsa_to_raw(signature)))
 
 
+def _pause(seconds):
+    time.sleep(seconds)
+
+
+def _retryable_transport(error):
+    return isinstance(error, (TimeoutError, urllib.error.URLError, ConnectionError, http.client.HTTPException))
+
+
 class Client:
     def __init__(self, token):
         self.token = token
 
     def request(self, method, path, body=None):
         data = None if body is None else json.dumps(body).encode()
-        request = urllib.request.Request(
-            API + path,
-            data=data,
-            method=method,
-            headers={
-                "Authorization": "Bearer " + self.token,
-                "Content-Type": "application/json",
-            },
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                raw = response.read()
-                if not raw:
-                    return {}
-                return json.loads(raw)
-        except urllib.error.HTTPError as error:
-            payload = error.read().decode("utf-8", errors="replace")
-            raise ApiError(error.code, payload)
+        for attempt in range(1, API_ATTEMPTS + 1):
+            request = urllib.request.Request(
+                API + path,
+                data=data,
+                method=method,
+                headers={
+                    "Authorization": "Bearer " + self.token,
+                    "Content-Type": "application/json",
+                },
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=API_TIMEOUT_SECONDS) as response:
+                    raw = response.read()
+                    if not raw:
+                        return {}
+                    return json.loads(raw)
+            except urllib.error.HTTPError as error:
+                payload = error.read().decode("utf-8", errors="replace")
+                if error.code in (429, 500, 502, 503, 504) and attempt < API_ATTEMPTS:
+                    self._retry_wait(attempt, "HTTP {}".format(error.code), path)
+                    continue
+                raise ApiError(error.code, payload)
+            except urllib.error.URLError as error:
+                # HTTPError is a URLError. It is handled above so a 4xx is not retried.
+                if attempt < API_ATTEMPTS and _retryable_transport(error):
+                    self._retry_wait(attempt, type(error).__name__, path)
+                    continue
+                raise
+            except (TimeoutError, ConnectionError, http.client.HTTPException) as error:
+                if attempt < API_ATTEMPTS:
+                    self._retry_wait(attempt, type(error).__name__, path)
+                    continue
+                raise
+        raise RuntimeError("App Store Connect request was not sent")
+
+    def _retry_wait(self, attempt, reason, path):
+        delay = 2 ** attempt
+        print("App Store Connect {} failed ({}), retrying in {}s ({}/{})".format(
+            path.split("?", 1)[0], reason, delay, attempt + 1, API_ATTEMPTS,
+        ))
+        _pause(delay)
 
 
 def require_env(name):
@@ -179,26 +213,21 @@ def _bundle_id_pages(client, query):
 
 
 def find_bundle_id(client, identifier):
-    # filter[identifier] with limit=1 has missed an App ID that already exists,
-    # and the following create then fails with 409 "is not available".
-    filtered = urllib.parse.urlencode({
+    # filter[identifier] is prefix-ish: app.tellomi.chat also returns
+    # app.tellomi.chat.Share. Only an exact attribute match counts.
+    query = urllib.parse.urlencode({
         "filter[identifier]": identifier,
         "limit": 200,
     })
-    for item in _bundle_id_pages(client, filtered):
-        if (item.get("attributes") or {}).get("identifier") == identifier:
-            return item["id"]
-    scanned = []
-    for item in _bundle_id_pages(client, urllib.parse.urlencode({"limit": 200})):
+    for item in _bundle_id_pages(client, query):
         found = (item.get("attributes") or {}).get("identifier") or ""
-        scanned.append(found)
         if found == identifier:
             return item["id"]
-    close = [item for item in scanned if "tellomi" in item]
-    print("bundle id {} is not among the {} App IDs this key can list".format(identifier, len(scanned)))
-    if close:
-        print("visible tellomi App IDs: {}".format(", ".join(close)))
     return None
+
+
+def _not_available(error):
+    return error.status == 409 and "not available" in str(error).lower()
 
 
 def ensure_bundle_id(client, identifier, name):
@@ -221,10 +250,18 @@ def ensure_bundle_id(client, identifier, name):
     except ApiError as error:
         if error.status != 409:
             raise
-        existing = find_bundle_id(client, identifier)
-        if existing:
-            print("bundle id exists: {}".format(identifier))
-            return existing
+        # 409 "is not available" means this identifier is already registered.
+        if _not_available(error):
+            print("bundle id {} already registered".format(identifier))
+        else:
+            print("bundle id create conflict for {}".format(identifier))
+        for attempt in range(1, API_ATTEMPTS + 1):
+            existing = find_bundle_id(client, identifier)
+            if existing:
+                print("bundle id exists: {}".format(identifier))
+                return existing
+            if attempt < API_ATTEMPTS:
+                _pause(2 ** attempt)
         raise
     return payload["data"]["id"]
 
@@ -564,6 +601,65 @@ def self_test():
         siri = [item for item in signing_targets() if item[0] == ".SiriIntents"]
         if len(siri) != 1 or "SIRIKIT" not in siri[0][3]:
             raise SystemExit("SiriIntents must enable SiriKit")
+        if API_TIMEOUT_SECONDS != 120 or API_ATTEMPTS != 5:
+            raise SystemExit("App Store Connect retry policy changed")
+
+        class PrefixList:
+            def request(self, method, path, body=None):
+                return {
+                    "data": [
+                        {"id": "share", "attributes": {"identifier": "app.tellomi.chat.Share"}},
+                        {"id": "main", "attributes": {"identifier": "app.tellomi.chat"}},
+                    ],
+                    "links": {},
+                }
+
+        if find_bundle_id(PrefixList(), "app.tellomi.chat") != "main":
+            raise SystemExit("exact bundle id match failed")
+        if find_bundle_id(PrefixList(), "missing.bundle") is not None:
+            raise SystemExit("missing bundle id matched a prefix")
+
+        class Flaky:
+            def __init__(self):
+                self.calls = 0
+
+            def __call__(self, request, timeout=None):
+                if timeout != API_TIMEOUT_SECONDS:
+                    raise SystemExit("read timeout is {}".format(timeout))
+                self.calls += 1
+                if self.calls < 3:
+                    raise TimeoutError("timed out")
+
+                class Response:
+                    def read(self):
+                        return b'{"ok": true}'
+
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *args):
+                        return False
+
+                return Response()
+
+        flaky = Flaky()
+        original_open = urllib.request.urlopen
+        original_pause = globals()["_pause"]
+        slept = []
+
+        def record(seconds):
+            slept.append(seconds)
+
+        urllib.request.urlopen = flaky
+        globals()["_pause"] = record
+        try:
+            payload = Client("token").request("GET", "/v1/bundleIds?filter[identifier]=app.tellomi.chat")
+        finally:
+            urllib.request.urlopen = original_open
+            globals()["_pause"] = original_pause
+        if payload != {"ok": True} or flaky.calls != 3 or slept != [2, 4]:
+            raise SystemExit("retry backoff failed: calls={} slept={}".format(flaky.calls, slept))
+        print("retry self-test passed")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
