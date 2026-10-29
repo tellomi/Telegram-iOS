@@ -352,12 +352,25 @@ def check_wiring() -> None:
         fail("placeholder icon is not marked")
 
 
+def check_marketing_version() -> None:
+    version = (ROOT / "Tellomi" / "version").read_text(encoding="utf-8").strip()
+    versions = json.loads((ROOT / "versions.json").read_text(encoding="utf-8"))
+    if version != versions.get("app"):
+        fail(f"Tellomi/version {version} does not match versions.json app {versions.get('app')}")
+    if version == "13.1.1":
+        fail("marketing version is still Telegram 13.1.1")
+    build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
+    if "Tellomi/version" not in build:
+        fail("VersionInfoPlist does not read Tellomi/version")
+
+
 def main() -> None:
     config = check_json_and_header()
     check_keys(config)
     check_build_configuration()
     check_public_links()
     check_wiring()
+    check_marketing_version()
     print("Tellomi server config checks passed")
 
 

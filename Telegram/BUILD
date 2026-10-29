@@ -623,10 +623,10 @@ plist_fragment(
 
 genrule(
     name = "VersionInfoPlist",
-    srcs = ["//:versions.json"],
+    srcs = ["//:Tellomi/version"],
     outs = ["VersionInfoPlist.plist"],
     cmd = """
-        version=$$(python3 -c "import json; print(json.load(open('$(location //:versions.json)'))['app'])")
+        version=$$(tr -d '[:space:]' < $(location //:Tellomi/version))
         cat > $@ <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

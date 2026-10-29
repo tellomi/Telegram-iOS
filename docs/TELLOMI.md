@@ -127,6 +127,8 @@ The main app's associated-domains entitlement is `applinks:tell.cc` and `webcred
 
 `.github/workflows/testflight.yml` runs on the `xcode-27` GitHub-hosted image (Xcode 27.1, the version in `versions.json`). It runs when a `v*` tag is pushed, when a GitHub Release is published, and on manual dispatch. It does not run on every pull request.
 
+`CFBundleShortVersionString` for the app and every extension is `Tellomi/version` (also `versions.json` key `app`). A tag `v0.1.0-tf9` is marketing version `0.1.0`; the workflow refuses to build when that does not match `Tellomi/version`. `CFBundleVersion` stays the auto-incremented build number.
+
 The workflow calls `Tellomi/prepare_appstore_signing.py`, which uses the App Store Connect API key to register the bundle ids below, turn on the capabilities the signed entitlements require, and download App Store profiles. The distribution certificate is the PKCS#12 in `APPLE_DIST_CERT_P12_BASE64` (password `APPLE_DIST_CERT_P12_PASSWORD`). Each profile must include that certificate's serial. How ops creates the certificate is [`Tellomi/README.md`](../Tellomi/README.md). Certificates and profiles are not committed. `Make.py` then does a Bazel `release_arm64` build. `xcrun altool` uploads `bazel-bin/Telegram/Telegram.ipa`. The build number is one higher than the highest build already on TestFlight for this app, and at least `github.run_number`.
 
 Enabling a capability sends an empty `settings` list. `APP_GROUPS` in particular must not name the group in that request; the API rejects it. The script still checks that each downloaded profile contains `group.app.tellomi.chat`. SiriIntents is registered with SiriKit enabled. The signed binary does not include `com.apple.developer.siri`, because `enable_siri` is false.

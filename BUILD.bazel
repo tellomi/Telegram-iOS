@@ -1,1 +1,4 @@
-exports_files(["versions.json"])
+exports_files([
+    "versions.json",
+    "Tellomi/version",
+])

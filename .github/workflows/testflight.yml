@@ -64,6 +64,9 @@ jobs:
       - name: Checkout submodules
         run: bash .github/checkout-submodules.sh
 
+      - name: Check marketing version
+        run: python3 Tellomi/check_marketing_version.py
+
       - name: Select Xcode from versions.json
         run: |
           set -euo pipefail
