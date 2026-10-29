@@ -5,7 +5,7 @@ import Display
 import TelegramPresentationData
 import TextFormat
 
-/// Tellomi: the sign-up screen's "我已阅读并同意《用户协议》和《隐私政策》" checkbox.
+/// Tellomi: the sign-up screen's "我已阅读并同意《用户服务协议》和《隐私政策》" checkbox.
 /// Continue stays disabled until it is checked. There is no in-app terms popup.
 /// It takes over the stock terms label on the sign-up screen; see Tellomi/UPSTREAM_PATCHES.md.
 final class TellomiSignUpAgreement {
@@ -53,7 +53,7 @@ final class TellomiSignUpAgreement {
         }
         toggle(self.agreed ? "☑ " : "☐ ", color: self.agreed ? accent : body)
         toggle("我已阅读并同意", color: body)
-        link("《用户协议》", TellomiSignUpAgreement.termsURL)
+        link("《用户服务协议》", TellomiSignUpAgreement.termsURL)
         toggle("和", color: body)
         link("《隐私政策》", TellomiSignUpAgreement.privacyURL)
         let paragraph = NSMutableParagraphStyle()
