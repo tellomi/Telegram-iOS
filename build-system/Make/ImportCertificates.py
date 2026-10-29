@@ -44,7 +44,26 @@ def import_certificates(certificatesPath):
 
     for file_name in os.listdir(certificatesPath):
         file_path = certificatesPath + '/' + file_name
-        if file_path.endswith('.p12') or file_path.endswith('.cer'):
+        if file_path.endswith('.p12'):
+            # A failed import used to be ignored, and set-key-partition-list then
+            # failed with "The specified item could not be found in the keychain"
+            # because the private key was never stored.
+            run_executable_with_output('security', arguments=[
+                'import',
+                file_path,
+                '-k',
+                keychain_name,
+                '-P',
+                '',
+                '-f',
+                'pkcs12',
+                '-A',
+                '-T',
+                '/usr/bin/codesign',
+                '-T',
+                '/usr/bin/security'
+            ], check_result=True)
+        elif file_path.endswith('.cer'):
             run_executable_with_output('security', arguments=[
                 'import',
                 file_path,

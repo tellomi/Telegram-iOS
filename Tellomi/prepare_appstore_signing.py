@@ -317,21 +317,57 @@ def certificate_serial(cert_path):
 
 
 def write_p12(key_path, cert_path, p12_path):
-    # ImportCertificates.py imports with an empty password. -legacy is what
-    # the macOS security tool in this repo's profile generator can read.
-    command = [
+    # ImportCertificates.py imports with an empty password. The Xcode 27
+    # `security` tool rejects OpenSSL's -legacy (RC2) archive, so the private
+    # key never lands in the keychain.
+    subprocess.check_call([
         "openssl", "pkcs12", "-export",
         "-inkey", str(key_path),
         "-in", str(cert_path),
         "-out", str(p12_path),
         "-passout", "pass:",
-        "-legacy",
-    ]
+        "-keypbe", "AES-256-CBC",
+        "-certpbe", "AES-256-CBC",
+        "-macalg", "SHA256",
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def normalize_p12(p12_path):
+    """Rewrite an existing PKCS#12 into the form macOS security import accepts.
+
+    The first distribution certificate was exported with OpenSSL -legacy and
+    cached. Reading it needs -legacy; writing it back must not use -legacy.
+    """
+    work = pathlib.Path(tempfile.mkdtemp(prefix="tellomi-p12-"))
     try:
-        subprocess.check_call(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except subprocess.CalledProcessError:
-        command.remove("-legacy")
-        subprocess.check_call(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        pem = work / "identity.pem"
+        modern = work / "modern.p12"
+        last = None
+        for extra in ([], ["-legacy"]):
+            try:
+                subprocess.check_call(
+                    ["openssl", "pkcs12", "-in", str(p12_path), "-passin", "pass:", "-nodes", "-out", str(pem)] + extra,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                last = None
+                break
+            except subprocess.CalledProcessError as error:
+                last = error
+        if last is not None:
+            raise last
+        subprocess.check_call([
+            "openssl", "pkcs12", "-export",
+            "-in", str(pem),
+            "-out", str(modern),
+            "-passout", "pass:",
+            "-keypbe", "AES-256-CBC",
+            "-certpbe", "AES-256-CBC",
+            "-macalg", "SHA256",
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        shutil.copyfile(modern, p12_path)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def extract_cached_cert(p12_path, cert_path):
@@ -557,8 +593,11 @@ def prepare(args):
         cert_out.mkdir(parents=True, exist_ok=True)
         for filename in ("Distribution.p12", "Distribution.cer"):
             source = pathlib.Path(args.cert_dir) / filename
-            if source.exists():
-                shutil.copyfile(source, cert_out / filename)
+            if not source.exists():
+                continue
+            if filename.endswith(".p12"):
+                normalize_p12(source)
+            shutil.copyfile(source, cert_out / filename)
         main_profile = None
         for identifier, _name, profile_name, _capabilities, group in targets:
             destination = profile_dir / (profile_name + ".mobileprovision")
