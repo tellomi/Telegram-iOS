@@ -40,8 +40,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          # Submodules are fetched by the next step at the recorded commits.
+          # fetch-depth plus submodules: recursive clones each default-branch
+          # tip, which is not the pin, and the tellomi org has no sibling
+          # copies of the relative tgcalls and rlottie URLs.
           fetch-depth: 1
+          submodules: false
+
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
 
       - name: Select Xcode from versions.json
         run: |
