@@ -127,7 +127,7 @@ The main app's associated-domains entitlement is `applinks:tell.cc` and `webcred
 
 `.github/workflows/testflight.yml` runs on the `xcode-27` GitHub-hosted image (Xcode 27.1, the version in `versions.json`). It runs when a `v*` tag is pushed, when a GitHub Release is published, and on manual dispatch. It does not run on every pull request.
 
-The workflow calls `Tellomi/prepare_appstore_signing.py`, which uses the App Store Connect API key to register the bundle ids below, turn on the capabilities the signed entitlements require, create an Apple Distribution certificate, and download App Store profiles. Certificates and profiles are not committed. `Make.py` then does a Bazel `release_arm64` build. `xcrun altool` uploads `bazel-bin/Telegram/Telegram.ipa`. The build number is one higher than the highest build already on TestFlight for this app, and at least `github.run_number`.
+The workflow calls `Tellomi/prepare_appstore_signing.py`, which uses the App Store Connect API key to register the bundle ids below, turn on the capabilities the signed entitlements require, and download App Store profiles. The distribution certificate is the PKCS#12 in `APPLE_DIST_CERT_P12_BASE64` (password `APPLE_DIST_CERT_P12_PASSWORD`). Each profile must include that certificate's serial. How ops creates the certificate is [`Tellomi/README.md`](../Tellomi/README.md). Certificates and profiles are not committed. `Make.py` then does a Bazel `release_arm64` build. `xcrun altool` uploads `bazel-bin/Telegram/Telegram.ipa`. The build number is one higher than the highest build already on TestFlight for this app, and at least `github.run_number`.
 
 Enabling a capability sends an empty `settings` list. `APP_GROUPS` in particular must not name the group in that request; the API rejects it. The script still checks that each downloaded profile contains `group.app.tellomi.chat`. SiriIntents is registered with SiriKit enabled. The signed binary does not include `com.apple.developer.siri`, because `enable_siri` is false.
 
@@ -136,8 +136,10 @@ Repository secrets, none of which are printed:
 - `APP_STORE_CONNECT_KEY_ID`
 - `APP_STORE_CONNECT_ISSUER_ID`
 - `APP_STORE_CONNECT_KEY_P8_BASE64` (base64 of the AuthKey `.p8`)
+- `APPLE_DIST_CERT_P12_BASE64` (base64 of the Apple Distribution `.p12`)
+- `APPLE_DIST_CERT_P12_PASSWORD` (that `.p12`'s export password)
 
-The `.p8` is only an API credential. The distribution certificate's private key stays in the Actions cache (`tellomi-apple-distribution-*`), not in git. The committed `team_id` default is `CB7KP6GBAR`. The workflow writes a temporary configuration whose team id is the one in the downloaded profile.
+The `.p8` is only an API credential. The distribution private key stays in the `.p12` secret, not in git. Minting a certificate and caching it (`TELLOMI_MINT_DISTRIBUTION_CERT=1`, or the workflow_dispatch input `mint_distribution_cert`) is opt-in. A cache saved on one tag is not visible to the next tag. The committed `team_id` default is `CB7KP6GBAR`. The workflow writes a temporary configuration whose team id is the one in the downloaded profile.
 
 The watch app is not in this IPA. Embedding it needs `--embedWatchApp` plus watch API credentials, which this workflow does not have.
 
@@ -209,4 +211,4 @@ These still say Telegram, or still call a Telegram host. They do not choose the 
 - **Watch app** under `Telegram/WatchApp` is a synced snapshot. It was not edited. Its API id is separate from `BuildConfig`.
 - **App Store updates and Premium.** `appstore_id` is `0`, and the Premium product id has no App Store product. `openAppStorePage` would open `itms-apps://…/id0` if something called it.
 - **Push, Stars, Fragment payments, wallet.** The client features are still compiled. They need the Teamgram server (and, for payments, a backend this client does not have) before they do anything.
-- **Signing material in git.** Certificates and profiles are not committed. TestFlight CI creates the distribution certificate and profiles from the API key; see the TestFlight section. The private key is not committed.
+- **Signing material in git.** Certificates and profiles are not committed. TestFlight CI builds profiles from the API key and signs with the distribution PKCS#12 in repository secrets. See [`Tellomi/README.md`](../Tellomi/README.md).

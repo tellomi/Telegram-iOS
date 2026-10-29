@@ -3,12 +3,14 @@
 
 Reads APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID and
 APP_STORE_CONNECT_KEY_P8_BASE64 from the environment. The .p8 is the API
-credential, not a code-signing certificate, so this script generates an
-Apple Distribution certificate (reusing one whose private key is already in
---cert-dir) and App Store profiles for every bundle id the Bazel device
-build signs.
+credential, not a code-signing certificate.
 
-Nothing from those three variables is written to stdout or stderr.
+The distribution certificate is APPLE_DIST_CERT_P12_BASE64, unlocked with
+APPLE_DIST_CERT_P12_PASSWORD. Profiles are created through the API and must
+include that certificate's serial. Minting a certificate and reusing
+--cert-dir is off unless TELLOMI_MINT_DISTRIBUTION_CERT is 1, true, or yes.
+
+Nothing from those secrets is written to stdout or stderr.
 """
 
 import argparse
@@ -308,12 +310,76 @@ def list_distribution_certs(client):
     return payload.get("data") or []
 
 
+def normalize_serial(value):
+    text = (value or "").strip().lower()
+    if text.startswith("serial="):
+        text = text.split("=", 1)[1]
+    text = text.replace(":", "")
+    stripped = text.lstrip("0")
+    return stripped or "0"
+
+
 def certificate_serial(cert_path):
     output = subprocess.check_output(
         ["openssl", "x509", "-in", str(cert_path), "-noout", "-serial"],
         text=True,
     )
-    return output.strip().split("=", 1)[1].lower().lstrip("0")
+    return normalize_serial(output)
+
+
+def _openssl_error(stderr, password):
+    text = stderr.decode("utf-8", errors="replace")
+    if password:
+        text = text.replace(password, "***")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return lines[-1] if lines else "openssl pkcs12 failed"
+
+
+def pkcs12_to_pem(p12_path, pem_path, password):
+    """Read a PKCS#12 that may be a modern or OpenSSL -legacy archive."""
+    env = os.environ.copy()
+    env["TELLOMI_P12_PASSWORD"] = "" if password is None else password
+    last = b""
+    for extra in ([], ["-legacy"]):
+        result = subprocess.run(
+            [
+                "openssl", "pkcs12",
+                "-in", str(p12_path),
+                "-passin", "env:TELLOMI_P12_PASSWORD",
+                "-nodes",
+                "-out", str(pem_path),
+            ] + extra,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode != 0:
+            last = result.stderr
+            continue
+        text = pathlib.Path(pem_path).read_text(encoding="utf-8", errors="replace")
+        if "PRIVATE KEY" not in text:
+            last = b"PKCS#12 did not contain a private key"
+            continue
+        return
+    raise SystemExit(
+        "Could not read the distribution PKCS#12 as a modern or legacy archive ({}). "
+        "Check APPLE_DIST_CERT_P12_PASSWORD.".format(_openssl_error(last, password))
+    )
+
+
+def write_modern_p12_from_pem(pem_path, p12_path):
+    # Empty password: ImportCertificates.py passes -P '' to `security import`.
+    # AES-256 is what the Xcode 27 security tool accepts. -legacy (RC2) is not.
+    subprocess.check_call([
+        "openssl", "pkcs12", "-export",
+        "-in", str(pem_path),
+        "-out", str(p12_path),
+        "-passout", "pass:",
+        "-keypbe", "AES-256-CBC",
+        "-certpbe", "AES-256-CBC",
+        "-macalg", "SHA256",
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    os.chmod(p12_path, 0o600)
 
 
 def write_p12(key_path, cert_path, p12_path):
@@ -332,42 +398,78 @@ def write_p12(key_path, cert_path, p12_path):
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def normalize_p12(p12_path):
-    """Rewrite an existing PKCS#12 into the form macOS security import accepts.
-
-    The first distribution certificate was exported with OpenSSL -legacy and
-    cached. Reading it needs -legacy; writing it back must not use -legacy.
-    """
+def normalize_p12(p12_path, password=""):
+    """Rewrite a PKCS#12 into the empty-password AES-256 archive `security import` accepts."""
     work = pathlib.Path(tempfile.mkdtemp(prefix="tellomi-p12-"))
     try:
         pem = work / "identity.pem"
         modern = work / "modern.p12"
-        last = None
-        for extra in ([], ["-legacy"]):
-            try:
-                subprocess.check_call(
-                    ["openssl", "pkcs12", "-in", str(p12_path), "-passin", "pass:", "-nodes", "-out", str(pem)] + extra,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                last = None
-                break
-            except subprocess.CalledProcessError as error:
-                last = error
-        if last is not None:
-            raise last
-        subprocess.check_call([
-            "openssl", "pkcs12", "-export",
-            "-in", str(pem),
-            "-out", str(modern),
-            "-passout", "pass:",
-            "-keypbe", "AES-256-CBC",
-            "-certpbe", "AES-256-CBC",
-            "-macalg", "SHA256",
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        pkcs12_to_pem(p12_path, pem, password)
+        write_modern_p12_from_pem(pem, modern)
         shutil.copyfile(modern, p12_path)
+        os.chmod(p12_path, 0o600)
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def mint_requested():
+    return os.environ.get("TELLOMI_MINT_DISTRIBUTION_CERT", "").strip().lower() in ("1", "true", "yes")
+
+
+def install_supplied_p12(cert_dir):
+    """Decode APPLE_DIST_CERT_P12_BASE64 into cert_dir. Returns the cert serial.
+
+    Absent secret returns None so the caller can fall through to the opt-in
+    mint path. The password may be empty. The written Distribution.p12 has an
+    empty password regardless of the secret's password.
+    """
+    raw = os.environ.get("APPLE_DIST_CERT_P12_BASE64", "").strip()
+    if not raw:
+        return None
+    password = os.environ.get("APPLE_DIST_CERT_P12_PASSWORD", "")
+    try:
+        blob = base64.b64decode("".join(raw.split()), validate=False)
+    except Exception:
+        raise SystemExit("APPLE_DIST_CERT_P12_BASE64 is not valid base64.")
+    if not blob:
+        raise SystemExit("APPLE_DIST_CERT_P12_BASE64 is empty.")
+    cert_dir.mkdir(parents=True, exist_ok=True)
+    incoming = cert_dir / "incoming.p12"
+    pem = cert_dir / "identity.pem"
+    try:
+        incoming.write_bytes(blob)
+        os.chmod(incoming, 0o600)
+        pkcs12_to_pem(incoming, pem, password)
+        p12_path = cert_dir / "Distribution.p12"
+        cer_path = cert_dir / "Distribution.cer"
+        write_modern_p12_from_pem(pem, p12_path)
+        subprocess.check_call(
+            ["openssl", "x509", "-in", str(pem), "-out", str(cer_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        serial = certificate_serial(cer_path)
+    finally:
+        if incoming.exists():
+            incoming.unlink()
+        if pem.exists():
+            pem.unlink()
+    print("using supplied distribution certificate")
+    return serial
+
+
+def certificate_id_for_serial(client, serial):
+    wanted = normalize_serial(serial)
+    for item in list_distribution_certs(client):
+        portal_serial = normalize_serial((item.get("attributes") or {}).get("serialNumber") or "")
+        if portal_serial == wanted:
+            print("distribution certificate serial {}".format(wanted))
+            return item["id"]
+    raise SystemExit(
+        "No Apple Distribution certificate on this team matches the supplied PKCS#12. "
+        "Upload that certificate in the developer portal before TestFlight. "
+        "Minting a certificate is opt-in (TELLOMI_MINT_DISTRIBUTION_CERT=1), not the default."
+    )
 
 
 def extract_cached_cert(p12_path, cert_path):
@@ -428,9 +530,9 @@ def ensure_certificate(client, cert_dir):
         except ApiError as error:
             if error.status == 409:
                 print(
-                    "Apple refused a new distribution certificate (the account is at its certificate limit). "
-                    "Revoke an unused Apple Distribution certificate in the developer portal, or restore the "
-                    "private key for an existing one into the signing cache.",
+                    "Apple refused a new distribution certificate (the account already has one). "
+                    "Export that certificate as a PKCS#12 and set APPLE_DIST_CERT_P12_BASE64 and "
+                    "APPLE_DIST_CERT_P12_PASSWORD. See Tellomi/README.md.",
                     file=sys.stderr,
                 )
             raise
@@ -497,6 +599,33 @@ def require_app_group(path, group):
     groups = (profile_plist(path).get("Entitlements") or {}).get("com.apple.security.application-groups") or []
     if group not in groups:
         raise SystemExit("Provisioning profile {} does not include {}".format(path.name, group))
+
+
+def der_certificate_serial(der):
+    if isinstance(der, memoryview):
+        der = der.tobytes()
+    work = pathlib.Path(tempfile.mkdtemp(prefix="tellomi-der-"))
+    try:
+        path = work / "cert.der"
+        path.write_bytes(bytes(der))
+        output = subprocess.check_output(
+            ["openssl", "x509", "-inform", "DER", "-in", str(path), "-noout", "-serial"],
+            text=True,
+        )
+        return normalize_serial(output)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def require_profile_certificate(path, serial):
+    wanted = normalize_serial(serial)
+    found = []
+    for der in profile_plist(path).get("DeveloperCertificates") or []:
+        found.append(der_certificate_serial(der))
+    if wanted not in found:
+        raise SystemExit(
+            "Provisioning profile {} does not include distribution certificate serial {}".format(path.name, wanted)
+        )
 
 
 def write_configuration(source, destination, team_id):
@@ -586,13 +715,27 @@ def prepare(args):
             for capability in capabilities:
                 print("capability {} on {}".format(capability, identifier))
                 ensure_capability(client, resource_id, capability, group)
-        certificate_id = ensure_certificate(client, pathlib.Path(args.cert_dir))
+        cert_dir = pathlib.Path(args.cert_dir)
+        supplied_serial = install_supplied_p12(cert_dir)
+        if supplied_serial:
+            certificate_id = certificate_id_for_serial(client, supplied_serial)
+            profile_serial = supplied_serial
+        elif mint_requested():
+            print("TELLOMI_MINT_DISTRIBUTION_CERT is set; minting or reusing a cached certificate")
+            certificate_id = ensure_certificate(client, cert_dir)
+            profile_serial = certificate_serial(cert_dir / "Distribution.cer")
+        else:
+            raise SystemExit(
+                "Set APPLE_DIST_CERT_P12_BASE64 and APPLE_DIST_CERT_P12_PASSWORD "
+                "(see Tellomi/README.md). Minting a distribution certificate is opt-in: "
+                "TELLOMI_MINT_DISTRIBUTION_CERT=1."
+            )
         profile_dir = pathlib.Path(args.output) / "profiles"
         profile_dir.mkdir(parents=True, exist_ok=True)
         cert_out = pathlib.Path(args.output) / "certs"
         cert_out.mkdir(parents=True, exist_ok=True)
         for filename in ("Distribution.p12", "Distribution.cer"):
-            source = pathlib.Path(args.cert_dir) / filename
+            source = cert_dir / filename
             if not source.exists():
                 continue
             if filename.endswith(".p12"):
@@ -603,6 +746,7 @@ def prepare(args):
             destination = profile_dir / (profile_name + ".mobileprovision")
             create_profile(client, profile_name, ids[identifier], certificate_id, destination)
             require_app_group(destination, group)
+            require_profile_certificate(destination, profile_serial)
             if identifier == bundle_id:
                 main_profile = destination
         team_id = team_id_from_profile(main_profile)
@@ -699,6 +843,40 @@ def self_test():
         if payload != {"ok": True} or flaky.calls != 3 or slept != [2, 4]:
             raise SystemExit("retry backoff failed: calls={} slept={}".format(flaky.calls, slept))
         print("retry self-test passed")
+
+        key = work / "dist.key"
+        cert = work / "dist.crt"
+        subprocess.check_call([
+            "openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
+            "-keyout", str(key), "-x509", "-out", str(cert),
+            "-subj", "/CN=Tellomi Distribution Test",
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        expected = certificate_serial(cert)
+        password = "test-pass"
+        for label, extra in (("modern", []), ("legacy", ["-legacy"])):
+            source = work / (label + ".p12")
+            try:
+                subprocess.check_call([
+                    "openssl", "pkcs12", "-export",
+                    "-inkey", str(key), "-in", str(cert),
+                    "-out", str(source), "-passout", "pass:" + password,
+                ] + extra, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except subprocess.CalledProcessError:
+                if label == "legacy":
+                    continue
+                raise
+            normalize_p12(source, password)
+            opened = work / (label + ".pem")
+            pkcs12_to_pem(source, opened, "")
+            got = subprocess.check_output(
+                ["openssl", "x509", "-in", str(opened), "-noout", "-serial"],
+                text=True,
+            )
+            if normalize_serial(got) != expected:
+                raise SystemExit("{} p12 serial changed".format(label))
+            if "PRIVATE KEY" not in opened.read_text(encoding="utf-8"):
+                raise SystemExit("{} p12 lost the private key".format(label))
+        print("pkcs12 self-test passed")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

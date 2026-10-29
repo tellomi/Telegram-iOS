@@ -1,8 +1,79 @@
 import os
+import subprocess
 import sys
+import tempfile
 import argparse
 
 from BuildEnvironment import run_executable_with_output
+
+
+def _rewrite_p12(file_path):
+    """Turn a legacy or password-protected PKCS#12 into an empty-password AES-256 archive.
+
+    The password is APPLE_DIST_CERT_P12_PASSWORD in the environment (empty if unset).
+    It is passed to openssl via env: so it is not part of the process arguments.
+    """
+    password = os.environ.get('APPLE_DIST_CERT_P12_PASSWORD', '')
+    env = os.environ.copy()
+    env['TELLOMI_P12_PASSWORD'] = password
+    work = tempfile.mkdtemp(prefix='tellomi-p12-import-')
+    try:
+        pem = os.path.join(work, 'identity.pem')
+        modern = os.path.join(work, 'modern.p12')
+        read = None
+        for extra in ([], ['-legacy']):
+            result = subprocess.run(
+                [
+                    'openssl', 'pkcs12', '-in', file_path,
+                    '-passin', 'env:TELLOMI_P12_PASSWORD',
+                    '-nodes', '-out', pem,
+                ] + extra,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            if result.returncode == 0:
+                read = True
+                break
+        if not read:
+            print('Could not read {} as a modern or legacy PKCS#12.'.format(file_path))
+            sys.exit(1)
+        subprocess.check_call([
+            'openssl', 'pkcs12', '-export',
+            '-in', pem, '-out', modern,
+            '-passout', 'pass:',
+            '-keypbe', 'AES-256-CBC',
+            '-certpbe', 'AES-256-CBC',
+            '-macalg', 'SHA256',
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        with open(modern, 'rb') as source, open(file_path, 'wb') as dest:
+            dest.write(source.read())
+    finally:
+        subprocess.call(['rm', '-rf', work])
+
+
+def _import_p12_once(file_path, keychain_name):
+    return subprocess.call([
+        'security', 'import', file_path,
+        '-k', keychain_name,
+        '-P', '',
+        '-f', 'pkcs12',
+        '-A',
+        '-T', '/usr/bin/codesign',
+        '-T', '/usr/bin/security',
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def import_p12(file_path, keychain_name):
+    # `security import` on Xcode 27 accepts an empty-password AES-256 archive and
+    # rejects OpenSSL -legacy (RC2). A password-protected or legacy archive is
+    # rewritten once, then imported. The password never appears on the command line.
+    if _import_p12_once(file_path, keychain_name) == 0:
+        return
+    _rewrite_p12(file_path)
+    if _import_p12_once(file_path, keychain_name) != 0:
+        print('security import failed for {}'.format(file_path))
+        sys.exit(1)
 
 def import_certificates(certificatesPath):
     if not os.path.exists(certificatesPath):
@@ -45,24 +116,7 @@ def import_certificates(certificatesPath):
     for file_name in os.listdir(certificatesPath):
         file_path = certificatesPath + '/' + file_name
         if file_path.endswith('.p12'):
-            # A failed import used to be ignored, and set-key-partition-list then
-            # failed with "The specified item could not be found in the keychain"
-            # because the private key was never stored.
-            run_executable_with_output('security', arguments=[
-                'import',
-                file_path,
-                '-k',
-                keychain_name,
-                '-P',
-                '',
-                '-f',
-                'pkcs12',
-                '-A',
-                '-T',
-                '/usr/bin/codesign',
-                '-T',
-                '/usr/bin/security'
-            ], check_result=True)
+            import_p12(file_path, keychain_name)
         elif file_path.endswith('.cer'):
             run_executable_with_output('security', arguments=[
                 'import',
