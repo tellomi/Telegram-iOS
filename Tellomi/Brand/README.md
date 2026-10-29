@@ -10,4 +10,4 @@ Colors applied around that outline, not a new drawing:
 - Dark: `#FFFFFF` on `#111113`
 - Tinted: black on white, for the iOS 18 tinted appearance
 
-`AppIcon.icon` is what the Bazel app icon uses. `AppIcon.appiconset` is the full size set, including dark and tinted. `Alternates/` fills the existing Settings icon slots with the same logo. Extensions do not have a separate icon target; they use the host app icon. Regenerate the PNGs with `python3 Tellomi/Brand/generate_icons.py` (`rsvg-convert` required).
+`AppIcon.icon` is what the Bazel app icon uses. Its layer is `Assets/Logo.png` (a white glyph rasterized from `logo.svg`); `icon.json` colors that glyph with `solid` fills. `AppIcon.appiconset` is the full size set, including dark and tinted. `Alternates/` fills the existing Settings icon slots with the same logo. Extensions do not have a separate icon target; they use the host app icon. Regenerate the PNGs with `python3 Tellomi/Brand/generate_icons.py` (`rsvg-convert` required).
