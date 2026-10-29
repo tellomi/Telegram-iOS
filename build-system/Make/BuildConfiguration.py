@@ -57,6 +57,7 @@ class BuildConfiguration:
         string += 'telegram_enable_siri = {}\n'.format(self.enable_siri)
         string += 'telegram_enable_icloud = {}\n'.format(self.enable_icloud)
         string += 'telegram_enable_watch = True\n'
+        string += _bazel_suffix_lines()
 
         if os.path.exists(path):
             os.remove(path)
@@ -156,18 +157,25 @@ def load_codesigning_data_from_git(working_dir, repo_url, temp_key_path, branch,
     decrypt_codesigning_directory_recursively(encrypted_working_dir + '/certs', decrypted_working_dir + '/certs', password)
 
 
+def _tellomi_module(name):
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'Tellomi'))
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    return __import__(name)
+
+
+def _bazel_suffix_lines():
+    return _tellomi_module('extension_suffixes').bazel_suffix_lines()
+
+
+def extension_profile_mapping():
+    # Suffix -> provisioning file name. The suffix strings live in
+    # Tellomi/extension-suffixes.json so a renamed extension id stays in one file.
+    return _tellomi_module('extension_suffixes').profile_name_mapping()
+
+
 def copy_profiles_from_directory(source_path, destination_path, team_id, bundle_id):
-    profile_name_mapping = {
-        '.SiriIntents': 'Intents',
-        '.NotificationContent': 'NotificationContent',
-        '.NotificationService': 'NotificationService',
-        '.Share': 'Share',
-        '': 'Telegram',
-        '.watchkitapp': 'WatchApp',
-        '.watchkitapp.watchkitextension': 'WatchExtension',
-        '.Widget': 'Widget',
-        '.BroadcastUpload': 'BroadcastUpload'
-    }
+    profile_name_mapping = extension_profile_mapping()
 
     for file_name in os.listdir(source_path):
         file_path = source_path + '/' + file_name

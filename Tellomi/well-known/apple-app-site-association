@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appID": "TELL0MIDEV.com.tellomi.app",
+        "appID": "CB7KP6GBAR.app.tellomi.chat",
         "paths": [
           "*",
           "/"
@@ -11,7 +11,7 @@
       },
       {
         "appIDs": [
-          "TELL0MIDEV.com.tellomi.app"
+          "CB7KP6GBAR.app.tellomi.chat"
         ],
         "components": [
           {
@@ -24,7 +24,7 @@
   },
   "webcredentials": {
     "apps": [
-      "TELL0MIDEV.com.tellomi.app"
+      "CB7KP6GBAR.app.tellomi.chat"
     ]
   }
 }

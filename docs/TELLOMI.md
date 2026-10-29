@@ -52,16 +52,16 @@ With `disable_telegram_backup_discovery` true, `initializedNetwork` does not ins
 | JSON field | Value | Notes |
 | --- | --- | --- |
 | `app_name` | `Tellomi` | `CFBundleDisplayName` / `CFBundleName` on the app and its extensions. |
-| `bundle_id` | `com.tellomi.app` | Extensions are `com.tellomi.app.Share`, `.NotificationService`, and so on. The app group is `group.com.tellomi.app`. |
+| `bundle_id` | `app.tellomi.chat` | Extensions append the suffixes in `Tellomi/extension-suffixes.json` (`.Share`, `.NotificationContent`, `.NotificationService`, `.SiriIntents`, `.Widget`, `.BroadcastUpload`). The app group is `group.app.tellomi.chat`. |
 | `api_id` | `100001` | Placeholder. Not Telegram's `8`. |
 | `api_hash` | `74656c6c6f6d69000000000000000000` | Placeholder: the ASCII bytes of `tellomi`, padded with zeros to 32 hex digits. Not a secret. |
-| `team_id` | `TELL0MIDEV` | Placeholder. Not an Apple team. Signing fails until this is replaced. |
+| `team_id` | `CB7KP6GBAR` | Default Apple team. Still a JSON field. The TestFlight workflow overwrites the temporary configuration with the team id inside the profile it downloads. |
 | `app_center_id` | empty | So a non-App-Store build does not start App Center with a fake secret. |
 | `is_appstore_build` | `false` | |
 | `is_internal_build` | `true` | |
 | `appstore_id` | `0` | No App Store listing yet. |
 | `app_specific_url_scheme` | `tellomi` | Also registered next to `telegram://` and `tg://`. |
-| `premium_iap_product_id` | `com.tellomi.app.premium.monthly` | No App Store product exists for this id. |
+| `premium_iap_product_id` | `app.tellomi.chat.premium.monthly` | No App Store product exists for this id. |
 | `enable_siri` / `enable_icloud` | `false` | Those entitlements need a real provisioning profile. |
 
 Teamgram's server does not check `api_id` or `api_hash` ([teamgram-server#120](https://github.com/teamgram/teamgram-server/issues/120)). They are still sent on `initConnection`. Replace the placeholders if a later server build starts checking them.
@@ -91,7 +91,7 @@ The alternate icons (`*.alticon`, `AppIcons.xcassets`, `DefaultAppIcon.xcassets`
 | Permission-prompt name | `Telegram/Telegram-iOS/*.lproj/InfoPlist.strings`, `Info.plist`, `InfoBazel.plist` |
 | Placeholder icon | `Telegram/Telegram-iOS/TellomiPlaceholder.icon` |
 | YouTube embed base URL | `YoutubeEmbedImplementation.swift` uses `https://tellomi.app` as the web view's base URL. It is not a host the app fetches. |
-| Watch bundle id default | `Telegram/prebuilt_watchos.bzl` defaults to `com.tellomi.app.watchkitapp`. The app target still passes `{bundle id}.watchkitapp`, so a different host bundle id still flows through. |
+| Watch bundle id default | `Telegram/prebuilt_watchos.bzl` defaults to `app.tellomi.chat.watchkitapp`. The app target still passes `{bundle id}.watchkitapp`, so a different host bundle id still flows through. |
 
 ## Build and sign
 
@@ -109,27 +109,27 @@ python3 build-system/Make/Make.py --overrideXcodeVersion \
   --configuration=debug_sim_arm64
 ```
 
-Device or distribution signing comes from the team later. Do not commit certificates, `.p12` files, `.mobileprovision` files, or `TELEGRAM_CODESIGNING_GIT_PASSWORD`. When they arrive:
+Do not commit certificates, `.p12` files, `.mobileprovision` files, or `TELEGRAM_CODESIGNING_GIT_PASSWORD`. The TestFlight workflow creates the Apple Distribution certificate and the App Store profiles through the App Store Connect API. A local device build can instead point `Make.py` at a profile directory with `--codesigningInformationPath`.
 
-1. Put the Apple team id in `team_id` in the configuration JSON. `TELL0MIDEV` will not match a real profile.
-2. Create provisioning profiles for `com.tellomi.app` and each extension suffix the build expects (`.Share`, `.NotificationContent`, `.NotificationService`, `.SiriIntents`, `.Widget`, `.BroadcastUpload`, and `.watchkitapp` if the watch app is embedded). `BuildConfiguration.py` maps those suffixes onto profile file names.
-3. Point `Make.py` at that profile directory with `--codesigningInformationPath`, or at the team's encrypted git repo with the existing `--gitCodesigning*` flags. The password stays in the environment.
-4. Turn `enable_siri` and `enable_icloud` back on only after the profiles contain those entitlements.
-5. Push notifications need an APNs key configured on the Teamgram server. The client already registers its device token over MTProto; it does not talk to a Telegram push gateway.
+`team_id` in the configuration JSON is `CB7KP6GBAR`. Change that field if the Apple team changes. Extension suffixes live in `Tellomi/extension-suffixes.json`. `prepare_appstore_signing.py` registers those bundle ids, and `BuildConfiguration.py` maps each suffix onto the profile file name Bazel expects (`.Share` → `Share.mobileprovision`, `.SiriIntents` → `Intents.mobileprovision`, and so on). `.watchkitapp` is in that file and is not registered unless the watch app is embedded.
 
-`Make.py` writes `build-input/configuration-repository/variables.bzl` from the JSON. That directory is local build state, not a source file.
+Turn `enable_siri` and `enable_icloud` on only after the profiles contain those entitlements. Push notifications need an APNs key configured on the Teamgram server. The client already registers its device token over MTProto; it does not talk to a Telegram push gateway.
+
+`Make.py` writes `build-input/configuration-repository/variables.bzl` from the JSON, including the extension suffix variables from `Tellomi/extension-suffixes.json`. That directory is local build state, not a source file. The checked-in copy is `build-system/example-configuration/variables.bzl`.
 
 ## Public links
 
 `tell.cc` is the public link host. It replaces `t.me`, `telegram.me`, and `telegram.dog`. The definition is `TellomiLinks.host` in `submodules/TellomiLinks/Sources/TellomiLinks.swift` (`TelegramCore` re-exports it). The legacy watch controller `Telegram/Watch/Extension/TGUserInfoController.m` repeats the same host because that Objective-C target does not import Swift. Paths are unchanged (`/username`, `/+hash`, `/joinchat`, `/c/`, `/s/`, `/addstickers`, `/addemoji`, `/proxy`, `/socks`, `/share`, stories, `?start`, and the rest). `tg://` is still accepted. `tellomi://` uses the same routes (`TellomiLinks.urlScheme`, also `app_specific_url_scheme` in the build configuration, registered next to `tg` in the URL types).
 
-The main app's associated-domains entitlement is `applinks:tell.cc` and `webcredentials:tell.cc`. Telegram domains are not in that entitlement. Ops uploads `Tellomi/well-known/apple-app-site-association` to `https://tell.cc/.well-known/apple-app-site-association`. The team id in that file is the placeholder `TELL0MIDEV` and must be replaced with the real Apple team id before it is served.
+The main app's associated-domains entitlement is `applinks:tell.cc` and `webcredentials:tell.cc`. Telegram domains are not in that entitlement. Ops uploads `Tellomi/well-known/apple-app-site-association` to `https://tell.cc/.well-known/apple-app-site-association`. The app id in that file is `CB7KP6GBAR.app.tellomi.chat`.
 
 ## TestFlight
 
 `.github/workflows/testflight.yml` runs on the `xcode-27` GitHub-hosted image (Xcode 27.1, the version in `versions.json`). It runs when a `v*` tag is pushed, when a GitHub Release is published, and on manual dispatch. It does not run on every pull request.
 
-The workflow calls `Tellomi/prepare_appstore_signing.py`, which uses the App Store Connect API key to register the bundle ids below, turn on the capabilities the signed entitlements require, create an Apple Distribution certificate, and download App Store profiles. `Make.py` then does a Bazel `release_arm64` build. `xcrun altool` uploads `bazel-bin/Telegram/Telegram.ipa`. The build number is one higher than the highest build already on TestFlight for this app, and at least `github.run_number`.
+The workflow calls `Tellomi/prepare_appstore_signing.py`, which uses the App Store Connect API key to register the bundle ids below, turn on the capabilities the signed entitlements require, create an Apple Distribution certificate, and download App Store profiles. Certificates and profiles are not committed. `Make.py` then does a Bazel `release_arm64` build. `xcrun altool` uploads `bazel-bin/Telegram/Telegram.ipa`. The build number is one higher than the highest build already on TestFlight for this app, and at least `github.run_number`.
+
+Enabling a capability sends an empty `settings` list. `APP_GROUPS` in particular must not name the group in that request; the API rejects it. The script still checks that each downloaded profile contains `group.app.tellomi.chat`. SiriIntents is registered with SiriKit enabled. The signed binary does not include `com.apple.developer.siri`, because `enable_siri` is false.
 
 Repository secrets, none of which are printed:
 
@@ -137,31 +137,31 @@ Repository secrets, none of which are printed:
 - `APP_STORE_CONNECT_ISSUER_ID`
 - `APP_STORE_CONNECT_KEY_P8_BASE64` (base64 of the AuthKey `.p8`)
 
-The `.p8` is only an API credential. The distribution certificate's private key stays in the Actions cache (`tellomi-apple-distribution-*`), not in git. The committed `team_id` stays the placeholder `TELL0MIDEV`; the workflow writes a temporary configuration whose team id is the one in the downloaded profile.
+The `.p8` is only an API credential. The distribution certificate's private key stays in the Actions cache (`tellomi-apple-distribution-*`), not in git. The committed `team_id` default is `CB7KP6GBAR`. The workflow writes a temporary configuration whose team id is the one in the downloaded profile.
 
 The watch app is not in this IPA. Embedding it needs `--embedWatchApp` plus watch API credentials, which this workflow does not have.
 
 ## Identifiers to create
 
-Base id `com.tellomi.app`, from `build-system/appstore-configuration.json` and `Telegram/BUILD`. `{TEAMID}` is the Apple team id. It is not `TELL0MIDEV`.
+Base id `app.tellomi.chat`, from `build-system/appstore-configuration.json`. Extension suffixes are `Tellomi/extension-suffixes.json`, and `Telegram/BUILD` interpolates the variables that file writes into `variables.bzl`. `{TEAMID}` is `CB7KP6GBAR` unless the downloaded profile names a different team.
 
 These seven ids are what `Make.py build --configuration=release_arm64` signs. The workflow registers them. Each needs an App Store profile.
 
 | Bundle id | Signed entitlements | App Group | Capabilities on the App ID |
 | --- | --- | --- | --- |
-| `com.tellomi.app` | `aps-environment` = `production` (Make.py copies this out of the profile and refuses to build if it is missing), `com.apple.security.application-groups` = `group.com.tellomi.app`, `application-identifier` = `{TEAMID}.com.tellomi.app` | `group.com.tellomi.app` | Push Notifications, App Groups |
-| `com.tellomi.app.Share` | App Group only | `group.com.tellomi.app` | App Groups |
-| `com.tellomi.app.NotificationContent` | App Group only | `group.com.tellomi.app` | App Groups |
-| `com.tellomi.app.NotificationService` | App Group only | `group.com.tellomi.app` | App Groups |
-| `com.tellomi.app.SiriIntents` | App Group only | `group.com.tellomi.app` | App Groups, SiriKit (the extension point is an Intents extension; the signed entitlements do not include `com.apple.developer.siri`, because `enable_siri` is false) |
-| `com.tellomi.app.Widget` | App Group only | `group.com.tellomi.app` | App Groups |
-| `com.tellomi.app.BroadcastUpload` | App Group only | `group.com.tellomi.app` | App Groups |
+| `app.tellomi.chat` | `aps-environment` = `production` (Make.py copies this out of the profile and refuses to build if it is missing), `com.apple.security.application-groups` = `group.app.tellomi.chat`, `application-identifier` = `{TEAMID}.app.tellomi.chat`, associated domains `applinks:tell.cc` and `webcredentials:tell.cc` | `group.app.tellomi.chat` | Push Notifications, App Groups, Associated Domains |
+| `app.tellomi.chat.Share` | App Group only | `group.app.tellomi.chat` | App Groups |
+| `app.tellomi.chat.NotificationContent` | App Group only | `group.app.tellomi.chat` | App Groups |
+| `app.tellomi.chat.NotificationService` | App Group only | `group.app.tellomi.chat` | App Groups |
+| `app.tellomi.chat.SiriIntents` | App Group only | `group.app.tellomi.chat` | App Groups, SiriKit (the extension point is an Intents extension; the signed entitlements do not include `com.apple.developer.siri`, because `enable_siri` is false) |
+| `app.tellomi.chat.Widget` | App Group only | `group.app.tellomi.chat` | App Groups |
+| `app.tellomi.chat.BroadcastUpload` | App Group only | `group.app.tellomi.chat` | App Groups |
 
-One App Group id: `group.com.tellomi.app`. Share, the notification content and service extensions, Siri intents, the widget and broadcast upload all open `group.` plus the main bundle id. The main app's entitlements declare the same group.
+One App Group id: `group.app.tellomi.chat`. Share, the notification content and service extensions, Siri intents, the widget and broadcast upload all open `group.` plus the main bundle id. The main app's entitlements declare the same group.
 
-Keychain group used by `BuildConfig.keychainAccessGroup`: `{TEAMID}.com.tellomi.app`. The project does not set a `keychain-access-groups` entitlement. That string is the main app's default keychain group, because it is the `application-identifier`. Extensions do not call that API.
+Keychain group used by `BuildConfig.keychainAccessGroup`: `{TEAMID}.app.tellomi.chat`. The project does not set a `keychain-access-groups` entitlement. That string is the main app's default keychain group, because it is the `application-identifier`. Extensions do not call that API.
 
-iCloud container: none. `enable_icloud` is false, so `TelegramEntitlements` does not contain `com.apple.developer.icloud-container-identifiers`. Turning the flag on would add container `iCloud.com.tellomi.app` and ubiquity key-value store `{TEAMID}.com.tellomi.app`.
+iCloud container: none. `enable_icloud` is false, so `TelegramEntitlements` does not contain `com.apple.developer.icloud-container-identifiers`. Turning the flag on would add container `iCloud.app.tellomi.chat` and ubiquity key-value store `{TEAMID}.app.tellomi.chat`.
 
 Also absent with this bundle id and these flags: Siri on the main app, Sign in with Apple, Apple Pay, CarPlay, unrestricted VoIP, communication notifications, notification filtering, and the continued-processing GPU entitlement. Those fragments in `Telegram/BUILD` are empty unless the bundle id is an official Telegram id or the JSON flag is turned on. Associated domains are present and name `tell.cc` only.
 
@@ -169,17 +169,17 @@ The main app's Info.plist background modes, which are not separate App IDs, are 
 
 Not registered as App Store Connect apps, and not given profiles. They are frameworks inside the IPA:
 
-- `com.tellomi.app.MtProtoKit`
-- `com.tellomi.app.SwiftSignalKit`
-- `com.tellomi.app.Postbox`
-- `com.tellomi.app.TelegramCore`
-- `com.tellomi.app.TelegramUI`
+- `app.tellomi.chat.MtProtoKit`
+- `app.tellomi.chat.SwiftSignalKit`
+- `app.tellomi.chat.Postbox`
+- `app.tellomi.chat.TelegramCore`
+- `app.tellomi.chat.TelegramUI`
 
 Not in the TestFlight IPA. Create it only when embedding the watch app (`--embedWatchApp`):
 
-- `com.tellomi.app.watchkitapp`
+- `app.tellomi.chat.watchkitapp`
 
-`BuildConfiguration.py` also accepts a profile whose id is `com.tellomi.app.watchkitapp.watchkitextension`. Nothing in the current watch target uses that id.
+`BuildConfiguration.py` also accepts a profile whose id is `app.tellomi.chat.watchkitapp.watchkitextension`. Nothing in the current watch target uses that id.
 
 ## What was checked here
 
@@ -188,7 +188,7 @@ Not in the TestFlight IPA. Create it only when embedding the watch app (`--embed
 - The JSON and the generated header are the same document.
 - OpenSSL accepts the PEM as an RSA public key.
 - Its fingerprint is `14798846482072068265` big-endian and `12240908862933197005` little-endian, and those are byte swaps of each other. The little-endian value is the decimal in Teamgram's `gnetway.yaml`.
-- The three configuration JSON files load through `BuildConfiguration` as `com.tellomi.app` / `Tellomi` / the placeholder api id, with Siri and iCloud off.
+- The three configuration JSON files load through `BuildConfiguration` as `app.tellomi.chat` / `Tellomi` / team `CB7KP6GBAR` / the placeholder api id, with Siri and iCloud off.
 - `Network.swift` installs `TellomiSeedAddresses` and no longer contains Telegram's production seed `149.154.175.50`.
 - The first connection uses `TellomiDefaultDatacenterId`.
 - The handshake reads `TellomiServerPublicKeys` and applies the fingerprint byte swap. Telegram's production modulus prefix is not the default key.
@@ -209,4 +209,4 @@ These still say Telegram, or still call a Telegram host. They do not choose the 
 - **Watch app** under `Telegram/WatchApp` is a synced snapshot. It was not edited. Its API id is separate from `BuildConfig`.
 - **App Store updates and Premium.** `appstore_id` is `0`, and the Premium product id has no App Store product. `openAppStorePage` would open `itms-apps://…/id0` if something called it.
 - **Push, Stars, Fragment payments, wallet.** The client features are still compiled. They need the Teamgram server (and, for payments, a backend this client does not have) before they do anything.
-- **Signing material in git.** The committed team id is still the placeholder. TestFlight CI creates the distribution certificate and profiles from the API key; see the TestFlight section. The private key is not committed.
+- **Signing material in git.** Certificates and profiles are not committed. TestFlight CI creates the distribution certificate and profiles from the API key; see the TestFlight section. The private key is not committed.

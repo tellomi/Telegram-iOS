@@ -1,15 +1,15 @@
 {
-	"bundle_id": "com.tellomi.app",
+	"bundle_id": "app.tellomi.chat",
 	"app_name": "Tellomi",
 	"api_id": "100001",
 	"api_hash": "74656c6c6f6d69000000000000000000",
-	"team_id": "TELL0MIDEV",
+	"team_id": "CB7KP6GBAR",
 	"app_center_id": "",
 	"is_internal_build": "true",
 	"is_appstore_build": "false",
 	"appstore_id": "0",
 	"app_specific_url_scheme": "tellomi",
-	"premium_iap_product_id": "com.tellomi.app.premium.monthly",
+	"premium_iap_product_id": "app.tellomi.chat.premium.monthly",
 	"enable_siri": false,
 	"enable_icloud": false
 }

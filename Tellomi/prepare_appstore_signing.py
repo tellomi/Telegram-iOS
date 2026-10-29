@@ -29,18 +29,25 @@ import urllib.request
 API = "https://api.appstoreconnect.apple.com"
 APP_GROUP = "group.{bundle_id}"
 
-# Suffixes are the ones Telegram/BUILD passes to ios_application / ios_extension.
-# The watch app is not in this list: Make.py embeds it only with --embedWatchApp.
-# profile_name is the App Store Connect profile name (50 character limit).
-TARGETS = [
-    ("", "Tellomi", "tellomi-ios-app", ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS"]),
-    (".Share", "Tellomi Share", "tellomi-ios-share", ["APP_GROUPS"]),
-    (".NotificationContent", "Tellomi Notification Content", "tellomi-ios-notification-content", ["APP_GROUPS"]),
-    (".NotificationService", "Tellomi Notification Service", "tellomi-ios-notification-service", ["APP_GROUPS"]),
-    (".SiriIntents", "Tellomi Siri", "tellomi-ios-siri", ["APP_GROUPS", "SIRIKIT"]),
-    (".Widget", "Tellomi Widget", "tellomi-ios-widget", ["APP_GROUPS"]),
-    (".BroadcastUpload", "Tellomi Broadcast Upload", "tellomi-ios-broadcast", ["APP_GROUPS"]),
-]
+
+def signing_targets():
+    """Bundle ids this script registers. Suffixes come from extension-suffixes.json.
+
+    The watch app is omitted there (register=false): Make.py embeds it only
+    with --embedWatchApp. asc_profile_name is the App Store Connect profile
+    name (50 character limit).
+    """
+    from extension_suffixes import registered_targets
+
+    targets = []
+    for item in registered_targets():
+        targets.append((
+            item["suffix"],
+            item["name"],
+            item["asc_profile_name"],
+            list(item["capabilities"]),
+        ))
+    return targets
 
 
 class ApiError(Exception):
@@ -154,7 +161,7 @@ def require_env(name):
 def bundle_targets(bundle_id):
     group = APP_GROUP.format(bundle_id=bundle_id)
     targets = []
-    for suffix, name, profile_name, capabilities in TARGETS:
+    for suffix, name, profile_name, capabilities in signing_targets():
         targets.append((bundle_id + suffix, name, profile_name, capabilities, group))
     return targets
 
@@ -188,12 +195,12 @@ def ensure_bundle_id(client, identifier, name):
 
 
 def capability_settings(capability, group):
-    if capability != "APP_GROUPS":
-        return []
-    return [{
-        "key": "APP_GROUPS",
-        "options": [{"key": group, "enabled": True}],
-    }]
+    # The App Store Connect API rejects APP_GROUPS when settings names the
+    # group. Enable every capability, including APP_GROUPS and SIRIKIT, with
+    # an empty settings list. The group id is checked on the downloaded
+    # profile afterwards (require_app_group).
+    del capability, group
+    return []
 
 
 def ensure_capability(client, bundle_resource_id, capability, group):
@@ -515,6 +522,13 @@ def self_test():
         if header.get("alg") != "ES256" or header.get("kid") != "TESTKEYID":
             raise SystemExit("JWT header is wrong")
         print("jwt self-test passed")
+        if capability_settings("APP_GROUPS", "group.app.tellomi.chat") != []:
+            raise SystemExit("APP_GROUPS capability settings must be empty")
+        if capability_settings("SIRIKIT", "group.app.tellomi.chat") != []:
+            raise SystemExit("capability settings must be empty")
+        siri = [item for item in signing_targets() if item[0] == ".SiriIntents"]
+        if len(siri) != 1 or "SIRIKIT" not in siri[0][3]:
+            raise SystemExit("SiriIntents must enable SiriKit")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

@@ -2,7 +2,7 @@
 
 This file provides guidance to AI assistants when working with code in this repository.
 
-This checkout is the Tellomi fork. The app name, bundle id (`com.tellomi.app`), API credentials and MTProto server are described in [`docs/TELLOMI.md`](docs/TELLOMI.md). Simulator recipes below that mention `ph.telegra.Telegraph` are the upstream bundle id; a Tellomi build uses `com.tellomi.app`.
+This checkout is the Tellomi fork. The app name, bundle id (`app.tellomi.chat`), API credentials and MTProto server are described in [`docs/TELLOMI.md`](docs/TELLOMI.md). Simulator recipes below that mention `ph.telegra.Telegraph` are the upstream bundle id; a Tellomi build uses `app.tellomi.chat`.
 
 ## Build
 

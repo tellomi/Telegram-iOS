@@ -204,7 +204,7 @@ def check_build_configuration() -> None:
         "build-system/template_minimal_development_configuration.json",
     ):
         config = build_configuration_from_json(str(ROOT / name))
-        if config.bundle_id != "com.tellomi.app":
+        if config.bundle_id != "app.tellomi.chat":
             fail(f"{name} bundle id is {config.bundle_id}")
         if config.app_name != "Tellomi":
             fail(f"{name} app name is {config.app_name}")
@@ -212,8 +212,8 @@ def check_build_configuration() -> None:
             fail(f"{name} is not using the placeholder api id and hash")
         if config.api_id == "8":
             fail(f"{name} still uses Telegram's api_id")
-        if config.team_id != "TELL0MIDEV":
-            fail(f"{name} team id is not the placeholder")
+        if config.team_id != "CB7KP6GBAR":
+            fail(f"{name} team id is {config.team_id}")
         if config.enable_siri or config.enable_icloud:
             fail(f"{name} enables Siri or iCloud before signing entitlements exist")
         if config.is_appstore_build != "false":
@@ -239,9 +239,9 @@ def check_public_links() -> None:
         if "appID" in detail:
             app_ids.append(detail["appID"])
         app_ids.extend(detail.get("appIDs") or [])
-    if app_ids != ["TELL0MIDEV.com.tellomi.app", "TELL0MIDEV.com.tellomi.app"]:
+    if app_ids != ["CB7KP6GBAR.app.tellomi.chat", "CB7KP6GBAR.app.tellomi.chat"]:
         fail(f"apple-app-site-association app ids are {app_ids}")
-    if association["webcredentials"]["apps"] != ["TELL0MIDEV.com.tellomi.app"]:
+    if association["webcredentials"]["apps"] != ["CB7KP6GBAR.app.tellomi.chat"]:
         fail("webcredentials app id is wrong")
     config = json.loads((ROOT / "build-system/appstore-configuration.json").read_text(encoding="utf-8"))
     if config.get("app_specific_url_scheme") != "tellomi":
@@ -256,6 +256,66 @@ def check_public_links() -> None:
             leftover.append(rel)
     if leftover:
         fail("telegram public-link hosts remain in " + ", ".join(leftover[:12]))
+
+
+def check_extension_suffixes(build: str, variables: str) -> None:
+    from BuildConfiguration import BuildConfiguration, extension_profile_mapping
+    from extension_suffixes import bazel_suffix_lines, profile_name_mapping, targets
+    from prepare_appstore_signing import capability_settings, signing_targets
+
+    if capability_settings("APP_GROUPS", "group.app.tellomi.chat") != []:
+        fail("APP_GROUPS capability settings must be an empty list")
+    if capability_settings("SIRIKIT", "group.app.tellomi.chat") != []:
+        fail("capability settings must be an empty list")
+    if extension_profile_mapping() != profile_name_mapping():
+        fail("profile suffix mapping does not read extension-suffixes.json")
+
+    signed = signing_targets()
+    expected = [
+        (item["suffix"], item["name"], item["asc_profile_name"], list(item["capabilities"]))
+        for item in targets()
+        if item.get("register")
+    ]
+    if signed != expected:
+        fail("signing targets do not match extension-suffixes.json")
+    for item in targets():
+        if item.get("register") and "APP_GROUPS" not in item["capabilities"]:
+            fail("registered target {} is missing APP_GROUPS".format(item["suffix"] or "(main)"))
+    siri = next(item for item in targets() if item.get("profile_file") == "Intents")
+    if "SIRIKIT" not in siri["capabilities"]:
+        fail("SiriIntents must enable SiriKit")
+    main = next(item for item in targets() if item["suffix"] == "")
+    if main["capabilities"] != ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS"]:
+        fail("main app capabilities changed")
+
+    for line in bazel_suffix_lines().splitlines():
+        if line not in variables:
+            fail("example variables.bzl is missing " + line)
+        variable = line.split(" = ", 1)[0]
+        if variable not in build:
+            fail("Telegram/BUILD does not use " + variable)
+
+    configuration = BuildConfiguration(
+        bundle_id="app.tellomi.chat",
+        api_id="100001",
+        api_hash="74656c6c6f6d69000000000000000000",
+        team_id="CB7KP6GBAR",
+        app_center_id="",
+        is_internal_build="true",
+        is_appstore_build="false",
+        appstore_id="0",
+        app_specific_url_scheme="tellomi",
+        premium_iap_product_id="app.tellomi.chat.premium.monthly",
+        enable_siri=False,
+        enable_icloud=False,
+        app_name="Tellomi",
+    )
+    written_path = "/tmp/tellomi-variables-check.bzl"
+    configuration.write_to_variables_file("bazel", False, "production", written_path)
+    written = pathlib.Path(written_path).read_text(encoding="utf-8")
+    for line in bazel_suffix_lines().splitlines():
+        if line not in written:
+            fail("variables.bzl writer dropped " + line)
 
 
 def check_wiring() -> None:
@@ -280,8 +340,11 @@ def check_wiring() -> None:
     if 'telegram_app_name' not in build:
         fail("the Bazel app name is not wired")
     variables = (ROOT / "build-system/example-configuration/variables.bzl").read_text(encoding="utf-8")
-    if 'telegram_bundle_id = "com.tellomi.app"' not in variables or 'telegram_app_name = "Tellomi"' not in variables:
+    if 'telegram_bundle_id = "app.tellomi.chat"' not in variables or 'telegram_app_name = "Tellomi"' not in variables:
         fail("example variables.bzl is not Tellomi")
+    if 'telegram_team_id = "CB7KP6GBAR"' not in variables:
+        fail("example variables.bzl team id is not CB7KP6GBAR")
+    check_extension_suffixes(build, variables)
     icon = ROOT / "Telegram/Telegram-iOS/TellomiPlaceholder.icon/Assets/Plane.svg"
     if "Placeholder-T" not in icon.read_text(encoding="utf-8"):
         fail("placeholder icon is missing the T mark")

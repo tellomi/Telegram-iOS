@@ -60,11 +60,25 @@ load(
     "telegram_team_id",
     "telegram_enable_icloud",
     "telegram_enable_siri",
+    "telegram_suffix_share",
+    "telegram_suffix_notification_content",
+    "telegram_suffix_notification_service",
+    "telegram_suffix_siri_intents",
+    "telegram_suffix_widget",
+    "telegram_suffix_broadcast_upload",
 )
 
 load("@build_bazel_rules_apple//apple:resources.bzl",
     "swift_intent_library",
 )
+
+# Suffix strings are Tellomi/extension-suffixes.json, written into variables.bzl.
+extension_bundle_id_share = telegram_bundle_id + telegram_suffix_share
+extension_bundle_id_notification_content = telegram_bundle_id + telegram_suffix_notification_content
+extension_bundle_id_notification_service = telegram_bundle_id + telegram_suffix_notification_service
+extension_bundle_id_siri_intents = telegram_bundle_id + telegram_suffix_siri_intents
+extension_bundle_id_widget = telegram_bundle_id + telegram_suffix_widget
+extension_bundle_id_broadcast_upload = telegram_bundle_id + telegram_suffix_broadcast_upload
 
 config_setting(
     name = "debug",
@@ -1043,7 +1057,7 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{telegram_bundle_id}.Share</string>
+    <string>{extension_bundle_id_share}</string>
     <key>CFBundleName</key>
     <string>{telegram_app_name}</string>
     <key>CFBundlePackageType</key>
@@ -1081,7 +1095,7 @@ plist_fragment(
         <string>ShareRootController</string>
     </dict>
     """.format(
-        telegram_bundle_id = telegram_bundle_id,
+        extension_bundle_id_share = extension_bundle_id_share,
         telegram_app_name = telegram_app_name,
     )
 )
@@ -1116,9 +1130,7 @@ plist_fragment(
 ios_extension(
     name = "ShareExtension",
     entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = "{telegram_bundle_id}.Share".format(
-        telegram_bundle_id = telegram_bundle_id,
-    ),
+    bundle_id = extension_bundle_id_share,
     families = [
         "iphone",
         "ipad",
@@ -1149,7 +1161,7 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{telegram_bundle_id}.NotificationContent</string>
+    <string>{extension_bundle_id_notification_content}</string>
     <key>CFBundleName</key>
     <string>{telegram_app_name}</string>
     <key>CFBundlePackageType</key>
@@ -1172,7 +1184,7 @@ plist_fragment(
         <string>NotificationViewController</string>
     </dict>
     """.format(
-        telegram_bundle_id = telegram_bundle_id,
+        extension_bundle_id_notification_content = extension_bundle_id_notification_content,
         telegram_app_name = telegram_app_name,
     )
 )
@@ -1225,9 +1237,7 @@ swift_library(
 ios_extension(
     name = "NotificationContentExtension",
     entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = "{telegram_bundle_id}.NotificationContent".format(
-        telegram_bundle_id = telegram_bundle_id,
-    ),
+    bundle_id = extension_bundle_id_notification_content,
     families = [
         "iphone",
         "ipad",
@@ -1259,7 +1269,7 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{telegram_bundle_id}.Widget</string>
+    <string>{extension_bundle_id_widget}</string>
     <key>CFBundleName</key>
     <string>{telegram_app_name}</string>
     <key>CFBundlePackageType</key>
@@ -1274,7 +1284,7 @@ plist_fragment(
         <string>arm64</string>
     </array>
     """.format(
-        telegram_bundle_id = telegram_bundle_id,
+        extension_bundle_id_widget = extension_bundle_id_widget,
         telegram_app_name = telegram_app_name,
     )
 )
@@ -1332,9 +1342,7 @@ genrule(
 ios_extension(
     name = "WidgetExtension",
     entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = "{telegram_bundle_id}.Widget".format(
-        telegram_bundle_id = telegram_bundle_id,
-    ),
+    bundle_id = extension_bundle_id_widget,
     families = [
         "iphone",
         "ipad",
@@ -1378,7 +1386,7 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{telegram_bundle_id}.SiriIntents</string>
+    <string>{extension_bundle_id_siri_intents}</string>
     <key>CFBundleName</key>
     <string>{telegram_app_name}</string>
     <key>CFBundlePackageType</key>
@@ -1408,7 +1416,7 @@ plist_fragment(
         <string>IntentHandler</string>
     </dict>
     """.format(
-        telegram_bundle_id = telegram_bundle_id,
+        extension_bundle_id_siri_intents = extension_bundle_id_siri_intents,
         telegram_app_name = telegram_app_name,
     )
 )
@@ -1507,9 +1515,7 @@ ios_unit_test(
 ios_extension(
     name = "IntentsExtension",
     entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = "{telegram_bundle_id}.SiriIntents".format(
-        telegram_bundle_id = telegram_bundle_id,
-    ),
+    bundle_id = extension_bundle_id_siri_intents,
     families = [
         "iphone",
         "ipad",
@@ -1543,7 +1549,7 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{telegram_bundle_id}.BroadcastUpload</string>
+    <string>{extension_bundle_id_broadcast_upload}</string>
     <key>CFBundleName</key>
     <string>{telegram_app_name}</string>
     <key>CFBundlePackageType</key>
@@ -1558,7 +1564,7 @@ plist_fragment(
         <string>RPBroadcastProcessModeSampleBuffer</string>
     </dict>
     """.format(
-        telegram_bundle_id = telegram_bundle_id,
+        extension_bundle_id_broadcast_upload = extension_bundle_id_broadcast_upload,
         telegram_app_name = telegram_app_name,
     )
 )
@@ -1604,9 +1610,7 @@ swift_library(
 ios_extension(
     name = "BroadcastUploadExtension",
     entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = "{telegram_bundle_id}.BroadcastUpload".format(
-        telegram_bundle_id = telegram_bundle_id,
-    ),
+    bundle_id = extension_bundle_id_broadcast_upload,
     families = [
         "iphone",
         "ipad",
@@ -1639,7 +1643,7 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{telegram_bundle_id}.NotificationService</string>
+    <string>{extension_bundle_id_notification_service}</string>
     <key>CFBundleName</key>
     <string>{telegram_app_name}</string>
     <key>CFBundlePackageType</key>
@@ -1659,7 +1663,7 @@ plist_fragment(
         </dict>
     </dict>
     """.format(
-        telegram_bundle_id = telegram_bundle_id,
+        extension_bundle_id_notification_service = extension_bundle_id_notification_service,
         telegram_app_name = telegram_app_name,
     )
 )
@@ -1667,9 +1671,7 @@ plist_fragment(
 ios_extension(
     name = "NotificationServiceExtension" + notificationServiceExtensionVersion,
     entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = "{telegram_bundle_id}.NotificationService".format(
-        telegram_bundle_id = telegram_bundle_id,
-    ),
+    bundle_id = extension_bundle_id_notification_service,
     families = [
         "iphone",
         "ipad",
