@@ -640,7 +640,20 @@ def write_configuration(source, destination, team_id):
     print("team id {}".format(team_id))
 
 
+def minimum_build_number(floor):
+    # A queued TestFlight job can ask for a number before App Store Connect lists
+    # the build the previous job just uploaded. This file is that floor.
+    path = pathlib.Path(__file__).resolve().parent / "build-number-floor"
+    if not path.exists():
+        return floor
+    text = path.read_text(encoding="utf-8").strip()
+    if not text.isdigit():
+        raise SystemExit("Tellomi/build-number-floor must be an integer")
+    return max(floor, int(text))
+
+
 def next_build_number(client, bundle_id, floor):
+    floor = minimum_build_number(floor)
     query = urllib.parse.urlencode({"filter[bundleId]": bundle_id, "limit": 1})
     payload = client.request("GET", "/v1/apps?" + query)
     apps = payload.get("data") or []
@@ -650,8 +663,9 @@ def next_build_number(client, bundle_id, floor):
     app_id = apps[0]["id"]
     query = urllib.parse.urlencode({
         "filter[app]": app_id,
-        "limit": 200,
-        "fields[builds]": "version",
+        "sort": "-uploadedDate",
+        "limit": 50,
+        "fields[builds]": "version,uploadedDate,processingState",
     })
     highest = 0
     path = "/v1/builds?" + query
@@ -666,7 +680,7 @@ def next_build_number(client, bundle_id, floor):
             break
         path = next_link[len(API):]
     number = max(highest + 1, floor)
-    print("build number {} (previous highest {})".format(number, highest))
+    print("build number {} (previous highest {}, floor {})".format(number, highest, floor))
     return number
 
 
@@ -790,6 +804,8 @@ def self_test():
             raise SystemExit("SiriIntents must enable SiriKit")
         if API_TIMEOUT_SECONDS != 120 or API_ATTEMPTS != 5:
             raise SystemExit("App Store Connect retry policy changed")
+        if minimum_build_number(1) < 52:
+            raise SystemExit("build number floor is below the uploaded build 51")
 
         class PrefixList:
             def request(self, method, path, body=None):

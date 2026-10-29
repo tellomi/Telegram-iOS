@@ -381,6 +381,9 @@ def check_marketing_version() -> None:
         fail(f"Tellomi/version {version} does not match versions.json app {versions.get('app')}")
     if version == "13.1.1":
         fail("marketing version is still Telegram 13.1.1")
+    floor = (ROOT / "Tellomi/build-number-floor").read_text(encoding="utf-8").strip()
+    if not floor.isdigit() or int(floor) < 52:
+        fail("Tellomi/build-number-floor must stay above the uploaded build 51")
     build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
     if "Tellomi/version" not in build:
         fail("VersionInfoPlist does not read Tellomi/version")
