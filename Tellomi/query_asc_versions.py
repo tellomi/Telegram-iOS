@@ -42,27 +42,17 @@ def main():
         client = Client(make_jwt(key_id, issuer_id, p8_path))
         query = urllib.parse.urlencode({
             "filter[bundleId]": BUNDLE_ID,
-            "include": "bundleId",
-            "limit": 20,
+            "limit": 5,
         })
         payload = client.request("GET", "/v1/apps?" + query)
-        included = {}
-        for item in payload.get("included") or []:
-            included[item.get("id")] = (item.get("attributes") or {}).get("identifier") or ""
-        match = None
-        for app in payload.get("data") or []:
-            relation = (((app.get("relationships") or {}).get("bundleId") or {}).get("data") or {})
-            identifier = included.get(relation.get("id"), "")
-            if identifier == BUNDLE_ID:
-                match = app
-                break
-        if match is None and len(payload.get("data") or []) == 1:
-            match = payload["data"][0]
-        if match is None:
+        apps = payload.get("data") or []
+        if not apps:
             print("no app record for {}".format(BUNDLE_ID))
             return
+        match = apps[0]
         app_id = match["id"]
-        print("app {}".format(app_id))
+        name = (match.get("attributes") or {}).get("name") or ""
+        print("app {} {}".format(app_id, name))
         print("appStoreVersions:")
         store = []
         for item in pages(client, "/v1/apps/{}/appStoreVersions?limit=200".format(app_id)):
