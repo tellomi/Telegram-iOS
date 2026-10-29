@@ -357,25 +357,8 @@ alternate_icon_folders = [
     "PremiumTurbo",
 ]
 
-composer_icon_folders = ["TellomiPlaceholder"]
-
-[
-    filegroup(
-        name = "{}".format(name),
-        srcs = glob([
-            "Telegram-iOS/{}.alticon/*.png".format(name),
-        ]),
-    ) for name in alternate_icon_folders
-]
-
-[
-    filegroup(
-        name = "{}_icon".format(name),
-        srcs = glob([
-            "Telegram-iOS/{}.icon/**/*".format(name),
-        ]),
-    ) for name in composer_icon_folders
-]
+# Primary and alternate icons are Tellomi/Brand. The upstream PNG folders stay
+# in the tree so an upstream icon update does not have to be merged by hand.
 
 filegroup(
     name = "LaunchScreen",
@@ -1941,9 +1924,9 @@ ios_application(
         ":RequiredDeviceCapabilitiesPlist",
         ":UrlTypesInfoPlist",
     ],
-    app_icons = [ ":{}_icon".format(name) for name in composer_icon_folders ],
+    app_icons = ["//:TellomiAppIcon"],
     alternate_icons = [
-        ":{}".format(name) for name in alternate_icon_folders
+        "//:TellomiAlternate_{}".format(name) for name in alternate_icon_folders
     ],
     resources = [
         ":LaunchScreen",

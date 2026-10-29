@@ -333,8 +333,8 @@ def check_wiring() -> None:
     if "MIIBCgKCAQEA6LszBcC1" in auth:
         fail("Telegram's production RSA key is still the default")
     build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
-    if 'composer_icon_folders = ["TellomiPlaceholder"]' not in build:
-        fail("the home-screen icon is not the placeholder")
+    if 'app_icons = ["//:TellomiAppIcon"]' not in build:
+        fail("the home-screen icon is not the Tellomi brand icon")
     if build.count('entitlements = ":ExtensionAppGroupEntitlements.entitlements"') != 6:
         fail("every extension that opens the app group must sign that entitlement")
     if 'telegram_app_name' not in build:
@@ -345,11 +345,15 @@ def check_wiring() -> None:
     if 'telegram_team_id = "CB7KP6GBAR"' not in variables:
         fail("example variables.bzl team id is not CB7KP6GBAR")
     check_extension_suffixes(build, variables)
-    icon = ROOT / "Telegram/Telegram-iOS/TellomiPlaceholder.icon/Assets/Plane.svg"
-    if "Placeholder-T" not in icon.read_text(encoding="utf-8"):
-        fail("placeholder icon is missing the T mark")
-    if "PLACEHOLDER" not in (ROOT / "Telegram/Telegram-iOS/TellomiPlaceholder-ICON-PLACEHOLDER.txt").read_text(encoding="utf-8"):
-        fail("placeholder icon is not marked")
+    logo = (ROOT / "Tellomi/Brand/logo.svg").read_text(encoding="utf-8")
+    asset = (ROOT / "Tellomi/Brand/AppIcon.icon/Assets/Logo.svg").read_text(encoding="utf-8")
+    if "M485.73 20.63" not in logo or "M481.88 248.76" not in logo:
+        fail("Tellomi/Brand/logo.svg is not the traced logo")
+    if "M485.73 20.63" not in asset or "M481.88 248.76" not in asset:
+        fail("the app icon SVG does not use the traced logo paths")
+    icon_json = (ROOT / "Tellomi/Brand/AppIcon.icon/icon.json").read_text(encoding="utf-8")
+    if "0.06667,0.06667,0.07451" not in icon_json or '"appearance" : "tinted"' not in icon_json:
+        fail("the icon composer file is missing the light color or the tinted variant")
 
 
 def check_marketing_version() -> None:

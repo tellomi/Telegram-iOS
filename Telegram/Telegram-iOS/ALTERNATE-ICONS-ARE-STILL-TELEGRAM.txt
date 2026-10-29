@@ -1,6 +1,4 @@
-PLACEHOLDER NOTE
+The PNG files in this directory are still Telegram's artwork.
 
-The PNG sets in AppIcons.xcassets, DefaultAppIcon.xcassets and the *.alticon
-folders are still Telegram's icons. The home-screen icon is
-TellomiPlaceholder.icon instead. Replace these files before a public release.
-See docs/TELLOMI.md.
+The Bazel app does not package them. Alternate icons come from
+Tellomi/Brand/Alternates. See Tellomi/UPSTREAM_PATCHES.md.

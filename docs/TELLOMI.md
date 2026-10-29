@@ -74,7 +74,7 @@ System permission prompts (the `InfoPlist.strings` files, plus the English strin
 
 ## Icons
 
-The home-screen icon is `Telegram/Telegram-iOS/TellomiPlaceholder.icon`: a plum circle and a white **T**, not the paper plane. `TellomiPlaceholder-ICON-PLACEHOLDER.txt` says so. `composer_icon_folders` in `Telegram/BUILD` points at it.
+The home-screen icon is `Tellomi/Brand/AppIcon.icon`. The outline is the traced `Tellomi/Brand/logo.svg` (light `#111113`, dark `#FFFFFF`, plus an iOS 18 tinted variant). `Telegram/BUILD` points `app_icons` at `//:TellomiAppIcon`. Settings alternate icons use the same artwork from `Tellomi/Brand/Alternates`. See `Tellomi/Brand/README.md` and `Tellomi/UPSTREAM_PATCHES.md`.
 
 The alternate icons (`*.alticon`, `AppIcons.xcassets`, `DefaultAppIcon.xcassets`) are still Telegram's artwork and can still be chosen in Settings. `ALTERNATE-ICONS-ARE-STILL-TELEGRAM.txt` marks them. Replace those files before a public release; they were left in place so an upstream icon update does not conflict with a binary rewrite of every PNG.
 
@@ -196,7 +196,7 @@ Not in the TestFlight IPA. Create it only when embedding the watch app (`--embed
 - `Network.swift` installs `TellomiSeedAddresses` and no longer contains Telegram's production seed `149.154.175.50`.
 - The first connection uses `TellomiDefaultDatacenterId`.
 - The handshake reads `TellomiServerPublicKeys` and applies the fingerprint byte swap. Telegram's production modulus prefix is not the default key.
-- The Bazel app icon list points at `TellomiPlaceholder`.
+- The Bazel app icon is `//:TellomiAppIcon`, and `Tellomi/Brand/logo.svg` still has the traced path data.
 
 A full Xcode or Bazel compile was not run. This machine has no Xcode, no iOS SDK and no simulator.
 

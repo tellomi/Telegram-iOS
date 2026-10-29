@@ -1,9 +1,4 @@
-PLACEHOLDER — replace before shipping.
+UNUSED. The shipping icon is Tellomi/Brand/AppIcon.icon.
 
-This is not the Tellomi app icon. TellomiPlaceholder.icon is a plum circle
-with a white T so the home screen does not show Telegram's paper plane.
-Replace that bundle (icon.json and Assets/) and delete this file.
-
-The alternate icons under Telegram-iOS/*.alticon and AppIcons.xcassets are
-still Telegram's artwork. They stay selectable from Settings until they are
-replaced. See docs/TELLOMI.md.
+This folder was a plum circle and a white T. Telegram/BUILD no longer
+packages it. See Tellomi/Brand/README.md.

@@ -2,3 +2,31 @@ exports_files([
     "versions.json",
     "Tellomi/version",
 ])
+
+filegroup(
+    name = "TellomiAppIcon",
+    srcs = glob(["Tellomi/Brand/AppIcon.icon/**"]),
+    visibility = ["//visibility:public"],
+)
+
+# Same filenames as the upstream *.alticon slots, with the traced Tellomi logo.
+[
+    filegroup(
+        name = "TellomiAlternate_{}".format(name),
+        srcs = glob(["Tellomi/Brand/Alternates/{}.alticon/*.png".format(name)]),
+        visibility = ["//visibility:public"],
+    ) for name in [
+        "BlackIcon",
+        "BlackClassicIcon",
+        "BlackFilledIcon",
+        "BlueIcon",
+        "BlueClassicIcon",
+        "BlueFilledIcon",
+        "WhiteFilledIcon",
+        "New1",
+        "New2",
+        "Premium",
+        "PremiumBlack",
+        "PremiumTurbo",
+    ]
+]
