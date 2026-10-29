@@ -442,7 +442,11 @@ def install_supplied_p12(cert_dir):
         pkcs12_to_pem(incoming, pem, password)
         p12_path = cert_dir / "Distribution.p12"
         cer_path = cert_dir / "Distribution.cer"
-        write_modern_p12_from_pem(pem, p12_path)
+        # Keep the original archive. Import uses APPLE_DIST_CERT_P12_PASSWORD.
+        # Rewriting to an empty-password AES archive here made `security import`
+        # fail, and the fallback then could not open that file with the original password.
+        shutil.copyfile(incoming, p12_path)
+        os.chmod(p12_path, 0o600)
         subprocess.check_call(
             ["openssl", "x509", "-in", str(pem), "-out", str(cer_path)],
             stdout=subprocess.DEVNULL,
@@ -738,8 +742,8 @@ def prepare(args):
             source = cert_dir / filename
             if not source.exists():
                 continue
-            if filename.endswith(".p12"):
-                normalize_p12(source)
+            # A supplied archive keeps its original encoding and password.
+            # A minted archive is already an empty-password AES-256 file.
             shutil.copyfile(source, cert_out / filename)
         main_profile = None
         for identifier, _name, profile_name, _capabilities, group in targets:

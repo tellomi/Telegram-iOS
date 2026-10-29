@@ -44,7 +44,7 @@ Do not commit the key, the CSR, the `.cer`, or the `.p12`.
 
 The workflow also needs `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, and `APP_STORE_CONNECT_KEY_P8_BASE64`.
 
-`ImportCertificates.py` imports the `.p12` into a temporary keychain. A modern AES-256 archive and an OpenSSL `-legacy` (RC2) archive both work: the reader tries the modern parser, then `-legacy`, and rewrites the file to an empty-password AES-256 archive before `security import`. The password is passed to `openssl` with `env:APPLE_DIST_CERT_P12_PASSWORD` and is not placed on the command line.
+`ImportCertificates.py` imports the `.p12` into a temporary keychain, first with the export password. A modern AES-256 archive and an OpenSSL `-legacy` archive both work. If Keychain rejects the original file, the reader tries the modern parser and then `-legacy`, rewrites to an empty-password archive, and imports that. The password is not printed.
 
 Profiles created for `app.tellomi.chat` and its extensions reference the portal certificate whose serial matches this `.p12`. A serial that is not on the team fails the signing step instead of minting a replacement.
 
