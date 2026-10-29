@@ -293,10 +293,7 @@ public func deleteAccountOptionsController(context: AccountContext, navigationCo
         
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         
-        var faqUrl = presentationData.strings.DeleteAccount_DeleteMessagesURL
-        if faqUrl == "DeleteAccount.DeleteMessagesURL" || faqUrl.isEmpty {
-            faqUrl = "https://telegram.org/faq#q-can-i-delete-my-messages"
-        }
+        let faqUrl = TellomiLinks.localizedSiteURL(presentationData.strings.DeleteAccount_DeleteMessagesURL, fallback: "faq#q-can-i-delete-my-messages")
         let resolvedUrl = resolveInstantViewUrl(account: context.account, url: faqUrl)
         |> mapToSignal { result -> Signal<ResolvedUrl, NoError> in
             guard case let .result(result) = result else {
@@ -334,10 +331,7 @@ public func deleteAccountOptionsController(context: AccountContext, navigationCo
         let supportPeer = Promise<EnginePeer.Id?>()
         supportPeer.set(context.engine.peers.supportPeerId())
         
-        var faqUrl = presentationData.strings.Settings_FAQ_URL
-        if faqUrl == "Settings.FAQ_URL" || faqUrl.isEmpty {
-            faqUrl = "https://telegram.org/faq#general"
-        }
+        let faqUrl = TellomiLinks.localizedSiteURL(presentationData.strings.Settings_FAQ_URL, fallback: "faq#general")
         let resolvedUrl = resolveInstantViewUrl(account: context.account, url: faqUrl)
         |> mapToSignal { result -> Signal<ResolvedUrl, NoError> in
             guard case let .result(result) = result else {

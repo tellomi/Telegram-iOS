@@ -1,0 +1,83 @@
+{
+  "comment": "Single list of bundle-id suffixes. prepare_appstore_signing.py registers every target with register=true. BuildConfiguration.py maps suffix to profile_file when copying profiles. Targets with bazel_variable are written into variables.bzl and interpolated by Telegram/BUILD. To register a different extension name, change that target's suffix here.",
+  "targets": [
+    {
+      "suffix": "",
+      "name": "Tellomi",
+      "asc_profile_name": "tellomi-ios-app",
+      "profile_file": "Telegram",
+      "capabilities": ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS"],
+      "register": true
+    },
+    {
+      "suffix": ".Share",
+      "name": "Tellomi Share",
+      "asc_profile_name": "tellomi-ios-share",
+      "profile_file": "Share",
+      "capabilities": ["APP_GROUPS"],
+      "register": true,
+      "bazel_variable": "telegram_suffix_share"
+    },
+    {
+      "suffix": ".NotificationContent",
+      "name": "Tellomi Notification Content",
+      "asc_profile_name": "tellomi-ios-notification-content",
+      "profile_file": "NotificationContent",
+      "capabilities": ["APP_GROUPS"],
+      "register": true,
+      "bazel_variable": "telegram_suffix_notification_content"
+    },
+    {
+      "suffix": ".NotificationService",
+      "name": "Tellomi Notification Service",
+      "asc_profile_name": "tellomi-ios-notification-service",
+      "profile_file": "NotificationService",
+      "capabilities": ["APP_GROUPS"],
+      "register": true,
+      "bazel_variable": "telegram_suffix_notification_service"
+    },
+    {
+      "suffix": ".SiriIntents",
+      "name": "Tellomi Siri",
+      "asc_profile_name": "tellomi-ios-siri",
+      "profile_file": "Intents",
+      "capabilities": ["APP_GROUPS", "SIRIKIT"],
+      "register": true,
+      "bazel_variable": "telegram_suffix_siri_intents"
+    },
+    {
+      "suffix": ".Widget",
+      "name": "Tellomi Widget",
+      "asc_profile_name": "tellomi-ios-widget",
+      "profile_file": "Widget",
+      "capabilities": ["APP_GROUPS"],
+      "register": true,
+      "bazel_variable": "telegram_suffix_widget"
+    },
+    {
+      "suffix": ".BroadcastUpload",
+      "name": "Tellomi Broadcast Upload",
+      "asc_profile_name": "tellomi-ios-broadcast",
+      "profile_file": "BroadcastUpload",
+      "capabilities": ["APP_GROUPS"],
+      "register": true,
+      "bazel_variable": "telegram_suffix_broadcast_upload"
+    },
+    {
+      "suffix": ".watchkitapp",
+      "name": "Tellomi Watch",
+      "asc_profile_name": "tellomi-ios-watch",
+      "profile_file": "WatchApp",
+      "capabilities": [],
+      "register": false
+    },
+    {
+      "suffix": ".watchkitapp.watchkitextension",
+      "name": "Tellomi Watch Extension",
+      "asc_profile_name": "tellomi-ios-watch-extension",
+      "profile_file": "WatchExtension",
+      "capabilities": [],
+      "register": false
+    }
+  ]
+}

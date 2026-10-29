@@ -1,0 +1,4 @@
+The PNG files in this directory are still Telegram's artwork.
+
+The Bazel app does not package them. Alternate icons come from
+Tellomi/Brand/Alternates. See Tellomi/UPSTREAM_PATCHES.md.

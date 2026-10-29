@@ -295,20 +295,10 @@ public final class AuthorizationSequenceCountrySelectionController: ViewControll
     }
     
     public static func defaultCountryCode() -> Int32 {
-        let countryId = (Locale.current as NSLocale).object(forKey: .countryCode) as? String
-     
-        var countryCode: Int32 = 1
-        if let countryId = countryId {
-            let normalizedId = countryId.uppercased()
-            for (code, idAndName) in countryCodeToIdAndName {
-                if idAndName.0 == normalizedId {
-                    countryCode = Int32(code)
-                    break
-                }
-            }
-        }
-        
-        return countryCode
+        // Tellomi: ignore the SIM and the device region. The login screen, and the
+        // new-contact / change-phone fields that share this helper, open on China.
+        // The country list still lets the user pick another code.
+        return 86
     }
     
     private let theme: PresentationTheme

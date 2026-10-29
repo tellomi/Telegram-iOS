@@ -41,7 +41,7 @@ public func webAppTermsAlertController(
         id: "check",
         component: AnyComponent(
             AlertCheckComponent(title: strings.WebApp_DisclaimerAgree, initialValue: false, externalState: checkState, linkAction: {
-                context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: strings.WebApp_Disclaimer_URL, forceExternal: true, presentationData: presentationData, navigationController: nil, dismissInput: {})
+                context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(strings.WebApp_Disclaimer_URL, fallback: "tos/mini-apps"), forceExternal: true, presentationData: presentationData, navigationController: nil, dismissInput: {})
             })
         )
     ))

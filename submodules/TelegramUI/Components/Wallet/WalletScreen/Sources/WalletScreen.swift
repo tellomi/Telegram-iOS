@@ -3813,7 +3813,7 @@ private final class WalletScreenComponent: Component {
                 }
                 contentHeight = emptyTransactionsOriginY + emptyTransactionsInfoSize.height
 
-                let url = environment.strings.Wallet_TermsText_URL
+                let url = TellomiLinks.localizedSiteURL(environment.strings.Wallet_TermsText_URL, fallback: "tos")
                 self.emptyTransactionsFooter.parentState = state
                 let emptyTransactionsFooterSize = self.emptyTransactionsFooter.update(
                     transition: transition,

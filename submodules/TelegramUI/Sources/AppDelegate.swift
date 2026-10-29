@@ -853,7 +853,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 if parsed.scheme == nil || parsed.scheme!.isEmpty {
                     parsedUrl = URL(string: "https://\(url)")
                 }
-                if parsed.scheme == "tg" {
+                if TellomiLinks.isDeepLinkScheme(parsed.scheme) {
                     return
                 }
             }

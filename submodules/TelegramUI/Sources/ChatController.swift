@@ -3113,7 +3113,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                                                 openBot()
                                             }, showMore: nil, openTerms: { [weak self] in
                                                 if let self, let navigationController = self.effectiveNavigationController {
-                                                    context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: presentationData.strings.WebApp_LaunchTermsConfirmation_URL, forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
+                                                    context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(presentationData.strings.WebApp_LaunchTermsConfirmation_URL, fallback: "tos/mini-apps"), forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
                                                 }
                                             })
                                             strongSelf.present(controller, in: .window(.root))
@@ -5566,7 +5566,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             guard let self else {
                 return
             }
-            self.openUrl("https://t.me/nft/\(slug)", concealed: false)
+            self.openUrl("https://\(TellomiLinks.host)/nft/\(slug)", concealed: false)
         }, openMessageFeeException: { [weak self] in
             guard let self, let peer = self.presentationInterfaceState.renderedPeer?.peer.flatMap(EnginePeer.init) else {
                 return

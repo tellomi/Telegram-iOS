@@ -97,7 +97,7 @@ final class QrStudioScreenComponent: Component {
         private var contactTokenStaleAttempt = 0
         private lazy var placeholderContactLink: String = {
             let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
-            return "https://t.me/contact/" + String((0 ..< 32).map { _ in alphabet.randomElement()! })
+            return "https://\(TellomiLinks.host)/contact/" + String((0 ..< 32).map { _ in alphabet.randomElement()! })
         }()
         private var didRequestContactToken = false
 
@@ -1932,11 +1932,11 @@ final class QrStudioScreenComponent: Component {
             let peer = component.peer
             var link: String
             if let addressName = peer.addressName, !addressName.isEmpty {
-                link = "https://t.me/\(addressName)"
+                link = "https://\(TellomiLinks.host)/\(addressName)"
             } else if case let .user(user) = peer {
-                link = "https://t.me/+\(user.phone ?? "")"
+                link = "https://\(TellomiLinks.host)/+\(user.phone ?? "")"
             } else if case .channel = peer {
-                link = "https://t.me/c/\(peer.id.id._internalGetInt64Value())"
+                link = "https://\(TellomiLinks.host)/c/\(peer.id.id._internalGetInt64Value())"
             } else {
                 link = ""
             }

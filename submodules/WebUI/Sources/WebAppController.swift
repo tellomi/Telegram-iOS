@@ -3407,7 +3407,7 @@ public final class WebAppController: ViewController, AttachmentContainable {
                 } else {
                     scheme = "https"
                 }
-                let url = URL(string: "\(scheme)://t.me/\(addressName)\(appName)?startapp&addToHomeScreen")!
+                let url = URL(string: "\(scheme)://\(TellomiLinks.host)/\(addressName)\(appName)?startapp&addToHomeScreen")!
                 UIApplication.shared.open(url)
             })
         }
@@ -3981,7 +3981,7 @@ public final class WebAppController: ViewController, AttachmentContainable {
                     guard let self else {
                         return
                     }
-                    let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://t.me/\(addressName)?profile"), actionCompleted: { [weak self] in
+                    let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://\(TellomiLinks.host)/\(addressName)?profile"), actionCompleted: { [weak self] in
                         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
                         self?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
                     }))
@@ -4047,7 +4047,7 @@ public final class WebAppController: ViewController, AttachmentContainable {
                         self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: .peer(botPeer)))
                     }
                 } else {
-                    self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: self.presentationData.strings.WebApp_PrivacyPolicy_URL, forceExternal: false, presentationData: self.presentationData, navigationController: self.getNavigationController(), dismissInput: {})
+                    self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(self.presentationData.strings.WebApp_PrivacyPolicy_URL, fallback: "privacy-tpa"), forceExternal: false, presentationData: self.presentationData, navigationController: self.getNavigationController(), dismissInput: {})
                 }
             })))
                         

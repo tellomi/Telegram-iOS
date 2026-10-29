@@ -131,7 +131,7 @@ final class SiriContactMatchingTests: XCTestCase {
     func testExplicitTelegramLinkIsTheFirstCandidate() {
         self.recordImport(of: "600 00 00 00", as: self.juan.id, localIdentifiers: [])
 
-        let result = self.match(self.deviceContact(numbers: ["600 00 00 00"], telegramLink: "https://t.me/@id\(self.marie.id.id._internalGetInt64Value())"))
+        let result = self.match(self.deviceContact(numbers: ["600 00 00 00"], telegramLink: "https://\(TellomiLinks.host)/@id\(self.marie.id.id._internalGetInt64Value())"))
 
         XCTAssertEqual(result.map(\.1), [self.marie.id, self.juan.id])
     }

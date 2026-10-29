@@ -684,7 +684,7 @@ private final class SheetContent: CombinedComponent {
             contentSize.height += button.size.height
             
             let termsText = isSubscription ? strings.Stars_Subscription_Terms : strings.Stars_Transfer_Terms
-            let termsURL = isSubscription ? strings.Stars_Subscription_Terms_URL : strings.Stars_Transfer_Terms_URL
+            let termsURL = TellomiLinks.localizedSiteURL(isSubscription ? strings.Stars_Subscription_Terms_URL : strings.Stars_Transfer_Terms_URL, fallback: "tos/stars")
             
             contentSize.height += 14.0
             

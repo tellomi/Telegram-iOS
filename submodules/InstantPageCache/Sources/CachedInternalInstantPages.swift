@@ -25,34 +25,22 @@ public func extractAnchor(string: String) -> (String, String?) {
 private let refreshTimeout: Int32 = 60 * 60 * 12
 
 public func cachedFaqInstantPage(context: AccountContext) -> Signal<ResolvedUrl, NoError> {
-    var faqUrl = context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_FAQ_URL
-    if faqUrl == "Settings.FAQ_URL" || faqUrl.isEmpty {
-        faqUrl = "https://telegram.org/faq#general-questions"
-    }
+    let faqUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_FAQ_URL, fallback: "faq#general-questions")
     return cachedInternalInstantPage(context: context, url: faqUrl)
 }
 
 public func cachedTermsPage(context: AccountContext) -> Signal<ResolvedUrl, NoError> {
-    var termsUrl = context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_Terms_URL
-    if termsUrl == "Settings.Terms_URL" || termsUrl.isEmpty {
-        termsUrl = "https://telegram.org/tos"
-    }
+    let termsUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_Terms_URL, fallback: "tos")
     return cachedInternalInstantPage(context: context, url: termsUrl)
 }
 
 public func cachedPrivacyPage(context: AccountContext) -> Signal<ResolvedUrl, NoError> {
-    var privacyUrl = context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_PrivacyPolicy_URL
-    if privacyUrl == "Settings.PrivacyPolicy_URL" || privacyUrl.isEmpty {
-        privacyUrl = "https://telegram.org/privacy"
-    }
+    let privacyUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_PrivacyPolicy_URL, fallback: "privacy")
     return cachedInternalInstantPage(context: context, url: privacyUrl)
 }
 
 public func cachedWebAppTermsPage(context: AccountContext) -> Signal<ResolvedUrl, NoError> {
-    var privacyUrl = context.sharedContext.currentPresentationData.with { $0 }.strings.WebApp_TermsOfUse_URL
-    if privacyUrl == "WebApp.TermsOfUse_URL" || privacyUrl.isEmpty {
-        privacyUrl = "https://telegram.org/tos/mini-apps"
-    }
+    let privacyUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.WebApp_TermsOfUse_URL, fallback: "tos/mini-apps")
     return cachedInternalInstantPage(context: context, url: privacyUrl)
 }
 

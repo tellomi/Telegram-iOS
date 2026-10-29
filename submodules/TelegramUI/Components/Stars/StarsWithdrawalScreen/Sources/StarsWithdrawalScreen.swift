@@ -412,7 +412,7 @@ private final class SheetContent: CombinedComponent {
                     },
                     tapAction: { attributes, _ in
                         if let controller = controller() as? StarsWithdrawScreen, let navigationController = controller.navigationController as? NavigationController {
-                            component.context.sharedContext.openExternalUrl(context: component.context, urlContext: .generic, url: strings.Stars_PaidContent_AmountInfo_URL, forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
+                            component.context.sharedContext.openExternalUrl(context: component.context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(strings.Stars_PaidContent_AmountInfo_URL, fallback: "tos/stars"), forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
                         }
                     }
                 ))

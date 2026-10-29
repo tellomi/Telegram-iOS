@@ -622,7 +622,7 @@ final class StarsStatisticsScreenComponent: Component {
                         },
                         tapAction: { [weak self] attributes, _ in
                             if let controller = self?.controller?() as? StarsStatisticsScreen, let navigationController = controller.navigationController as? NavigationController {
-                                component.context.sharedContext.openExternalUrl(context: component.context, urlContext: .generic, url: strings.Stars_BotRevenue_Withdraw_Info_URL, forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
+                                component.context.sharedContext.openExternalUrl(context: component.context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(strings.Stars_BotRevenue_Withdraw_Info_URL, fallback: "tos/bot-developers#6-2-2-tpa-balance"), forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
                             }
                         }
                     )),

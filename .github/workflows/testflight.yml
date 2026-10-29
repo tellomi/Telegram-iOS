@@ -1,0 +1,171 @@
+# Builds the Tellomi iOS app and uploads it to TestFlight.
+#
+# Secrets (repository or environment; never printed by this workflow):
+#   APP_STORE_CONNECT_KEY_ID
+#   APP_STORE_CONNECT_ISSUER_ID
+#   APP_STORE_CONNECT_KEY_P8_BASE64   base64 of the AuthKey .p8
+#   APPLE_DIST_CERT_P12_BASE64        base64 of the Apple Distribution .p12
+#   APPLE_DIST_CERT_P12_PASSWORD      password for that .p12 (may be empty)
+#
+# The .p8 authenticates to App Store Connect. It is not a code-signing
+# certificate. The distribution certificate comes from the two p12 secrets.
+# The API still creates profiles, and each profile must include that
+# certificate. How to create the p12 is Tellomi/README.md.
+#
+# Minting a certificate and caching its private key is opt-in. Set the
+# repository variable TELLOMI_MINT_DISTRIBUTION_CERT to 1, or dispatch this
+# workflow with mint_distribution_cert. Caches do not cross tag refs, so
+# minting is not the default.
+
+name: TestFlight
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      mint_distribution_cert:
+        description: Mint an Apple Distribution certificate instead of using APPLE_DIST_CERT_P12_BASE64
+        type: boolean
+        default: false
+
+concurrency:
+  group: tellomi-testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    runs-on: xcode-27
+    timeout-minutes: 360
+    env:
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_P8_BASE64 }}
+      APPLE_DIST_CERT_P12_BASE64: ${{ secrets.APPLE_DIST_CERT_P12_BASE64 }}
+      APPLE_DIST_CERT_P12_PASSWORD: ${{ secrets.APPLE_DIST_CERT_P12_PASSWORD }}
+      TELLOMI_MINT_DISTRIBUTION_CERT: ${{ vars.TELLOMI_MINT_DISTRIBUTION_CERT }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Submodules are fetched by the next step at the recorded commits.
+          # fetch-depth plus submodules: recursive clones each default-branch
+          # tip, which is not the pin, and the tellomi org has no sibling
+          # copies of the relative tgcalls and rlottie URLs.
+          fetch-depth: 1
+          submodules: false
+
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
+
+      - name: Check marketing version
+        run: python3 Tellomi/check_marketing_version.py
+
+      - name: Select Xcode from versions.json
+        run: |
+          set -euo pipefail
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [ ! -d "$CANDIDATE" ]; then
+            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
+            ls -1 /Applications | grep -E '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select -s "${CANDIDATE}/Contents/Developer"
+          xcodebuild -version
+
+      - name: Restore distribution certificate
+        if: ${{ vars.TELLOMI_MINT_DISTRIBUTION_CERT == '1' || (github.event_name == 'workflow_dispatch' && inputs.mint_distribution_cert) }}
+        uses: actions/cache/restore@v4
+        with:
+          path: tellomi-distribution-cert
+          key: tellomi-apple-distribution-none
+          restore-keys: |
+            tellomi-apple-distribution-
+
+      - name: Restore Bazel cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /Users/runner/telegram-bazel-cache
+          key: tellomi-bazel-none
+          restore-keys: |
+            tellomi-bazel-
+
+      - name: Prepare signing and build number
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.mint_distribution_cert }}" == "true" ]]; then
+            export TELLOMI_MINT_DISTRIBUTION_CERT=1
+          fi
+          python3 Tellomi/prepare_appstore_signing.py \
+            --configuration build-system/appstore-configuration.json \
+            --configuration-out "${RUNNER_TEMP}/tellomi-configuration.json" \
+            --output "${RUNNER_TEMP}/tellomi-signing" \
+            --cert-dir "${GITHUB_WORKSPACE}/tellomi-distribution-cert" \
+            --build-number-out "${RUNNER_TEMP}/build-number.txt" \
+            --build-number-floor "${{ github.run_number }}"
+          echo "BUILD_NUMBER=$(tr -d '[:space:]' < "${RUNNER_TEMP}/build-number.txt")" >> "${GITHUB_ENV}"
+
+      - name: Save distribution certificate
+        if: ${{ success() && (vars.TELLOMI_MINT_DISTRIBUTION_CERT == '1' || (github.event_name == 'workflow_dispatch' && inputs.mint_distribution_cert)) }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: tellomi-distribution-cert
+          key: tellomi-apple-distribution-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Import signing certificate
+        run: |
+          set -euo pipefail
+          # Imports into temp.keychain. A legacy or password-protected p12 is
+          # rewritten with openssl (modern, then -legacy) before security import.
+          # APPLE_DIST_CERT_P12_PASSWORD is already in the environment and is
+          # not passed on the command line.
+          python3 build-system/Make/ImportCertificates.py \
+            --path "${RUNNER_TEMP}/tellomi-signing/certs"
+
+      - name: Build release IPA
+        run: |
+          set -euo pipefail
+          python3 -u build-system/Make/Make.py \
+            --overrideXcodeVersion \
+            --cacheDir /Users/runner/telegram-bazel-cache \
+            build \
+            --configurationPath "${RUNNER_TEMP}/tellomi-configuration.json" \
+            --codesigningInformationPath "${RUNNER_TEMP}/tellomi-signing" \
+            --configuration release_arm64 \
+            --buildNumber "${BUILD_NUMBER}"
+          test -f bazel-bin/Telegram/Telegram.ipa
+
+      - name: Upload to TestFlight
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - << 'PY'
+          import base64, os, pathlib
+          dest_dir = pathlib.Path.home() / ".private_keys"
+          dest_dir.mkdir(mode=0o700, exist_ok=True)
+          dest = dest_dir / ("AuthKey_" + os.environ["APP_STORE_CONNECT_KEY_ID"] + ".p8")
+          dest.write_bytes(base64.b64decode(os.environ["APP_STORE_CONNECT_KEY_P8_BASE64"]))
+          dest.chmod(0o600)
+          PY
+          xcrun altool --upload-app \
+            --type ios \
+            --file bazel-bin/Telegram/Telegram.ipa \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+          rm -rf "${HOME}/.private_keys"
+
+      - name: Save Bazel cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /Users/runner/telegram-bazel-cache
+          key: tellomi-bazel-${{ github.run_id }}-${{ github.run_attempt }}
