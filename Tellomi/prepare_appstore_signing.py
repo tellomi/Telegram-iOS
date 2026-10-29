@@ -166,12 +166,38 @@ def bundle_targets(bundle_id):
     return targets
 
 
+def _bundle_id_pages(client, query):
+    path = "/v1/bundleIds?" + query
+    for _page in range(50):
+        payload = client.request("GET", path)
+        for item in payload.get("data") or []:
+            yield item
+        next_link = ((payload.get("links") or {}).get("next")) or ""
+        if not next_link.startswith(API):
+            return
+        path = next_link[len(API):]
+
+
 def find_bundle_id(client, identifier):
-    query = urllib.parse.urlencode({"filter[identifier]": identifier, "limit": 1})
-    payload = client.request("GET", "/v1/bundleIds?" + query)
-    for item in payload.get("data") or []:
-        if item.get("attributes", {}).get("identifier") == identifier:
+    # filter[identifier] with limit=1 has missed an App ID that already exists,
+    # and the following create then fails with 409 "is not available".
+    filtered = urllib.parse.urlencode({
+        "filter[identifier]": identifier,
+        "limit": 200,
+    })
+    for item in _bundle_id_pages(client, filtered):
+        if (item.get("attributes") or {}).get("identifier") == identifier:
             return item["id"]
+    scanned = []
+    for item in _bundle_id_pages(client, urllib.parse.urlencode({"limit": 200})):
+        found = (item.get("attributes") or {}).get("identifier") or ""
+        scanned.append(found)
+        if found == identifier:
+            return item["id"]
+    close = [item for item in scanned if "tellomi" in item]
+    print("bundle id {} is not among the {} App IDs this key can list".format(identifier, len(scanned)))
+    if close:
+        print("visible tellomi App IDs: {}".format(", ".join(close)))
     return None
 
 
@@ -181,16 +207,25 @@ def ensure_bundle_id(client, identifier, name):
         print("bundle id exists: {}".format(identifier))
         return existing
     print("creating bundle id {}".format(identifier))
-    payload = client.request("POST", "/v1/bundleIds", {
-        "data": {
-            "type": "bundleIds",
-            "attributes": {
-                "identifier": identifier,
-                "name": name,
-                "platform": "IOS",
-            },
-        }
-    })
+    try:
+        payload = client.request("POST", "/v1/bundleIds", {
+            "data": {
+                "type": "bundleIds",
+                "attributes": {
+                    "identifier": identifier,
+                    "name": name,
+                    "platform": "IOS",
+                },
+            }
+        })
+    except ApiError as error:
+        if error.status != 409:
+            raise
+        existing = find_bundle_id(client, identifier)
+        if existing:
+            print("bundle id exists: {}".format(identifier))
+            return existing
+        raise
     return payload["data"]["id"]
 
 
