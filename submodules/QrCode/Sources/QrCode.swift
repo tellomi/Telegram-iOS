@@ -1,4 +1,5 @@
 import Foundation
+import TellomiLinks
 import UIKit
 import CoreImage
 import CoreGraphics
@@ -16,7 +17,7 @@ private enum QrCodePreheater {
     static let once: Void = {
         DispatchQueue.global(qos: .utility).async {
             autoreleasepool {
-                let _ = qrCode(string: "https://t.me/telegram", color: .black, icon: .none, ecl: "Q").start()
+                let _ = qrCode(string: "https://\(TellomiLinks.host)/telegram", color: .black, icon: .none, ecl: "Q").start()
             }
         }
     }()

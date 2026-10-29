@@ -33,7 +33,7 @@ APP_GROUP = "group.{bundle_id}"
 # The watch app is not in this list: Make.py embeds it only with --embedWatchApp.
 # profile_name is the App Store Connect profile name (50 character limit).
 TARGETS = [
-    ("", "Tellomi", "tellomi-ios-app", ["PUSH_NOTIFICATIONS", "APP_GROUPS"]),
+    ("", "Tellomi", "tellomi-ios-app", ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS"]),
     (".Share", "Tellomi Share", "tellomi-ios-share", ["APP_GROUPS"]),
     (".NotificationContent", "Tellomi Notification Content", "tellomi-ios-notification-content", ["APP_GROUPS"]),
     (".NotificationService", "Tellomi Notification Service", "tellomi-ios-notification-service", ["APP_GROUPS"]),

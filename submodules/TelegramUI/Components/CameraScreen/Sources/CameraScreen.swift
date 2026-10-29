@@ -2990,7 +2990,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                     }
                     let filteredCodes = codes.filter {
                         let message = $0.message.replacingOccurrences(of: "https://", with: "")
-                        if message.hasPrefix("t.me/c/") || message.hasPrefix("t.me/+") || message.hasPrefix("t.me/contact/") || message.hasPrefix("t.me/") {
+                        if message.hasPrefix("\(TellomiLinks.host)/c/") || message.hasPrefix("\(TellomiLinks.host)/+") || message.hasPrefix("\(TellomiLinks.host)/contact/") || message.hasPrefix("\(TellomiLinks.host)/") {
                             return true
                         } else {
                             return false

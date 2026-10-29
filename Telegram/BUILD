@@ -530,14 +530,13 @@ icloud_fragment = "" if not telegram_enable_icloud else """
     telegram_icloud_environment="Production" if telegram_aps_environment == "production" else "Development"
 )
 
-associated_domains_fragment = "" if telegram_bundle_id not in official_bundle_ids else """
+# Host must match TellomiLinks.host (tell.cc). webcredentials stays because the
+# previous entitlement used it for t.me; it now names Tellomi's host only.
+associated_domains_fragment = """
 <key>com.apple.developer.associated-domains</key>
 <array>
-    <string>applinks:telegram.me</string>
-    <string>applinks:t.me</string>
-    <string>applinks:*.t.me</string>
-    <string>webcredentials:t.me</string>
-    <string>webcredentials:telegram.org</string>
+    <string>applinks:tell.cc</string>
+    <string>webcredentials:tell.cc</string>
 </array>
 """
 

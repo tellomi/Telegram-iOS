@@ -1,9 +1,9 @@
 import Foundation
+import TellomiLinks
 import UrlEscaping
 
 private let whitelistedHosts: Set<String> = Set([
-    "t.me",
-    "telegram.me",
+    TellomiLinks.host,
     "telegra.ph",
     "telesco.pe",
     "fragment.com"

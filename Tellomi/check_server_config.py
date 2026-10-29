@@ -222,6 +222,42 @@ def check_build_configuration() -> None:
             fail(f"{name} url scheme is {config.app_specific_url_scheme}")
 
 
+def check_public_links() -> None:
+    source = (ROOT / "submodules/TellomiLinks/Sources/TellomiLinks.swift").read_text(encoding="utf-8")
+    if 'public static let host = "tell.cc"' not in source:
+        fail("TellomiLinks.host is not tell.cc")
+    if 'public static let urlScheme = "tellomi"' not in source:
+        fail("TellomiLinks.urlScheme is not tellomi")
+    build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
+    if "applinks:tell.cc" not in build or "webcredentials:tell.cc" not in build:
+        fail("associated domains do not name tell.cc")
+    if "applinks:t.me" in build or "applinks:telegram" in build or "webcredentials:t.me" in build or "webcredentials:telegram.org" in build:
+        fail("Telegram associated domains are still in the entitlements")
+    association = json.loads((ROOT / "Tellomi/well-known/apple-app-site-association").read_text(encoding="utf-8"))
+    app_ids = []
+    for detail in association["applinks"]["details"]:
+        if "appID" in detail:
+            app_ids.append(detail["appID"])
+        app_ids.extend(detail.get("appIDs") or [])
+    if app_ids != ["TELL0MIDEV.com.tellomi.app", "TELL0MIDEV.com.tellomi.app"]:
+        fail(f"apple-app-site-association app ids are {app_ids}")
+    if association["webcredentials"]["apps"] != ["TELL0MIDEV.com.tellomi.app"]:
+        fail("webcredentials app id is wrong")
+    config = json.loads((ROOT / "build-system/appstore-configuration.json").read_text(encoding="utf-8"))
+    if config.get("app_specific_url_scheme") != "tellomi":
+        fail("app_specific_url_scheme is not tellomi")
+    leftover = []
+    for path in (ROOT / "submodules").rglob("*.swift"):
+        rel = str(path.relative_to(ROOT))
+        if "/Tests/" in rel or rel.endswith("TellomiLinks.swift"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if "https://t.me" in text or "://t.me/" in text or '"t.me/' in text or '"t.me"' in text or "telegram.me" in text or "telegram.dog" in text:
+            leftover.append(rel)
+    if leftover:
+        fail("telegram public-link hosts remain in " + ", ".join(leftover[:12]))
+
+
 def check_wiring() -> None:
     network = (ROOT / "submodules/TelegramCore/Sources/Network/Network.swift").read_text(encoding="utf-8")
     if "149.154.175.50" in network or "TellomiSeedAddresses" not in network:
@@ -257,6 +293,7 @@ def main() -> None:
     config = check_json_and_header()
     check_keys(config)
     check_build_configuration()
+    check_public_links()
     check_wiring()
     print("Tellomi server config checks passed")
 

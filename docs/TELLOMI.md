@@ -68,7 +68,7 @@ Teamgram's server does not check `api_id` or `api_hash` ([teamgram-server#120](h
 
 The legacy Xcode configs `Telegram/Telegram-iOS/Config-AppStoreLLC.xcconfig` and `Config-Fork.xcconfig` carry the same name, bundle id and placeholders. Bazel is the build that ships.
 
-Because the bundle id is not `ph.telegra.Telegraph`, `Telegram/BUILD` already drops the entitlements that exist only for the official client: associated domains (`t.me`), CarPlay, Apple Pay merchant ids, unrestricted VoIP, communication notifications, Sign in with Apple, and the continued-processing GPU entitlement. Siri and iCloud are off via the flags above.
+Because the bundle id is not `ph.telegra.Telegraph`, `Telegram/BUILD` drops the entitlements that exist only for the official client: CarPlay, Apple Pay merchant ids, unrestricted VoIP, communication notifications, Sign in with Apple, and the continued-processing GPU entitlement. Siri and iCloud are off via the flags above. Associated domains are `applinks:tell.cc` and `webcredentials:tell.cc` (see Public links).
 
 System permission prompts (the `InfoPlist.strings` files, plus the English strings in the plist) say Tellomi, including the Arabic, Persian and Korean product names that override the home-screen title. That was a name swap in those files only.
 
@@ -119,6 +119,12 @@ Device or distribution signing comes from the team later. Do not commit certific
 
 `Make.py` writes `build-input/configuration-repository/variables.bzl` from the JSON. That directory is local build state, not a source file.
 
+## Public links
+
+`tell.cc` is the public link host. It replaces `t.me`, `telegram.me`, and `telegram.dog`. The definition is `TellomiLinks.host` in `submodules/TellomiLinks/Sources/TellomiLinks.swift` (`TelegramCore` re-exports it). The legacy watch controller `Telegram/Watch/Extension/TGUserInfoController.m` repeats the same host because that Objective-C target does not import Swift. Paths are unchanged (`/username`, `/+hash`, `/joinchat`, `/c/`, `/s/`, `/addstickers`, `/addemoji`, `/proxy`, `/socks`, `/share`, stories, `?start`, and the rest). `tg://` is still accepted. `tellomi://` uses the same routes (`TellomiLinks.urlScheme`, also `app_specific_url_scheme` in the build configuration, registered next to `tg` in the URL types).
+
+The main app's associated-domains entitlement is `applinks:tell.cc` and `webcredentials:tell.cc`. Telegram domains are not in that entitlement. Ops uploads `Tellomi/well-known/apple-app-site-association` to `https://tell.cc/.well-known/apple-app-site-association`. The team id in that file is the placeholder `TELL0MIDEV` and must be replaced with the real Apple team id before it is served.
+
 ## TestFlight
 
 `.github/workflows/testflight.yml` runs on the `xcode-27` GitHub-hosted image (Xcode 27.1, the version in `versions.json`). It runs when a `v*` tag is pushed, when a GitHub Release is published, and on manual dispatch. It does not run on every pull request.
@@ -157,7 +163,7 @@ Keychain group used by `BuildConfig.keychainAccessGroup`: `{TEAMID}.com.tellomi.
 
 iCloud container: none. `enable_icloud` is false, so `TelegramEntitlements` does not contain `com.apple.developer.icloud-container-identifiers`. Turning the flag on would add container `iCloud.com.tellomi.app` and ubiquity key-value store `{TEAMID}.com.tellomi.app`.
 
-Also absent with this bundle id and these flags: Siri on the main app, associated domains, Sign in with Apple, Apple Pay, CarPlay, unrestricted VoIP, communication notifications, notification filtering, and the continued-processing GPU entitlement. Those fragments in `Telegram/BUILD` are empty unless the bundle id is an official Telegram id or the JSON flag is turned on.
+Also absent with this bundle id and these flags: Siri on the main app, Sign in with Apple, Apple Pay, CarPlay, unrestricted VoIP, communication notifications, notification filtering, and the continued-processing GPU entitlement. Those fragments in `Telegram/BUILD` are empty unless the bundle id is an official Telegram id or the JSON flag is turned on. Associated domains are present and name `tell.cc` only.
 
 The main app's Info.plist background modes, which are not separate App IDs, are `audio`, `fetch`, `location`, `remote-notification`, `voip`, and `processing`.
 

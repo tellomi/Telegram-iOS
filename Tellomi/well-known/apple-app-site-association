@@ -1,0 +1,30 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TELL0MIDEV.com.tellomi.app",
+        "paths": [
+          "*",
+          "/"
+        ]
+      },
+      {
+        "appIDs": [
+          "TELL0MIDEV.com.tellomi.app"
+        ],
+        "components": [
+          {
+            "/": "/*",
+            "comment": "tell.cc keeps t.me path shape: /username, /+hash, /joinchat, /c/, /s/, /addstickers, /addemoji, /proxy, /socks, /share, stories, ?start, and the rest."
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TELL0MIDEV.com.tellomi.app"
+    ]
+  }
+}

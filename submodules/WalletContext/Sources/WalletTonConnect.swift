@@ -1273,11 +1273,11 @@ public struct TonConnectLink: Equatable, Sendable {
         guard let url = URLComponents(string: value) else { return false }
         let scheme = url.scheme?.lowercased()
         let host = url.host?.lowercased()
-        let telegramScheme = scheme == "tg" || scheme == "telegram"
+        let telegramScheme = TellomiLinks.isDeepLinkScheme(scheme) || scheme == "telegram"
         if scheme == "tc" || (telegramScheme && host == "ton-connect") { return true }
         let items = url.queryItems ?? []
         let carriesStart = items.contains { $0.name == "startapp" && $0.value?.hasPrefix("tonconnect-") == true }
-        let walletLink = (scheme == "https" && host == "t.me" && ["/sendgrams", "/sendgrams/"].contains(url.path.lowercased()))
+        let walletLink = (scheme == "https" && host == TellomiLinks.host && ["/sendgrams", "/sendgrams/"].contains(url.path.lowercased()))
             || (telegramScheme && host == "sendgrams")
         if walletLink {
             return carriesStart || items.contains { ["id", "v", "r"].contains($0.name) }

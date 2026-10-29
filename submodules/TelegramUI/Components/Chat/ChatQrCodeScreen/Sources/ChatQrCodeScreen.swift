@@ -1843,11 +1843,11 @@ private class QrContentNode: ASDisplayNode, ContentNode {
         
         var codeLink: String
         if let addressName = peer.addressName, !addressName.isEmpty {
-            codeLink = "https://t.me/\(peer.addressName ?? "")"
+            codeLink = "https://\(TellomiLinks.host)/\(peer.addressName ?? "")"
         } else if case let .user(peer) = peer {
-            codeLink = "https://t.me/+\(peer.phone ?? "")"
+            codeLink = "https://\(TellomiLinks.host)/+\(peer.phone ?? "")"
         } else if case .channel = peer {
-            codeLink = "https://t.me/c/\(peer.id.id._internalGetInt64Value())"
+            codeLink = "https://\(TellomiLinks.host)/c/\(peer.id.id._internalGetInt64Value())"
         } else {
             codeLink = ""
         }
@@ -1883,7 +1883,7 @@ private class QrContentNode: ASDisplayNode, ContentNode {
             
             self.codeImageNode.alpha = 0.0
             
-            self.codeMarkersNode.setSignal(qrCode(string: "https://t.me/contact/000000:abcdef", color: .black, backgroundColor: nil, icon: .cutout, ecl: "Q", onlyMarkers: true) |> map { $0.1 }, attemptSynchronously: true)
+            self.codeMarkersNode.setSignal(qrCode(string: "https://\(TellomiLinks.host)/contact/000000:abcdef", color: .black, backgroundColor: nil, icon: .cutout, ecl: "Q", onlyMarkers: true) |> map { $0.1 }, attemptSynchronously: true)
         }
     }
     
@@ -2607,7 +2607,7 @@ private class MessageContentNode: ASDisplayNode, ContentNode {
         
         let link: String
         if let message = self.messages.first, let chatPeer = message.peers[message.id.peerId] as? TelegramChannel, message.id.namespace == Namespaces.Message.Cloud, let addressName = chatPeer.addressName, !addressName.isEmpty {
-            link = "t.me/\(addressName)/\(message.id.id)"
+            link = "\(TellomiLinks.host)/\(addressName)/\(message.id.id)"
         } else {
             link = ""
         }
