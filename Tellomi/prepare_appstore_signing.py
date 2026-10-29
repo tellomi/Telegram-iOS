@@ -804,8 +804,8 @@ def self_test():
             raise SystemExit("SiriIntents must enable SiriKit")
         if API_TIMEOUT_SECONDS != 120 or API_ATTEMPTS != 5:
             raise SystemExit("App Store Connect retry policy changed")
-        if minimum_build_number(1) < 52:
-            raise SystemExit("build number floor is below the uploaded build 51")
+        if minimum_build_number(1) < 53:
+            raise SystemExit("build number floor is below the next free TestFlight build")
 
         class PrefixList:
             def request(self, method, path, body=None):
