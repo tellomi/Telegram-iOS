@@ -48,6 +48,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     private var stateDisposable: Disposable?
     private let actionDisposable = MetaDisposable()
     private var applicationStateDisposable: Disposable?
+    private let tellomiLanguageDisposable = MetaDisposable()
+    private let tellomiLanguageStringsDisposable = MetaDisposable()
+    private var tellomiLanguageGate = 0
     
     private var didPlayPresentationAnimation = false
     
@@ -121,6 +124,8 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         self.stateDisposable?.dispose()
         self.actionDisposable.dispose()
         self.applicationStateDisposable?.dispose()
+        self.tellomiLanguageDisposable.dispose()
+        self.tellomiLanguageStringsDisposable.dispose()
     }
     
     override public func loadView() {
@@ -1243,6 +1248,54 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     }
     
     private func updateState(state: InnerState) {
+        if case .authorized = state {
+            self.authorizationCompleted()
+            return
+        }
+        // Download zh-hans / zh-hant before the login screens are built. The old Start
+        // button stored English, and an update keeps that pack. The intro carousel
+        // itself stays the bundled English strings.
+        if self.tellomiLanguageGate == 1 {
+            return
+        } else if self.tellomiLanguageGate == 0, let code = tellomiLangPackCodePendingApplication(currentLanguageCode: self.presentationData.strings.primaryComponent.languageCode) {
+            self.tellomiLanguageGate = 1
+            let accountManager = self.sharedContext.accountManager
+            let signal = TelegramEngineUnauthorized(account: self.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: code)
+            |> timeout(12.0, queue: .mainQueue(), alternate: .fail(.generic))
+            self.tellomiLanguageDisposable.set(signal.start(error: { [weak self] _ in
+                Queue.mainQueue().async {
+                    guard let self else {
+                        return
+                    }
+                    self.tellomiLanguageGate = 2
+                    self.updateState(state: state)
+                }
+            }, completed: { [weak self] in
+                Queue.mainQueue().async {
+                    guard let self else {
+                        return
+                    }
+                    tellomiMarkSystemLangPackApplied()
+                    self.tellomiLanguageStringsDisposable.set((accountManager.transaction { transaction -> PresentationStrings? in
+                        guard let localizationSettings = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self) else {
+                            return nil
+                        }
+                        return PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: dictFromLocalization(localizationSettings.primaryComponent.localization)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: "")
+                    }
+                    |> deliverOnMainQueue).start(next: { [weak self] strings in
+                        guard let self else {
+                            return
+                        }
+                        if let strings {
+                            self.presentationData = self.presentationData.withStrings(strings)
+                        }
+                        self.tellomiLanguageGate = 2
+                        self.updateState(state: state)
+                    }))
+                }
+            }))
+            return
+        }
         switch state {
         case .authorized:
             self.authorizationCompleted()
@@ -1259,7 +1312,11 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         }
                         self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                     }
-                case let .phoneEntry(countryCode, number):
+                case let .phoneEntry(storedCountryCode, number):
+                    // An update keeps the previous unauthorized state. An empty number is still
+                    // the automatic default, so replace a stored +1 with China. A typed number
+                    // keeps the code it was entered with.
+                    let countryCode = number.isEmpty ? AuthorizationSequenceCountrySelectionController.defaultCountryCode() : storedCountryCode
                     var controllers: [ViewController] = []
                     if !self.otherAccountPhoneNumbers.1.isEmpty {
                         controllers.append(self.splashController())
@@ -1434,20 +1491,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     }
     
     public static func defaultCountryCode() -> Int32 {
-        let countryId = (Locale.current as NSLocale).object(forKey: .countryCode) as? String
-     
-        var countryCode: Int32 = 1
-        if let countryId = countryId {
-            let normalizedId = countryId.uppercased()
-            for (code, idAndName) in countryCodeToIdAndName {
-                if idAndName.0 == normalizedId {
-                    countryCode = Int32(code)
-                    break
-                }
-            }
-        }
-        
-        return countryCode
+        return AuthorizationSequenceCountrySelectionController.defaultCountryCode()
     }
     
     public static func presentDidNotGetCodeUI(

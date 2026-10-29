@@ -232,8 +232,23 @@ public final class AuthorizationSequenceSplashController: ViewController {
             if let suggestedCode = suggestedCode {
                 _ = TelegramEngineUnauthorized(account: strongSelf.account).localization.markSuggestedLocalizationAsSeenInteractively(languageCode: suggestedCode).start()
             }
+
+            // The stock button always requested "en". A Chinese system language downloads
+            // the server langpack (zh-hans / zh-hant) instead. Once that has been applied,
+            // later taps keep the saved language, including a choice made in Settings.
+            let resolvedCode: String
+            if UserDefaults.standard.bool(forKey: tellomiSystemLangPackDefaultsKey) {
+                resolvedCode = currentCode
+            } else if let preferred = tellomiSystemLangPackCode() {
+                resolvedCode = preferred
+            } else {
+                resolvedCode = code
+            }
             
-            if currentCode == code {
+            if currentCode == resolvedCode {
+                if tellomiSystemLangPackCode() == resolvedCode {
+                    tellomiMarkSystemLangPackApplied()
+                }
                 strongSelf.pressNext(strings: nil)
                 return
             }
@@ -242,7 +257,10 @@ public final class AuthorizationSequenceSplashController: ViewController {
             strongSelf.startButton.alpha = 0.6
             let accountManager = strongSelf.accountManager
             
-            strongSelf.activateLocalizationDisposable.set(TelegramEngineUnauthorized(account: strongSelf.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: code).start(completed: {
+            strongSelf.activateLocalizationDisposable.set(TelegramEngineUnauthorized(account: strongSelf.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: resolvedCode).start(completed: {
+                if tellomiSystemLangPackCode() == resolvedCode {
+                    tellomiMarkSystemLangPackApplied()
+                }
                 let _ = (accountManager.transaction { transaction -> PresentationStrings? in
                     let localizationSettings: LocalizationSettings?
                     if let current = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self) {
