@@ -65,6 +65,9 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     
     var signUpWithName: ((String, String) -> Void)?
     var openTermsOfService: (() -> Void)?
+    // Tellomi: signup agreement checkbox, see TellomiSignUpAgreement.swift.
+    let tellomiAgreement = TellomiSignUpAgreement()
+    var tellomiOpenUrl: ((String) -> Void)?
     
     var inProgress: Bool = false {
         didSet {
@@ -203,10 +206,17 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
                 strongSelf.signUpWithName?(name.0, name.1)
             }
         }
+        // Tellomi: replace the terms label with the agreement checkbox; Continue waits for it.
+        self.proceedNode.isEnabled = false
+        self.tellomiAgreement.install(on: self.termsNode, theme: theme, openUrl: { [weak self] url in
+            self?.tellomiOpenUrl?(url)
+        }, changed: { [weak self] agreed in
+            self?.proceedNode.isEnabled = agreed
+        })
     }
     
     func updateData(firstName: String, lastName: String, hasTermsOfService: Bool) {
-        self.termsNode.isHidden = !hasTermsOfService
+        self.termsNode.isHidden = false // Tellomi: the agreement checkbox is always shown.
         self.firstNameField.textField.attributedText = NSAttributedString(string: firstName, font: Font.regular(20.0), textColor: self.theme.list.itemPlaceholderTextColor)
         self.lastNameField.textField.attributedText = NSAttributedString(string: lastName, font: Font.regular(20.0), textColor: self.theme.list.itemPlaceholderTextColor)
         

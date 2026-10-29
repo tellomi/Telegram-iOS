@@ -179,6 +179,9 @@ final class AuthorizationSequenceSignUpController: ViewController {
         self.controllerNode.signUpWithName = { [weak self] _, _ in
             self?.nextPressed()
         }
+        self.controllerNode.tellomiOpenUrl = { [weak self] url in // Tellomi: agreement links
+            self?.openUrl?(url)
+        }
         self.controllerNode.openTermsOfService = { [weak self] in
             guard let strongSelf = self, let termsOfService = strongSelf.termsOfService else {
                 return
@@ -262,6 +265,9 @@ final class AuthorizationSequenceSignUpController: ViewController {
         if firstName.isEmpty && lastName.isEmpty {
             self.hapticFeedback.error()
             self.controllerNode.animateError()
+            return
+        } else if !self.controllerNode.tellomiAgreement.agreed { // Tellomi: agreement checkbox required
+            self.hapticFeedback.error()
             return
         } else if firstName.isEmpty && !lastName.isEmpty {
             name = (lastName, "")
