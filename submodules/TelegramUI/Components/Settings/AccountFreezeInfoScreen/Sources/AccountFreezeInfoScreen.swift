@@ -408,7 +408,7 @@ public final class AccountFreezeInfoScreen: ViewControllerComponentContainer {
             }
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             Queue.mainQueue().after(0.4) {
-                context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: presentationData.strings.FrozenAccount_Violation_TextNew_URL, forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
+                context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(presentationData.strings.FrozenAccount_Violation_TextNew_URL, fallback: "tos"), forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
             }
         }
         submitAppealImpl = { [weak self] in

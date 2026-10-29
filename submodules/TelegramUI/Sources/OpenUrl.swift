@@ -225,7 +225,7 @@ private func makeInternalUrlHandler(
 }
 
 private let internetSchemes: [String] = ["http", "https"]
-private let telegramMeHosts: [String] = [TellomiLinks.host]
+private let telegramMeHosts: [String] = TellomiLinks.linkHosts
 
 private func handleInternetUrl(
     parsedUrl: URL,

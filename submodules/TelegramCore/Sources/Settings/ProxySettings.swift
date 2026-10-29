@@ -118,7 +118,7 @@ public func parseWebProxySettingsLink(_ value: String) -> ProxyServerSettings? {
 
     let scheme = components.scheme?.lowercased()
     let isTelegramLink = scheme == "https"
-        && components.host?.lowercased() == TellomiLinks.host
+        && TellomiLinks.isPublicLinkHost(components.host)
         && components.path == "/webproxy"
         && (components.port == nil || components.port == Int(WebProxyConfiguration.port))
     let isTelegramScheme = TellomiLinks.isDeepLinkScheme(scheme)

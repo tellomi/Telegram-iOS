@@ -1422,7 +1422,7 @@ private final class StarsTransactionSheetContent: CombinedComponent {
                     tapAction: { attributes, _ in
                         if let controller = controller() as? StarsTransactionScreen, let navigationController = controller.navigationController as? NavigationController {
                             let presentationData = component.context.sharedContext.currentPresentationData.with { $0 }
-                            component.context.sharedContext.openExternalUrl(context: component.context, urlContext: .generic, url: strings.Stars_Transaction_Terms_URL, forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
+                            component.context.sharedContext.openExternalUrl(context: component.context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(strings.Stars_Transaction_Terms_URL, fallback: "tos"), forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
                             component.cancel(true)
                         }
                     }

@@ -718,7 +718,7 @@
 
 // Encryption Key
 "EncryptionKey.Title" = "Encryption Key";
-"EncryptionKey.Description" = "This image and text were derived from the encryption key for this secret chat with %1$@.\n\n If they look the same on %2$@'s device, end-to-end encryption is guaranteed.\n\nLearn more at telegram.org";
+"EncryptionKey.Description" = "This image and text were derived from the encryption key for this secret chat with %1$@.\n\n If they look the same on %2$@'s device, end-to-end encryption is guaranteed.\n\nLearn more at tellomi.cn";
 
 // Conversation media
 "ConversationMedia.Title" = "Media";
@@ -755,7 +755,7 @@
 "Settings.ChatBackground" = "Chat Background";
 "Settings.Support" = "Ask a Question";
 "Settings.FAQ" = "Telegram FAQ";
-"Settings.FAQ_URL" = "https://telegram.org/faq#general";
+"Settings.FAQ_URL" = "https://tellomi.cn/faq#general";
 "Settings.FAQ_Intro" = "Please note that Telegram Support is done by volunteers. We try to respond as quickly as possible, but it may take a while.\n\nPlease take a look at the Telegram FAQ: it has important troubleshooting tips and answers to most questions.";
 "Settings.FAQ_Button" = "FAQ";
 "Settings.SaveIncomingPhotos" = "Save Incoming Photos";
@@ -1216,7 +1216,7 @@
 "DialogList.SearchSectionGlobal" = "Global Search";
 "DialogList.SearchSectionMessages" = "Messages";
 
-"Username.LinkHint" = "This link opens a chat with you in Telegram:[\nhttps://t.me/%@]";
+"Username.LinkHint" = "This link opens a chat with you in Telegram:[\nhttps://tell.cc/%@]";
 "Username.LinkCopied" = "Copied link to clipboard";
 
 "SharedMedia.DeleteItemsConfirmation_1" = "Delete media file?";
@@ -1603,7 +1603,7 @@
 
 "Channel.Username.Title" = "Link";
 "Channel.Username.Help" = "You can choose a channel name on **Telegram**. If you do, other people will be able to find your channel by this name.\n\nYou can use **a-z**, **0-9** and underscores. Minimum length is **5** characters.";
-"Channel.Username.LinkHint" = "This link opens your channel in Telegram:[\nhttps://t.me/%@]";
+"Channel.Username.LinkHint" = "This link opens your channel in Telegram:[\nhttps://tell.cc/%@]";
 "Channel.Username.InvalidTooShort" = "Channel names must have at least 5 characters.";
 "Channel.Username.InvalidStartsWithNumber" = "Channel names can't start with a number.";
 "Channel.Username.InvalidCharacters" = "Sorry, this name is invalid.";
@@ -3362,7 +3362,7 @@ Unused sets are archived when you add more.";
 "Passport.InfoTitle" = "What is Telegram Passport?";
 "Passport.InfoText" = "With **Telegram Passport** you can easily sign up for websites and services that require identity verification.\n\nYour information, personal data, and documents are protected by end-to-end encryption. Nobody, including Telegram, can access them without your permission.";
 "Passport.InfoLearnMore" = "Learn More";
-"Passport.InfoFAQ_URL" = "https://telegram.org/faq#passport";
+"Passport.InfoFAQ_URL" = "https://tellomi.cn/faq#passport";
 
 "Passport.PassportInformation" = "PASSPORT INFORMATION";
 "Passport.RequestedInformation" = "REQUESTED INFORMATION";
@@ -4069,7 +4069,7 @@ Unused sets are archived when you add more.";
 "EmptyGroupInfo.Subtitle" = "Groups can have:";
 "EmptyGroupInfo.Line1" = "Up to %@ members";
 "EmptyGroupInfo.Line2" = "Persistent chat history";
-"EmptyGroupInfo.Line3" = "Public links such as t.me/title";
+"EmptyGroupInfo.Line3" = "Public links such as tell.cc/title";
 "EmptyGroupInfo.Line4" = "Admins with different rights";
 
 "WallpaperPreview.Title" = "Background Preview";
@@ -6961,7 +6961,7 @@ Sorry for the inconvenience.";
 
 "SponsoredMessageMenu.Info" = "What are sponsored\nmessages?";
 "SponsoredMessageInfoScreen.Title" = "What are sponsored messages?";
-"SponsoredMessageInfoScreen.MarkdownText" = "Unlike other apps, Telegram never uses your private data to target ads. [Learn more in the Privacy Policy](https://telegram.org/privacy#5-6-no-ads-based-on-user-data)\nYou are seeing this message only because someone chose this public one-to many channel as a space to promote their messages. This means that no user data is mined or analyzed to display ads, and every user viewing a channel on Telegram sees the same sponsored message.\n\nUnline other apps, Telegram doesn't track whether you tapped on a sponsored message and doesn't profile you based on your activity. We also prevent external links in sponsored messages to ensure that third parties can't spy on our users. We believe that everyone has the right to privacy, and technological platforms should respect that.\n\nTelegram offers free and unlimited service to hundreds of millions of users, which involves significant server and traffic costs. In order to remain independent and stay true to its values, Telegram developed a paid tool to promote messages with user privacy in mind. We welcome responsible adverticers at:\n[url]\nAds should no longer be synonymous with abuse of user privacy. Let us redefine how a tech compony should operate — together.";
+"SponsoredMessageInfoScreen.MarkdownText" = "Unlike other apps, Telegram never uses your private data to target ads. [Learn more in the Privacy Policy](https://tellomi.cn/privacy#5-6-no-ads-based-on-user-data)\nYou are seeing this message only because someone chose this public one-to many channel as a space to promote their messages. This means that no user data is mined or analyzed to display ads, and every user viewing a channel on Telegram sees the same sponsored message.\n\nUnline other apps, Telegram doesn't track whether you tapped on a sponsored message and doesn't profile you based on your activity. We also prevent external links in sponsored messages to ensure that third parties can't spy on our users. We believe that everyone has the right to privacy, and technological platforms should respect that.\n\nTelegram offers free and unlimited service to hundreds of millions of users, which involves significant server and traffic costs. In order to remain independent and stay true to its values, Telegram developed a paid tool to promote messages with user privacy in mind. We welcome responsible adverticers at:\n[url]\nAds should no longer be synonymous with abuse of user privacy. Let us redefine how a tech compony should operate — together.";
 "SponsoredMessageInfo.Action" = "Learn More";
 "SponsoredMessageInfo.Url" = "https://telegram.org/ads";
 
@@ -7460,7 +7460,7 @@ Sorry for the inconvenience.";
 "Attachment.DeselectedItems_1" = "%@ item deselected";
 "Attachment.DeselectedItems_any" = "%@ items deselected";
 
-"PrivacyPhoneNumberSettings.CustomPublicLink" = "Users who have your number saved in their contacts will also see it on Telegram.\n\nThis public link opens a chat with you:\n[https://t.me/%@]()";
+"PrivacyPhoneNumberSettings.CustomPublicLink" = "Users who have your number saved in their contacts will also see it on Telegram.\n\nThis public link opens a chat with you:\n[https://tell.cc/%@]()";
 
 "DownloadList.DownloadingHeader" = "Downloading";
 "DownloadList.DownloadedHeader" = "Recently Downloaded";
@@ -7801,8 +7801,8 @@ Sorry for the inconvenience.";
 "Conversation.CopyProtectionSavingDisabledSecret" = "Saving is restricted";
 "Conversation.CopyProtectionForwardingDisabledSecret" = "Forwarding is restricted";
 
-"Settings.Terms_URL" = "https://telegram.org/tos";
-"Settings.PrivacyPolicy_URL" = "https://telegram.org/privacy";
+"Settings.Terms_URL" = "https://tellomi.cn/tos";
+"Settings.PrivacyPolicy_URL" = "https://tellomi.cn/privacy";
 
 "Stickers.PremiumPackInfoText" = "This pack contains premium stickers like this one.";
 "Stickers.PremiumPackView" = "View";
@@ -7827,7 +7827,7 @@ Sorry for the inconvenience.";
 
 "Premium.Limits.GroupsAndChannelsInfo" = "Join up to 1000 channels and large groups";
 "Premium.Limits.PinnedChatsInfo" = "Pin up to 10 chats in your main chat list";
-"Premium.Limits.PublicLinksInfo" = "Reserve up to 20 [t.me/name]() links";
+"Premium.Limits.PublicLinksInfo" = "Reserve up to 20 [tell.cc/name]() links";
 "Premium.Limits.SavedGifsInfo" = "Save up to 400 GIFs in your Favorite GIFs";
 "Premium.Limits.FavedStickersInfo" = "Save up to 10 stickers in your Favorite stickers";
 "Premium.Limits.BioInfo" = "Add more symbols and use links in your bio";
@@ -7919,7 +7919,7 @@ Sorry for the inconvenience.";
 "DeleteAccount.MessageHistoryTitle" = "Your Message History";
 "DeleteAccount.MessageHistoryText" = "Your chat partners will keep their message history with you, including the messages you shared in secret chats.\n\nYou can remove any messages for both sides at any time, but this will not be possible if you delete your account.";
 
-"DeleteAccount.DeleteMessagesURL" = "https://telegram.org/faq#q-can-i-delete-my-messages";
+"DeleteAccount.DeleteMessagesURL" = "https://tellomi.cn/faq#q-can-i-delete-my-messages";
 
 "DeleteAccount.EnterPhoneNumber" = "Enter Your Phone Number";
 "DeleteAccount.InvalidPhoneNumberError" = "Invalid phone number. Please try again.";
@@ -9250,7 +9250,7 @@ Sorry for the inconvenience.";
 "WebApp.LaunchMoreInfo" = "More about this bot";
 "WebApp.LaunchConfirmation" = "To launch this web app, you will connect to its website.";
 "WebApp.LaunchTermsConfirmation" = "By launching this mini app, you agree to the [Terms of Service for Mini Apps]().";
-"WebApp.LaunchTermsConfirmation_URL" = "https://telegram.org/tos/mini-apps";
+"WebApp.LaunchTermsConfirmation_URL" = "https://tellomi.cn/tos/mini-apps";
 "WebApp.LaunchOpenApp" = "Open App";
 
 "WallpaperPreview.PreviewInNightMode" = "Preview this wallpaper in night mode.";
@@ -9990,7 +9990,7 @@ Sorry for the inconvenience.";
 "WebApp.DisclaimerText" = "You are about to use a mini app operated by an independent party not affiliated with Telegram. You must agree to the Terms of Use of mini apps to continue.";
 "WebApp.DisclaimerAgree" = "I agree to the [Terms of Use]()";
 "WebApp.DisclaimerContinue" = "Continue";
-"WebApp.Disclaimer_URL" = "https://telegram.org/tos/mini-apps";
+"WebApp.Disclaimer_URL" = "https://tellomi.cn/tos/mini-apps";
 
 "WebApp.ShortcutsAdded" = "**%@** shortcut added in attachment menu.";
 "WebApp.ShortcutsSettingsAdded" = "**%@** shortcut added in attachment menu and Settings.";
@@ -11705,7 +11705,7 @@ Sorry for the inconvenience.";
 "ChannelBoost.EnableNoAdsLevelText" = "Your channel needs **Level %1$@** to switch off ads.";
 
 "WebApp.TermsOfUse" = "Terms of Use";
-"WebApp.TermsOfUse_URL" = "https://telegram.org/tos/mini-apps";
+"WebApp.TermsOfUse_URL" = "https://tellomi.cn/tos/mini-apps";
 
 "Privacy.Birthday" = "Date of Birth";
 "Privacy.Birthday.WhoCanSeeMyBio" = "WHO CAN SEE MY DATE OF BIRTH";
@@ -11915,9 +11915,9 @@ Sorry for the inconvenience.";
 "Business.Links.CreateAction" = "Create a Link to Chat";
 "Business.Links.LinksSectionHeader" = "LINKS TO CHAT";
 
-"Business.Links.SimpleLinkInfoUsernamePhone" = "You can also use a simple link for a chat with you — [t.me/%1$@](username) or [t.me/\\u{2060}+\\u{2060}%2$@](phone).";
-"Business.Links.SimpleLinkInfoUsername" = "You can also use a simple link for a chat with you — [t.me/%@](username).";
-"Business.Links.SimpleLinkInfoPhone" = "You can also use a simple link for a chat with you — [t.me/\\u{2060}+\\u{2060}%@](phone).";
+"Business.Links.SimpleLinkInfoUsernamePhone" = "You can also use a simple link for a chat with you — [tell.cc/%1$@](username) or [tell.cc/\\u{2060}+\\u{2060}%2$@](phone).";
+"Business.Links.SimpleLinkInfoUsername" = "You can also use a simple link for a chat with you — [tell.cc/%@](username).";
+"Business.Links.SimpleLinkInfoPhone" = "You can also use a simple link for a chat with you — [tell.cc/\\u{2060}+\\u{2060}%@](phone).";
 
 "Business.Links.LinkNameTitle" = "Link Name";
 "Business.Links.LinkNameText" = "Add a name for this link that only you will see.";
@@ -12370,7 +12370,7 @@ Sorry for the inconvenience.";
 "Stars.Purchase.Stars_any" = "%@ Stars";
 "Stars.Purchase.ShowMore" = "Show More Options";
 "Stars.Purchase.Info" = "By proceeding and purchasing Stars, you agree with [Terms and Conditions]().";
-"Stars.Purchase.Terms_URL" = "https://telegram.org/tos";
+"Stars.Purchase.Terms_URL" = "https://tellomi.cn/tos";
 
 "Stars.Transaction.Via" = "Via";
 "Stars.Transaction.To" = "To";
@@ -12379,7 +12379,7 @@ Sorry for the inconvenience.";
 "Stars.Transaction.Id" = "Transaction ID";
 "Stars.Transaction.Date" = "Date";
 "Stars.Transaction.Terms" = "Review the [Terms of Service]() for Stars.";
-"Stars.Transaction.Terms_URL" = "https://telegram.org/tos";
+"Stars.Transaction.Terms_URL" = "https://tellomi.cn/tos";
 "Stars.Transaction.CopiedId" = "Transaction ID copied to clipboard.";
 
 "Stars.Transaction.MediaPurchase" = "Media Purchase";
@@ -12477,7 +12477,7 @@ Sorry for the inconvenience.";
 "Stars.BotRevenue.Withdraw.WithdrawShort" = "Withdraw";
 "Stars.BotRevenue.Withdraw.BuyAds" = "Buy Ads";
 "Stars.BotRevenue.Withdraw.Info" = "You can collect rewards for Stars using Fragment, or use Stars to advertise your bot. [Learn More >]()";
-"Stars.BotRevenue.Withdraw.Info_URL" = "https://telegram.org/tos/bot-developers#6-2-2-tpa-balance";
+"Stars.BotRevenue.Withdraw.Info_URL" = "https://tellomi.cn/tos/bot-developers#6-2-2-tpa-balance";
 
 "Stars.BotRevenue.Transactions.Title" = "Transaction History";
 
@@ -12496,7 +12496,7 @@ Sorry for the inconvenience.";
 "Stars.PaidContent.AmountTitle" = "ENTER UNLOCK COST";
 "Stars.PaidContent.AmountPlaceholder" = "Stars to Unlock";
 "Stars.PaidContent.AmountInfo" = "Users will have to transfer this amount of Stars to your channel in order to view this media.\n[More about Stars >]()";
-"Stars.PaidContent.AmountInfo_URL" = "https://telegram.org/tos/stars";
+"Stars.PaidContent.AmountInfo_URL" = "https://tellomi.cn/tos/stars";
 "Stars.PaidContent.Create" = "Make This Media Paid";
 
 "MediaEditor.AddLink" = "LINK";
@@ -12713,8 +12713,8 @@ Sorry for the inconvenience.";
 
 "PeerInfo.PaneBotPreviews" = "Preview";
 "PeerInfo.OpenAppButton" = "Open App";
-"PeerInfo.AppFooterAdmin" = "By publishing this mini app, you agree to the [Telegram Terms of Service for Developers](https://telegram.org/privacy).";
-"PeerInfo.AppFooter" = "By launching this mini app, you agree to the [Terms of Service for Mini Apps](https://telegram.org/privacy).";
+"PeerInfo.AppFooterAdmin" = "By publishing this mini app, you agree to the [Telegram Terms of Service for Developers](https://tellomi.cn/privacy).";
+"PeerInfo.AppFooter" = "By launching this mini app, you agree to the [Terms of Service for Mini Apps](https://tellomi.cn/privacy).";
 "BotPreviews.MenuAddPreview" = "Add Preview";
 "BotPreviews.MenuReorder" = "Reorder";
 "BotPreviews.MenuDeleteLanguage" = "Delete %@";
@@ -12774,7 +12774,7 @@ Sorry for the inconvenience.";
 "InviteLink.ShareShort" = "Share";
 
 "Stars.Subscription.Terms" = "By subscribing you agree to the [Terms of Service]().";
-"Stars.Subscription.Terms_URL" = "https://telegram.org/tos/stars";
+"Stars.Subscription.Terms_URL" = "https://tellomi.cn/tos/stars";
 
 "Stars.Transaction.Reaction.Title" = "Star reaction";
 "Stars.Transaction.Reaction.Post" = "Post";
@@ -12859,7 +12859,7 @@ Sorry for the inconvenience.";
 "InviteLink.Create.FeeEditInfo" = "If you need to change the subscription fee, create a new invite link with a different price.";
 "InviteLink.Create.RequestApprovalFeeUnavailable" = "You can't enable admin approval for links that require a monthly fee.";
 
-"WebApp.PrivacyPolicy_URL" = "https://telegram.org/privacy-tpa";
+"WebApp.PrivacyPolicy_URL" = "https://tellomi.cn/privacy-tpa";
 
 "ChatList.SubscriptionsLowBalance.Stars_1" = "%@ Star needed";
 "ChatList.SubscriptionsLowBalance.Stars_any" = "%@ Stars needed";
@@ -12885,10 +12885,10 @@ Sorry for the inconvenience.";
 "SendStarReactions.SectionTop" = "Top Senders";
 "SendStarReactions.ShowMyselfInTop" = "Show me in Top Senders";
 "SendStarReactions.SendButtonTitle" = "Send  # %@";
-"SendStarReactions.TermsOfServiceFooter" = "By sending Stars you agree to the [Terms of Service](https://telegram.org/tos/stars)";
+"SendStarReactions.TermsOfServiceFooter" = "By sending Stars you agree to the [Terms of Service](https://tellomi.cn/tos/stars)";
 
 "PeerInfo.AllowedReactions.StarReactions" = "Enable Paid Reactions";
-"PeerInfo.AllowedReactions.StarReactionsFooter" = "Switch this on to let your subscribers set paid reactions with Telegram Stars, which you will be able to withdraw later as GRAM. [Learn More >](https://telegram.org/privacy)";
+"PeerInfo.AllowedReactions.StarReactionsFooter" = "Switch this on to let your subscribers set paid reactions with Telegram Stars, which you will be able to withdraw later as GRAM. [Learn More >](https://tellomi.cn/privacy)";
 
 "Chat.ToastStarsSent.Title_1" = "Star sent!";
 "Chat.ToastStarsSent.Title_any" = "Stars sent!";
@@ -13407,7 +13407,7 @@ Sorry for the inconvenience.";
 "AffiliateSetup.StartTitle" = "Start Affiliate Program";
 "AffiliateSetup.UpdateTitle" = "Update Affiliate Program";
 
-"AffiliateSetup.TermsFooter" = "By creating an affiliate program, you afree to the [terms and conditions](https://telegram.org/terms) of Affiliate Programs.";
+"AffiliateSetup.TermsFooter" = "By creating an affiliate program, you afree to the [terms and conditions](https://tellomi.cn/terms) of Affiliate Programs.";
 
 "AffiliateSetup.ProgramMenu.OpenBot" = "Open Bot";
 "AffiliateSetup.ProgramMenu.OpenApp" = "Open App";
@@ -13460,7 +13460,7 @@ Sorry for the inconvenience.";
 "AffiliateProgram.PeerTypeSelf" = "personal account";
 
 "AffiliateProgram.JoinTitle" = "Affiliate Program";
-"AffiliateProgram.JoinTerms" = "By joining this program, you afree to the [terms and conditions](https://telegram.org/terms) of Affiliate Programs.";
+"AffiliateProgram.JoinTerms" = "By joining this program, you afree to the [terms and conditions](https://tellomi.cn/terms) of Affiliate Programs.";
 "AffiliateProgram.DailyRevenueText" = "The average daily revenue per user: #**%@**";
 
 "AffiliateProgram.LinkTitle" = "Referral Link";
@@ -13860,7 +13860,7 @@ Sorry for the inconvenience.";
 "Gift.Convert.Success.ChannelText.Stars_any" = "%@ Stars";
 
 "Stars.Transfer.Terms" = "By purchasing you agree to the [Terms of Service]().";
-"Stars.Transfer.Terms_URL" = "https://telegram.org/tos/stars";
+"Stars.Transfer.Terms_URL" = "https://tellomi.cn/tos/stars";
 
 "AvatarEditor.PremiumNeeded.Background" = "Subscribe to Telegram Premium to choose this background.";
 "AvatarEditor.PremiumNeeded.Emoji" = "Subscribe to Telegram Premium to choose this emoji.";
@@ -13906,7 +13906,7 @@ Sorry for the inconvenience.";
 "Notification.PaidMessageYouMany" = "You paid %1$@ to send %2$@";
 
 "Stars.Transfer.Terms" = "By purchasing you agree to the [Terms of Service]().";
-"Stars.Transfer.Terms_URL" = "https://telegram.org/tos/stars";
+"Stars.Transfer.Terms_URL" = "https://tellomi.cn/tos/stars";
 
 "StarsTransaction.Commission" = "Commission";
 
@@ -14353,7 +14353,7 @@ Sorry for the inconvenience.";
 "Premium.CreateMultipleStories" = "Create Multiple Stories";
 
 "FrozenAccount.Violation.TextNew" = "Your account was frozen for breaking Telegram's [Terms and Conditions]().";
-"FrozenAccount.Violation.TextNew_URL" = "https://telegram.org/tos";
+"FrozenAccount.Violation.TextNew_URL" = "https://tellomi.cn/tos";
 
 "Stars.Purchase.BuyStarGiftInfo" = "Buy Stars to acquire a unique collectible.";
 
@@ -15013,7 +15013,7 @@ Sorry for the inconvenience.";
 
 "Ton.WithdrawViaFragment" = "Withdraw via Fragment";
 "Ton.WithdrawViaFragment.Info" = "Collect your GRAM using Fragment. [Learn More >]()";
-"Ton.WithdrawViaFragment.Info_URL" = "https://telegram.org/tos/bot-developers#6-2-2-tpa-balance";
+"Ton.WithdrawViaFragment.Info_URL" = "https://tellomi.cn/tos/bot-developers#6-2-2-tpa-balance";
 
 "MESSAGE_GIFT_THEME" = "%1$@ changed theme to %2$@";
 
@@ -15700,7 +15700,7 @@ Error: %8$@";
 "CocoonInfo.Efficient.Text" = "Cocoon has allowed Telegram to reduce translation costs by 6x.";
 "CocoonInfo.ForEveryone.Title" = "For Everyone";
 "CocoonInfo.ForEveryone.Text" = "Any developer can use Cocoon for AI features. Learn more at [@cocoon](telegram) or [cocoon.org](web).";
-"CocoonInfo.IntergrateInfo" = "Want to integrate Cocoon into your projects?\nReach out at [t.me/cocoon?direct]()";
+"CocoonInfo.IntergrateInfo" = "Want to integrate Cocoon into your projects?\nReach out at [tell.cc/cocoon?direct]()";
 "CocoonInfo.Understood" = "Understood";
 
 "Conversation.Translation.CocoonInfo" = "Translations are powered by\n**#Cocoon**. [How does it work?]()";
@@ -16404,7 +16404,7 @@ Error: %8$@";
 "ChatList.RemoveFolderConfirmationTitle" = "Remove %@?";
 
 "SocksProxySetup.QrCode.TgLink" = "tg:// link";
-"SocksProxySetup.QrCode.TMeLink" = "t.me link";
+"SocksProxySetup.QrCode.TMeLink" = "tell.cc link";
 
 "WebBrowser.OpenLinksInfo" = "Open links inside Telegram instead of your default browser for more privacy.";
 "WebBrowser.Exceptions.OpenInApp" = "OPEN IN-APP";
@@ -16848,7 +16848,7 @@ Error: %8$@";
 "Wallet.GotIt" = "Got it";
 "Wallet.Send" = "Send";
 "Wallet.TermsText" = "By using this service, you agree to the [Terms]().";
-"Wallet.TermsText_URL" = "https://telegram.org/tos";
+"Wallet.TermsText_URL" = "https://tellomi.cn/tos";
 "Wallet.Recipient.Error" = "An unknown error occurred. Please try again later.";
 "Wallet.Recipient.InvalidAddress" = "The pasted text is not a valid TON address.";
 "Wallet.Recipient.ScanQR" = "Find a QR code that contains a wallet address";

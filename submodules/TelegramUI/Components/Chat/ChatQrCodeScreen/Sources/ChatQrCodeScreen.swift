@@ -1756,20 +1756,12 @@ private class QrContentNode: ASDisplayNode, ContentNode {
         
         self.codePlaceholderNode = DefaultAnimatedStickerNodeImpl(lottieSettings: self.context.lottieRenderingSettings)
         
-        if isStatic {
-            let codeStaticIconNode = ASImageNode()
-            codeStaticIconNode.displaysAsynchronously = false
-            codeStaticIconNode.contentMode = .scaleToFill
-            codeStaticIconNode.image = UIImage(bundleImageName: "Share/QrPlaneIcon")
-            self.codeStaticIconNode = codeStaticIconNode
-            self.codeAnimatedIconNode = nil
-        } else {
-            let codeAnimatedIconNode = DefaultAnimatedStickerNodeImpl(lottieSettings: self.context.lottieRenderingSettings)
-            codeAnimatedIconNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "PlaneLogoPlain"), width: 120, height: 120, mode: .direct(cachePathPrefix: nil))
-            codeAnimatedIconNode.visibility = true
-            self.codeAnimatedIconNode = codeAnimatedIconNode
-            self.codeStaticIconNode = nil
-        }
+        let codeStaticIconNode = ASImageNode()
+        codeStaticIconNode.displaysAsynchronously = false
+        codeStaticIconNode.contentMode = .scaleToFill
+        codeStaticIconNode.image = UIImage(bundleImageName: "Share/QrPlaneIcon")
+        self.codeStaticIconNode = codeStaticIconNode
+        self.codeAnimatedIconNode = nil
         
         var codeText: String
         if let addressName = peer.addressName, !addressName.isEmpty {

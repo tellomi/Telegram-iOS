@@ -423,7 +423,7 @@ func openWebAppImpl(
                         openWebView(false)
                     }, showMore: nil, openTerms: {
                         if let navigationController = parentController.navigationController as? NavigationController {
-                            context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: presentationData.strings.WebApp_LaunchTermsConfirmation_URL, forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
+                            context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(presentationData.strings.WebApp_LaunchTermsConfirmation_URL, fallback: "tos/mini-apps"), forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
                         }
                     })
                     parentController.present(controller, in: .window(.root))
@@ -908,7 +908,7 @@ public extension ChatControllerImpl {
                                     chatController.openResolved(result: .peer(botPeer._asPeer(), .info(nil)), sourceMessageId: nil)
                                 }
                             }, openTerms: {
-                                context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: presentationData.strings.WebApp_LaunchTermsConfirmation_URL, forceExternal: false, presentationData: presentationData, navigationController: parentController?.navigationController as? NavigationController, dismissInput: {})
+                                context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(presentationData.strings.WebApp_LaunchTermsConfirmation_URL, fallback: "tos/mini-apps"), forceExternal: false, presentationData: presentationData, navigationController: parentController?.navigationController as? NavigationController, dismissInput: {})
                             })
                             parentController?.present(controller, in: .window(.root))
                         }

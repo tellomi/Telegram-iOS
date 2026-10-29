@@ -320,11 +320,11 @@ final class ChatbotSetupScreenComponent: Component {
                     }
                     
                     var cleanQuery = query
-                    if let url = URL(string: cleanQuery), url.host == TellomiLinks.host {
+                    if let url = URL(string: cleanQuery), TellomiLinks.isPublicLinkHost(url.host) {
                         if url.pathComponents.count > 1 {
                             cleanQuery = url.pathComponents[1]
                         }
-                    } else if let url = URL(string: "https://\(cleanQuery)"), url.host == TellomiLinks.host {
+                    } else if let url = URL(string: "https://\(cleanQuery)"), TellomiLinks.isPublicLinkHost(url.host) {
                         if url.pathComponents.count > 1 {
                             cleanQuery = url.pathComponents[1]
                         }

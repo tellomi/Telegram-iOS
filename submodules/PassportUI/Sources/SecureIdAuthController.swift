@@ -669,7 +669,7 @@ public final class SecureIdAuthController: ViewController, StandalonePresentable
             guard let strongSelf = self else {
                 return
             }
-            strongSelf.context.sharedContext.openExternalUrl(context: strongSelf.context, urlContext: .generic, url: strongSelf.presentationData.strings.Passport_InfoFAQ_URL, forceExternal: false, presentationData: strongSelf.presentationData, navigationController: strongSelf.navigationController as? NavigationController, dismissInput: {
+            strongSelf.context.sharedContext.openExternalUrl(context: strongSelf.context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(strongSelf.presentationData.strings.Passport_InfoFAQ_URL, fallback: "faq#passport"), forceExternal: false, presentationData: strongSelf.presentationData, navigationController: strongSelf.navigationController as? NavigationController, dismissInput: {
                 self?.view.endEditing(true)
             })
         })]), in: .window(.root))

@@ -202,10 +202,7 @@ public func logoutOptionsController(context: AccountContext, navigationControlle
         supportPeer.set(context.engine.peers.supportPeerId())
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         
-        var faqUrl = presentationData.strings.Settings_FAQ_URL
-        if faqUrl == "Settings.FAQ_URL" || faqUrl.isEmpty {
-            faqUrl = "https://telegram.org/faq#general"
-        }
+        let faqUrl = TellomiLinks.localizedSiteURL(presentationData.strings.Settings_FAQ_URL, fallback: "faq#general")
         let resolvedUrl = resolveInstantViewUrl(account: context.account, url: faqUrl)
         |> mapToSignal { result -> Signal<ResolvedUrl, NoError> in
             guard case let .result(result) = result else {

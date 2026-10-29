@@ -481,7 +481,7 @@ private final class StarsPurchaseScreenContentComponent: CombinedComponent {
                         guard let controller = controller(), let navigationController = controller.navigationController as? NavigationController else {
                             return
                         }
-                        component.context.sharedContext.openExternalUrl(context: component.context, urlContext: .generic, url: strings.Stars_Purchase_Terms_URL, forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
+                        component.context.sharedContext.openExternalUrl(context: component.context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(strings.Stars_Purchase_Terms_URL, fallback: "tos"), forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
                     }
                 ),
                 environment: {},

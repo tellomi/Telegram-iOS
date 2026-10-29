@@ -22,7 +22,7 @@ func makeWebAppTelegramLink(pathFull: String) -> String? {
     guard url.scheme?.lowercased() == "https" else {
         return nil
     }
-    guard url.host?.lowercased() == TellomiLinks.host else {
+    guard TellomiLinks.isPublicLinkHost(url.host) else {
         return nil
     }
     guard url.user == nil, url.password == nil, url.fragment == nil else {

@@ -607,7 +607,7 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
                 case .authTransfer:
                     filteredCodes = codes.filter { TellomiLinks.hasDeepLinkPrefix($0.message) }
                 case .peer:
-                    filteredCodes = codes.filter { $0.message.hasPrefix("https://\(TellomiLinks.host)/") || $0.message.hasPrefix("\(TellomiLinks.host)/") }
+                    filteredCodes = codes.filter { TellomiLinks.hasPublicLinkPrefix($0.message) }
                 case .cryptoAddress:
                     filteredCodes = codes.filter { normalizedTonQrValue($0.message) != nil }
                 case .custom:

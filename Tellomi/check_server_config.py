@@ -226,8 +226,18 @@ def check_public_links() -> None:
     source = (ROOT / "submodules/TellomiLinks/Sources/TellomiLinks.swift").read_text(encoding="utf-8")
     if 'public static let host = "tell.cc"' not in source:
         fail("TellomiLinks.host is not tell.cc")
+    if 'public static let siteHost = "tellomi.cn"' not in source:
+        fail("TellomiLinks.siteHost is not tellomi.cn")
+    if '"t.me"' not in source or '"telegram.me"' not in source or '"telegram.dog"' not in source:
+        fail("legacy public-link hosts must stay parseable")
     if 'public static let urlScheme = "tellomi"' not in source:
         fail("TellomiLinks.urlScheme is not tellomi")
+    strings = (ROOT / "Telegram/Telegram-iOS/en.lproj/Localizable.strings").read_text(encoding="utf-8")
+    for stale in ("https://t.me", "https://telegram.org/faq", "https://telegram.org/tos", "https://telegram.org/privacy", "https://telegram.org/terms"):
+        if stale in strings:
+            fail(f"bundled strings still contain {stale}")
+    if "https://tell.cc/" not in strings or "https://tellomi.cn/faq" not in strings or "https://tellomi.cn/privacy" not in strings:
+        fail("bundled strings are missing tell.cc or tellomi.cn links")
     build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
     if "applinks:tell.cc" not in build or "webcredentials:tell.cc" not in build:
         fail("associated domains do not name tell.cc")
@@ -346,14 +356,22 @@ def check_wiring() -> None:
         fail("example variables.bzl team id is not CB7KP6GBAR")
     check_extension_suffixes(build, variables)
     logo = (ROOT / "Tellomi/Brand/logo.svg").read_text(encoding="utf-8")
-    asset = (ROOT / "Tellomi/Brand/AppIcon.icon/Assets/Logo.svg").read_text(encoding="utf-8")
     if "M485.73 20.63" not in logo or "M481.88 248.76" not in logo:
         fail("Tellomi/Brand/logo.svg is not the traced logo")
-    if "M485.73 20.63" not in asset or "M481.88 248.76" not in asset:
-        fail("the app icon SVG does not use the traced logo paths")
     icon_json = (ROOT / "Tellomi/Brand/AppIcon.icon/icon.json").read_text(encoding="utf-8")
     if "0.06667,0.06667,0.07451" not in icon_json or '"appearance" : "tinted"' not in icon_json:
         fail("the icon composer file is missing the light color or the tinted variant")
+    if '"image-name" : "Logo.png"' not in icon_json or ".svg" in icon_json:
+        fail("the icon composer document must reference Logo.png; an SVG image-name is the actool failure from v13.1.2-tf14")
+    if not (ROOT / "Tellomi/Brand/AppIcon.icon/Assets/Logo.png").is_file():
+        fail("Tellomi/Brand/AppIcon.icon/Assets/Logo.png is missing")
+    qr_pdfs = [
+        ROOT / "submodules/TelegramUI/Images.xcassets/Share/QrPlaneIcon.imageset/ic_qrlogo.pdf",
+        ROOT / "submodules/TelegramUI/Images.xcassets/Chat/Links/QrLogo.imageset/ic_qrlogo.pdf",
+    ]
+    qr_hashes = {hashlib.sha256(path.read_bytes()).hexdigest() for path in qr_pdfs}
+    if qr_hashes != {"f5d9181d28caeb17efbae908ac35737240fef92304874d15e1ba123975884658"}:
+        fail(f"QR center mark is not the traced Tellomi logo PDF ({qr_hashes})")
 
 
 def check_marketing_version() -> None:

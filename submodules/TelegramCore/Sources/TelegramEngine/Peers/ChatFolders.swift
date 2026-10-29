@@ -60,9 +60,7 @@ public struct ExportedChatFolderLink: Equatable {
 public extension ExportedChatFolderLink {
     var slug: String {
         var slug = self.link
-        if slug.hasPrefix("https://\(TellomiLinks.host)/addlist/") {
-            slug = String(slug[slug.index(slug.startIndex, offsetBy: "https://\(TellomiLinks.host)/addlist/".count)...])
-        }
+        slug = TellomiLinks.strippingPublicLinkPrefix(slug, path: "addlist/")
         return slug
     }
 }

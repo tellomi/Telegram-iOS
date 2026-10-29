@@ -78,7 +78,7 @@ private func chatLinkContextMenuOpenMode(context: AccountContext, url: String) -
     if host.isEmpty {
         return .single(nil)
     }
-    if host == TellomiLinks.host {
+    if TellomiLinks.isPublicLinkHost(host) {
         return .single(nil)
     }
     if host.hasSuffix(".ton") || scheme.hasPrefix("tonsite") {

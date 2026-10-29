@@ -148,7 +148,7 @@ final class BotCheckoutWebInteractionControllerNode: ViewControllerTracingNode, 
     
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if case let .externalVerification(completion) = self.intent, let host = navigationAction.request.url?.host {
-            if host == TellomiLinks.host {
+            if TellomiLinks.isPublicLinkHost(host) {
                 decisionHandler(.cancel)
                 completion(true)
             } else {
