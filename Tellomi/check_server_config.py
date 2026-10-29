@@ -232,6 +232,8 @@ def check_wiring() -> None:
     build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
     if 'composer_icon_folders = ["TellomiPlaceholder"]' not in build:
         fail("the home-screen icon is not the placeholder")
+    if build.count('entitlements = ":ExtensionAppGroupEntitlements.entitlements"') != 6:
+        fail("every extension that opens the app group must sign that entitlement")
     if 'telegram_app_name' not in build:
         fail("the Bazel app name is not wired")
     variables = (ROOT / "build-system/example-configuration/variables.bzl").read_text(encoding="utf-8")

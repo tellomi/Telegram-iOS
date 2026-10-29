@@ -1104,7 +1104,7 @@ swift_library(
 )
 
 plist_fragment(
-    name = "ShareExtensionEntitlements",
+    name = "ExtensionAppGroupEntitlements",
     extension = "entitlements",
     template = """
 <key>com.apple.security.application-groups</key>
@@ -1116,7 +1116,7 @@ plist_fragment(
 
 ios_extension(
     name = "ShareExtension",
-    entitlements = ":ShareExtensionEntitlements.entitlements",
+    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
     bundle_id = "{telegram_bundle_id}.Share".format(
         telegram_bundle_id = telegram_bundle_id,
     ),
@@ -1225,6 +1225,7 @@ swift_library(
 
 ios_extension(
     name = "NotificationContentExtension",
+    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
     bundle_id = "{telegram_bundle_id}.NotificationContent".format(
         telegram_bundle_id = telegram_bundle_id,
     ),
@@ -1331,6 +1332,7 @@ genrule(
 
 ios_extension(
     name = "WidgetExtension",
+    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
     bundle_id = "{telegram_bundle_id}.Widget".format(
         telegram_bundle_id = telegram_bundle_id,
     ),
@@ -1505,6 +1507,7 @@ ios_unit_test(
 
 ios_extension(
     name = "IntentsExtension",
+    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
     bundle_id = "{telegram_bundle_id}.SiriIntents".format(
         telegram_bundle_id = telegram_bundle_id,
     ),
@@ -1601,6 +1604,7 @@ swift_library(
 
 ios_extension(
     name = "BroadcastUploadExtension",
+    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
     bundle_id = "{telegram_bundle_id}.BroadcastUpload".format(
         telegram_bundle_id = telegram_bundle_id,
     ),
@@ -1663,6 +1667,7 @@ plist_fragment(
 
 ios_extension(
     name = "NotificationServiceExtension" + notificationServiceExtensionVersion,
+    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
     bundle_id = "{telegram_bundle_id}.NotificationService".format(
         telegram_bundle_id = telegram_bundle_id,
     ),
