@@ -32,6 +32,9 @@ public final class EmojiSuggestionsComponent: Component {
     }
     
     public static func suggestionData(context: AccountContext, isSavedMessages: Bool, query: String) -> Signal<[TelegramMediaFile], NoError> {
+        if TellomiEmojiBlocklist.isBlocked(query) || TellomiEmojiBlocklist.isBlocked(query.basicEmoji.0) {
+            return .single([])
+        }
         let hasPremium: Signal<Bool, NoError>
         if isSavedMessages {
             hasPremium = .single(true)
@@ -104,6 +107,9 @@ public final class EmojiSuggestionsComponent: Component {
     }
     
     public static func searchData(context: AccountContext, isSavedMessages: Bool, query: String) -> Signal<[TelegramMediaFile], NoError> {
+        if TellomiEmojiBlocklist.isBlocked(query) || TellomiEmojiBlocklist.isBlocked(query.basicEmoji.0) {
+            return .single([])
+        }
         let hasPremium: Signal<Bool, NoError>
         if isSavedMessages {
             hasPremium = .single(true)

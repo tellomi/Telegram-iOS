@@ -2063,6 +2063,9 @@ public final class ReactionContextNode: ASDisplayNode, ASScrollViewDelegate {
                                             for attribute in itemFile.attributes {
                                                 switch attribute {
                                                 case let .CustomEmoji(_, _, alt, _):
+                                                    if TellomiEmojiBlocklist.isBlocked(alt) {
+                                                        break
+                                                    }
                                                     if !alt.isEmpty, let keyword = allEmoticons[alt] {
                                                         result.append((alt, TelegramMediaFile.Accessor(itemFile), keyword))
                                                     } else if alt == query {
@@ -2076,6 +2079,9 @@ public final class ReactionContextNode: ASDisplayNode, ASScrollViewDelegate {
                                         
                                         for rawItem in rawItems {
                                             guard let item = rawItem as? StickerPackItem else {
+                                                continue
+                                            }
+                                            if let alt = item.file.customEmojiAlt, TellomiEmojiBlocklist.isBlocked(alt) {
                                                 continue
                                             }
                                             if !item.file.isPremiumEmoji {

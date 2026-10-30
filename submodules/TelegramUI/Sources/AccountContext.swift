@@ -433,6 +433,8 @@ public final class AccountContextImpl: AccountContext {
         self.appConfigurationDisposable = (self._appConfiguration.get()
         |> deliverOnMainQueue).start(next: { value in
             let _ = currentAppConfiguration.swap(value)
+            // Tellomi: picker blocklist. `emoji_blocklist` on this config replaces the built-in list.
+            TellomiEmojiBlocklist.apply(appConfiguration: value)
             let _ = cachedLottieRenderingSettings.swap(AccountContextImpl.resolveLottieRenderingSettings(
                 appConfiguration: value,
                 experimentalSettings: lottieSharedContext.immediateExperimentalUISettings
