@@ -203,6 +203,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let self else {
                     return
                 }
+                self.tellomiActiveLoginNumber = number
                 controller?.inProgress = true
                 
                 let disableAuthTokens = self.sharedContext.immediateExperimentalUISettings.disableReloginTokens
@@ -232,11 +233,16 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             if let strongSelf = self, let controller = controller {
                                 controller.inProgress = false
                                 
+                                let emailLogin = tellomiIsLoginEmail(number)
+                                let emailCopy = tellomiEmailLoginCopy(languageCode: strongSelf.presentationData.strings.baseLanguageCode)
                                 let text: String
                                 var actions: [TextAlertAction] = []
                                 switch error {
                                     case .limitExceeded:
                                         text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
+                                    case .invalidPhoneNumber where emailLogin:
+                                        text = emailCopy.invalid
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .invalidPhoneNumber:
                                         text = strongSelf.presentationData.strings.Login_InvalidPhoneError
@@ -264,6 +270,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {
                                             sharedContext.applicationBindings.openUrl(updateUrl)
                                         }))
+                                    case .phoneBanned where emailLogin:
+                                        text = emailCopy.unavailable
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .phoneBanned:
                                         text = strongSelf.presentationData.strings.Login_PhoneBannedError
                                         actions.append(TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
@@ -280,6 +289,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             
                                             AuthorizationSequenceController.presentEmailComposeController(sharedContext: strongSelf.sharedContext, address: "recover@telegram.org", subject: strongSelf.presentationData.strings.Login_PhoneBannedEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_PhoneBannedEmailBody(formattedNumber, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
                                         }))
+                                    case .generic(_) where emailLogin:
+                                        text = strongSelf.presentationData.strings.Login_UnknownError
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case let .generic(info):
                                         text = strongSelf.presentationData.strings.Login_UnknownError
                                         actions.append(TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
@@ -385,9 +397,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
-                
-                let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
+                strongSelf.returnToPhoneOrEmailEntry()
             })
             controller.retryResetEmail = { [weak self] in
                 if let self {
@@ -728,13 +738,23 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 strongSelf.sharedContext.applicationBindings.openUrl(url)
             }
         }
-        controller.updateData(number: formatPhoneNumber(number), email: email, codeType: type, nextType: nextType, timeout: timeout, termsOfService: termsOfService, previousCodeType: previousCodeType, isPrevious: isPrevious)
+        let displayedNumber = tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : formatPhoneNumber(number)
+        let displayedEmail = email ?? (tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : nil)
+        controller.updateData(number: displayedNumber, email: displayedEmail, codeType: type, nextType: nextType, timeout: timeout, termsOfService: termsOfService, previousCodeType: previousCodeType, isPrevious: isPrevious)
         return controller
     }
     
     private var signInWithAppleSetup = false
     private var appleSignInAllowed = false
     private var currentEmail: String?
+    /// The identifier of the login in progress. An email is put back into the phone-entry state on Back.
+    private var tellomiActiveLoginNumber: String = ""
+
+    private func returnToPhoneOrEmailEntry() {
+        let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+        let restored = tellomiIsLoginEmail(self.tellomiActiveLoginNumber) ? tellomiNormalizedLoginEmail(self.tellomiActiveLoginNumber) : ""
+        let _ = self.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: self.account.testingEnvironment, masterDatacenterId: self.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: restored))).startStandalone()
+    }
     
     private func emailSetupController(number: String, appleSignInAllowed: Bool) -> AuthorizationSequenceEmailEntryController {
         var currentController: AuthorizationSequenceEmailEntryController?
@@ -752,9 +772,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
-                
-                let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
+                strongSelf.returnToPhoneOrEmailEntry()
             })
         }
         controller.proceedWithEmail = { [weak self, weak controller] email in
@@ -819,8 +837,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             guard let self else {
                 return
             }
-            let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
-            let _ = self.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: self.account.testingEnvironment, masterDatacenterId: self.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
+            self.returnToPhoneOrEmailEntry()
         })
         return controller
     }
@@ -936,9 +953,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
-                
-                let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
+                strongSelf.returnToPhoneOrEmailEntry()
             })
             controller.loginWithPassword = { [weak self, weak controller] password in
                 if let strongSelf = self {
@@ -1081,9 +1096,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
-                
-                let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
+                strongSelf.returnToPhoneOrEmailEntry()
             })
             controller.reset = { [weak self, weak controller] in
                 if let strongSelf = self, let strongController = controller {
@@ -1125,7 +1138,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         return controller
     }
     
-    private func signUpController(firstName: String, lastName: String, termsOfService: UnauthorizedAccountTermsOfService?, displayCancel: Bool) -> AuthorizationSequenceSignUpController {
+    private func signUpController(firstName: String, lastName: String, termsOfService: UnauthorizedAccountTermsOfService?, displayCancel: Bool, loginNumber: String) -> AuthorizationSequenceSignUpController {
         var currentController: AuthorizationSequenceSignUpController?
         for c in self.viewControllers {
             if let c = c as? AuthorizationSequenceSignUpController {
@@ -1141,9 +1154,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
-                
-                let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
+                strongSelf.returnToPhoneOrEmailEntry()
             }, displayCancel: displayCancel)
             controller.openUrl = { [weak self] url in
                 guard let self else {
@@ -1243,6 +1254,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 }
             }
         }
+        controller.setTellomiNicknameOnly(tellomiIsLoginEmail(loginNumber))
         controller.updateData(firstName: firstName, lastName: lastName, termsOfService: termsOfService)
         return controller
     }
@@ -1336,30 +1348,34 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     controllers.append(self.phoneEntryController(countryCode: countryCode, number: number, splashController: previousSplashController))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty && (previousSplashController == nil || self.viewControllers.count > 2))
                 case let .confirmationCodeEntry(number, type, phoneCodeHash, timeout, nextType, _, previousCodeEntry, usePrevious):
+                    self.tellomiActiveLoginNumber = number
+                    let loginEmail = tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : nil
                     var controllers: [ViewController] = []
                     if !self.otherAccountPhoneNumbers.1.isEmpty {
                         controllers.append(self.splashController())
                     }
-                    controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: "", splashController: nil))
+                    controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: loginEmail ?? "", splashController: nil))
                 
                     var isGoingBack = false
                     if case let .emailSetupRequired(appleSignInAllowed) = type {
                         self.appleSignInAllowed = appleSignInAllowed
                         controllers.append(self.emailSetupController(number: number, appleSignInAllowed: appleSignInAllowed))
                     } else {
-                        if let _ = self.currentEmail {
+                        // currentEmail is the login-email setup screen. An address used as phone_number is the login itself.
+                        if self.currentEmail != nil && loginEmail == nil {
                             controllers.append(self.emailSetupController(number: number, appleSignInAllowed: self.appleSignInAllowed))
                         }
+                        let codeEmail = loginEmail ?? self.currentEmail
                         
                         if let previousCodeEntry, case let .confirmationCodeEntry(number, previousType, phoneCodeHash, timeout, nextType, _, _, _) = previousCodeEntry, usePrevious {
-                            controllers.append(self.codeEntryController(number: number, phoneCodeHash: phoneCodeHash, email: self.currentEmail, type: previousType, nextType: nextType, timeout: timeout, previousCodeType: type, isPrevious: true, termsOfService: nil))
+                            controllers.append(self.codeEntryController(number: number, phoneCodeHash: phoneCodeHash, email: codeEmail, type: previousType, nextType: nextType, timeout: timeout, previousCodeType: type, isPrevious: true, termsOfService: nil))
                             isGoingBack = true
                         } else {
                             var previousCodeType: SentAuthorizationCodeType?
                             if let previousCodeEntry, case let .confirmationCodeEntry(_, type, _, _, _, _, _, _) = previousCodeEntry {
                                 previousCodeType = type
                             }
-                            controllers.append(self.codeEntryController(number: number, phoneCodeHash: phoneCodeHash, email: self.currentEmail, type: type, nextType: nextType, timeout: timeout, previousCodeType: previousCodeType, isPrevious: false, termsOfService: nil))
+                            controllers.append(self.codeEntryController(number: number, phoneCodeHash: phoneCodeHash, email: codeEmail, type: type, nextType: nextType, timeout: timeout, previousCodeType: previousCodeType, isPrevious: false, termsOfService: nil))
                         }
                     }
                 
@@ -1373,7 +1389,10 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     } else {
                         self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                     }
-                case let .passwordEntry(hint, _, _, suggestReset, syncContacts):
+                case let .passwordEntry(hint, number, _, suggestReset, syncContacts):
+                    if let number {
+                        self.tellomiActiveLoginNumber = number
+                    }
                     var controllers: [ViewController] = []
                     if !self.otherAccountPhoneNumbers.1.isEmpty {
                         controllers.append(self.splashController())
@@ -1394,7 +1413,8 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     }
                     controllers.append(self.awaitingAccountResetController(protectedUntil: protectedUntil, number: number))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
-                case let .signUp(_, _, firstName, lastName, termsOfService, _):
+                case let .signUp(number, _, firstName, lastName, termsOfService, _):
+                    self.tellomiActiveLoginNumber = number
                     var controllers: [ViewController] = []
                     var displayCancel = false
                     if !self.otherAccountPhoneNumbers.1.isEmpty {
@@ -1402,7 +1422,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     } else {
                         displayCancel = true
                     }
-                    controllers.append(self.signUpController(firstName: firstName, lastName: lastName, termsOfService: termsOfService, displayCancel: displayCancel))
+                    controllers.append(self.signUpController(firstName: firstName, lastName: lastName, termsOfService: termsOfService, displayCancel: displayCancel, loginNumber: number))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .payment(number, codeHash, storeProduct, premiumDays, supportEmailAddress, supportEmailSubject, _):
                     var controllers: [ViewController] = []

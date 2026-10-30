@@ -65,6 +65,16 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     
     var signUpWithName: ((String, String) -> Void)?
     var openTermsOfService: (() -> Void)?
+    var tellomiNicknameOnly = false {
+        didSet {
+            if oldValue != self.tellomiNicknameOnly {
+                self.applyTellomiNicknameChrome()
+                if let (layout, navigationHeight) = self.layoutArguments {
+                    self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: .immediate)
+                }
+            }
+        }
+    }
     // Tellomi: signup agreement checkbox, see TellomiSignUpAgreement.swift.
     let tellomiAgreement = TellomiSignUpAgreement()
     var tellomiOpenUrl: ((String) -> Void)?
@@ -257,7 +267,12 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 90.0 : 10.0
                 
-        self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_InfoTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+        let nicknameCopy = tellomiEmailLoginCopy(languageCode: self.strings.baseLanguageCode)
+        let title = self.tellomiNicknameOnly ? nicknameCopy.nicknameTitle : self.strings.Login_InfoTitle
+        let help = self.tellomiNicknameOnly ? nicknameCopy.nicknameHelp : self.strings.Login_InfoHelp
+        self.titleNode.attributedText = NSAttributedString(string: title, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+        self.currentOptionNode.attributedText = NSAttributedString(string: help, font: Font.regular(16.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+        self.applyTellomiNicknameChrome()
         let titleSize = self.titleNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
         
         let fieldHeight: CGFloat = 54.0
@@ -278,9 +293,13 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         items.append(AuthorizationLayoutItem(node: self.firstNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 32.0, maxValue: 60.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         items.append(AuthorizationLayoutItem(node: self.firstSeparatorNode, size: CGSize(width: bandWidth - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
-        
-        items.append(AuthorizationLayoutItem(node: self.lastNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
-        items.append(AuthorizationLayoutItem(node: self.lastSeparatorNode, size: CGSize(width: bandWidth - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+
+        self.lastNameField.isHidden = self.tellomiNicknameOnly
+        self.lastSeparatorNode.isHidden = self.tellomiNicknameOnly
+        if !self.tellomiNicknameOnly {
+            items.append(AuthorizationLayoutItem(node: self.lastNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+            items.append(AuthorizationLayoutItem(node: self.lastSeparatorNode, size: CGSize(width: bandWidth - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        }
         
         items.append(AuthorizationLayoutItem(node: self.termsNode, size: termsSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 48.0, maxValue: 100.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
@@ -310,13 +329,25 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     }
     
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        if textField === self.firstNameField.textField {
+        if textField === self.firstNameField.textField && !self.tellomiNicknameOnly {
             self.lastNameField.textField.becomeFirstResponder()
         } else {
             let name = self.currentName
-            self.signUpWithName?(name.0, name.1)
+            self.signUpWithName?(name.0, self.tellomiNicknameOnly ? "" : name.1)
         }
         return false
+    }
+
+    private func applyTellomiNicknameChrome() {
+        let copy = tellomiEmailLoginCopy(languageCode: self.strings.baseLanguageCode)
+        let placeholder = self.tellomiNicknameOnly ? copy.nicknamePlaceholder : self.strings.UserInfo_FirstNamePlaceholder
+        self.firstNameField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: self.firstNameField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
+        self.firstNameField.textField.returnKeyType = self.tellomiNicknameOnly ? .done : .next
+        if #available(iOSApplicationExtension 12.0, iOS 12.0, *) {
+            self.firstNameField.textField.textContentType = self.tellomiNicknameOnly ? .nickname : .givenName
+        } else if #available(iOSApplicationExtension 10.0, iOS 10.0, *) {
+            self.firstNameField.textField.textContentType = .givenName
+        }
     }
     
     @objc private func addPhotoPressed() {
