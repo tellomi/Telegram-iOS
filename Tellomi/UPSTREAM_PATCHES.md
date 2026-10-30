@@ -103,3 +103,22 @@ The traced bubble fills the viewBox. `Tellomi/Brand/generate_icons.py` scales it
 | `Telegram/BUILD` `TelegramInfoPlist` | `UIAppFonts` no longer lists those files. The key is gone; nothing else was registered there. |
 | `submodules/Display/Source/Font.swift` | `Font.Design.camera` takes the system font path, including weight and monospaced numbers. |
 | `submodules/LegacyComponents/Sources/TGCameraInterfaceAssets.m` | `regularFontOfSize` / `boldFontOfSize` are `systemFontOfSize` and semibold. The name decoder is gone. |
+
+## Emoji blocklist
+
+Pickers hide a client-side list. The built-in entry is the Taiwan flag (U+1F1F9 U+1F1FC). A message that already contains it still renders. `help.getAppConfig` field `emoji_blocklist` replaces the built-in list when it is an array of emoji strings or codepoint sequences (`U+1F1F9 U+1F1FC`, `1F1F9-1F1FC`). The key being absent, or a value that is not an array of strings, keeps the built-in list. An empty array blocks nothing. The list is process-global; the latest account configuration wins.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TellomiEmojiBlocklist.swift` | New. Default list, codepoint parsing, `isBlocked` / `filtering`. |
+| `submodules/TelegramCore/Sources/TellomiEmojiBlocklistAppConfig.swift` | New. Reads `emoji_blocklist` from `AppConfiguration`. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Stickers/EmojiKeywords.swift` | `searchEmojiKeywords` drops blocked emoticons. Search and keyword suggestions share this. |
+| `submodules/TelegramUI/Components/EntityKeyboard/Sources/EmojiPagerContentComponentStaticEmoji.swift` | `staticEmojiMapping` filters the loaded `emoji1.txt` lists, including the flags page. |
+| `submodules/TelegramUI/Components/EntityKeyboard/Sources/EmojiPagerContentSignals.swift` | Frequently-used unicode emoji, sticker-alt recents, and builtin reactions in the reaction picker. |
+| `submodules/TelegramUI/Components/Chat/TopMessageReactions/Sources/TopMessageReactions.swift` | The quick reaction row skips a builtin reaction on the list. |
+| `submodules/ReactionSelectionNode/Sources/ReactionContextNode.swift` | Reaction search skips a custom emoji whose alt is blocked. Emoji-only search reads `staticEmojiMapping`. |
+| `submodules/TelegramUI/Sources/AccountContext.swift` | Applies the current app configuration to the blocklist. |
+| `submodules/TelegramUI/Sources/ChatInterfaceStateContextQueries.swift` | A suggestion query that is itself a blocked emoji returns nothing. |
+| `submodules/TelegramUI/Components/MessageInputPanelComponent/Sources/InputContextQueries.swift` | Same, for the other composer. |
+| `submodules/TelegramUI/Components/EmojiSuggestionsComponent/Sources/EmojiSuggestionsComponent.swift` | Same, for the suggestion strip. |
+| `submodules/TelegramCore/Tests/TellomiEmojiBlocklistTests.swift` | Default list, codepoint entries, app-config override, keyword filtering. |

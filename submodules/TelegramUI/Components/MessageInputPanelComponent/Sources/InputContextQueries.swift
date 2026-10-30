@@ -246,6 +246,10 @@ private func updatedContextQueryResultStateForQuery(context: AccountContext, cha
         |> distinctUntilChanged
     
         if query.isSingleEmoji {
+            if TellomiEmojiBlocklist.isBlocked(query) || TellomiEmojiBlocklist.isBlocked(query.basicEmoji.0) {
+                return .single({ _ in return .emojis([], range) })
+                |> castError(ChatContextQueryError.self)
+            }
             return combineLatest(
                 context.account.postbox.itemCollectionsView(orderedItemListCollectionIds: [], namespaces: [Namespaces.ItemCollection.CloudEmojiPacks], aroundIndex: nil, count: 10000000),
                 hasPremium

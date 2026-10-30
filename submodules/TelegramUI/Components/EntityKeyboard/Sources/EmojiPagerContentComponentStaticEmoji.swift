@@ -85,6 +85,14 @@ private func parseEmojiSection(_ sectionContent: String) -> [String] {
     return result
 }
 
+private let tellomiLoadedStaticEmojiMapping: [(EmojiPagerContentComponent.StaticEmojiSegment, [String])] = loadStaticEmojiMapping()
+
 public extension EmojiPagerContentComponent {
-    static let staticEmojiMapping: [(EmojiPagerContentComponent.StaticEmojiSegment, [String])] = loadStaticEmojiMapping()
+    /// `emoji1.txt`, with `TellomiEmojiBlocklist` applied on each read so an app-config override is visible
+    /// the next time a picker is built.
+    static var staticEmojiMapping: [(EmojiPagerContentComponent.StaticEmojiSegment, [String])] {
+        return tellomiLoadedStaticEmojiMapping.map { segment, emoji in
+            (segment, TellomiEmojiBlocklist.filtering(emoji))
+        }
+    }
 }

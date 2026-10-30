@@ -373,6 +373,10 @@ private func updatedContextQueryResultStateForQuery(context: AccountContext, pee
             |> distinctUntilChanged
         
             if query.isSingleEmoji {
+                if TellomiEmojiBlocklist.isBlocked(query) || TellomiEmojiBlocklist.isBlocked(query.basicEmoji.0) {
+                    return .single({ _ in return .emojis([], range) })
+                    |> castError(ChatContextQueryError.self)
+                }
                 return combineLatest(
                     context.engine.itemCollections.allItems(namespace: Namespaces.ItemCollection.CloudEmojiPacks),
                     hasPremium
