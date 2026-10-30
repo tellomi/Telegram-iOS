@@ -76,6 +76,8 @@ No in-app terms popup (the server returns `help.termsOfServiceUpdateEmpty` and `
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Adds `tellomiAgreement` / `tellomiOpenUrl`; end of `init` disables Continue and installs the checkbox on `termsNode`; `updateData` always shows `termsNode`. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpController.swift` | Wires `tellomiOpenUrl` to `openUrl`; `nextPressed()` refuses (haptic error) until the box is checked, which also covers the small-screen Next bar button. |
 
+Email registration uses this same screen. The links stay `https://tellomi.cn/legal/terms/` and `https://tellomi.cn/legal/privacy/`, opened with `UIApplication.shared.open` (no in-app terms modal).
+
 ## iPad icons 152 and 167
 
 App Store still asks for an iPad icon of exactly 152×152 pixels and an iPad Pro icon of exactly 167×167. The Icon Composer document does not emit those sizes, and `app_icons` cannot list both `AppIcon.icon` and the size set. `//:TellomiAppIcon` is `Tellomi/Brand/AppIcon.xcassets`, whose 76pt @2x and 83.5pt @2x slots are those pixels, rasterized from the same `logo.svg`.
@@ -122,3 +124,22 @@ Pickers hide a client-side list. The built-in entry is the Taiwan flag (U+1F1F9 
 | `submodules/TelegramUI/Components/MessageInputPanelComponent/Sources/InputContextQueries.swift` | Same, for the other composer. |
 | `submodules/TelegramUI/Components/EmojiSuggestionsComponent/Sources/EmojiSuggestionsComponent.swift` | Same, for the suggestion strip. |
 | `submodules/TelegramCore/Tests/TellomiEmojiBlocklistTests.swift` | Default list, codepoint entries, app-config override, keyword filtering. |
+
+## Email login
+
+The login home stays phone, country +86. A switch under the field changes it to an email address. Continue calls the existing `sendAuthorizationCode`, which sends `auth.sendCode` with that address in `phone_number`. There is no email+password form (P1).
+
+When the server returns `auth.sentCodeTypeEmailCode`, the stock code screen is the one already used for that type: title "Check Your Email", the code boxes, and `auth.signIn` with `email_verification: emailVerificationCode` (not `phone_code`). Back returns to the email field. Change Phone Number does not get the switch (`account == nil`).
+
+An unregistered address comes back `PHONE_NUMBER_UNOCCUPIED` or `auth.authorizationSignUpRequired`. That is the stock sign-up state. For an email, the name screen asks for a nickname only (last name is sent empty) and then `auth.signUp` with the address still in `phone_number`. Continue stays disabled until the agreement box is checked.
+
+Leave `reset_available_period`, `reset_pending_date`, and `apple_signin_allowed` unset on this code unless those stock actions are wanted (reset-via-SMS, Sign in with Apple). A cloud password (`SESSION_PASSWORD_NEEDED`) still opens the existing password screen; that is account 2FA, not an email password login.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiEmailLogin.swift` | New. Copy (Chinese when the langpack is `zh*`, otherwise English) and `tellomiIsLoginEmail`. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Email field and phone/email switch on the login home only. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Email Continue confirms the address and calls `loginWithNumber` with it, skipping the phone confirmation. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Sends that string through `sendAuthorizationCode`. Shows the email on the code screen and does not insert the login-email setup page. Back restores the address. Email `sendCode` errors do not offer `recover@telegram.org`. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpController.swift` | Email sign-up is nickname-only and still requires the agreement checkbox. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Hides the last-name row and retitles the screen when the identifier is an email. |

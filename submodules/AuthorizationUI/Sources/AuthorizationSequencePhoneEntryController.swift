@@ -34,6 +34,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private let back: () -> Void
     
     private var currentData: (Int32, String?, String)?
+    private var pendingEntry: (Int32, String?, String)?
         
     var codeNode: ASDisplayNode {
         return self.controllerNode.codeNode
@@ -125,9 +126,15 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     }
     
     public func updateData(countryCode: Int32, countryName: String?, number: String) {
-        self.currentData = (countryCode, countryName, number)
+        self.pendingEntry = (countryCode, countryName, number)
+        // The country picker reads currentData. An email must not land in the phone field.
+        if tellomiIsLoginEmail(number) {
+            self.currentData = (countryCode, countryName, "")
+        } else {
+            self.currentData = (countryCode, countryName, number)
+        }
         if self.isNodeLoaded {
-            self.controllerNode.codeAndNumber = (countryCode, countryName, number)
+            self.controllerNode.applyEntry(countryCode: countryCode, countryName: countryName, number: number)
         }
     }
     
@@ -164,8 +171,10 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             self.loadAndPresentPasskey(force: true)
         }
         
-        if let (code, name, number) = self.currentData {
-            self.controllerNode.codeAndNumber = (code, name, number)
+        if let (code, name, number) = self.pendingEntry {
+            self.controllerNode.applyEntry(countryCode: code, countryName: name, number: number)
+        } else if let (code, name, number) = self.currentData {
+            self.controllerNode.applyEntry(countryCode: code, countryName: name, number: number)
         }
         self.displayNodeDidLoad()
         
@@ -383,6 +392,25 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     @objc func nextPressed() {
         guard self.confirmationController == nil else {
+            return
+        }
+        if self.controllerNode.isEmailLogin {
+            let email = self.controllerNode.emailAddress
+            guard tellomiIsLoginEmail(email) else {
+                self.hapticFeedback.error()
+                self.controllerNode.animateError()
+                return
+            }
+            let copy = tellomiEmailLoginCopy(languageCode: self.presentationData.strings.baseLanguageCode)
+            var actions: [TextAlertAction] = []
+            actions.append(TextAlertAction(type: .genericAction, title: self.presentationData.strings.Login_Edit, action: {}))
+            actions.append(TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Login_Yes, action: { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.loginWithNumber?(email, self.controllerNode.syncContacts)
+            }))
+            self.present(textAlertController(sharedContext: self.sharedContext, title: email, text: copy.confirm, actions: actions), in: .window(.root))
             return
         }
         let (_, _, number) = self.controllerNode.codeAndNumber

@@ -301,6 +301,73 @@ private final class ContactSyncNode: ASDisplayNode {
     }
 }
 
+/// One underlined email row, the same height rhythm as the phone field. Login home only.
+private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
+    let textField: TextFieldNode
+    private let separatorNode: ASDisplayNode
+    var textChanged: ((String) -> Void)?
+    var returnPressed: (() -> Void)?
+
+    var text: String {
+        return self.textField.textField.text ?? ""
+    }
+
+    init(theme: PresentationTheme, placeholder: String) {
+        self.textField = TextFieldNode()
+        self.textField.textField.font = Font.regular(20.0)
+        self.textField.textField.textColor = theme.list.itemPrimaryTextColor
+        self.textField.textField.textAlignment = .natural
+        self.textField.textField.autocorrectionType = .no
+        self.textField.textField.autocapitalizationType = .none
+        self.textField.textField.keyboardType = .emailAddress
+        self.textField.textField.returnKeyType = .done
+        self.textField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        self.textField.textField.tintColor = theme.list.itemAccentColor
+        self.textField.textField.disableAutomaticKeyboardHandling = [.forward, .backward]
+        self.textField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: Font.regular(20.0), textColor: theme.list.itemPlaceholderTextColor)
+        self.textField.textField.accessibilityIdentifier = "Auth.PhoneEntry.EmailField"
+        if #available(iOSApplicationExtension 10.0, iOS 10.0, *) {
+            self.textField.textField.textContentType = .emailAddress
+        }
+
+        self.separatorNode = ASDisplayNode()
+        self.separatorNode.isLayerBacked = true
+        self.separatorNode.backgroundColor = theme.list.itemPlainSeparatorColor
+
+        super.init()
+
+        self.textField.textField.delegate = self
+        self.addSubnode(self.separatorNode)
+        self.addSubnode(self.textField)
+        self.textField.textField.addTarget(self, action: #selector(self.editingChanged), for: .editingChanged)
+    }
+
+    func setText(_ text: String) {
+        self.textField.textField.text = text
+    }
+
+    func setPlaceholder(_ placeholder: String, theme: PresentationTheme) {
+        self.textField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: Font.regular(20.0), textColor: theme.list.itemPlaceholderTextColor)
+    }
+
+    @objc private func editingChanged() {
+        self.textChanged?(self.text)
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        self.returnPressed?()
+        return false
+    }
+
+    override func layout() {
+        super.layout()
+        let inset: CGFloat = 24.0
+        let size = self.bounds.size
+        self.textField.frame = CGRect(x: inset, y: 0.0, width: max(0.0, size.width - inset * 2.0), height: size.height)
+        self.separatorNode.frame = CGRect(x: inset, y: size.height - UIScreenPixel, width: max(0.0, size.width - inset * 2.0), height: UIScreenPixel)
+    }
+}
+
 final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private let sharedContext: SharedAccountContext
     private var account: UnauthorizedAccount?
@@ -315,8 +382,13 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private let noticeNode: ImmediateTextNode
     private let noticeActivateAreaNode: AccessibilityAreaNode
     private let phoneAndCountryNode: PhoneAndCountryNode
+    private let emailFieldNode: TellomiEmailFieldNode?
+    private let emailSwitchNode: HighlightableButtonNode?
     private let contactSyncNode: ContactSyncNode
     private let proceedNode: SolidRoundedButtonNode
+    private var emailLogin = false
+    private var passkeyNotice = false
+    private var layoutArguments: (ContainerViewLayout, CGFloat)?
     
     private var qrNode: ASImageNode?
     private let exportTokenDisposable = MetaDisposable()
@@ -329,6 +401,14 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     
     var currentNumber: String {
         return self.phoneAndCountryNode.phoneInputNode.number
+    }
+
+    var isEmailLogin: Bool {
+        return self.emailLogin
+    }
+
+    var emailAddress: String {
+        return tellomiNormalizedLoginEmail(self.emailFieldNode?.text ?? "")
     }
     
     var codeAndNumber: (Int32?, String?, String) {
@@ -361,6 +441,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             self.phoneAndCountryNode.phoneInputNode.enableEditing = !self.inProgress
             self.phoneAndCountryNode.phoneInputNode.alpha = self.inProgress ? 0.6 : 1.0
             self.phoneAndCountryNode.countryButton.isEnabled = !self.inProgress
+            self.emailFieldNode?.textField.alpha = self.inProgress ? 0.6 : 1.0
+            self.emailFieldNode?.textField.textField.isEnabled = !self.inProgress
+            self.emailSwitchNode?.isUserInteractionEnabled = !self.inProgress
+            self.emailSwitchNode?.alpha = self.inProgress ? 0.6 : 1.0
             
             if self.inProgress != oldValue {
                 if self.inProgress {
@@ -421,6 +505,23 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.contactSyncNode = ContactSyncNode(theme: theme, strings: strings)
         
         self.phoneAndCountryNode = PhoneAndCountryNode(strings: strings, theme: theme)
+
+        // Change Phone Number uses this screen with account == nil. Email login stays on the login home.
+        if account != nil {
+            let copy = tellomiEmailLoginCopy(languageCode: strings.baseLanguageCode)
+            let emailFieldNode = TellomiEmailFieldNode(theme: theme, placeholder: copy.placeholder)
+            emailFieldNode.isHidden = true
+            self.emailFieldNode = emailFieldNode
+            let emailSwitchNode = HighlightableButtonNode()
+            emailSwitchNode.displaysAsynchronously = false
+            emailSwitchNode.setTitle(copy.switchToEmail, with: Font.regular(17.0), with: theme.list.itemAccentColor, for: [])
+            emailSwitchNode.accessibilityLabel = copy.switchToEmail
+            emailSwitchNode.accessibilityTraits = [.button]
+            self.emailSwitchNode = emailSwitchNode
+        } else {
+            self.emailFieldNode = nil
+            self.emailSwitchNode = nil
+        }
         
         self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: false, height: 50.0, cornerRadius: 50 * 0.5)
         self.proceedNode.progressType = .embedded
@@ -440,6 +541,12 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.addSubnode(self.titleActivateAreaNode)
         self.addSubnode(self.noticeActivateAreaNode)
         self.addSubnode(self.phoneAndCountryNode)
+        if let emailFieldNode = self.emailFieldNode {
+            self.addSubnode(emailFieldNode)
+        }
+        if let emailSwitchNode = self.emailSwitchNode {
+            self.addSubnode(emailSwitchNode)
+        }
         self.addSubnode(self.contactSyncNode)
         self.addSubnode(self.proceedNode)
         self.addSubnode(self.animationNode)
@@ -469,9 +576,16 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.phoneAndCountryNode.checkPhone = { [weak self] in
             self?.checkPhone?()
         }
-        self.phoneAndCountryNode.hasNumberUpdated = { [weak self] hasNumber in
-            self?.proceedNode.isEnabled = hasNumber
+        self.phoneAndCountryNode.hasNumberUpdated = { [weak self] _ in
+            self?.refreshProceedEnabled()
         }
+        self.emailFieldNode?.textChanged = { [weak self] _ in
+            self?.refreshProceedEnabled()
+        }
+        self.emailFieldNode?.returnPressed = { [weak self] in
+            self?.checkPhone?()
+        }
+        self.emailSwitchNode?.addTarget(self, action: #selector(self.emailSwitchPressed), forControlEvents: .touchUpInside)
         self.phoneAndCountryNode.keyPressed = { [weak self] num in
             if let strongSelf = self, !strongSelf.managedAnimationNode.isHidden {
                 strongSelf.managedAnimationNode.animate(num: num)
@@ -490,8 +604,13 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         }
         
         self.animationNode.completed = { [weak self] _ in
-            self?.animationNode.removeFromSupernode()
-            self?.managedAnimationNode.isHidden = false
+            guard let self else {
+                return
+            }
+            self.animationNode.removeFromSupernode()
+            if !self.emailLogin {
+                self.managedAnimationNode.isHidden = false
+            }
         }
     }
     
@@ -503,6 +622,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     override func didLoad() {
         super.didLoad()
         
+        self.emailSwitchNode?.view.accessibilityIdentifier = "Auth.PhoneEntry.EmailSwitch"
         self.titleNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.debugTap(_:))))
         #if DEBUG && false
         self.noticeNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.debugQrTap(_:))))
@@ -525,13 +645,19 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.textSnapshotView = textSnapshot
         self.view.insertSubview(textSnapshot, at: 0)
         
-        let nodes: [ASDisplayNode] = [
+        var nodes: [ASDisplayNode] = [
             self.animationNode,
             self.titleNode,
             self.noticeNode,
             self.phoneAndCountryNode,
             self.contactSyncNode
         ]
+        if let emailFieldNode = self.emailFieldNode {
+            nodes.append(emailFieldNode)
+        }
+        if let emailSwitchNode = self.emailSwitchNode {
+            nodes.append(emailSwitchNode)
+        }
 
         for node in nodes {
             node.alpha = 0.0
@@ -554,13 +680,19 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         })
         self.textSnapshotView?.layer.animatePosition(from: CGPoint(), to: CGPoint(x: 0.0, y: -140.0), duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, additive: true)
     
-        let nodes: [ASDisplayNode] = [
+        var nodes: [ASDisplayNode] = [
             self.animationNode,
             self.titleNode,
             self.noticeNode,
             self.phoneAndCountryNode,
             self.contactSyncNode
         ]
+        if let emailFieldNode = self.emailFieldNode {
+            nodes.append(emailFieldNode)
+        }
+        if let emailSwitchNode = self.emailSwitchNode {
+            nodes.append(emailSwitchNode)
+        }
         
         self.animationNode.layer.animateScale(from: 0.3, to: 1.0, duration: 0.3)
 
@@ -577,6 +709,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     
     func updateDisplayPasskeyLoginOption() {
         if self.account == nil {
+            return
+        }
+        self.passkeyNotice = true
+        if self.emailLogin {
             return
         }
         let attributedText = NSMutableAttributedString(attributedString: parseMarkdownIntoAttributedString(self.strings.Login_PhoneWithPasskeySubtitle, attributes: MarkdownAttributes(
@@ -596,7 +732,19 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.noticeNode.attributedText = attributedText
     }
     
+    func applyEntry(countryCode: Int32, countryName: String?, number: String) {
+        if self.account != nil, tellomiIsLoginEmail(number) {
+            self.setEmailMode(true, address: tellomiNormalizedLoginEmail(number))
+            return
+        }
+        if self.emailLogin {
+            self.setEmailMode(false, address: nil)
+        }
+        self.codeAndNumber = (countryCode, countryName, number)
+    }
+
     func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
+        self.layoutArguments = (layout, navigationBarHeight)
         var insets = layout.insets(options: [])
         insets.top = layout.statusBarHeight ?? 20.0
         if let inputHeight = layout.inputHeight, !inputHeight.isZero {
@@ -606,7 +754,25 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let titleInset: CGFloat = layout.size.width > 320.0 ? 18.0 : 0.0
         let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 80.0 : 10.0
         
-        self.titleNode.attributedText = NSAttributedString(string: self.account == nil ? self.strings.Login_NewNumber : self.strings.Login_PhoneTitle, font: Font.bold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+        let emailCopy = tellomiEmailLoginCopy(languageCode: self.strings.baseLanguageCode)
+        let title: String
+        if self.emailLogin {
+            title = emailCopy.title
+        } else if self.account == nil {
+            title = self.strings.Login_NewNumber
+        } else {
+            title = self.strings.Login_PhoneTitle
+        }
+        self.titleNode.attributedText = NSAttributedString(string: title, font: Font.bold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+        if self.emailLogin {
+            self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: Font.regular(17.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+            self.emailFieldNode?.setPlaceholder(emailCopy.placeholder, theme: self.theme)
+        }
+        if let emailSwitchNode = self.emailSwitchNode {
+            let switchTitle = self.emailLogin ? emailCopy.switchToPhone : emailCopy.switchToEmail
+            emailSwitchNode.setTitle(switchTitle, with: Font.regular(17.0), with: self.theme.list.itemAccentColor, for: [])
+            emailSwitchNode.accessibilityLabel = switchTitle
+        }
         self.titleActivateAreaNode.accessibilityLabel = self.titleNode.attributedText?.string ?? ""
         
         // iPhone Duo: beside a side strip the content keeps to the band between the side insets. With equal
@@ -636,14 +802,24 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         var items: [AuthorizationLayoutItem] = [
             AuthorizationLayoutItem(node: self.titleNode, size: titleSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: titleInset, maxValue: titleInset), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)),
             AuthorizationLayoutItem(node: self.noticeNode, size: noticeSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 18.0, maxValue: 18.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)),
-            AuthorizationLayoutItem(node: self.phoneAndCountryNode, size: CGSize(width: maximumWidth, height: 115.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 30.0, maxValue: 30.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)),
         ]
+        if self.emailLogin, let emailFieldNode = self.emailFieldNode {
+            items.append(AuthorizationLayoutItem(node: emailFieldNode, size: CGSize(width: maximumWidth, height: 64.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 30.0, maxValue: 30.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        } else {
+            items.append(AuthorizationLayoutItem(node: self.phoneAndCountryNode, size: CGSize(width: maximumWidth, height: 115.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 30.0, maxValue: 30.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        }
+        if let emailSwitchNode = self.emailSwitchNode {
+            let measured = emailSwitchNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
+            items.append(AuthorizationLayoutItem(node: emailSwitchNode, size: CGSize(width: maximumWidth, height: max(44.0, measured.height)), spacingBefore: AuthorizationLayoutItemSpacing(weight: 8.0, maxValue: 8.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        }
         
         if layout.size.width > 320.0 {
-            items.insert(AuthorizationLayoutItem(node: self.animationNode, size: animationSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 10.0, maxValue: 10.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)), at: 0)
+            if !self.emailLogin {
+                items.insert(AuthorizationLayoutItem(node: self.animationNode, size: animationSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 10.0, maxValue: 10.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)), at: 0)
+            }
             self.proceedNode.isHidden = false
-            self.animationNode.isHidden = false
-            self.animationNode.visibility = true
+            self.animationNode.isHidden = self.emailLogin
+            self.animationNode.visibility = !self.emailLogin
         } else {
             insets.top = navigationBarHeight
             self.proceedNode.isHidden = true
@@ -680,12 +856,69 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     }
     
     func activateInput() {
-        self.phoneAndCountryNode.phoneInputNode.numberField.textField.becomeFirstResponder()
+        if self.emailLogin, let emailFieldNode = self.emailFieldNode {
+            emailFieldNode.textField.textField.becomeFirstResponder()
+        } else {
+            self.phoneAndCountryNode.phoneInputNode.numberField.textField.becomeFirstResponder()
+        }
     }
     
     func animateError() {
-        self.phoneAndCountryNode.phoneInputNode.countryCodeField.layer.addShakeAnimation()
-        self.phoneAndCountryNode.phoneInputNode.numberField.layer.addShakeAnimation()
+        if self.emailLogin, let emailFieldNode = self.emailFieldNode {
+            emailFieldNode.layer.addShakeAnimation()
+        } else {
+            self.phoneAndCountryNode.phoneInputNode.countryCodeField.layer.addShakeAnimation()
+            self.phoneAndCountryNode.phoneInputNode.numberField.layer.addShakeAnimation()
+        }
+    }
+
+    private func refreshProceedEnabled() {
+        if self.emailLogin {
+            self.proceedNode.isEnabled = tellomiIsLoginEmail(self.emailAddress)
+            return
+        }
+        let isServiceNumber = self.phoneAndCountryNode.phoneInputNode.number.hasPrefix("+999")
+        if self.phoneAndCountryNode.hasCountry || isServiceNumber {
+            self.proceedNode.isEnabled = !self.phoneAndCountryNode.phoneInputNode.codeAndNumber.2.isEmpty || isServiceNumber
+        } else {
+            self.proceedNode.isEnabled = false
+        }
+    }
+
+    private func setEmailMode(_ email: Bool, address: String?) {
+        guard self.account != nil, let emailFieldNode = self.emailFieldNode else {
+            return
+        }
+        self.emailLogin = email
+        if let address {
+            emailFieldNode.setText(address)
+        }
+        emailFieldNode.isHidden = !email
+        self.phoneAndCountryNode.isHidden = email
+        if email {
+            self.managedAnimationNode.isHidden = true
+        } else if self.animationNode.supernode == nil {
+            self.managedAnimationNode.isHidden = false
+        }
+        if !email {
+            if self.passkeyNotice {
+                self.updateDisplayPasskeyLoginOption()
+            } else {
+                self.noticeNode.attributedText = NSAttributedString(string: self.strings.Login_PhoneAndCountryHelp, font: Font.regular(17.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+            }
+        }
+        self.refreshProceedEnabled()
+        if let (layout, navigationBarHeight) = self.layoutArguments {
+            self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
+        }
+    }
+
+    @objc private func emailSwitchPressed() {
+        if self.inProgress {
+            return
+        }
+        self.setEmailMode(!self.emailLogin, address: nil)
+        self.activateInput()
     }
     
     private var debugTapCounter: (Double, Int) = (0.0, 0)

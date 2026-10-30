@@ -30,6 +30,7 @@ final class AuthorizationSequenceSignUpController: ViewController {
     
     var initialName: (String, String) = ("", "")
     private var termsOfService: UnauthorizedAccountTermsOfService?
+    private var tellomiNicknameOnly = false
     
     var signUpWithName: ((String, String, Data?, Any?, TGVideoEditAdjustments?, Bool) -> Void)?
     var openUrl: ((String) -> Void)?
@@ -215,7 +216,15 @@ final class AuthorizationSequenceSignUpController: ViewController {
             presentAlertImpl()
         }
         
+        self.controllerNode.tellomiNicknameOnly = self.tellomiNicknameOnly
         self.controllerNode.updateData(firstName: self.initialName.0, lastName: self.initialName.1, hasTermsOfService: self.termsOfService != nil)
+    }
+
+    func setTellomiNicknameOnly(_ nicknameOnly: Bool) {
+        self.tellomiNicknameOnly = nicknameOnly
+        if self.isNodeLoaded {
+            self.controllerNode.tellomiNicknameOnly = nicknameOnly
+        }
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -259,7 +268,7 @@ final class AuthorizationSequenceSignUpController: ViewController {
     
     @objc func nextPressed() {
         let firstName = self.controllerNode.currentName.0.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lastName = self.controllerNode.currentName.1.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastName = self.tellomiNicknameOnly ? "" : self.controllerNode.currentName.1.trimmingCharacters(in: .whitespacesAndNewlines)
         
         var name: (String, String)?
         if firstName.isEmpty && lastName.isEmpty {
