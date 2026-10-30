@@ -4,12 +4,12 @@ Edits under `Telegram/` and `BUILD.bazel` that exist so Tellomi assets can ship.
 
 | File | Change |
 | --- | --- |
-| `BUILD.bazel` | Exports `Tellomi/version`. Adds `//:TellomiAppIcon` and `//:TellomiAlternate_*` filegroups over `Tellomi/Brand`. |
-| `Telegram/BUILD` | `app_icons` is `//:TellomiAppIcon` instead of `Telegram-iOS/TellomiPlaceholder.icon`. `alternate_icons` read `Tellomi/Brand/Alternates` instead of `Telegram-iOS/*.alticon`. |
+| `BUILD.bazel` | Exports `Tellomi/version`. Adds `//:TellomiAppIcon` (the `AppIcon.xcassets` size set, including iPad 152 and 167) and `//:TellomiAlternate_*` filegroups over `Tellomi/Brand`. |
+| `Telegram/BUILD` | `app_icons` is `//:TellomiAppIcon` instead of `Telegram-iOS/TellomiPlaceholder.icon`. `alternate_icons` read `Tellomi/Brand/Alternates` instead of `Telegram-iOS/*.alticon`. The Info.plist fragment includes `NSLocationAlwaysAndWhenInUseUsageDescription` and does not register `AremacFS` fonts. |
 | `Telegram/BUILD` `VersionInfoPlist` | `CFBundleShortVersionString` is read from `Tellomi/version`, not `versions.json`. |
 | `versions.json` | `app` matches `Tellomi/version` (`13.1.2`) so the watch patch script and the plist agree. |
 
-`Telegram-iOS/*.alticon`, `AppIcons.xcassets`, `DefaultAppIcon.xcassets`, and `TellomiPlaceholder.icon` are still in the tree and are not the icons the Bazel app packages.
+`Telegram-iOS/*.alticon`, `AppIcons.xcassets`, `DefaultAppIcon.xcassets`, and `TellomiPlaceholder.icon` are still in the tree and are not the icons the Bazel app packages. `Tellomi/Brand/AppIcon.icon` is the Icon Composer document for the same glyph and is also not compiled: this rules_apple pin fails the build if an `.appiconset` is assigned next to an `.icon`, and the `.icon` compile does not emit the iPad 152×152 and 167×167 icons App Store still checks. Those two sizes ship inside `Tellomi/Brand/AppIcon.xcassets` (76pt @2x and 83.5pt @2x), rasterized from `logo.svg`.
 
 `Tellomi/Brand/AppIcon.icon/icon.json` layer fills are `{ "solid": "srgb:…" }` (and `"automatic"` for the tinted appearance). A bare `srgb:` string is not a fill, and actool rejects it with `A fill should be one of: "orientation", "solid", "linear-gradient" or "automatic-gradient"`. The glyph is a PNG, not an SVG, so actool does not convert the traced path into a PDF.
 
@@ -75,3 +75,31 @@ No in-app terms popup (the server returns `help.termsOfServiceUpdateEmpty` and `
 | `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | New. Builds the checkbox text and installs its tap/highlight handlers on the stock terms label. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Adds `tellomiAgreement` / `tellomiOpenUrl`; end of `init` disables Continue and installs the checkbox on `termsNode`; `updateData` always shows `termsNode`. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpController.swift` | Wires `tellomiOpenUrl` to `openUrl`; `nextPressed()` refuses (haptic error) until the box is checked, which also covers the small-screen Next bar button. |
+
+## iPad icons 152 and 167
+
+App Store still asks for an iPad icon of exactly 152×152 pixels and an iPad Pro icon of exactly 167×167. The Icon Composer document does not emit those sizes, and `app_icons` cannot list both `AppIcon.icon` and the size set. `//:TellomiAppIcon` is `Tellomi/Brand/AppIcon.xcassets`, whose 76pt @2x and 83.5pt @2x slots are those pixels, rasterized from the same `logo.svg`.
+
+The traced bubble fills the viewBox. `Tellomi/Brand/generate_icons.py` scales it so the painted mark stays inside 75–80% of the square: 78% on the home-screen set (light, dark, tinted), on `AppIcon.icon/Assets/Logo.png`, and on Default, Water, and Sunset. Classic is 76% inside a round base. Filled is 79.5% on a color that runs to the edge of the square. Water is a teal-to-cyan gradient and Sunset is a pink-to-purple gradient. Premium is a star field; Turbo and Black add a gold star. None of those PNGs replace the upstream `Telegram-iOS/*.alticon` files. The Settings names stay the existing slots (`BlueIcon`, `New2`, `New1`, `BlackIcon`, `BlueClassicIcon`, `BlackClassicIcon`, `BlueFilledIcon`, `BlackFilledIcon`, `Premium`, `PremiumTurbo`, `PremiumBlack`).
+
+## Location purpose string
+
+`UIBackgroundModes` includes `location`, so the main Info.plist must contain `NSLocationAlwaysAndWhenInUseUsageDescription`. The key was already translated in `InfoPlist.strings` and missing from the plist, which is what App Store checks. The shipping string is the Bazel fragment in `Telegram/BUILD`. `en.lproj` is the development language, so that file carries the same Simplified Chinese sentence; otherwise it would replace the plist value. Other bundled languages still describe live location shared with friends.
+
+| File | Change |
+| --- | --- |
+| `Telegram/BUILD` `TelegramInfoPlist` | Adds the key. The app name is `{telegram_app_name}`. |
+| `Telegram/Telegram-iOS/Info.plist`, `InfoBazel.plist` | Same key, with Tellomi written out. These are not the plist the Bazel app links. |
+| `Telegram/Telegram-iOS/en.lproj/InfoPlist.strings` | The English-locale override is the same sentence. |
+
+## SF Camera fonts
+
+`AremacFS-Regular.otf` and `AremacFS-Semibold.otf` are Apple's SF Camera (`SFCamera-Regular` / `SFCamera-Semibold`), renamed by reversing the family name. They were registered in `UIAppFonts` and loaded under an obfuscated `UIFont` name. They are not licensed for redistribution. Camera UI now uses the system font.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Resources/Fonts/AremacFS-*.otf` | Deleted. |
+| `submodules/TelegramUI/BUILD` | The resources glob excludes `AremacFS-*.otf` so a restored copy is not bundled. |
+| `Telegram/BUILD` `TelegramInfoPlist` | `UIAppFonts` no longer lists those files. The key is gone; nothing else was registered there. |
+| `submodules/Display/Source/Font.swift` | `Font.Design.camera` takes the system font path, including weight and monospaced numbers. |
+| `submodules/LegacyComponents/Sources/TGCameraInterfaceAssets.m` | `regularFontOfSize` / `boldFontOfSize` are `systemFontOfSize` and semibold. The name decoder is gone. |

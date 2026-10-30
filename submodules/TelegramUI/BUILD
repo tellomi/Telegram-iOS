@@ -11,7 +11,12 @@ filegroup(
     srcs = glob([
         "Sounds/**/*",
         "Resources/**/*",
-    ], exclude = ["Sounds/**/.*", "Resources/**/.*"]),
+    ], exclude = [
+        "Sounds/**/.*",
+        "Resources/**/.*",
+        # Apple's SF Camera (filename reversed). Not licensed for redistribution.
+        "Resources/Fonts/AremacFS-*.otf",
+    ]),
     visibility = ["//visibility:public"],
 )
 

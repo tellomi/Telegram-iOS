@@ -10,8 +10,10 @@ import base64
 import hashlib
 import json
 import pathlib
+import struct
 import subprocess
 import sys
+import zlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tellomi"))
@@ -374,6 +376,202 @@ def check_wiring() -> None:
         fail(f"QR center mark is not the traced Tellomi logo PDF ({qr_hashes})")
 
 
+def png_size(path: pathlib.Path) -> tuple[int, int]:
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        fail(f"{path} is not a PNG")
+    return struct.unpack(">II", data[16:24])
+
+
+def _paeth(left: int, up: int, up_left: int) -> int:
+    estimate = left + up - up_left
+    distance_left = abs(estimate - left)
+    distance_up = abs(estimate - up)
+    distance_up_left = abs(estimate - up_left)
+    if distance_left <= distance_up and distance_left <= distance_up_left:
+        return left
+    if distance_up <= distance_up_left:
+        return up
+    return up_left
+
+
+def png_rgb_rows(path: pathlib.Path) -> tuple[int, int, list[bytes]]:
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        fail(f"{path} is not a PNG")
+    position = 8
+    width = height = color_type = None
+    idat = bytearray()
+    while position < len(data):
+        length = struct.unpack(">I", data[position : position + 4])[0]
+        kind = data[position + 4 : position + 8]
+        chunk = data[position + 8 : position + 8 + length]
+        position += 12 + length
+        if kind == b"IHDR":
+            width, height, bit_depth, color_type = struct.unpack(">IIBB", chunk[:10])
+            if bit_depth != 8 or color_type not in (2, 6):
+                fail(f"{path} is not 8-bit RGB or RGBA")
+        elif kind == b"IDAT":
+            idat.extend(chunk)
+        elif kind == b"IEND":
+            break
+    if width is None or height is None or color_type is None:
+        fail(f"{path} has no IHDR")
+    channels = 4 if color_type == 6 else 3
+    raw = zlib.decompress(bytes(idat))
+    stride = width * channels
+    rows: list[bytes] = []
+    cursor = 0
+    previous = bytearray(stride)
+    for _ in range(height):
+        filter_type = raw[cursor]
+        cursor += 1
+        row = bytearray(raw[cursor : cursor + stride])
+        cursor += stride
+        if filter_type == 1:
+            for index in range(stride):
+                left = row[index - channels] if index >= channels else 0
+                row[index] = (row[index] + left) & 255
+        elif filter_type == 2:
+            for index in range(stride):
+                row[index] = (row[index] + previous[index]) & 255
+        elif filter_type == 3:
+            for index in range(stride):
+                left = row[index - channels] if index >= channels else 0
+                row[index] = (row[index] + ((left + previous[index]) // 2)) & 255
+        elif filter_type == 4:
+            for index in range(stride):
+                left = row[index - channels] if index >= channels else 0
+                up_left = previous[index - channels] if index >= channels else 0
+                row[index] = (row[index] + _paeth(left, previous[index], up_left)) & 255
+        elif filter_type != 0:
+            fail(f"{path} has an unknown PNG filter")
+        previous = row
+        rows.append(bytes(row))
+    return width, height, rows
+
+
+def mark_fraction_on_white(path: pathlib.Path) -> float:
+    width, height, rows = png_rgb_rows(path)
+    channels = len(rows[0]) // width
+    min_x, min_y, max_x, max_y = width, height, 0, 0
+    for y, row in enumerate(rows):
+        for x in range(width):
+            red, green, blue = row[x * channels : x * channels + 3]
+            if red < 250 or green < 250 or blue < 250:
+                min_x = min(min_x, x)
+                min_y = min(min_y, y)
+                max_x = max(max_x, x + 1)
+                max_y = max(max_y, y + 1)
+    if max_x <= min_x:
+        fail(f"{path} has no painted mark")
+    return max(max_x - min_x, max_y - min_y) / float(width)
+
+
+def sample_rgb(path: pathlib.Path, fx: float, fy: float) -> tuple[int, int, int]:
+    width, height, rows = png_rgb_rows(path)
+    channels = len(rows[0]) // width
+    x = min(width - 1, max(0, int(fx * (width - 1))))
+    y = min(height - 1, max(0, int(fy * (height - 1))))
+    red, green, blue = rows[y][x * channels : x * channels + 3]
+    return red, green, blue
+
+
+def count_pixels(path: pathlib.Path, predicate) -> int:
+    width, _height, rows = png_rgb_rows(path)
+    channels = len(rows[0]) // width
+    found = 0
+    for row in rows:
+        for x in range(width):
+            if predicate(row[x * channels : x * channels + 3]):
+                found += 1
+    return found
+
+
+def check_app_store_submission() -> None:
+    build_bazel = (ROOT / "BUILD.bazel").read_text(encoding="utf-8")
+    if 'glob(["Tellomi/Brand/AppIcon.xcassets/**"])' not in build_bazel:
+        fail("TellomiAppIcon is not the size set that contains the iPad 152 and 167 icons")
+    if 'glob(["Tellomi/Brand/AppIcon.icon/**"])' in build_bazel:
+        fail("TellomiAppIcon still compiles the Icon Composer document, which omits iPad 152 and 167")
+    icon_dir = ROOT / "Tellomi/Brand/AppIcon.xcassets/AppIcon.appiconset"
+    expected = {
+        "AppIcon-ipad-76x76@2x.png": (152, 152),
+        "AppIcon-ipad-83_5x83_5@2x.png": (167, 167),
+    }
+    for name, size in expected.items():
+        path = icon_dir / name
+        if not path.is_file():
+            fail(f"missing iPad icon {name}")
+        if png_size(path) != size:
+            fail(f"{name} is {png_size(path)}, expected {size}")
+    marketing = icon_dir / "AppIcon-ios-marketing-1024x1024@1x.png"
+    fraction = mark_fraction_on_white(marketing)
+    if not 0.75 <= fraction <= 0.80:
+        fail(f"the home-screen mark fills {fraction:.3f} of the frame; it should be 75–80%")
+    for name in ("AppIcon-ipad-76x76@2x.png", "AppIcon-ipad-83_5x83_5@2x.png"):
+        ipad_fraction = mark_fraction_on_white(icon_dir / name)
+        if abs(ipad_fraction - fraction) > 0.03:
+            fail(f"{name} is not the same padded mark as the home-screen icon")
+    alternates = ROOT / "Tellomi/Brand/Alternates"
+
+    def slot(folder: str, filename: str) -> pathlib.Path:
+        path = alternates / folder / filename
+        if not path.is_file():
+            fail(f"missing alternate icon {path}")
+        return path
+
+    water = slot("New2.alticon", "New2@3x.png")
+    sunset = slot("New1.alticon", "New1@3x.png")
+    water_a = sample_rgb(water, 0.0, 0.0)
+    water_b = sample_rgb(water, 1.0, 1.0)
+    if abs(water_a[1] - water_b[1]) < 40 or abs(water_a[2] - water_b[2]) < 40:
+        fail(f"Water is not a teal-cyan gradient {water_a} -> {water_b}")
+    if water_a[0] > 80 or water_b[1] < 160 or water_b[2] < 180:
+        fail(f"Water is not teal-cyan {water_a} -> {water_b}")
+    sunset_a = sample_rgb(sunset, 0.0, 0.0)
+    sunset_b = sample_rgb(sunset, 1.0, 1.0)
+    if abs(sunset_a[0] - sunset_b[0]) < 80:
+        fail(f"Sunset is not a pink-purple gradient {sunset_a} -> {sunset_b}")
+    if sunset_a[0] < 200 or sunset_a[2] < 140 or sunset_b[2] < 160 or sunset_b[0] > 160:
+        fail(f"Sunset is not pink-purple {sunset_a} -> {sunset_b}")
+    classic = slot("BlueClassicIcon.alticon", "BlueClassicIcon@3x.png")
+    if min(sample_rgb(classic, 0.02, 0.02)) < 230:
+        fail("Classic round base does not leave a light field in the corners")
+    disc = sample_rgb(classic, 0.5, 0.08)
+    if not (disc[2] > 180 and disc[0] < 80):
+        fail(f"Classic disc is not the blue round base {disc}")
+    filled = sample_rgb(slot("BlueFilledIcon.alticon", "BlueFilledIcon@3x.png"), 0.0, 0.0)
+    if filled[0] > 80 or filled[2] < 180:
+        fail(f"Filled is not a full-bleed color block {filled}")
+    default_x = sample_rgb(slot("BlackIcon.alticon", "BlackIcon@3x.png"), 0.0, 0.0)
+    if max(default_x) > 40:
+        fail(f"Default X is not a black plate {default_x}")
+    premium = slot("Premium.alticon", "Premium@3x.png")
+    if count_pixels(premium, lambda rgb: rgb[0] > 200 and rgb[1] > 170 and rgb[2] < 170) < 4:
+        fail("Premium has no starry gold marks")
+    if count_pixels(slot("PremiumBlack.alticon", "PremiumBlack@3x.png"), lambda rgb: rgb[0] > 180 and rgb[1] > 140 and rgb[2] < 120) < 4:
+        fail("Black special has no gold star mark")
+    build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
+    if "NSLocationAlwaysAndWhenInUseUsageDescription" not in build:
+        fail("the Bazel Info.plist fragment is missing NSLocationAlwaysAndWhenInUseUsageDescription")
+    if "AremacFS" in build:
+        fail("the Bazel Info.plist still registers the SF Camera fonts")
+    for relative in (
+        "submodules/TelegramUI/Resources/Fonts/AremacFS-Regular.otf",
+        "submodules/TelegramUI/Resources/Fonts/AremacFS-Semibold.otf",
+    ):
+        if (ROOT / relative).exists():
+            fail(f"{relative} is still in the tree")
+    ui_build = (ROOT / "submodules/TelegramUI/BUILD").read_text(encoding="utf-8")
+    if "AremacFS-*.otf" not in ui_build:
+        fail("TelegramUI resources do not exclude the SF Camera fonts")
+    font = (ROOT / "submodules/Display/Source/Font.swift").read_text(encoding="utf-8")
+    camera = (ROOT / "submodules/LegacyComponents/Sources/TGCameraInterfaceAssets.m").read_text(encoding="utf-8")
+    if "TGDbnfsb" in font or "TGDbnfsb" in camera:
+        fail("camera UI still looks up the bundled SF Camera font by name")
+
+
 def check_marketing_version() -> None:
     version = (ROOT / "Tellomi" / "version").read_text(encoding="utf-8").strip()
     versions = json.loads((ROOT / "versions.json").read_text(encoding="utf-8"))
@@ -392,6 +590,7 @@ def main() -> None:
     check_build_configuration()
     check_public_links()
     check_wiring()
+    check_app_store_submission()
     check_marketing_version()
     print("Tellomi server config checks passed")
 

@@ -74,7 +74,7 @@ System permission prompts (the `InfoPlist.strings` files, plus the English strin
 
 ## Icons
 
-The home-screen icon is `Tellomi/Brand/AppIcon.icon`. The outline is the traced `Tellomi/Brand/logo.svg` (light `#111113`, dark `#FFFFFF`, plus an iOS 18 tinted variant). `Telegram/BUILD` points `app_icons` at `//:TellomiAppIcon`. Settings alternate icons use the same artwork from `Tellomi/Brand/Alternates`. See `Tellomi/Brand/README.md` and `Tellomi/UPSTREAM_PATCHES.md`.
+The home-screen icon is `Tellomi/Brand/AppIcon.xcassets`. The outline is the traced `Tellomi/Brand/logo.svg` (light `#111113`, dark `#FFFFFF`, plus an iOS 18 tinted variant), scaled so the mark is 78% of the icon square. The iPad home-screen slots are 152×152 and 167×167 from that same render. `Telegram/BUILD` points `app_icons` at `//:TellomiAppIcon`. `AppIcon.icon` is the same glyph in Icon Composer form and is not the file the IPA compiles. Settings alternate icons are `Tellomi/Brand/Alternates`: Water and Sunset are gradients, Classic is a round base, Filled is a full-bleed color with a larger mark, and Premium adds a star field. See `Tellomi/Brand/README.md` and `Tellomi/UPSTREAM_PATCHES.md`.
 
 The alternate icons (`*.alticon`, `AppIcons.xcassets`, `DefaultAppIcon.xcassets`) are still Telegram's artwork and can still be chosen in Settings. `ALTERNATE-ICONS-ARE-STILL-TELEGRAM.txt` marks them. Replace those files before a public release; they were left in place so an upstream icon update does not conflict with a binary rewrite of every PNG.
 

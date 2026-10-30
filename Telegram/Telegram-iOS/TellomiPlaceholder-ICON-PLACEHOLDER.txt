@@ -1,4 +1,4 @@
-UNUSED. The shipping icon is Tellomi/Brand/AppIcon.icon.
+UNUSED. The shipping icon is Tellomi/Brand/AppIcon.xcassets.
 
 This folder was a plum circle and a white T. Telegram/BUILD no longer
 packages it. See Tellomi/Brand/README.md.

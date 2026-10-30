@@ -165,7 +165,7 @@ public struct Font {
         if let cachedFont = self.cache.get(key) {
             return cachedFont
         }
-        if #available(iOS 13.0, *), design != .camera {
+        if #available(iOS 13.0, *) {
             let descriptor: UIFontDescriptor
             if #available(iOS 14.0, *) {
                 descriptor = UIFont.systemFont(ofSize: size).fontDescriptor
@@ -234,7 +234,7 @@ public struct Font {
         } else {
             let font: UIFont
             switch design {
-                case .regular, .round:
+                case .regular, .round, .camera:
                     if traits.contains(.italic) {
                         if let descriptor = UIFont.systemFont(ofSize: size, weight: weight.weight).fontDescriptor.withSymbolicTraits([.traitItalic]) {
                             font = UIFont(descriptor: descriptor, size: size)
@@ -263,22 +263,6 @@ public struct Font {
                         font = UIFont(name: "Menlo-Italic", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)
                     } else {
                         font = UIFont(name: "Menlo", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)
-                    }
-                case .camera:
-                    func encodeText(string: String, key: Int16) -> String {
-                        let nsString = string as NSString
-                        let result = NSMutableString()
-                        for i in 0 ..< nsString.length {
-                            var c: unichar = nsString.character(at: i)
-                            c = unichar(Int16(c) + key)
-                            result.append(NSString(characters: &c, length: 1) as String)
-                        }
-                        return result as String
-                    }
-                    if case .semibold = weight {
-                        font = UIFont(name: encodeText(string: "TGDbnfsb.Tfnjcpme", key: -1), size: size) ?? UIFont.systemFont(ofSize: size, weight: weight.weight)
-                    } else {
-                        font = UIFont(name: encodeText(string: "TGDbnfsb.Sfhvmbs", key: -1), size: size) ?? UIFont.systemFont(ofSize: size, weight: weight.weight)
                     }
             }
             
