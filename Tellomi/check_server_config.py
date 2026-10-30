@@ -468,10 +468,24 @@ def mark_fraction_on_white(path: pathlib.Path) -> float:
     return max(max_x - min_x, max_y - min_y) / float(width)
 
 
-def corner_rgb(path: pathlib.Path) -> tuple[int, int, int]:
-    _width, _height, rows = png_rgb_rows(path)
-    red, green, blue = rows[0][:3]
+def sample_rgb(path: pathlib.Path, fx: float, fy: float) -> tuple[int, int, int]:
+    width, height, rows = png_rgb_rows(path)
+    channels = len(rows[0]) // width
+    x = min(width - 1, max(0, int(fx * (width - 1))))
+    y = min(height - 1, max(0, int(fy * (height - 1))))
+    red, green, blue = rows[y][x * channels : x * channels + 3]
     return red, green, blue
+
+
+def count_pixels(path: pathlib.Path, predicate) -> int:
+    width, _height, rows = png_rgb_rows(path)
+    channels = len(rows[0]) // width
+    found = 0
+    for row in rows:
+        for x in range(width):
+            if predicate(row[x * channels : x * channels + 3]):
+                found += 1
+    return found
 
 
 def check_app_store_submission() -> None:
@@ -495,20 +509,49 @@ def check_app_store_submission() -> None:
     fraction = mark_fraction_on_white(marketing)
     if not 0.75 <= fraction <= 0.80:
         fail(f"the home-screen mark fills {fraction:.3f} of the frame; it should be 75–80%")
-    ipad = icon_dir / "AppIcon-ipad-76x76@2x.png"
-    ipad_fraction = mark_fraction_on_white(ipad)
-    if abs(ipad_fraction - fraction) > 0.03:
-        fail("the 152px iPad icon is not the same padded mark as the home-screen icon")
+    for name in ("AppIcon-ipad-76x76@2x.png", "AppIcon-ipad-83_5x83_5@2x.png"):
+        ipad_fraction = mark_fraction_on_white(icon_dir / name)
+        if abs(ipad_fraction - fraction) > 0.03:
+            fail(f"{name} is not the same padded mark as the home-screen icon")
     alternates = ROOT / "Tellomi/Brand/Alternates"
-    sunset = corner_rgb(next((alternates / "New1.alticon").glob("New1@3x.png")))
-    aqua = corner_rgb(next((alternates / "New2.alticon").glob("New2@3x.png")))
-    black = corner_rgb(next((alternates / "BlackIcon.alticon").glob("BlackIcon@3x.png")))
-    if max(sunset) - min(sunset) < 40 or sunset[0] < 180:
-        fail(f"Sunset alternate is not a warm color {sunset}")
-    if aqua[1] < 120 or aqua[2] < 120 or aqua[0] > 80:
-        fail(f"Aqua alternate is not a water color {aqua}")
-    if max(black) > 40:
-        fail(f"Default X is not a black plate {black}")
+
+    def slot(folder: str, filename: str) -> pathlib.Path:
+        path = alternates / folder / filename
+        if not path.is_file():
+            fail(f"missing alternate icon {path}")
+        return path
+
+    water = slot("New2.alticon", "New2@3x.png")
+    sunset = slot("New1.alticon", "New1@3x.png")
+    water_a = sample_rgb(water, 0.0, 0.0)
+    water_b = sample_rgb(water, 1.0, 1.0)
+    if abs(water_a[1] - water_b[1]) < 40 or abs(water_a[2] - water_b[2]) < 40:
+        fail(f"Water is not a teal-cyan gradient {water_a} -> {water_b}")
+    if water_a[0] > 80 or water_b[1] < 160 or water_b[2] < 180:
+        fail(f"Water is not teal-cyan {water_a} -> {water_b}")
+    sunset_a = sample_rgb(sunset, 0.0, 0.0)
+    sunset_b = sample_rgb(sunset, 1.0, 1.0)
+    if abs(sunset_a[0] - sunset_b[0]) < 80:
+        fail(f"Sunset is not a pink-purple gradient {sunset_a} -> {sunset_b}")
+    if sunset_a[0] < 200 or sunset_a[2] < 140 or sunset_b[2] < 160 or sunset_b[0] > 160:
+        fail(f"Sunset is not pink-purple {sunset_a} -> {sunset_b}")
+    classic = slot("BlueClassicIcon.alticon", "BlueClassicIcon@3x.png")
+    if min(sample_rgb(classic, 0.02, 0.02)) < 230:
+        fail("Classic round base does not leave a light field in the corners")
+    disc = sample_rgb(classic, 0.5, 0.08)
+    if not (disc[2] > 180 and disc[0] < 80):
+        fail(f"Classic disc is not the blue round base {disc}")
+    filled = sample_rgb(slot("BlueFilledIcon.alticon", "BlueFilledIcon@3x.png"), 0.0, 0.0)
+    if filled[0] > 80 or filled[2] < 180:
+        fail(f"Filled is not a full-bleed color block {filled}")
+    default_x = sample_rgb(slot("BlackIcon.alticon", "BlackIcon@3x.png"), 0.0, 0.0)
+    if max(default_x) > 40:
+        fail(f"Default X is not a black plate {default_x}")
+    premium = slot("Premium.alticon", "Premium@3x.png")
+    if count_pixels(premium, lambda rgb: rgb[0] > 200 and rgb[1] > 170 and rgb[2] < 170) < 4:
+        fail("Premium has no starry gold marks")
+    if count_pixels(slot("PremiumBlack.alticon", "PremiumBlack@3x.png"), lambda rgb: rgb[0] > 180 and rgb[1] > 140 and rgb[2] < 120) < 4:
+        fail("Black special has no gold star mark")
     build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
     if "NSLocationAlwaysAndWhenInUseUsageDescription" not in build:
         fail("the Bazel Info.plist fragment is missing NSLocationAlwaysAndWhenInUseUsageDescription")

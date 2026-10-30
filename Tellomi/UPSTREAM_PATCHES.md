@@ -80,7 +80,7 @@ No in-app terms popup (the server returns `help.termsOfServiceUpdateEmpty` and `
 
 App Store still asks for an iPad icon of exactly 152×152 pixels and an iPad Pro icon of exactly 167×167. The Icon Composer document does not emit those sizes, and `app_icons` cannot list both `AppIcon.icon` and the size set. `//:TellomiAppIcon` is `Tellomi/Brand/AppIcon.xcassets`, whose 76pt @2x and 83.5pt @2x slots are those pixels, rasterized from the same `logo.svg`.
 
-The traced bubble fills the viewBox. `Tellomi/Brand/generate_icons.py` scales it so the painted mark is 78% of the square, on the home-screen set (light, dark, tinted), on `AppIcon.icon/Assets/Logo.png`, and on every file under `Tellomi/Brand/Alternates`. Default X, Classic X, Filled X, and Black stay white on `#111113`. Classic, Filled, Sunset, Aqua, Premium, and Turbo use their own background colors. None of those PNGs replace the upstream `Telegram-iOS/*.alticon` files.
+The traced bubble fills the viewBox. `Tellomi/Brand/generate_icons.py` scales it so the painted mark stays inside 75–80% of the square: 78% on the home-screen set (light, dark, tinted), on `AppIcon.icon/Assets/Logo.png`, and on Default, Water, and Sunset. Classic is 76% inside a round base. Filled is 79.5% on a color that runs to the edge of the square. Water is a teal-to-cyan gradient and Sunset is a pink-to-purple gradient. Premium is a star field; Turbo and Black add a gold star. None of those PNGs replace the upstream `Telegram-iOS/*.alticon` files. The Settings names stay the existing slots (`BlueIcon`, `New2`, `New1`, `BlackIcon`, `BlueClassicIcon`, `BlackClassicIcon`, `BlueFilledIcon`, `BlackFilledIcon`, `Premium`, `PremiumTurbo`, `PremiumBlack`).
 
 ## Location purpose string
 
