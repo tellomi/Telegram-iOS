@@ -3,9 +3,12 @@ exports_files([
     "Tellomi/version",
 ])
 
+# The size set, not AppIcon.icon. This rules_apple pin rejects an .appiconset next to an
+# Icon Composer .icon, and the .icon compile does not emit the iPad 152 and 167 pixel icons
+# App Store still checks. AppIcon.icon stays in the tree as the glyph source.
 filegroup(
     name = "TellomiAppIcon",
-    srcs = glob(["Tellomi/Brand/AppIcon.icon/**"]),
+    srcs = glob(["Tellomi/Brand/AppIcon.xcassets/**"]),
     visibility = ["//visibility:public"],
 )
 

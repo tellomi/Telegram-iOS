@@ -1762,6 +1762,8 @@ plist_fragment(
     <string>{telegram_app_name} stores your contacts heavily encrypted in the cloud to let you connect with your friends across all your devices.</string>
     <key>NSFaceIDUsageDescription</key>
     <string>You can use Face ID to unlock the app.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>当你分享位置、发送实时位置，或查看附近的人时，{telegram_app_name} 需要使用你的位置。开启实时位置后，应用在后台也会继续使用位置信息。</string>
     <key>NSLocationAlwaysUsageDescription</key>
     <string>When you send your location to your friends, {telegram_app_name} needs access to show them a map. You also need this to send locations from an Apple Watch.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
@@ -1782,11 +1784,6 @@ plist_fragment(
     <array>
         <string>INSendMessageIntent</string>
         <string>RemindAboutChatIntent</string>
-    </array>
-    <key>UIAppFonts</key>
-    <array>
-        <string>AremacFS-Regular.otf</string>
-        <string>AremacFS-Semibold.otf</string>
     </array>
     <key>UIApplicationSceneManifest</key>
     <dict>
