@@ -505,6 +505,36 @@ def check_app_store_submission() -> None:
             fail(f"missing iPad icon {name}")
         if png_size(path) != size:
             fail(f"{name} is {png_size(path)}, expected {size}")
+    catalog = json.loads((icon_dir / "Contents.json").read_text(encoding="utf-8"))
+    for image in catalog["images"]:
+        if (
+            image.get("idiom") == "ipad"
+            and image.get("size") == "76x76"
+            and image.get("scale") == "1x"
+        ):
+            fail("AppIcon still references the iPad 76x76@1x slot, which actool rejects for iOS 10+")
+        if image.get("idiom") in ("iphone", "ipad", "ios-marketing") and "appearances" in image:
+            fail(f"appearance on {image.get('filename')} is not an icon slot actool assigns")
+    for obsolete in (
+        "AppIcon-ipad-76x76@1x.png",
+        "AppIcon-ipad-76x76@1x-dark.png",
+        "AppIcon-ipad-76x76@1x-tinted.png",
+    ):
+        if (icon_dir / obsolete).exists():
+            fail(f"obsolete iPad icon {obsolete} is still in the appiconset")
+    referenced = {image["filename"] for image in catalog["images"]}
+    on_disk = {path.name for path in icon_dir.glob("*.png")}
+    if referenced != on_disk:
+        fail(
+            "appiconset PNGs and Contents.json disagree: "
+            f"only in json {sorted(referenced - on_disk)}, only on disk {sorted(on_disk - referenced)}"
+        )
+    for name in (
+        "AppIcon-ios-marketing-1024x1024@1x-dark.png",
+        "AppIcon-ios-marketing-1024x1024@1x-tinted.png",
+    ):
+        if not (icon_dir / name).is_file():
+            fail(f"missing marketing icon {name}")
     marketing = icon_dir / "AppIcon-ios-marketing-1024x1024@1x.png"
     fraction = mark_fraction_on_white(marketing)
     if not 0.75 <= fraction <= 0.80:

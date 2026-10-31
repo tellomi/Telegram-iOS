@@ -46,7 +46,10 @@ SIZES = [
     ("ipad", "29x29", "2x", 58),
     ("ipad", "40x40", "1x", 40),
     ("ipad", "40x40", "2x", 80),
-    ("ipad", "76x76", "1x", 76),
+    # 76x76@1x is the non-Retina iPad home icon. actool rejects it when the
+    # deployment target is iOS 10 or later ("only apply to iPad apps targeting
+    # releases of iOS prior to 10.0"). 76x76@2x (152 px) stays; App Store still
+    # checks that size and 83.5@2x.
     ("ipad", "76x76", "2x", 152),
     ("ipad", "83.5x83.5", "2x", 167),
     ("ios-marketing", "1024x1024", "1x", 1024),
@@ -191,24 +194,46 @@ def write_appiconset(mark_scale):
     tinted = icon_svg("#000000", mark_scale, plate=solid_plate("#FFFFFF"))
     images = []
     for idiom, size_name, scale, pixels in SIZES:
-        for suffix, svg, appearances in (
-            ("", light, None),
-            ("-dark", dark, [{"appearance": "luminosity", "value": "dark"}]),
-            ("-tinted", tinted, [{"appearance": "luminosity", "value": "tinted"}]),
-        ):
-            filename = "AppIcon-{}-{}@{}{}.png".format(
-                idiom, size_name.replace(".", "_"), scale, suffix
-            )
-            render(svg, pixels, out / filename)
-            entry = {
+        filename = "AppIcon-{}-{}@{}.png".format(
+            idiom, size_name.replace(".", "_"), scale
+        )
+        render(light, pixels, out / filename)
+        images.append(
+            {
                 "filename": filename,
                 "idiom": idiom,
                 "scale": scale,
                 "size": size_name,
             }
-            if appearances:
-                entry["appearances"] = appearances
-            images.append(entry)
+        )
+        if idiom != "ios-marketing":
+            continue
+        # Dark and tinted are one 1024 slot (idiom universal, platform ios).
+        # The same attributes on an iphone/ipad size, or on idiom ios-marketing,
+        # are not slots actool assigns, so those PNGs were "unassigned children".
+        images.append(
+            {
+                "filename": filename,
+                "idiom": "universal",
+                "platform": "ios",
+                "size": size_name,
+            }
+        )
+        for suffix, svg, value in (
+            ("-dark", dark, "dark"),
+            ("-tinted", tinted, "tinted"),
+        ):
+            appearance_name = "AppIcon-ios-marketing-1024x1024@1x{}.png".format(suffix)
+            render(svg, pixels, out / appearance_name)
+            images.append(
+                {
+                    "filename": appearance_name,
+                    "idiom": "universal",
+                    "platform": "ios",
+                    "size": size_name,
+                    "appearances": [{"appearance": "luminosity", "value": value}],
+                }
+            )
     (out / "Contents.json").write_text(
         json.dumps({"images": images, "info": {"author": "xcode", "version": 1}}, indent=2) + "\n",
         encoding="utf-8",
