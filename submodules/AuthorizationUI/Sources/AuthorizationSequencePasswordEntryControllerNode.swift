@@ -70,7 +70,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.titleNode = ASTextNode()
         self.titleNode.isUserInteractionEnabled = false
         self.titleNode.displaysAsynchronously = false
-        self.titleNode.attributedText = NSAttributedString(string: tellomiLoginCopy(languageCode: strings.baseLanguageCode).cloudPasswordTitle, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor)
+        self.titleNode.attributedText = NSAttributedString(string: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings)).cloudPasswordTitle, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor)
         
         self.titleActivateAreaNode = AccessibilityAreaNode()
         self.titleActivateAreaNode.accessibilityTraits = .staticText
@@ -109,7 +109,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.codeField.textField.font = Font.regular(17.0)
         self.codeField.textField.accessibilityHint = self.strings.Login_VoiceOver_Password
         
-        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: strings.baseLanguageCode).login, theme: TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance), glass: false, height: 50.0, cornerRadius: 25.0)
+        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings)).login, theme: TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance), glass: false, height: 50.0, cornerRadius: 25.0)
         self.proceedNode.progressType = .embedded
         self.proceedNode.isEnabled = false
         
@@ -200,7 +200,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         let titleInset: CGFloat = layout.size.width > 320.0 ? 18.0 : 0.0
         let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 110.0 : 20.0
         
-        self.titleNode.attributedText = NSAttributedString(string: tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).cloudPasswordTitle, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor)
+        self.titleNode.attributedText = NSAttributedString(string: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).cloudPasswordTitle, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor)
         
         let animationSize = CGSize(width: 100.0, height: 100.0)
         let titleSize = self.titleNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
@@ -250,7 +250,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         let fieldFrame = CGRect(x: bandMinX + 24.0, y: self.codeField.frame.minY, width: max(0.0, bandWidth - 48.0), height: max(self.codeField.frame.height, 52.0))
         self.tellomiFieldBackground.frame = fieldFrame
         self.codeField.frame = fieldFrame.insetBy(dx: 16.0, dy: 0.0)
-        self.proceedNode.title = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).login
+        self.proceedNode.title = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).login
     }
     
     func activateInput() {

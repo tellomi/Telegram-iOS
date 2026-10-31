@@ -261,7 +261,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 controller.inProgress = false
                                 
                                 let emailLogin = tellomiIsLoginEmail(number)
-                                let emailCopy = tellomiEmailLoginCopy(languageCode: strongSelf.presentationData.strings.baseLanguageCode)
+                                let emailCopy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(strongSelf.presentationData.strings))
                                 let text: String
                                 var actions: [TextAlertAction] = []
                                 switch error {

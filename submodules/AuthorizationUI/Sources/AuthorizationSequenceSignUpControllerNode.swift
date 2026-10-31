@@ -172,7 +172,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.addPhotoButton.addSubnode(self.currentPhotoNode)
         self.addPhotoButton.allowsGroupOpacity = true
         
-        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: strings.baseLanguageCode).continueAction, theme: TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance), glass: false, height: 50.0, cornerRadius: 25.0)
+        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings)).continueAction, theme: TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance), glass: false, height: 50.0, cornerRadius: 25.0)
         self.proceedNode.progressType = .embedded
         self.proceedNode.accessibilityIdentifier = "Auth.SetName.ContinueButton"
         
@@ -230,7 +230,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         // Tellomi: replace the terms label with the agreement checkbox; Continue waits for it.
         self.proceedNode.isEnabled = false
         self.firstNameField.textField.addTarget(self, action: #selector(self.tellomiNameChanged), for: .editingChanged)
-        self.tellomiAgreement.install(on: self.termsNode, theme: theme, kind: .signUp, chinese: tellomiLoginPrefersChinese(languageCode: strings.baseLanguageCode), openUrl: { [weak self] url in
+        self.tellomiAgreement.install(on: self.termsNode, theme: theme, kind: .signUp, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(strings)), openUrl: { [weak self] url in
             self?.tellomiOpenUrl?(url)
         }, changed: { [weak self] agreed in
             self?.agreementRow.setChecked(agreed)
@@ -286,7 +286,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 90.0 : 10.0
                 
-        let nicknameCopy = tellomiEmailLoginCopy(languageCode: self.strings.baseLanguageCode)
+        let nicknameCopy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let title = self.tellomiNicknameOnly ? nicknameCopy.nicknameTitle : self.strings.Login_InfoTitle
         let help = self.tellomiNicknameOnly ? nicknameCopy.nicknameHelp : self.strings.Login_InfoHelp
         self.titleNode.attributedText = NSAttributedString(string: title, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
@@ -338,7 +338,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.view.bringSubviewToFront(self.agreementRow.view)
         self.placeTellomiField(self.tellomiFirstBackground, field: self.firstNameField, bandMinX: bandMinX, bandWidth: bandWidth)
         self.placeTellomiField(self.tellomiLastBackground, field: self.lastNameField, bandMinX: bandMinX, bandWidth: bandWidth)
-        self.proceedNode.title = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).continueAction
+        self.proceedNode.title = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).continueAction
     }
 
     private func placeTellomiField(_ background: ASDisplayNode, field: ASDisplayNode, bandMinX: CGFloat, bandWidth: CGFloat) {
@@ -381,7 +381,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     }
 
     private func applyTellomiNicknameChrome() {
-        let copy = tellomiEmailLoginCopy(languageCode: self.strings.baseLanguageCode)
+        let copy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let placeholder = self.tellomiNicknameOnly ? copy.nicknamePlaceholder : self.strings.UserInfo_FirstNamePlaceholder
         self.firstNameField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: self.firstNameField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
         self.firstNameField.textField.returnKeyType = self.tellomiNicknameOnly ? .done : .next

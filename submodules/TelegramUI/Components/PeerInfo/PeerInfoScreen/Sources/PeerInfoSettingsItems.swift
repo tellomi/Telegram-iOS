@@ -472,7 +472,7 @@ func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, conte
     
     if case let .user(user) = data.peer {
         let contact = tellomiAccountContact(phone: user.phone, peerId: user.id)
-        let accountCopy = tellomiAccountLabels(languageCode: presentationData.strings.baseLanguageCode)
+        let accountCopy = tellomiAccountLabels(languageCode: tellomiInterfaceLanguageCode(presentationData.strings))
         if let phone = contact.phone, !phone.isEmpty {
             items[.info]!.append(PeerInfoScreenDisclosureItem(id: ItemPhoneNumber, label: .text(formatPhoneNumber(context: context, number: phone)), text: presentationData.strings.Settings_PhoneNumber, icon: PresentationResourcesSettings.recentCalls, action: {
                 interaction.openSettings(.phoneNumber)
@@ -480,11 +480,17 @@ func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, conte
         }
         if let email = contact.email, !email.isEmpty {
             items[.info]!.append(PeerInfoScreenDisclosureItem(id: 30, label: .text(email), text: accountCopy.email, icon: PresentationResourcesSettings.email, action: {
+                interaction.openSettings(.loginEmail)
             }))
         }
         if contact.phone == nil {
-            items[.info]!.append(PeerInfoScreenActionItem(id: 31, text: accountCopy.bindPhone, alignment: .natural, action: {
+            items[.info]!.append(PeerInfoScreenDisclosureItem(id: 31, text: accountCopy.bindPhone, icon: PresentationResourcesSettings.recentCalls, action: {
                 interaction.openSettings(.phoneNumber)
+            }))
+        }
+        if contact.email == nil {
+            items[.info]!.append(PeerInfoScreenDisclosureItem(id: 32, text: accountCopy.bindEmail, icon: PresentationResourcesSettings.email, action: {
+                interaction.openSettings(.loginEmail)
             }))
         }
     }

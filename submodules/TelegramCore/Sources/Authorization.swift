@@ -15,6 +15,15 @@ public enum AuthorizationCodeRequestError {
     case appOutdated
 }
 
+/// The user from `auth.authorization` is the account peer. The first screen reads it
+/// immediately. Leaving it out of the peer table crashed phone sign-in once the code
+/// was accepted: email sign-up reached a name screen first and the peer arrived later.
+func tellomiStoreAuthorizedUser(transaction: Transaction, user: TelegramUser) {
+    transaction.updatePeersInternal([user], update: { _, updated in
+        return updated
+    })
+}
+
 func switchToAuthorizedAccount(transaction: AccountManagerModifier<TelegramAccountManagerTypes>, account: UnauthorizedAccount, isSupportUser: Bool) {
     let nextSortOrder = (transaction.getRecords().map({ record -> Int32 in
         for attribute in record.attributes {
@@ -377,6 +386,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
                                 isSupportUser = true
                             }
                             let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
+                            tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                             initializedAppSettingsAfterLogin(transaction: transaction, appVersion: account.networkArguments.appVersion, syncContacts: syncContacts)
                             transaction.setState(state)
                             if let otherwiseReloginDays = otherwiseReloginDays, let value = forcedPasswordSetupNotice(otherwiseReloginDays) {
@@ -1104,6 +1114,7 @@ public func authorizeWithCode(accountManager: AccountManager<TelegramAccountMana
                                             isSupportUser = true
                                         }
                                         let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
+                                        tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                                         initializedAppSettingsAfterLogin(transaction: transaction, appVersion: account.networkArguments.appVersion, syncContacts: syncContacts)
                                         transaction.setState(state)
                                         if let otherwiseReloginDays = otherwiseReloginDays, let value = forcedPasswordSetupNotice(otherwiseReloginDays) {
@@ -1170,6 +1181,7 @@ public func authorizeWithPassword(accountManager: AccountManager<TelegramAccount
 
                 let user = TelegramUser(user: apiUser)
                 let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
+                tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                 /*transaction.updatePeersInternal([user], update: { current, peer -> Peer? in
                  return peer
                  })*/
@@ -1303,6 +1315,7 @@ public func authorizeWithPasskey(accountManager: AccountManager<TelegramAccountM
                         isSupportUser = true
                     }
                     let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
+                    tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                     initializedAppSettingsAfterLogin(transaction: transaction, appVersion: account.networkArguments.appVersion, syncContacts: syncContacts)
                     transaction.setState(state)
                     if let otherwiseReloginDays = otherwiseReloginDays, let value = forcedPasswordSetupNotice(otherwiseReloginDays) {
@@ -1370,6 +1383,7 @@ public func loginWithRecoveredAccountData(accountManager: AccountManager<Telegra
                 isSupportUser = true
             }
             let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
+            tellomiStoreAuthorizedUser(transaction: transaction, user: user)
 
             initializedAppSettingsAfterLogin(transaction: transaction, appVersion: account.networkArguments.appVersion, syncContacts: syncContacts)
             transaction.setState(state)
@@ -1531,6 +1545,7 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                     }
                     let appliedState = account.postbox.transaction { transaction -> Void in
                         let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
+                        tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                         if let hole = account.postbox.seedConfiguration.initializeChatListWithHole.topLevel {
                             transaction.replaceChatListHole(groupId: .root, index: hole.index, hole: nil)
                         }

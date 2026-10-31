@@ -171,6 +171,7 @@ struct TellomiLoginCopy: Equatable {
     let bindPhoneTitle: String
     let bindPhoneAction: String
     let bindPhoneNotice: String
+    let bindEmailTitle: String
     let emailLabel: String
     let alreadyAuthorized: String
     let switchToAccount: String
@@ -188,9 +189,9 @@ struct TellomiLoginCopy: Equatable {
     }
 }
 
-public func tellomiAccountLabels(languageCode: String) -> (email: String, bindPhone: String, bindAction: String) {
+public func tellomiAccountLabels(languageCode: String) -> (email: String, bindPhone: String, bindAction: String, bindEmail: String) {
     let copy = tellomiLoginCopy(languageCode: languageCode)
-    return (copy.emailLabel, copy.bindPhoneTitle, copy.bindPhoneAction)
+    return (copy.emailLabel, copy.bindPhoneTitle, copy.bindPhoneAction, copy.bindEmailTitle)
 }
 
 func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
@@ -234,6 +235,7 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
             bindPhoneTitle: "绑定手机号",
             bindPhoneAction: "绑定",
             bindPhoneNotice: "绑定后可使用手机号登录",
+            bindEmailTitle: "绑定邮箱",
             emailLabel: "邮箱",
             alreadyAuthorized: "该账号已登录",
             switchToAccount: "切换到该账号"
@@ -278,6 +280,7 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
         bindPhoneTitle: "Link a phone number",
         bindPhoneAction: "Link",
         bindPhoneNotice: "You can sign in with this number after linking it.",
+        bindEmailTitle: "Link an email",
         emailLabel: "Email",
         alreadyAuthorized: "This account is already signed in",
         switchToAccount: "Switch to this account"

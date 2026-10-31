@@ -1,0 +1,13 @@
+/* Localized versions of Info.plist keys */
+
+"NSContactsUsageDescription" = "当你与朋友联系时，Tellomi 会把通讯录同步到加密的云端，以便在你的设备上找到他们。";
+"NSLocationWhenInUseUsageDescription" = "当你向朋友发送位置时，Tellomi 需要使用你的位置来显示地图。";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "当你分享位置、发送实时位置，或查看附近的人时，Tellomi 需要使用你的位置。开启实时位置后，应用在后台也会继续使用位置信息。";
+"NSLocationAlwaysUsageDescription" = "当你在聊天中与朋友分享实时位置时，Tellomi 需要在后台使用位置，以便在分享期间持续更新。从 Apple Watch 发送位置也需要这项权限。";
+"NSCameraUsageDescription" = "需要相机权限，以便拍照、录像和进行视频通话。";
+"NSPhotoLibraryUsageDescription" = "需要照片权限，以便从相册分享照片和视频，并保存你拍摄的内容。";
+"NSPhotoLibraryAddUsageDescription" = "需要权限，以便把照片和视频保存到相册。";
+"NSMicrophoneUsageDescription" = "需要麦克风权限，以便录制并分享语音消息和有声视频。";
+"NSSiriUsageDescription" = "你可以使用 Siri 发送消息。";
+"NSFaceIDUsageDescription" = "你可以使用面容 ID 解锁应用。";
+"CFBundleDisplayName" = "Tellomi";

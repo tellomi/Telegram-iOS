@@ -285,6 +285,9 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         let font = Font.regular(17.0)
         self.phoneInputNode.countryCodeField.textField.font = font
         self.phoneInputNode.numberField.textField.font = font
+        // The code opens the country list. Typing digits into it was the broken picker.
+        self.phoneInputNode.countryCodeField.textField.isEnabled = false
+        self.phoneInputNode.countryCodeField.isUserInteractionEnabled = false
         self.applyTellomiPlaceholder()
         self.addSubnode(self.countryButton)
         self.addSubnode(self.tellomiChevron)
@@ -363,6 +366,13 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         self.phoneInputNode.countryCodeField.frame = countryCodeFrame.offsetBy(dx: -phoneInputFrame.minX, dy: -phoneInputFrame.minY)
         self.phoneInputNode.numberField.frame = numberFrame.offsetBy(dx: -phoneInputFrame.minX, dy: -phoneInputFrame.minY)
         self.phoneInputNode.placeholderNode.frame = placeholderFrame.offsetBy(dx: -phoneInputFrame.minX, dy: -phoneInputFrame.minY)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        if self.tellomiCompact, self.countryButton.frame.contains(point) {
+            return self.countryButton.hitTest(self.view.convert(point, to: self.countryButton.view), with: event) ?? self.countryButton.view
+        }
+        return super.hitTest(point, with: event)
     }
 }
 
@@ -690,8 +700,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
 
         // Change Phone Number uses this screen with account == nil. The login home is the mockup set.
         if account != nil {
-            let copy = tellomiEmailLoginCopy(languageCode: strings.baseLanguageCode)
-            let loginCopy = tellomiLoginCopy(languageCode: strings.baseLanguageCode)
+            let copy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings))
+            let loginCopy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings))
             let emailFieldNode = TellomiEmailFieldNode(theme: theme, placeholder: copy.placeholder)
             emailFieldNode.isHidden = true
             self.emailFieldNode = emailFieldNode
@@ -765,7 +775,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             self.passwordErrorNode = nil
         }
         
-        let loginCopy = tellomiLoginCopy(languageCode: strings.baseLanguageCode)
+        let loginCopy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings))
         let buttonTitle = account != nil ? loginCopy.verifyAndLogin : self.strings.Login_Continue
         let buttonTheme = account != nil ? TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance) : SolidRoundedButtonTheme(theme: self.theme)
         self.proceedNode = SolidRoundedButtonNode(title: buttonTitle, theme: buttonTheme, glass: false, height: 50.0, cornerRadius: 25.0)
@@ -909,7 +919,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         }
 
         if account != nil {
-            self.tellomiAgreement.install(on: self.agreementNode, theme: theme, kind: .phone, chinese: tellomiLoginPrefersChinese(languageCode: strings.baseLanguageCode), openUrl: { [weak self] url in
+            self.tellomiAgreement.install(on: self.agreementNode, theme: theme, kind: .phone, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(strings)), openUrl: { [weak self] url in
                 self?.tellomiOpenUrl?(url)
             }, changed: { [weak self] agreed in
                 self?.agreementRow?.setChecked(agreed)
@@ -978,7 +988,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     }
     
     func animateIn(buttonFrame: CGRect, buttonTitle: String, animationSnapshot: UIView, textSnapshot: UIView) {
-        let continueTitle = self.tellomiLoginHome ? tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).verifyAndLogin : self.strings.Login_Continue
+        let continueTitle = self.tellomiLoginHome ? tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).verifyAndLogin : self.strings.Login_Continue
         self.proceedNode.animateTitle(to: continueTitle)
                 
         self.animationSnapshotView?.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { [weak self] _ in
@@ -1073,12 +1083,12 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let titleInset: CGFloat = layout.size.width > 320.0 ? 18.0 : 0.0
         let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 80.0 : 10.0
         
-        let emailCopy = tellomiEmailLoginCopy(languageCode: self.strings.baseLanguageCode)
+        let emailCopy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let title: String
         if self.emailLogin {
             title = emailCopy.title
         } else if self.account == nil {
-            let loginCopy = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode)
+            let loginCopy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
             title = self.tellomiBindPhone ? loginCopy.bindPhoneTitle : self.strings.Login_NewNumber
         } else {
             title = self.strings.Login_PhoneTitle
@@ -1088,7 +1098,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: Font.regular(17.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
             self.emailFieldNode?.setPlaceholder(emailCopy.placeholder, theme: self.theme)
         } else if self.tellomiBindPhone {
-            let loginCopy = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode)
+            let loginCopy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
             self.noticeNode.attributedText = NSAttributedString(string: loginCopy.bindPhoneNotice, font: Font.regular(17.0), textColor: TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).secondaryText, paragraphAlignment: .center)
             self.proceedNode.title = loginCopy.bindPhoneAction
             self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance))
@@ -1181,8 +1191,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     }
     
     private func layoutTellomiHome(_ layout: ContainerViewLayout, insets: UIEdgeInsets, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
-        let emailCopy = tellomiEmailLoginCopy(languageCode: self.strings.baseLanguageCode)
-        let loginCopy = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode)
+        let emailCopy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        let loginCopy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let surface = self.tellomiSurface
         let title: String
         let titleAlignment: NSTextAlignment
@@ -1241,7 +1251,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let showPhone = !surface.isEmail
         let showEmail = surface.isEmail
         let showPassword = surface.isPassword
-        let showHomeRows = surface == .phoneCode && (layout.inputHeight ?? 0.0) < 20.0
+        // Keep Apple / Google / Email / Other on the phone home while the keyboard is up.
+        let showHomeRows = surface == .phoneCode
         let showCircles = surface != .phoneCode && (layout.inputHeight ?? 0.0) < 20.0
         self.phoneAndCountryNode.isHidden = !showPhone
         self.emailFieldNode?.isHidden = !showEmail

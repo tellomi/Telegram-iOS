@@ -184,6 +184,7 @@ enum PeerInfoSettingsSection {
     case faq
     case tips
     case phoneNumber
+    case loginEmail
     case username
     case addAccount
     case logout

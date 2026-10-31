@@ -28,7 +28,7 @@ public func ChangePhoneNumberController(context: AccountContext, bindPhone: Bool
     if bindPhone {
         controller.setTellomiBindPhone(true)
     }
-    let bindActionTitle = bindPhone ? tellomiAccountLabels(languageCode: presentationData.strings.baseLanguageCode).bindAction : nil
+    let bindActionTitle = bindPhone ? tellomiAccountLabels(languageCode: tellomiInterfaceLanguageCode(presentationData.strings)).bindAction : nil
     controller.loginWithNumber = { [weak controller] phoneNumber, _ in
         controller?.inProgress = true
         
