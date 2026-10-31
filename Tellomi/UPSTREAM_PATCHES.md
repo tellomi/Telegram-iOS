@@ -26,13 +26,16 @@ The same helper is what New Contact and Change Phone Number open with, so those 
 
 ## Chinese system language
 
-The app ships only `en.lproj`. Start Messaging called `downloadAndApplyLocalization` with `"en"`. `suggested_lang_code` adds a second button; it is not applied on its own. The saved pack lives in the account manager under `SharedDataKeys.localizationSettings`. `help.getConfig`'s suggestion is `PreferencesKeys.suggestedLocalization`. The language list cache is `Namespaces.CachedItemCollection.cachedAvailableLocalizations`. An update keeps all three. Reinstalling clears them. `UserDefaults` key `TellomiDidApplySystemLangPack` records that the automatic pack was applied, so a later choice in Settings is kept; reinstalling clears that key too.
+The app ships only `en.lproj`. Start Messaging used to call `downloadAndApplyLocalization` with `"en"`. The welcome pages themselves are Tellomi copy now (see Welcome copy below); they do not wait for that download. `suggested_lang_code` adds a second button; it is not applied on its own. The saved pack lives in the account manager under `SharedDataKeys.localizationSettings`. `help.getConfig`'s suggestion is `PreferencesKeys.suggestedLocalization`. The language list cache is `Namespaces.CachedItemCollection.cachedAvailableLocalizations`. An update keeps all three. Reinstalling clears them. `UserDefaults` key `TellomiDidApplySystemLangPack` records that the automatic pack was applied, so a later choice in Settings is kept; reinstalling clears that key too.
 
 | File | Change |
 | --- | --- |
 | `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | `zh-Hans` / `zh-CN` / `zh` map to server langpack `zh-hans`. `zh-Hant` / `zh-TW` / `zh-HK` / `zh-MO` map to `zh-hant`. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | Start downloads that pack instead of `"en"` until the key above is set. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | The login flow downloads the pack before it builds the splash or the phone screen, so a saved English pack from the old Start button is replaced. The intro carousel stays the bundled English strings. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | The login flow downloads the pack before it builds the splash or the phone screen, so a saved English pack from the old Start button is replaced. |
+| `submodules/AuthorizationUI/Sources/TellomiIntroCopy.swift` | Welcome pages and the start button. Chinese when the system language is `zh*`, otherwise Tellomi English. Not the bundled Telegram tour. |
+| `submodules/RMIntro/PublicHeaders/RMIntro/RMIntroViewController.h`, `Sources/platform/ios/RMIntroViewController.m`, `RMIntroPageView.m` | `setIntroHeadlines:descriptions:` replaces the six pages, including after the view has loaded. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` `tellomiChromeLanguageCode` | Login chrome uses the system language until the automatic pack has been applied. A later choice in Settings is kept. `tellomiLoginCopy`, `tellomiEmailLoginCopy`, and the agreement follow it, so a Chinese device is not stuck on the bundled English pack. |
 | `submodules/TelegramUI/Sources/ApplicationContext.swift` | A signed-in account whose saved language is not the matching pack downloads it once. The running UI follows `localizationSettings`, the same path as Settings ▸ Language. |
 
 ## QR center mark
@@ -72,7 +75,7 @@ No in-app terms popup (the server returns `help.termsOfServiceUpdateEmpty` and `
 
 | File | Change |
 | --- | --- |
-| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | New. Builds the checkbox text and installs its tap/highlight handlers on the stock terms label. |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | New. Builds the checkbox text. A single-tap recognizer on the label toggles the box or opens a link in Safari. The stock text-node recognizer waits for a double tap and only hits the glyph, so the ☐ box did not register, and setting the string did not redraw it. The hit rect grows past the label (leading edge and below). |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Adds `tellomiAgreement` / `tellomiOpenUrl`; end of `init` disables Continue and installs the checkbox on `termsNode`; `updateData` always shows `termsNode`. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpController.swift` | Wires `tellomiOpenUrl` to `openUrl`; `nextPressed()` refuses (haptic error) until the box is checked, which also covers the small-screen Next bar button. |
 
@@ -150,7 +153,7 @@ The login home, email step, code step, nickname step, and the existing cloud-pas
 
 「密码登录」is not a second sign-in. `auth.signIn` still needs a code. A cloud password (`SESSION_PASSWORD_NEEDED`) is the existing 2FA screen after the code, restyled, and it does not replace the OTP path.
 
-The phone field stays country +86. The email switch stays a text link. OTP length is whatever the server sends (the dev code is five digits); SMS and phone codes use the digit boxes, email uses one field. The pink button is light until the field is filled. Tapping it without the checkbox shakes the checkbox and does not send the code.
+The phone field stays country +86. The email switch stays a text link. OTP length is whatever the server sends (the dev code is five digits); SMS and phone codes use the digit boxes, email uses one field. The pink button is light until the field is filled. Tapping it without the checkbox shakes the checkbox and does not send the code. The agreement label is brought to the front of the phone and sign-up screens so the continue button, which is a later sibling, does not take the tap.
 
 Links open in Safari through the existing `openUrl` (`UIApplication.shared.open`): 用户协议 `https://tellomi.cn/legal/terms/`, 隐私政策 `https://tellomi.cn/legal/privacy/`, 运营商服务协议 and 帮助 `https://tellomi.cn/legal` and `https://tellomi.cn/faq`.
 
@@ -165,3 +168,22 @@ Links open in Safari through the existing `openUrl` (`UIApplication.shared.open`
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift` | Help on the code screen. Sign in with Apple is not shown. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Pink continue, gray name field. Nickname still has no password. `textContentType` is set only inside `#available(iOSApplicationExtension 12.0, iOS 12.0, *)`. This target is `-warnings-as-errors` with an iOS 15 deployment target, so an `else if #available(... 10.0 ...)` is `UselessAvailabilityCheck` and fails the release build. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePasswordEntryControllerNode.swift` | The 2FA cloud-password screen uses the same pink button and gray field. |
+
+## Welcome copy
+
+The intro used to read `en.lproj` (`Tour.Title1` = "Telegram", `Tour.StartButton` = "Start Messaging") and ignore the system language. A Chinese device stayed on that English tour until Start downloaded a langpack, and the carousel itself never changed. The six pages and the button now come from `tellomiIntroCopy()`: Simplified Chinese when `tellomiSystemLangPackCode()` is set, otherwise Tellomi English ("Get Started", not "Start Messaging"). The OpenGL pages are unchanged.
+
+## Last seen year
+
+`stringForTimestamp` and `stringForMediumDate` showed a two-digit year as `tm_year - 100`. `tm_year` is years since 1900, so 2026 is 26 and 1970 is **-30**. A profile whose `userStatusOffline.was_online` is 0 (stored as presence `.present(until: 0)`, the Unix epoch) rendered as `01/01/-30`. Years before 2000 now print in full (`calendarDisplayYear`). A presence timestamp of 0 or less is "last seen a long time ago" instead of that date. The value still comes from the server; this only changes how 0 and pre-2000 dates are drawn.
+
+## Teamgram on screen
+
+There is no client string "Teamgram" in the auth, login, session, or profile UI. The word appears in comments and in `Tellomi/tellomi-server.json`.
+
+| What the owner sees | Where it comes from |
+| --- | --- |
+| Active session named Teamgram | `authorization.appName` from `account.getAuthorizations`, drawn in `ItemListRecentSessionItem` / `RecentSessionScreen`. `initConnection` has no app-name field. The server names the session from `api_id` (this client sends `100001`). |
+| Profile title Teamgram and @teamgram | `user.first_name` and `user.username` on the user the server returns. The client does not invent a display name for that peer. |
+
+Replacing those on the client would disagree with the account the server stores. The one client string changed in this pass is the "didn't get a code" email body, which now says `Tellomi:` instead of `Telegram:`. It is still sent to `sms@telegram.org`.

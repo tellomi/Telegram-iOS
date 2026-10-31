@@ -325,6 +325,8 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         }
         
         let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
+        // The continue button is a later sibling. Keep the agreement above it so the checkbox receives the tap.
+        self.view.bringSubviewToFront(self.termsNode.view)
         self.placeTellomiField(self.tellomiFirstBackground, field: self.firstNameField, bandMinX: bandMinX, bandWidth: bandWidth)
         self.placeTellomiField(self.tellomiLastBackground, field: self.lastNameField, bandMinX: bandMinX, bandWidth: bandWidth)
         self.proceedNode.title = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).continueAction

@@ -1066,6 +1066,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         items.append(AuthorizationLayoutItem(node: self.agreementNode, size: CGSize(width: contentWidth, height: agreementSize.height), spacingBefore: AuthorizationLayoutItemSpacing(weight: 800.0, maxValue: 2000.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 12.0, maxValue: 16.0)))
 
         let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom)), items: items, transition: transition, failIfDoesNotFit: false)
+        // The continue button is a later sibling. Keep the agreement above it so the checkbox receives the tap.
+        self.view.bringSubviewToFront(self.agreementNode.view)
         self.titleActivateAreaNode.frame = self.titleNode.frame
         self.noticeActivateAreaNode.accessibilityLabel = self.noticeNode.attributedText?.string ?? ""
         self.noticeActivateAreaNode.frame = self.noticeNode.frame

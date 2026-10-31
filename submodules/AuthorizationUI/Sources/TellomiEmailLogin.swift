@@ -1,7 +1,8 @@
 import Foundation
 
 /// Tellomi login-home copy. The langpack does not have these strings. Chinese follows the
-/// sign-up agreement; every other language uses English. See Tellomi/UPSTREAM_PATCHES.md.
+/// system language (see `tellomiChromeLanguageCode`) until Settings has chosen a pack.
+/// See Tellomi/UPSTREAM_PATCHES.md.
 struct TellomiEmailLoginCopy: Equatable {
     let switchToEmail: String
     let switchToPhone: String
@@ -17,7 +18,7 @@ struct TellomiEmailLoginCopy: Equatable {
 }
 
 func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
-    let code = languageCode.lowercased()
+    let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode).lowercased()
     if code == "zh" || code.hasPrefix("zh-") {
         return TellomiEmailLoginCopy(
             switchToEmail: "邮箱登录",
