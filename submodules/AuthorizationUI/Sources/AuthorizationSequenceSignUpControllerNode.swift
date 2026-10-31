@@ -30,6 +30,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     private let titleNode: ASTextNode
     private let currentOptionNode: ASTextNode
     private let termsNode: ImmediateTextNode
+    private let agreementRow: TellomiAgreementRow
     
     private let firstNameField: TextFieldNode
     private let lastNameField: TextFieldNode
@@ -119,6 +120,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         let body = MarkdownAttributeSet(font: Font.regular(13.0), textColor: theme.list.itemSecondaryTextColor)
         let link = MarkdownAttributeSet(font: Font.regular(13.0), textColor: theme.list.itemAccentColor, additionalAttributes: [TelegramTextAttributes.URL: ""])
         self.termsNode.attributedText = parseMarkdownIntoAttributedString(strings.Login_TermsOfServiceLabel.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "]", with: "]()"), attributes: MarkdownAttributes(body: body, bold: body, link: link, linkAttribute: { _ in nil }), textAlignment: .center)
+        self.agreementRow = TellomiAgreementRow(textNode: self.termsNode)
         
         self.firstSeparatorNode = ASDisplayNode()
         self.firstSeparatorNode.isLayerBacked = true
@@ -198,8 +200,8 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.addSubnode(self.lastNameField)
         self.addSubnode(self.titleNode)
         self.addSubnode(self.currentOptionNode)
-        self.addSubnode(self.termsNode)
-        self.termsNode.isHidden = true
+        self.addSubnode(self.agreementRow)
+        self.agreementRow.isHidden = true
         self.addSubnode(self.addPhotoButton)
         self.addSubnode(self.proceedNode)
         
@@ -228,15 +230,22 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         // Tellomi: replace the terms label with the agreement checkbox; Continue waits for it.
         self.proceedNode.isEnabled = false
         self.firstNameField.textField.addTarget(self, action: #selector(self.tellomiNameChanged), for: .editingChanged)
-        self.tellomiAgreement.install(on: self.termsNode, theme: theme, kind: .signUp, chinese: tellomiLoginLanguageIsChinese(strings.baseLanguageCode), openUrl: { [weak self] url in
+        self.tellomiAgreement.install(on: self.termsNode, theme: theme, kind: .signUp, chinese: tellomiLoginPrefersChinese(languageCode: strings.baseLanguageCode), openUrl: { [weak self] url in
             self?.tellomiOpenUrl?(url)
-        }, changed: { [weak self] _ in
+        }, changed: { [weak self] agreed in
+            self?.agreementRow.setChecked(agreed)
             self?.tellomiRefreshProceed()
         })
+        self.agreementRow.onToggle = { [weak self] in
+            guard let self else {
+                return
+            }
+            self.tellomiAgreement.setAgreed(!self.tellomiAgreement.agreed)
+        }
     }
     
     func updateData(firstName: String, lastName: String, hasTermsOfService: Bool) {
-        self.termsNode.isHidden = false // Tellomi: the agreement checkbox is always shown.
+        self.agreementRow.isHidden = false // Tellomi: the agreement checkbox is always shown.
         self.firstNameField.textField.attributedText = NSAttributedString(string: firstName, font: Font.regular(20.0), textColor: self.theme.list.itemPlaceholderTextColor)
         self.lastNameField.textField.attributedText = NSAttributedString(string: lastName, font: Font.regular(20.0), textColor: self.theme.list.itemPlaceholderTextColor)
         
@@ -291,7 +300,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         let innerInset: CGFloat = 16.0
         
         let noticeSize = self.currentOptionNode.measure(CGSize(width: maximumWidth - 28.0, height: CGFloat.greatestFiniteMagnitude))
-        let termsSize = self.termsNode.updateLayout(CGSize(width: maximumWidth - 28.0, height: CGFloat.greatestFiniteMagnitude))
+        let termsSize = self.agreementRow.updateLayout(width: maximumWidth - 28.0, centered: true)
         
         let avatarSize: CGSize = CGSize(width: 110.0, height: 110.0)
         var items: [AuthorizationLayoutItem] = []
@@ -310,7 +319,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             items.append(AuthorizationLayoutItem(node: self.lastNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 12.0, maxValue: 12.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         }
         
-        items.append(AuthorizationLayoutItem(node: self.termsNode, size: termsSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 48.0, maxValue: 100.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        items.append(AuthorizationLayoutItem(node: self.agreementRow, size: termsSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 48.0, maxValue: 100.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
         if layout.size.width > 320.0 {
             self.proceedNode.isHidden = false
@@ -326,7 +335,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
         // The continue button is a later sibling. Keep the agreement above it so the checkbox receives the tap.
-        self.view.bringSubviewToFront(self.termsNode.view)
+        self.view.bringSubviewToFront(self.agreementRow.view)
         self.placeTellomiField(self.tellomiFirstBackground, field: self.firstNameField, bandMinX: bandMinX, bandWidth: bandWidth)
         self.placeTellomiField(self.tellomiLastBackground, field: self.lastNameField, bandMinX: bandMinX, bandWidth: bandWidth)
         self.proceedNode.title = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).continueAction

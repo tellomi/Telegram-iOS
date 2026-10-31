@@ -130,7 +130,7 @@ Pickers hide a client-side list. The built-in entry is the Taiwan flag (U+1F1F9 
 
 ## Email login
 
-The login home stays phone, country +86. A switch under the field changes it to an email address. Continue calls the existing `sendAuthorizationCode`, which sends `auth.sendCode` with that address in `phone_number`. There is no email+password form (P1).
+The login home stays phone, country +86 (mockups that show +66 are not the default). Email is its own screen, reached from「邮箱登录」. Continue on a code screen calls the existing `sendAuthorizationCode`, which sends `auth.sendCode` with that address in `phone_number`. Phone and email password screens are in the flow. `auth.signIn` still needs a code, so submitting a password shows「账号或密码错误，请重试。」
 
 When the server returns `auth.sentCodeTypeEmailCode`, the stock code screen is the one already used for that type: title "Check Your Email", the code boxes, and `auth.signIn` with `email_verification: emailVerificationCode` (not `phone_code`). Back returns to the email field. Change Phone Number does not get the switch (`account == nil`).
 
@@ -149,29 +149,37 @@ Leave `reset_available_period`, `reset_pending_date`, and `apple_signin_allowed`
 
 ## Login screen restyle
 
-The login home, email step, code step, nickname step, and the existing cloud-password step use the same pink button, gray rounded field, and white background. Apple, Google, and other third-party buttons are not added. Sign in with Apple on the code screen stays off even if the server sets `apple_signin_allowed`. There is no「找回账号」row. There is no in-app agreement modal.
+Owner mockups in `login-ui-ref/owner-2026-10-31/` are the layout. Primary buttons are not the pink in those shots. Brand buttons are black `#111111` with white text. Disabled buttons are `#E5E5E5` with gray `#8E8E93` text. Links are `#3478F6`. Errors are `#FF3B30`. A checked agreement circle is black.
 
-「密码登录」is not a second sign-in. `auth.signIn` still needs a code. A cloud password (`SESSION_PASSWORD_NEEDED`) is the existing 2FA screen after the code, restyled, and it does not replace the OTP path.
+The login home, email step, password step, code step, nickname step, and the existing cloud-password step share that chrome and the gray rounded field. Sign in with Apple on the code screen stays off even if the server sets `apple_signin_allowed`. Apple, Google,「其他登录方式」,「找回账号」, and the round social buttons present「暂未开放」. They do not start a sign-in.「邮箱登录」opens the email screen.
 
-The phone field stays country +86. The email switch stays a text link. OTP length is whatever the server sends (the dev code is five digits); SMS and phone codes use the digit boxes, email uses one field. The pink button is light until the field is filled. Tapping it without the checkbox shakes the checkbox and does not send the code. The agreement label is brought to the front of the phone and sign-up screens so the continue button, which is a later sibling, does not take the tap.
+「密码登录」is a screen, not a second protocol. There is no password sign-in RPC, so 登录 on the phone and email password screens shows the same「暂未开放」notice as Apple, Google, 其他登录方式, and 找回账号. It does not show「账号或密码错误，请重试。」. A cloud password (`SESSION_PASSWORD_NEEDED`) is still the existing 2FA screen after a code.
 
-Links open in Safari through the existing `openUrl` (`UIApplication.shared.open`): 用户协议 `https://tellomi.cn/legal/terms/`, 隐私政策 `https://tellomi.cn/legal/privacy/`, 运营商服务协议 and 帮助 `https://tellomi.cn/legal` and `https://tellomi.cn/faq`.
+The phone field stays country +86. OTP length is whatever the server sends (the dev code is five digits); SMS and phone codes use filled digit boxes, email uses one field. The black button is gray until the field is filled. Tapping it without the checkbox opens the agreement card (「同意并登录」/「不同意」) and does not send the code. The circle is a 44pt control. `ImmediateTextNode` now keeps the tap recognizer it adds, so the sentence links receive the tap as well.
+
+Copy follows the system language. Chinese (and an empty preferred-language list) uses the bundled Chinese strings. Anything else uses English. The welcome carousel does the same, and its titles say Tellomi.
+
+Links open in Safari through the existing `openUrl`: 用户协议 `https://tellomi.cn/legal/terms/`, 隐私政策 `https://tellomi.cn/legal/privacy/`, 运营商服务协议 `https://tellomi.cn/legal`, 帮助 and「收不到验证码?」`https://tellomi.cn/faq`. Login errors that used to mail `recover@telegram.org` or `sms@telegram.org` open that FAQ instead.
 
 | File | Change |
 | --- | --- |
-| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | New. Pink, gray, copy, legal and help URLs. Imports `AsyncDisplayKit`: `applyField` takes `ASDisplayNode`, and `import Display` does not bring that type into scope. |
-| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Phone and email checkbox wording. Same toggle, no modal. |
-| `submodules/AuthorizationUI/Sources/TellomiEmailLogin.swift` | Email title, subtitle, and placeholder match the mockup. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Login-home title, gray phone and email fields, pink「验证并登录」, agreement, email text link. Hides the sticker, passkey notice, and contact-sync row. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Help opens the FAQ. Agreement is required before send. Login home skips the number and email confirmation alerts. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | Code titles, sent-to line, pink「登录」, resend countdown, sent toast. Email code is one field. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift` | Help on the code screen. Sign in with Apple is not shown. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Pink continue, gray name field. Nickname still has no password. `textContentType` is set only inside `#available(iOSApplicationExtension 12.0, iOS 12.0, *)`. This target is `-warnings-as-errors` with an iOS 15 deployment target, so an `else if #available(... 10.0 ...)` is `UselessAvailabilityCheck` and fails the release build. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequencePasswordEntryControllerNode.swift` | The 2FA cloud-password screen uses the same pink button and gray field. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Black / gray / blue chrome, copy, legal and help URLs, login surface enum. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginSurfaces.swift` | New. Agreement row, social rows, circle buttons, password field, agreement card. |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Phone, email, and sign-up wording. The circle is a real control. Sentence taps use the single-tap recognizer from the checkbox fix. |
+| `submodules/AuthorizationUI/Sources/TellomiEmailLogin.swift` | Email title, subtitle, and placeholder. Chinese follows `tellomiChromeLanguageCode`. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Phone home, phone password, email, email password. Hides the sticker and the contact-sync row. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Help, agreement card,「暂未开放」for Apple, Google, other methods, account recovery, and password 登录. X on the phone home. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | Code titles, sent-to line, black「登录」, resend countdown,「收不到验证码?」, sent toast, sticky email error. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift` | Help on the code screen and on「收不到验证码?」. Sign in with Apple is not shown. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Black continue, gray name field, tappable agreement circle. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePasswordEntryControllerNode.swift` | The 2FA cloud-password screen uses the same black button and gray field. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Login help no longer mails `recover@telegram.org` or `sms@telegram.org`. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | Start button is black. Welcome pages stay `tellomiIntroCopy()`. |
+| `submodules/CodeInputView/Sources/CodeInputView.swift` | Optional box fill and a width that spans the row, used by the SMS code screen. |
 
 ## Welcome copy
 
-The intro used to read `en.lproj` (`Tour.Title1` = "Telegram", `Tour.StartButton` = "Start Messaging") and ignore the system language. A Chinese device stayed on that English tour until Start downloaded a langpack, and the carousel itself never changed. The six pages and the button now come from `tellomiIntroCopy()`: Simplified Chinese when `tellomiSystemLangPackCode()` is set, otherwise Tellomi English ("Get Started", not "Start Messaging"). The OpenGL pages are unchanged.
+The intro used to read `en.lproj` (`Tour.Title1` = "Telegram", `Tour.StartButton` = "Start Messaging") and ignore the system language. A Chinese device stayed on that English tour until Start downloaded a langpack, and the carousel itself never changed. The six pages and the button now come from `tellomiIntroCopy()`: Simplified Chinese when `tellomiSystemLangPackCode()` is set, otherwise Tellomi English ("Get Started", not "Start Messaging"). The OpenGL pages are unchanged. The Start button uses the black login chrome.
 
 ## Last seen year
 
@@ -186,4 +194,4 @@ There is no client string "Teamgram" in the auth, login, session, or profile UI.
 | Active session named Teamgram | `authorization.appName` from `account.getAuthorizations`, drawn in `ItemListRecentSessionItem` / `RecentSessionScreen`. `initConnection` has no app-name field. The server names the session from `api_id` (this client sends `100001`). |
 | Profile title Teamgram and @teamgram | `user.first_name` and `user.username` on the user the server returns. The client does not invent a display name for that peer. |
 
-Replacing those on the client would disagree with the account the server stores. The one client string changed in this pass is the "didn't get a code" email body, which now says `Tellomi:` instead of `Telegram:`. It is still sent to `sms@telegram.org`.
+Replacing those on the client would disagree with the account the server stores. "Didn't get a code" opens `https://tellomi.cn/faq` instead of mailing `sms@telegram.org`.

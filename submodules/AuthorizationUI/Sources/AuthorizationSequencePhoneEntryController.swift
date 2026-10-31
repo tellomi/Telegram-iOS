@@ -13,6 +13,7 @@ import PhoneNumberFormat
 import DebugSettingsUI
 import MessageUI
 import AuthenticationServices
+import UIKitRuntimeUtils
 
 public final class AuthorizationSequencePhoneEntryController: ViewController, MFMailComposeViewControllerDelegate, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
     private var controllerNode: AuthorizationSequencePhoneEntryControllerNode {
@@ -119,9 +120,42 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         self.openUrl(TellomiLoginChrome.helpURL)
     }
 
+    @objc private func tellomiSurfaceBackPressed() {
+        if !self.controllerNode.popTellomiSurface() {
+            self.back()
+        }
+    }
+
+    private func presentTellomiUnavailable() {
+        let copy = tellomiLoginCopy(languageCode: self.presentationData.strings.baseLanguageCode)
+        self.present(textAlertController(sharedContext: self.sharedContext, title: copy.unavailableTitle, text: copy.unavailableBody, actions: [TextAlertAction(type: .defaultAction, title: copy.ok, action: {})]), in: .window(.root))
+    }
+
+    private func presentTellomiAgreementPrompt() {
+        let kind: TellomiSignUpAgreement.Kind = self.controllerNode.tellomiSurface.showsCarrierAgreement ? .phone : .email
+        let prompt = TellomiAgreementPromptController(kind: kind, chinese: tellomiLoginPrefersChinese(languageCode: self.presentationData.strings.baseLanguageCode), openUrl: { [weak self] url in
+            self?.openUrl(url)
+        })
+        prompt.agreed = { [weak self] in
+            guard let self else {
+                return
+            }
+            self.controllerNode.setTellomiAgreed(true)
+            self.nextPressed()
+        }
+        self.present(prompt, in: .window(.root))
+    }
+
     func updateNavigationItems() {
         if self.account != nil {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLoginCopy(languageCode: self.presentationData.strings.baseLanguageCode).help, style: .plain, target: self, action: #selector(self.helpPressed))
+            let copy = tellomiLoginCopy(languageCode: self.presentationData.strings.baseLanguageCode)
+            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: copy.help, style: .plain, target: self, action: #selector(self.helpPressed))
+            if self.isNodeLoaded, self.controllerNode.tellomiSurface != .phoneCode {
+                let backTitle = tellomiLoginPrefersChinese(languageCode: self.presentationData.strings.baseLanguageCode) ? "返回" : "Back"
+                self.navigationItem.leftBarButtonItem = UIBarButtonItem(backButtonAppearanceWithTitle: backTitle, target: self, action: #selector(self.tellomiSurfaceBackPressed))
+            } else {
+                self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
+            }
             return
         }
         guard let layout = self.validLayout, layout.size.width < 360.0 else {
@@ -211,6 +245,12 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
         self.controllerNode.tellomiOpenUrl = { [weak self] url in
             self?.openUrl(url)
+        }
+        self.controllerNode.tellomiUnavailable = { [weak self] in
+            self?.presentTellomiUnavailable()
+        }
+        self.controllerNode.tellomiSurfaceChanged = { [weak self] in
+            self?.updateNavigationItems()
         }
         
         if let account = self.account {
@@ -411,6 +451,12 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         if self.account != nil && !self.controllerNode.tellomiAgreement.agreed {
             self.hapticFeedback.error()
             self.controllerNode.animateAgreementError()
+            self.presentTellomiAgreementPrompt()
+            return
+        }
+        if self.account != nil && self.controllerNode.isPasswordLogin {
+            // There is no password sign-in RPC. Same notice as Apple, Google, and 找回账号.
+            self.presentTellomiUnavailable()
             return
         }
         if self.controllerNode.isEmailLogin {

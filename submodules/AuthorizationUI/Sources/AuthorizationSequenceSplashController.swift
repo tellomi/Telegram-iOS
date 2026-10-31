@@ -74,7 +74,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
         let intro = tellomiIntroCopy()
         self.controller.setIntroHeadlines(intro.headlines, descriptions: intro.descriptions)
 
-        self.startButton = SolidRoundedButtonNode(title: intro.startButton, theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
+        self.startButton = SolidRoundedButtonNode(title: intro.startButton, theme: TellomiLoginChrome.buttonTheme(), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
         self.startButton.accessibilityIdentifier = "Auth.Welcome.StartButton"
 
         super.init(navigationBarPresentationData: nil)

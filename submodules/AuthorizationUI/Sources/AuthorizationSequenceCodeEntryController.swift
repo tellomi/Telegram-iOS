@@ -100,6 +100,9 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         self.controllerNode.loginWithCode = { [weak self] code in
             self?.continueWithCode(code)
         }
+        self.controllerNode.openHelp = { [weak self] in
+            self?.tellomiHelpPressed()
+        }
         
         self.controllerNode.signInWithApple = { [weak self] in
             self?.signInWithApple?()
