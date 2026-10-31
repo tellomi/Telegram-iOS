@@ -144,7 +144,8 @@ final class TellomiAgreementRow: ASDisplayNode {
 
 final class TellomiSocialRowNode: HighlightableButtonNode {
     private let iconNode = ASImageNode()
-    private let titleNode = ImmediateTextNode()
+    /// Not `titleNode`: `ASButtonNode` already has that property, and a stored override does not compile.
+    private let labelNode = ImmediateTextNode()
 
     init(title: String, icon: UIImage?) {
         super.init()
@@ -155,20 +156,20 @@ final class TellomiSocialRowNode: HighlightableButtonNode {
         self.clipsToBounds = true
         self.iconNode.image = icon
         self.iconNode.isUserInteractionEnabled = false
-        self.titleNode.attributedText = NSAttributedString(string: title, font: Font.regular(16.0), textColor: UIColor(rgb: 0x111111))
-        self.titleNode.isUserInteractionEnabled = false
+        self.labelNode.attributedText = NSAttributedString(string: title, font: Font.regular(16.0), textColor: UIColor(rgb: 0x111111))
+        self.labelNode.isUserInteractionEnabled = false
         self.accessibilityLabel = title
         self.accessibilityTraits = [.button]
         self.addSubnode(self.iconNode)
-        self.addSubnode(self.titleNode)
+        self.addSubnode(self.labelNode)
     }
 
     override func layout() {
         super.layout()
         let iconSide: CGFloat = 22.0
         self.iconNode.frame = CGRect(x: 16.0, y: floor((self.bounds.height - iconSide) / 2.0), width: iconSide, height: iconSide)
-        let titleSize = self.titleNode.updateLayout(CGSize(width: self.bounds.width - 80.0, height: self.bounds.height))
-        self.titleNode.frame = CGRect(x: floor((self.bounds.width - titleSize.width) / 2.0), y: floor((self.bounds.height - titleSize.height) / 2.0), width: titleSize.width, height: titleSize.height)
+        let titleSize = self.labelNode.updateLayout(CGSize(width: self.bounds.width - 80.0, height: self.bounds.height))
+        self.labelNode.frame = CGRect(x: floor((self.bounds.width - titleSize.width) / 2.0), y: floor((self.bounds.height - titleSize.height) / 2.0), width: titleSize.width, height: titleSize.height)
     }
 }
 
