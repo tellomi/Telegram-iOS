@@ -376,8 +376,6 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.firstNameField.textField.returnKeyType = self.tellomiNicknameOnly ? .done : .next
         if #available(iOSApplicationExtension 12.0, iOS 12.0, *) {
             self.firstNameField.textField.textContentType = self.tellomiNicknameOnly ? .nickname : .givenName
-        } else if #available(iOSApplicationExtension 10.0, iOS 10.0, *) {
-            self.firstNameField.textField.textContentType = .givenName
         }
     }
     
