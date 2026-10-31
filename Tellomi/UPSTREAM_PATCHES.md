@@ -156,12 +156,12 @@ Links open in Safari through the existing `openUrl` (`UIApplication.shared.open`
 
 | File | Change |
 | --- | --- |
-| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | New. Pink, gray, copy, legal and help URLs. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | New. Pink, gray, copy, legal and help URLs. Imports `AsyncDisplayKit`: `applyField` takes `ASDisplayNode`, and `import Display` does not bring that type into scope. |
 | `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Phone and email checkbox wording. Same toggle, no modal. |
 | `submodules/AuthorizationUI/Sources/TellomiEmailLogin.swift` | Email title, subtitle, and placeholder match the mockup. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Login-home title, gray phone and email fields, pink「验证并登录」, agreement, email text link. Hides the sticker, passkey notice, and contact-sync row. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Help opens the FAQ. Agreement is required before send. Login home skips the number and email confirmation alerts. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | Code titles, sent-to line, pink「登录」, resend countdown, sent toast. Email code is one field. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift` | Help on the code screen. Sign in with Apple is not shown. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Pink continue, gray name field. Nickname still has no password. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Pink continue, gray name field. Nickname still has no password. `textContentType` is set only inside `#available(iOSApplicationExtension 12.0, iOS 12.0, *)`. This target is `-warnings-as-errors` with an iOS 15 deployment target, so an `else if #available(... 10.0 ...)` is `UselessAvailabilityCheck` and fails the release build. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePasswordEntryControllerNode.swift` | The 2FA cloud-password screen uses the same pink button and gray field. |
