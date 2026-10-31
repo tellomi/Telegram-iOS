@@ -33,6 +33,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     private let nextOptionTitleNode: ImmediateTextNode
     private let nextOptionButtonNode: HighlightableButtonNode
     private let nextOptionArrowNode: ASImageNode
+    private let missingCodeNode: HighlightableButtonNode
     
     private let resetTextNode: ImmediateTextNode
     private let resetNode: HighlightableButtonNode
@@ -94,6 +95,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     var openFragment: ((String) -> Void)?
     var present: (ViewController, Any?) -> Void = { _, _ in }
     
+    var openHelp: (() -> Void)?
     var requestNextOption: (() -> Void)?
     var requestAnotherOption: (() -> Void)?
     var requestPreviousOption: (() -> Void)?
@@ -175,6 +177,11 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             self.nextOptionButtonNode.accessibilityTraits = [.button, .notEnabled]
         }
         self.nextOptionButtonNode.addSubnode(self.nextOptionTitleNode)
+
+        self.missingCodeNode = HighlightableButtonNode()
+        self.missingCodeNode.displaysAsynchronously = false
+        self.missingCodeNode.isHidden = true
+        self.missingCodeNode.accessibilityTraits = [.button]
         
         self.nextOptionArrowNode = ASImageNode()
         self.nextOptionArrowNode.displaysAsynchronously = false
@@ -295,6 +302,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.addSubnode(self.currentOptionActivateAreaNode)
         self.addSubnode(self.currentOptionInfoNode)
         self.addSubnode(self.nextOptionButtonNode)
+        self.addSubnode(self.missingCodeNode)
         self.nextOptionButtonNode.addSubnode(self.nextOptionArrowNode)
         self.addSubnode(self.animationNode)
         self.addSubnode(self.resetNode)
@@ -344,6 +352,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         }
         
         self.nextOptionButtonNode.addTarget(self, action: #selector(self.nextOptionNodePressed), forControlEvents: .touchUpInside)
+        self.missingCodeNode.addTarget(self, action: #selector(self.missingCodePressed), forControlEvents: .touchUpInside)
         self.proceedNode.pressed = { [weak self] in
             self?.proceedPressed()
         }
@@ -656,17 +665,19 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         
         let codeFieldSize = self.codeInputView.update(
             theme: CodeInputView.Theme(
-                inactiveBorder: self.tellomiCodeChrome ? 0xFFE4EA : self.theme.list.itemPlainSeparatorColor.argb,
-                activeBorder: self.tellomiCodeChrome ? 0xFF4B6E : self.theme.list.itemAccentColor.argb,
+                inactiveBorder: self.tellomiCodeChrome ? 0xFFE5E5E5 : self.theme.list.itemPlainSeparatorColor.argb,
+                activeBorder: self.tellomiCodeChrome ? 0xFF111111 : self.theme.list.itemAccentColor.argb,
                 succeedBorder: self.theme.list.itemDisclosureActions.constructive.fillColor.argb,
-                failedBorder: self.theme.list.itemDestructiveColor.argb,
+                failedBorder: self.tellomiCodeChrome ? 0xFFFF3B30 : self.theme.list.itemDestructiveColor.argb,
                 foreground: self.theme.list.itemPrimaryTextColor.argb,
-                isDark: self.theme.overallDarkAppearance
+                isDark: self.theme.overallDarkAppearance,
+                fill: self.tellomiCodeChrome ? 0xFFF2F3F5 : nil
             ),
             prefix: codePrefix,
             count: codeLength,
-            width: maximumWidth - 28.0,
-            compact: layout.size.width <= 320.0 || (layout.size.width <= 375.0 && codeLength > 5)
+            width: self.tellomiCodeChrome ? maximumWidth - 48.0 : maximumWidth - 28.0,
+            compact: layout.size.width <= 320.0 || (layout.size.width <= 375.0 && codeLength > 5),
+            expandItems: self.tellomiCodeChrome
         )
         
         var items: [AuthorizationLayoutItem] = []
@@ -963,7 +974,36 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             transition.updateFrame(node: self.tellomiFieldBackground, frame: fieldFrame)
             transition.updateFrame(node: self.textField, frame: fieldFrame.insetBy(dx: 16.0, dy: 0.0))
         }
+        self.placeTellomiCodeActions(bandMinX: bandMinX, bandWidth: bandWidth, transition: transition)
         self.showSentToastIfNeeded(layout)
+    }
+
+    private func placeTellomiCodeActions(bandMinX: CGFloat, bandWidth: CGFloat, transition: ContainedViewLayoutTransition) {
+        guard self.tellomiCodeChrome, !self.proceedNode.isHidden else {
+            self.missingCodeNode.isHidden = true
+            return
+        }
+        let copy = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode)
+        let showsMissing: Bool
+        switch self.codeType {
+        case .sms, .call, .firebase:
+            showsMissing = true
+        default:
+            showsMissing = false
+        }
+        self.missingCodeNode.isHidden = !showsMissing
+        let y = self.proceedNode.frame.maxY + 14.0
+        let rowHeight: CGFloat = 22.0
+        if showsMissing {
+            self.missingCodeNode.setTitle(copy.codeNotReceived, with: Font.regular(14.0), with: TellomiLoginChrome.link, for: [])
+            self.missingCodeNode.accessibilityLabel = copy.codeNotReceived
+            let missingSize = self.missingCodeNode.measure(CGSize(width: bandWidth / 2.0, height: rowHeight))
+            transition.updateFrame(node: self.missingCodeNode, frame: CGRect(x: bandMinX + 24.0, y: y, width: max(missingSize.width, 120.0), height: rowHeight))
+        }
+        let resendSize = self.nextOptionTitleNode.updateLayout(CGSize(width: bandWidth / 2.0, height: rowHeight))
+        let resendWidth = max(resendSize.width, 80.0)
+        transition.updateFrame(node: self.nextOptionButtonNode, frame: CGRect(x: bandMinX + bandWidth - 24.0 - resendWidth, y: y, width: resendWidth, height: rowHeight))
+        self.nextOptionTitleNode.frame = CGRect(x: resendWidth - resendSize.width, y: 0.0, width: resendSize.width, height: resendSize.height)
     }
 
     private var tellomiCodeChrome: Bool {
@@ -1060,16 +1100,24 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         }
     }
     
+    private var tellomiStickyError = false
+
     func animateError(text: String) {
         let errorOriginY: CGFloat
         let errorOriginOffset: CGFloat
+        let tellomiEmail = self.tellomiCodeChrome && {
+            if case .email = self.codeType {
+                return true
+            }
+            return false
+        }()
         switch self.codeType {
         case .word, .phrase, .email:
             self.textField.layer.addShakeAnimation()
             
             let transition: ContainedViewLayoutTransition = .animated(duration: 0.15, curve: .easeInOut)
             transition.updateBackgroundColor(node: self.textSeparatorNode, color: self.theme.list.itemDestructiveColor)
-            errorOriginY = self.textField.frame.maxY
+            errorOriginY = tellomiEmail ? self.tellomiFieldBackground.frame.maxY : self.textField.frame.maxY
             errorOriginOffset = 5.0
         default:
             self.codeInputView.animateError()
@@ -1077,8 +1125,12 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             errorOriginY = self.codeInputView.frame.maxY
             errorOriginOffset = 11.0
         }
-        
-        self.errorTextNode.attributedText = NSAttributedString(string: text, font: Font.regular(13.0), textColor: self.theme.list.itemDestructiveColor, paragraphAlignment: .center)
+
+        let shown = self.tellomiCodeChrome ? tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).wrongCode : text
+        let alignment: NSTextAlignment = tellomiEmail ? .left : .center
+        let errorColor = self.tellomiCodeChrome ? TellomiLoginChrome.error : self.theme.list.itemDestructiveColor
+        self.errorTextNode.attributedText = NSAttributedString(string: shown, font: Font.regular(13.0), textColor: errorColor, paragraphAlignment: alignment)
+        self.tellomiStickyError = tellomiEmail
         
         if let (layout, _) = self.layoutArguments {
             // iPhone Duo: centered under the field in the band between the side insets, as containerLayoutUpdated lays it out.
@@ -1088,7 +1140,13 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             
             let errorTextSize = self.errorTextNode.updateLayout(CGSize(width: bandWidth - 48.0, height: .greatestFiniteMagnitude))
             let yOffset: CGFloat = layout.size.width > 320.0 ? errorOriginOffset + 13.0 : errorOriginOffset
-            self.errorTextNode.frame = CGRect(origin: CGPoint(x: bandMinX + floorToScreenPixels((bandWidth - errorTextSize.width) / 2.0), y: errorOriginY + yOffset), size: errorTextSize)
+            let errorX: CGFloat
+            if self.tellomiStickyError {
+                errorX = self.tellomiFieldBackground.frame.minX
+            } else {
+                errorX = bandMinX + floorToScreenPixels((bandWidth - errorTextSize.width) / 2.0)
+            }
+            self.errorTextNode.frame = CGRect(origin: CGPoint(x: errorX, y: errorOriginY + yOffset), size: errorTextSize)
         }
         self.errorTextNode.alpha = 1.0
         self.errorTextNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.15)
@@ -1103,6 +1161,9 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             self.resetNode.layer.animateAlpha(from: previousResetAlpha, to: 0.0, duration: 0.1)
         }
         
+        if self.tellomiStickyError {
+            return
+        }
         Queue.mainQueue().after(1.6) {
             self.errorTextNode.alpha = 0.0
             self.errorTextNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15)
@@ -1129,6 +1190,10 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             
     @objc private func textDidChange() {
         let text = self.textField.textField.text ?? ""
+        if self.tellomiStickyError {
+            self.tellomiStickyError = false
+            self.errorTextNode.alpha = 0.0
+        }
         self.proceedNode.isEnabled = !text.isEmpty
         self.updateNextEnabled?(!text.isEmpty)
         self.updatePasteVisibility()
@@ -1217,6 +1282,10 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     
     @objc func nextOptionNodePressed() {
         self.requestAnotherOption?()
+    }
+
+    @objc private func missingCodePressed() {
+        self.openHelp?()
     }
     
     @objc func previousOptionNodePressed() {

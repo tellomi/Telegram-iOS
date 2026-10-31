@@ -18,8 +18,7 @@ struct TellomiEmailLoginCopy: Equatable {
 }
 
 func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
-    let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode).lowercased()
-    if code == "zh" || code.hasPrefix("zh-") {
+    if tellomiLoginPrefersChinese(languageCode: languageCode) {
         return TellomiEmailLoginCopy(
             switchToEmail: "邮箱登录",
             switchToPhone: "使用手机号登录",

@@ -159,6 +159,24 @@ typedef enum {
             }
         }
         _englishStrings = englishStrings;
+        NSString *preferredLanguage = [NSLocale preferredLanguages].firstObject.lowercaseString;
+        if (preferredLanguage.length == 0 || [preferredLanguage hasPrefix:@"zh"]) {
+            _englishStrings = @{
+                @"Tour.Title1": @"Tellomi",
+                @"Tour.Text1": @"全球最快的通讯应用。\n**免费**且**安全**。",
+                @"Tour.Title2": @"极速",
+                @"Tour.Text2": @"**Tellomi** 传递消息\n比其他应用更快。",
+                @"Tour.Title3": @"强大",
+                @"Tour.Text3": @"**Tellomi** 对媒体和聊天\n大小没有限制。",
+                @"Tour.Title4": @"安全",
+                @"Tour.Text4": @"**Tellomi** 保护你的消息\n免受攻击。",
+                @"Tour.Title5": @"云端",
+                @"Tour.Text5": @"**Tellomi** 让你在多台设备上\n访问消息。",
+                @"Tour.Title6": @"免费",
+                @"Tour.Text6": @"**Tellomi** 为聊天和媒体\n提供免费的云存储。",
+                @"Tour.StartButton": @"开始聊天"
+            };
+        }
         
         _headlines = @[ _englishStrings[@"Tour.Title1"], _englishStrings[@"Tour.Title2"],  _englishStrings[@"Tour.Title6"], _englishStrings[@"Tour.Title3"], _englishStrings[@"Tour.Title4"], _englishStrings[@"Tour.Title5"]];
         _descriptions = @[_englishStrings[@"Tour.Text1"], _englishStrings[@"Tour.Text2"],  _englishStrings[@"Tour.Text6"], _englishStrings[@"Tour.Text3"], _englishStrings[@"Tour.Text4"], _englishStrings[@"Tour.Text5"]];

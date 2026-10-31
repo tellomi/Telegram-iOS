@@ -247,18 +247,11 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                     case .invalidPhoneNumber:
                                         text = strongSelf.presentationData.strings.Login_InvalidPhoneError
                                         actions.append(TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
-                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: { [weak controller] in
-                                            guard let strongSelf = self, let controller = controller else {
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: {
+                                            guard let strongSelf = self else {
                                                 return
                                             }
-                                            let formattedNumber = formatPhoneNumber(number)
-                                            let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
-                                            let systemVersion = UIDevice.current.systemVersion
-                                            let locale = Locale.current.identifier
-                                            let carrier = CTCarrier()
-                                            let mnc = carrier.mobileNetworkCode ?? "none"
-                                            
-                                            AuthorizationSequenceController.presentEmailComposeController(sharedContext: strongSelf.sharedContext, address: "recover@telegram.org", subject: strongSelf.presentationData.strings.Login_InvalidPhoneEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_InvalidPhoneEmailBody(formattedNumber, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
+                                            strongSelf.sharedContext.applicationBindings.openUrl(TellomiLoginChrome.helpURL)
                                         }))
                                     case .phoneLimitExceeded:
                                         text = strongSelf.presentationData.strings.Login_PhoneFloodError
@@ -276,43 +269,23 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                     case .phoneBanned:
                                         text = strongSelf.presentationData.strings.Login_PhoneBannedError
                                         actions.append(TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
-                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: { [weak controller] in
-                                            guard let strongSelf = self, let controller = controller else {
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: {
+                                            guard let strongSelf = self else {
                                                 return
                                             }
-                                            let formattedNumber = formatPhoneNumber(number)
-                                            let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
-                                            let systemVersion = UIDevice.current.systemVersion
-                                            let locale = Locale.current.identifier
-                                            let carrier = CTCarrier()
-                                            let mnc = carrier.mobileNetworkCode ?? "none"
-                                            
-                                            AuthorizationSequenceController.presentEmailComposeController(sharedContext: strongSelf.sharedContext, address: "recover@telegram.org", subject: strongSelf.presentationData.strings.Login_PhoneBannedEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_PhoneBannedEmailBody(formattedNumber, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
+                                            strongSelf.sharedContext.applicationBindings.openUrl(TellomiLoginChrome.helpURL)
                                         }))
                                     case .generic(_) where emailLogin:
                                         text = strongSelf.presentationData.strings.Login_UnknownError
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
-                                    case let .generic(info):
+                                    case .generic(_):
                                         text = strongSelf.presentationData.strings.Login_UnknownError
                                         actions.append(TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
-                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: { [weak controller] in
-                                            guard let strongSelf = self, let controller = controller else {
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: {
+                                            guard let strongSelf = self else {
                                                 return
                                             }
-                                            let formattedNumber = formatPhoneNumber(number)
-                                            let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
-                                            let systemVersion = UIDevice.current.systemVersion
-                                            let locale = Locale.current.identifier
-                                            let carrier = CTCarrier()
-                                            let mnc = carrier.mobileNetworkCode ?? "none"
-                                            let errorString: String
-                                            if let (code, description) = info {
-                                                errorString = "\(code): \(description)"
-                                            } else {
-                                                errorString = "unknown"
-                                            }
-                                            
-                                            AuthorizationSequenceController.presentEmailComposeController(sharedContext: strongSelf.sharedContext, address: "recover@telegram.org", subject: strongSelf.presentationData.strings.Login_PhoneGenericEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_PhoneGenericEmailBody(formattedNumber, errorString, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
+                                            strongSelf.sharedContext.applicationBindings.openUrl(TellomiLoginChrome.helpURL)
                                         }))
                                     case .timeout:
                                         text = strongSelf.presentationData.strings.Login_NetworkError
@@ -1521,20 +1494,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         phoneNumber: String,
         mnc: String
     ) {
-        let formattedNumber = formatPhoneNumber(phoneNumber)
-        
-        var emailBody = ""
-        emailBody.append(presentationData.strings.Login_EmailCodeBody(formattedNumber).string)
-        emailBody.append("\n\n")
-        
-        let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
-        let systemVersion = UIDevice.current.systemVersion
-        let locale = Locale.current.identifier
-        emailBody.append("Tellomi: \(appVersion)\n")
-        emailBody.append("OS: \(systemVersion)\n")
-        emailBody.append("Locale: \(locale)\n")
-        emailBody.append("MNC: \(mnc)")
-        
-        AuthorizationSequenceController.presentEmailComposeController(sharedContext: sharedContext, address: "sms@telegram.org", subject: presentationData.strings.Login_EmailCodeSubject(formattedNumber).string, body: emailBody, from: controller, presentationData: presentationData)
+        let _ = (sharedContext, controller, presentationData, phoneNumber, mnc)
+        if let url = URL(string: TellomiLoginChrome.helpURL) {
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+        }
     }
 }
