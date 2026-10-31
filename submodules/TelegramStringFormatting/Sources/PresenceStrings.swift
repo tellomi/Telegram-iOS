@@ -6,7 +6,7 @@ import TextFormat
 public func stringForTimestamp(day: Int32, month: Int32, year: Int32, dateTimeFormat: PresentationDateTimeFormat) -> String {
     let separator = dateTimeFormat.dateSeparator
     let suffix = dateTimeFormat.dateSuffix
-    let displayYear = dateTimeFormat.requiresFullYear ? year - 100 + 2000 : year - 100
+    let displayYear = calendarDisplayYear(tmYear: year, requiresFullYear: dateTimeFormat.requiresFullYear)
     switch dateTimeFormat.dateFormat {
     case .monthFirst:
         return String(format: "%02d%@%02d%@%02d%@", month, separator, day, separator, displayYear, suffix)
@@ -574,6 +574,11 @@ public func stringForStoryActivityTimestamp(strings: PresentationStrings, dateTi
 public func stringAndActivityForUserPresence(strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat, presence: EnginePeer.Presence, relativeTo timestamp: Int32, expanded: Bool = false) -> (String, Bool) {
     switch presence.status {
     case let .present(statusTimestamp):
+        // `userStatusOffline` with `was_online == 0` is stored as `.present(until: 0)`.
+        // That is the Unix epoch, which the two-digit year formatter printed as 01/01/-30.
+        if statusTimestamp <= 0 {
+            return (strings.LastSeen_ALongTimeAgo, false)
+        }
         if statusTimestamp >= timestamp {
             return (strings.Presence_online, true)
         } else {

@@ -1530,7 +1530,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
         let systemVersion = UIDevice.current.systemVersion
         let locale = Locale.current.identifier
-        emailBody.append("Telegram: \(appVersion)\n")
+        emailBody.append("Tellomi: \(appVersion)\n")
         emailBody.append("OS: \(systemVersion)\n")
         emailBody.append("Locale: \(locale)\n")
         emailBody.append("MNC: \(mnc)")

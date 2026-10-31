@@ -325,6 +325,23 @@ typedef enum {
     _isOpenGLLoaded = false;
 }
 
+- (void)setIntroHeadlines:(NSArray<NSString *> *)headlines descriptions:(NSArray<NSString *> *)descriptions
+{
+    if (headlines.count == 0 || headlines.count != descriptions.count) {
+        return;
+    }
+    _headlines = headlines;
+    _descriptions = descriptions;
+    if (_pageViews == nil) {
+        return;
+    }
+    NSUInteger count = MIN(headlines.count, _pageViews.count);
+    for (NSUInteger i = 0; i < count; i++) {
+        RMIntroPageView *page = _pageViews[i];
+        [page setHeadline:headlines[i] description:descriptions[i] color:_primaryColor];
+    }
+}
+
 - (void)loadView {
     self.view = [[RMIntroView alloc] initWithFrame:self.defaultFrame];
     __weak RMIntroViewController *weakSelf = self;

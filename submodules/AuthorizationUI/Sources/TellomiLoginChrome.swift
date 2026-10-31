@@ -64,7 +64,7 @@ struct TellomiLoginCopy: Equatable {
 }
 
 func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
-    let code = languageCode.lowercased()
+    let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode).lowercased()
     if code == "zh" || code.hasPrefix("zh-") {
         return TellomiLoginCopy(
             phoneTitle: "登录发现更多精彩",
@@ -104,6 +104,6 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
 }
 
 func tellomiLoginLanguageIsChinese(_ languageCode: String) -> Bool {
-    let code = languageCode.lowercased()
+    let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode).lowercased()
     return code == "zh" || code.hasPrefix("zh-")
 }

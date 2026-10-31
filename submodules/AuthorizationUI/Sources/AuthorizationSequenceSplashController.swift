@@ -71,8 +71,10 @@ public final class AuthorizationSequenceSplashController: ViewController {
         })
         
         self.controller = RMIntroViewController(backgroundColor: theme.list.plainBackgroundColor, primaryColor: theme.list.itemPrimaryTextColor, buttonColor: theme.intro.startButtonColor, accentColor: theme.list.itemAccentColor, regularDotColor: theme.intro.dotColor, highlightedDotColor: theme.list.itemAccentColor, suggestedLocalizationSignal: localizationSignal)
-        
-        self.startButton = SolidRoundedButtonNode(title: "Start Messaging", theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
+        let intro = tellomiIntroCopy()
+        self.controller.setIntroHeadlines(intro.headlines, descriptions: intro.descriptions)
+
+        self.startButton = SolidRoundedButtonNode(title: intro.startButton, theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
         self.startButton.accessibilityIdentifier = "Auth.Welcome.StartButton"
 
         super.init(navigationBarPresentationData: nil)

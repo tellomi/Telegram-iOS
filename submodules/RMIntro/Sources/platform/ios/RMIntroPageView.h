@@ -19,4 +19,6 @@
 
 - (id)initWithFrame:(CGRect)frame headline:(NSString*)headline description:(NSString*)description color:(UIColor *)color;
 
+- (void)setHeadline:(NSString *)headline description:(NSString *)description color:(UIColor *)color;
+
 @end
