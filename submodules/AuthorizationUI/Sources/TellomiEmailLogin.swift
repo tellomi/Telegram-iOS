@@ -20,11 +20,11 @@ func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
     let code = languageCode.lowercased()
     if code == "zh" || code.hasPrefix("zh-") {
         return TellomiEmailLoginCopy(
-            switchToEmail: "使用邮箱登录",
+            switchToEmail: "邮箱登录",
             switchToPhone: "使用手机号登录",
-            title: "你的邮箱",
-            notice: "我们将向该邮箱发送验证码",
-            placeholder: "邮箱",
+            title: "请输入邮箱地址",
+            notice: "未注册的邮箱验证通过后将自动注册",
+            placeholder: "请输入邮箱地址",
             invalid: "请输入有效的邮箱地址",
             confirm: "将向该邮箱发送验证码",
             unavailable: "该邮箱无法使用",
@@ -34,11 +34,11 @@ func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
         )
     }
     return TellomiEmailLoginCopy(
-        switchToEmail: "Log in with email",
-        switchToPhone: "Log in with phone number",
-        title: "Your email",
-        notice: "We'll send a login code to this address.",
-        placeholder: "Email",
+        switchToEmail: "Email",
+        switchToPhone: "Use phone number",
+        title: "Enter your email",
+        notice: "An unregistered address is signed up after the code is verified.",
+        placeholder: "Enter your email",
         invalid: "Please enter a valid email address.",
         confirm: "We'll send a login code to this address.",
         unavailable: "This email can't be used.",

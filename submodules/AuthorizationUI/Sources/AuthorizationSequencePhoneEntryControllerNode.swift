@@ -34,6 +34,11 @@ private final class PhoneAndCountryNode: ASDisplayNode {
     var preferredCountryIdForCode: [String: String] = [:]
     
     var hasCountry = false
+    private let tellomiBackground = ASDisplayNode()
+    private let tellomiDivider = ASDisplayNode()
+    private let tellomiChevron = ASImageNode()
+    private var tellomiCompact = false
+    private var tellomiPlaceholder = ""
     
     init(strings: PresentationStrings, theme: PresentationTheme) {
         self.strings = strings
@@ -105,10 +110,28 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         
         super.init()
         
+        self.tellomiBackground.isHidden = true
+        self.tellomiDivider.isHidden = true
+        self.tellomiDivider.backgroundColor = UIColor(rgb: 0xE4E4E7)
+        self.tellomiChevron.isHidden = true
+        self.tellomiChevron.isUserInteractionEnabled = false
+        self.tellomiChevron.image = generateImage(CGSize(width: 10.0, height: 6.0), rotatedContext: { size, context in
+            context.clear(CGRect(origin: CGPoint(), size: size))
+            context.setFillColor(UIColor(rgb: 0x8A8A8E).cgColor)
+            context.move(to: CGPoint())
+            context.addLine(to: CGPoint(x: size.width, y: 0.0))
+            context.addLine(to: CGPoint(x: size.width / 2.0, y: size.height))
+            context.closePath()
+            context.fillPath()
+        })
+
         self.addSubnode(self.phoneBackground)
+        self.addSubnode(self.tellomiBackground)
         self.addSubnode(self.countryButton)
         self.countryButton.addSubnode(self.countryButtonArrow)
         self.addSubnode(self.phoneInputNode)
+        self.addSubnode(self.tellomiDivider)
+        self.addSubnode(self.tellomiChevron)
         
         self.phoneInputNode.countryCodeField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
         self.phoneInputNode.numberField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
@@ -157,7 +180,7 @@ private final class PhoneAndCountryNode: ASDisplayNode {
                     if name == "FT" {
                         localizedName = strongSelf.strings.Login_AnonymousNumbers
                     }
-                    strongSelf.countryButton.setCountryTitle(countryId: name, name: localizedName, font: Font.regular(20.0), color: theme.list.itemAccentColor)
+                    strongSelf.updateCountryButton(countryId: name, name: localizedName)
                     strongSelf.hasCountry = true
                     
                     if strongSelf.phoneInputNode.mask == nil {
@@ -168,7 +191,7 @@ private final class PhoneAndCountryNode: ASDisplayNode {
                     if countryId == "FT" {
                         localizedName = strongSelf.strings.Login_AnonymousNumbers
                     }
-                    strongSelf.countryButton.setCountryTitle(countryId: countryId, name: localizedName, font: Font.regular(20.0), color: theme.list.itemAccentColor)
+                    strongSelf.updateCountryButton(countryId: countryId, name: localizedName)
                     strongSelf.hasCountry = true
                     
                     if strongSelf.phoneInputNode.mask == nil {
@@ -176,13 +199,20 @@ private final class PhoneAndCountryNode: ASDisplayNode {
                     }
                 } else {
                     strongSelf.hasCountry = false
-                    strongSelf.countryButton.setTitle(strings.Login_SelectCountry, with: Font.regular(20.0), with: theme.list.itemAccentColor, for: [])
+                    if strongSelf.tellomiCompact {
+                        strongSelf.countryButton.setTitle("", with: Font.regular(17.0), with: .clear, for: [])
+                    } else {
+                        strongSelf.countryButton.setTitle(strings.Login_SelectCountry, with: Font.regular(20.0), with: theme.list.itemAccentColor, for: [])
+                    }
                     strongSelf.phoneInputNode.mask = nil
                     strongSelf.phoneInputNode.numberField.textField.attributedPlaceholder = NSAttributedString(string: strings.Login_PhonePlaceholder, font: Font.regular(20.0), textColor: theme.list.itemPlaceholderTextColor)
                 }
                 
-                strongSelf.countryButton.accessibilityLabel = strongSelf.countryButton.attributedTitle(for: .normal)?.string ?? ""
+                if !strongSelf.tellomiCompact {
+                    strongSelf.countryButton.accessibilityLabel = strongSelf.countryButton.attributedTitle(for: .normal)?.string ?? ""
+                }
                 strongSelf.countryButton.accessibilityTraits = [.button]
+                strongSelf.applyTellomiPlaceholder()
                 
                 if strongSelf.hasCountry {
                     strongSelf.hasNumberUpdated?(!strongSelf.phoneInputNode.codeAndNumber.2.isEmpty)
@@ -216,11 +246,13 @@ private final class PhoneAndCountryNode: ASDisplayNode {
             if country.id == "FT" {
                 localizedName = self.strings.Login_AnonymousNumbers
             }
-            self.countryButton.setCountryTitle(countryId: country.id, name: localizedName, font: Font.regular(20.0), color: self.theme.list.itemAccentColor)
+            self.updateCountryButton(countryId: country.id, name: localizedName)
             self.hasCountry = true
             
             let maskFont = Font.with(size: 20.0, design: .regular, traits: [.monospacedNumbers])
-            if let mask = AuthorizationSequenceCountrySelectionController.lookupPatternByNumber(number, preferredCountries: self.preferredCountryIdForCode).flatMap({ NSAttributedString(string: $0, font: maskFont, textColor: self.theme.list.itemPlaceholderTextColor) }) {
+            if self.tellomiCompact {
+                self.applyTellomiPlaceholder()
+            } else if let mask = AuthorizationSequenceCountrySelectionController.lookupPatternByNumber(number, preferredCountries: self.preferredCountryIdForCode).flatMap({ NSAttributedString(string: $0, font: maskFont, textColor: self.theme.list.itemPlaceholderTextColor) }) {
                 self.phoneInputNode.numberField.textField.attributedPlaceholder = nil
                 self.phoneInputNode.mask = mask
             } else {
@@ -233,12 +265,82 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         }
     }
     
+    func setTellomiStyle(placeholder: String) {
+        self.tellomiCompact = true
+        self.tellomiPlaceholder = placeholder
+        self.tellomiBackground.isHidden = false
+        self.tellomiDivider.isHidden = false
+        self.tellomiChevron.isHidden = false
+        self.phoneBackground.isHidden = true
+        self.countryButtonArrow.isHidden = true
+        self.countryButton.setBackgroundImage(nil, for: [])
+        self.countryButton.setBackgroundImage(nil, for: .highlighted)
+        TellomiLoginChrome.applyField(self.tellomiBackground)
+        self.phoneInputNode.countryCodeField.textField.textAlignment = .left
+        self.phoneInputNode.countryCodeField.textField.textColor = self.theme.list.itemPrimaryTextColor
+        self.phoneInputNode.numberField.textField.textColor = self.theme.list.itemPrimaryTextColor
+        self.phoneInputNode.countryCodeField.textField.tintColor = TellomiLoginChrome.accent
+        self.phoneInputNode.numberField.textField.tintColor = TellomiLoginChrome.accent
+        let font = Font.regular(17.0)
+        self.phoneInputNode.countryCodeField.textField.font = font
+        self.phoneInputNode.numberField.textField.font = font
+        self.applyTellomiPlaceholder()
+        self.addSubnode(self.countryButton)
+        self.addSubnode(self.tellomiChevron)
+        self.setNeedsLayout()
+    }
+
+    private func applyTellomiPlaceholder() {
+        guard self.tellomiCompact else {
+            return
+        }
+        self.phoneInputNode.mask = nil
+        self.phoneInputNode.numberField.textField.attributedPlaceholder = NSAttributedString(string: self.tellomiPlaceholder, font: Font.regular(17.0), textColor: TellomiLoginChrome.placeholder)
+    }
+
+    private func updateCountryButton(countryId: String, name: String) {
+        if self.tellomiCompact {
+            self.countryButton.setTitle("", with: Font.regular(17.0), with: .clear, for: [])
+            self.countryButton.accessibilityLabel = name
+            return
+        }
+        self.countryButton.setCountryTitle(countryId: countryId, name: name, font: Font.regular(20.0), color: self.theme.list.itemAccentColor)
+    }
+
     @objc func countryPressed() {
         self.selectCountryCode?()
+    }
+
+    private func layoutTellomi() {
+        let size = self.bounds.size
+        let inset: CGFloat = 24.0
+        let fieldHeight: CGFloat = 52.0
+        let fieldFrame = CGRect(x: inset, y: floor((size.height - fieldHeight) / 2.0), width: max(0.0, size.width - inset * 2.0), height: fieldHeight)
+        self.tellomiBackground.frame = fieldFrame
+
+        let codeWidth: CGFloat = 78.0
+        self.tellomiDivider.frame = CGRect(x: fieldFrame.minX + codeWidth, y: fieldFrame.minY + 16.0, width: UIScreenPixel, height: fieldHeight - 32.0)
+        let chevronSize = self.tellomiChevron.image?.size ?? CGSize(width: 10.0, height: 6.0)
+        self.tellomiChevron.frame = CGRect(x: fieldFrame.minX + codeWidth - 14.0 - chevronSize.width, y: fieldFrame.midY - chevronSize.height / 2.0, width: chevronSize.width, height: chevronSize.height)
+
+        self.countryButton.isHidden = false
+        self.countryButton.frame = CGRect(x: fieldFrame.minX, y: fieldFrame.minY, width: codeWidth, height: fieldHeight)
+        self.countryButton.backgroundColor = nil
+
+        self.phoneInputNode.frame = fieldFrame
+        self.phoneInputNode.countryCodeField.frame = CGRect(x: 14.0, y: 0.0, width: 46.0, height: fieldHeight)
+        let numberFrame = CGRect(x: codeWidth + 12.0, y: 0.0, width: max(0.0, fieldFrame.width - codeWidth - 24.0), height: fieldHeight)
+        self.phoneInputNode.numberField.frame = numberFrame
+        self.phoneInputNode.placeholderNode.frame = numberFrame
     }
     
     override func layout() {
         super.layout()
+
+        if self.tellomiCompact {
+            self.layoutTellomi()
+            return
+        }
         
         let size = self.bounds.size
         let inset: CGFloat = 24.0
@@ -301,9 +403,10 @@ private final class ContactSyncNode: ASDisplayNode {
     }
 }
 
-/// One underlined email row, the same height rhythm as the phone field. Login home only.
+/// Gray rounded email row on the login home.
 private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
     let textField: TextFieldNode
+    private let backgroundNode: ASDisplayNode
     private let separatorNode: ASDisplayNode
     var textChanged: ((String) -> Void)?
     var returnPressed: (() -> Void)?
@@ -314,7 +417,7 @@ private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
 
     init(theme: PresentationTheme, placeholder: String) {
         self.textField = TextFieldNode()
-        self.textField.textField.font = Font.regular(20.0)
+        self.textField.textField.font = Font.regular(17.0)
         self.textField.textField.textColor = theme.list.itemPrimaryTextColor
         self.textField.textField.textAlignment = .natural
         self.textField.textField.autocorrectionType = .no
@@ -322,21 +425,24 @@ private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
         self.textField.textField.keyboardType = .emailAddress
         self.textField.textField.returnKeyType = .done
         self.textField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.textField.textField.tintColor = theme.list.itemAccentColor
+        self.textField.textField.tintColor = TellomiLoginChrome.accent
         self.textField.textField.disableAutomaticKeyboardHandling = [.forward, .backward]
-        self.textField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: Font.regular(20.0), textColor: theme.list.itemPlaceholderTextColor)
+        self.textField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: Font.regular(17.0), textColor: TellomiLoginChrome.placeholder)
         self.textField.textField.accessibilityIdentifier = "Auth.PhoneEntry.EmailField"
         if #available(iOSApplicationExtension 10.0, iOS 10.0, *) {
             self.textField.textField.textContentType = .emailAddress
         }
 
+        self.backgroundNode = ASDisplayNode()
+        TellomiLoginChrome.applyField(self.backgroundNode)
+
         self.separatorNode = ASDisplayNode()
-        self.separatorNode.isLayerBacked = true
-        self.separatorNode.backgroundColor = theme.list.itemPlainSeparatorColor
+        self.separatorNode.isHidden = true
 
         super.init()
 
         self.textField.textField.delegate = self
+        self.addSubnode(self.backgroundNode)
         self.addSubnode(self.separatorNode)
         self.addSubnode(self.textField)
         self.textField.textField.addTarget(self, action: #selector(self.editingChanged), for: .editingChanged)
@@ -346,8 +452,8 @@ private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
         self.textField.textField.text = text
     }
 
-    func setPlaceholder(_ placeholder: String, theme: PresentationTheme) {
-        self.textField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: Font.regular(20.0), textColor: theme.list.itemPlaceholderTextColor)
+    func setPlaceholder(_ placeholder: String, theme _: PresentationTheme) {
+        self.textField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: Font.regular(17.0), textColor: TellomiLoginChrome.placeholder)
     }
 
     @objc private func editingChanged() {
@@ -363,8 +469,10 @@ private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
         super.layout()
         let inset: CGFloat = 24.0
         let size = self.bounds.size
-        self.textField.frame = CGRect(x: inset, y: 0.0, width: max(0.0, size.width - inset * 2.0), height: size.height)
-        self.separatorNode.frame = CGRect(x: inset, y: size.height - UIScreenPixel, width: max(0.0, size.width - inset * 2.0), height: UIScreenPixel)
+        let fieldHeight: CGFloat = 52.0
+        let fieldFrame = CGRect(x: inset, y: floor((size.height - fieldHeight) / 2.0), width: max(0.0, size.width - inset * 2.0), height: fieldHeight)
+        self.backgroundNode.frame = fieldFrame
+        self.textField.frame = fieldFrame.insetBy(dx: 16.0, dy: 0.0)
     }
 }
 
@@ -385,6 +493,9 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private let emailFieldNode: TellomiEmailFieldNode?
     private let emailSwitchNode: HighlightableButtonNode?
     private let contactSyncNode: ContactSyncNode
+    private let agreementNode: ImmediateTextNode
+    let tellomiAgreement = TellomiSignUpAgreement()
+    var tellomiOpenUrl: ((String) -> Void)?
     private let proceedNode: SolidRoundedButtonNode
     private var emailLogin = false
     private var passkeyNotice = false
@@ -467,6 +578,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     var buttonNode: ASDisplayNode {
         return self.proceedNode
     }
+
+    private var tellomiLoginHome: Bool {
+        return self.account != nil
+    }
     
     init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, strings: PresentationStrings, theme: PresentationTheme, debugAction: @escaping () -> Void, hasOtherAccounts: Bool) {
         self.sharedContext = sharedContext
@@ -514,19 +629,32 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             self.emailFieldNode = emailFieldNode
             let emailSwitchNode = HighlightableButtonNode()
             emailSwitchNode.displaysAsynchronously = false
-            emailSwitchNode.setTitle(copy.switchToEmail, with: Font.regular(17.0), with: theme.list.itemAccentColor, for: [])
+            emailSwitchNode.setTitle(copy.switchToEmail, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
             emailSwitchNode.accessibilityLabel = copy.switchToEmail
             emailSwitchNode.accessibilityTraits = [.button]
+            emailSwitchNode.contentHorizontalAlignment = .left
+            emailSwitchNode.contentEdgeInsets = UIEdgeInsets(top: 0.0, left: 24.0, bottom: 0.0, right: 24.0)
             self.emailSwitchNode = emailSwitchNode
+            self.phoneAndCountryNode.setTellomiStyle(placeholder: tellomiLoginCopy(languageCode: strings.baseLanguageCode).phonePlaceholder)
         } else {
             self.emailFieldNode = nil
             self.emailSwitchNode = nil
         }
         
-        self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: false, height: 50.0, cornerRadius: 50 * 0.5)
+        let loginCopy = tellomiLoginCopy(languageCode: strings.baseLanguageCode)
+        let buttonTitle = account != nil ? loginCopy.verifyAndLogin : self.strings.Login_Continue
+        let buttonTheme = account != nil ? TellomiLoginChrome.buttonTheme() : SolidRoundedButtonTheme(theme: self.theme)
+        self.proceedNode = SolidRoundedButtonNode(title: buttonTitle, theme: buttonTheme, glass: false, height: 50.0, cornerRadius: 25.0)
         self.proceedNode.progressType = .embedded
         self.proceedNode.isEnabled = false
         self.proceedNode.accessibilityIdentifier = "Auth.PhoneEntry.ContinueButton"
+
+        self.agreementNode = ImmediateTextNode()
+        self.agreementNode.maximumNumberOfLines = 0
+        self.agreementNode.displaysAsynchronously = false
+        self.agreementNode.isUserInteractionEnabled = true
+        self.agreementNode.linkHighlightColor = TellomiLoginChrome.link.withAlphaComponent(0.2)
+        self.agreementNode.isHidden = account == nil
 
         super.init()
         
@@ -548,6 +676,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             self.addSubnode(emailSwitchNode)
         }
         self.addSubnode(self.contactSyncNode)
+        self.addSubnode(self.agreementNode)
         self.addSubnode(self.proceedNode)
         self.addSubnode(self.animationNode)
         self.addSubnode(self.managedAnimationNode)
@@ -601,6 +730,12 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         
         self.proceedNode.pressed = { [weak self] in
             self?.checkPhone?()
+        }
+
+        if account != nil {
+            self.tellomiAgreement.install(on: self.agreementNode, theme: theme, kind: .phone, chinese: tellomiLoginLanguageIsChinese(strings.baseLanguageCode), openUrl: { [weak self] url in
+                self?.tellomiOpenUrl?(url)
+            }, changed: { _ in })
         }
         
         self.animationNode.completed = { [weak self] _ in
@@ -665,7 +800,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     }
     
     func animateIn(buttonFrame: CGRect, buttonTitle: String, animationSnapshot: UIView, textSnapshot: UIView) {
-        self.proceedNode.animateTitle(to: self.strings.Login_Continue)
+        let continueTitle = self.tellomiLoginHome ? tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).verifyAndLogin : self.strings.Login_Continue
+        self.proceedNode.animateTitle(to: continueTitle)
                 
         self.animationSnapshotView?.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { [weak self] _ in
             self?.animationSnapshotView?.removeFromSuperview()
@@ -708,7 +844,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     }
     
     func updateDisplayPasskeyLoginOption() {
-        if self.account == nil {
+        if self.account == nil || self.tellomiLoginHome {
             return
         }
         self.passkeyNotice = true
@@ -749,6 +885,11 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         insets.top = layout.statusBarHeight ?? 20.0
         if let inputHeight = layout.inputHeight, !inputHeight.isZero {
             insets.bottom = max(inputHeight, insets.bottom)
+        }
+
+        if self.tellomiLoginHome {
+            self.layoutTellomiHome(layout, insets: insets, navigationBarHeight: navigationBarHeight, transition: transition)
+            return
         }
         
         let titleInset: CGFloat = layout.size.width > 320.0 ? 18.0 : 0.0
@@ -855,6 +996,81 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.noticeActivateAreaNode.frame = self.noticeNode.frame
     }
     
+    private func layoutTellomiHome(_ layout: ContainerViewLayout, insets: UIEdgeInsets, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
+        var insets = insets
+        let emailCopy = tellomiEmailLoginCopy(languageCode: self.strings.baseLanguageCode)
+        let loginCopy = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode)
+        let title = self.emailLogin ? emailCopy.title : loginCopy.phoneTitle
+        let titleAlignment: NSTextAlignment = self.emailLogin ? .left : .center
+        let titleFont = self.emailLogin ? Font.semibold(22.0) : Font.bold(22.0)
+        self.titleNode.attributedText = NSAttributedString(string: title, font: titleFont, textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: titleAlignment)
+        self.proceedNode.title = loginCopy.verifyAndLogin
+        self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme())
+        if self.emailLogin {
+            self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
+            self.emailFieldNode?.setPlaceholder(emailCopy.placeholder, theme: self.theme)
+            self.tellomiAgreement.setKind(.email)
+        } else {
+            self.noticeNode.attributedText = NSAttributedString(string: "", font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText)
+            self.tellomiAgreement.setKind(.phone)
+        }
+        if let emailSwitchNode = self.emailSwitchNode {
+            let switchTitle = self.emailLogin ? emailCopy.switchToPhone : emailCopy.switchToEmail
+            emailSwitchNode.setTitle(switchTitle, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
+            emailSwitchNode.accessibilityLabel = switchTitle
+        }
+        self.titleActivateAreaNode.accessibilityLabel = title
+
+        let insetsDiffer = layout.safeInsets.left != layout.safeInsets.right
+        let bandMinX: CGFloat = insetsDiffer ? layout.safeInsets.left : 0.0
+        let bandWidth: CGFloat = insetsDiffer ? layout.size.width - layout.safeInsets.left - layout.safeInsets.right : layout.size.width
+        let maximumWidth: CGFloat = min(430.0, bandWidth)
+        let contentWidth = maximumWidth - 48.0
+        let bottomSideInsets = layout.bottomEdgeSideInsets()
+        let bottomBandWidth: CGFloat = insetsDiffer ? layout.size.width - bottomSideInsets.left - bottomSideInsets.right : layout.size.width
+        let bottomMaximumWidth: CGFloat = min(430.0, bottomBandWidth)
+
+        self.animationNode.isHidden = true
+        self.animationNode.visibility = false
+        self.managedAnimationNode.isHidden = true
+        self.contactSyncNode.isHidden = true
+        self.agreementNode.isHidden = false
+        self.proceedNode.isHidden = false
+        if layout.size.width <= 320.0 {
+            insets.top = navigationBarHeight
+        }
+
+        let titleSize = self.titleNode.measure(CGSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude))
+        let noticeSize = self.noticeNode.updateLayout(CGSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude))
+        let agreementSize = self.agreementNode.updateLayout(CGSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude))
+        let proceedHeight = self.proceedNode.updateLayout(width: bottomMaximumWidth - 48.0, transition: transition)
+        let proceedSize = CGSize(width: bottomMaximumWidth - 48.0, height: proceedHeight)
+
+        var items: [AuthorizationLayoutItem] = []
+        items.append(AuthorizationLayoutItem(node: self.titleNode, size: CGSize(width: contentWidth, height: titleSize.height), spacingBefore: AuthorizationLayoutItemSpacing(weight: 28.0, maxValue: 36.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        if self.emailLogin {
+            items.append(AuthorizationLayoutItem(node: self.noticeNode, size: CGSize(width: contentWidth, height: noticeSize.height), spacingBefore: AuthorizationLayoutItemSpacing(weight: 8.0, maxValue: 8.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        } else {
+            self.noticeNode.isHidden = true
+        }
+        if self.emailLogin, let emailFieldNode = self.emailFieldNode {
+            self.noticeNode.isHidden = false
+            items.append(AuthorizationLayoutItem(node: emailFieldNode, size: CGSize(width: maximumWidth, height: 68.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 28.0, maxValue: 28.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        } else {
+            items.append(AuthorizationLayoutItem(node: self.phoneAndCountryNode, size: CGSize(width: maximumWidth, height: 68.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 28.0, maxValue: 28.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        }
+        if let emailSwitchNode = self.emailSwitchNode {
+            items.append(AuthorizationLayoutItem(node: emailSwitchNode, size: CGSize(width: maximumWidth, height: 36.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 4.0, maxValue: 4.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        }
+        items.append(AuthorizationLayoutItem(node: self.proceedNode, size: proceedSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 16.0, maxValue: 16.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        items.append(AuthorizationLayoutItem(node: self.agreementNode, size: CGSize(width: contentWidth, height: agreementSize.height), spacingBefore: AuthorizationLayoutItemSpacing(weight: 800.0, maxValue: 2000.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 12.0, maxValue: 16.0)))
+
+        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom)), items: items, transition: transition, failIfDoesNotFit: false)
+        self.titleActivateAreaNode.frame = self.titleNode.frame
+        self.noticeActivateAreaNode.accessibilityLabel = self.noticeNode.attributedText?.string ?? ""
+        self.noticeActivateAreaNode.frame = self.noticeNode.frame
+    }
+
     func activateInput() {
         if self.emailLogin, let emailFieldNode = self.emailFieldNode {
             emailFieldNode.textField.textField.becomeFirstResponder()
@@ -870,6 +1086,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             self.phoneAndCountryNode.phoneInputNode.countryCodeField.layer.addShakeAnimation()
             self.phoneAndCountryNode.phoneInputNode.numberField.layer.addShakeAnimation()
         }
+    }
+
+    func animateAgreementError() {
+        self.agreementNode.layer.addShakeAnimation()
     }
 
     private func refreshProceedEnabled() {
@@ -897,10 +1117,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.phoneAndCountryNode.isHidden = email
         if email {
             self.managedAnimationNode.isHidden = true
-        } else if self.animationNode.supernode == nil {
+        } else if self.animationNode.supernode == nil && !self.tellomiLoginHome {
             self.managedAnimationNode.isHidden = false
         }
-        if !email {
+        if !email && !self.tellomiLoginHome {
             if self.passkeyNotice {
                 self.updateDisplayPasskeyLoginOption()
             } else {

@@ -35,6 +35,8 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     private let lastNameField: TextFieldNode
     private let firstSeparatorNode: ASDisplayNode
     private let lastSeparatorNode: ASDisplayNode
+    private let tellomiFirstBackground = ASDisplayNode()
+    private let tellomiLastBackground = ASDisplayNode()
     private let currentPhotoNode: ASImageNode
     private let addPhotoButton: HighlightableButtonNode
     private let proceedNode: SolidRoundedButtonNode
@@ -138,7 +140,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             self.firstNameField.textField.textContentType = .givenName
         }
         self.firstNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.firstNameField.textField.tintColor = theme.list.itemAccentColor
+        self.firstNameField.textField.tintColor = TellomiLoginChrome.accent
         self.firstNameField.textField.accessibilityIdentifier = "Auth.SetName.FirstNameField"
 
         self.lastNameField = TextFieldNode()
@@ -153,7 +155,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             self.lastNameField.textField.textContentType = .familyName
         }
         self.lastNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.lastNameField.textField.tintColor = theme.list.itemAccentColor
+        self.lastNameField.textField.tintColor = TellomiLoginChrome.accent
         self.lastNameField.textField.accessibilityIdentifier = "Auth.SetName.LastNameField"
 
         self.currentPhotoNode = ASImageNode()
@@ -168,7 +170,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.addPhotoButton.addSubnode(self.currentPhotoNode)
         self.addPhotoButton.allowsGroupOpacity = true
         
-        self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5)
+        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: strings.baseLanguageCode).continueAction, theme: TellomiLoginChrome.buttonTheme(), glass: false, height: 50.0, cornerRadius: 25.0)
         self.proceedNode.progressType = .embedded
         self.proceedNode.accessibilityIdentifier = "Auth.SetName.ContinueButton"
         
@@ -183,6 +185,13 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.firstNameField.textField.delegate = self
         self.lastNameField.textField.delegate = self
         
+        TellomiLoginChrome.applyField(self.tellomiFirstBackground)
+        TellomiLoginChrome.applyField(self.tellomiLastBackground)
+        self.firstSeparatorNode.isHidden = true
+        self.lastSeparatorNode.isHidden = true
+
+        self.addSubnode(self.tellomiFirstBackground)
+        self.addSubnode(self.tellomiLastBackground)
         self.addSubnode(self.firstSeparatorNode)
         self.addSubnode(self.lastSeparatorNode)
         self.addSubnode(self.firstNameField)
@@ -218,10 +227,11 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         }
         // Tellomi: replace the terms label with the agreement checkbox; Continue waits for it.
         self.proceedNode.isEnabled = false
-        self.tellomiAgreement.install(on: self.termsNode, theme: theme, openUrl: { [weak self] url in
+        self.firstNameField.textField.addTarget(self, action: #selector(self.tellomiNameChanged), for: .editingChanged)
+        self.tellomiAgreement.install(on: self.termsNode, theme: theme, kind: .signUp, chinese: tellomiLoginLanguageIsChinese(strings.baseLanguageCode), openUrl: { [weak self] url in
             self?.tellomiOpenUrl?(url)
-        }, changed: { [weak self] agreed in
-            self?.proceedNode.isEnabled = agreed
+        }, changed: { [weak self] _ in
+            self?.tellomiRefreshProceed()
         })
     }
     
@@ -292,13 +302,12 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         items.append(AuthorizationLayoutItem(node: self.currentOptionNode, size: noticeSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 20.0, maxValue: 20.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
         items.append(AuthorizationLayoutItem(node: self.firstNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 32.0, maxValue: 60.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
-        items.append(AuthorizationLayoutItem(node: self.firstSeparatorNode, size: CGSize(width: bandWidth - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
 
         self.lastNameField.isHidden = self.tellomiNicknameOnly
-        self.lastSeparatorNode.isHidden = self.tellomiNicknameOnly
+        self.lastSeparatorNode.isHidden = true
+        self.firstSeparatorNode.isHidden = true
         if !self.tellomiNicknameOnly {
-            items.append(AuthorizationLayoutItem(node: self.lastNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
-            items.append(AuthorizationLayoutItem(node: self.lastSeparatorNode, size: CGSize(width: bandWidth - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+            items.append(AuthorizationLayoutItem(node: self.lastNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 12.0, maxValue: 12.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         }
         
         items.append(AuthorizationLayoutItem(node: self.termsNode, size: termsSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 48.0, maxValue: 100.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
@@ -316,6 +325,28 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         }
         
         let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
+        self.placeTellomiField(self.tellomiFirstBackground, field: self.firstNameField, bandMinX: bandMinX, bandWidth: bandWidth)
+        self.placeTellomiField(self.tellomiLastBackground, field: self.lastNameField, bandMinX: bandMinX, bandWidth: bandWidth)
+        self.proceedNode.title = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).continueAction
+    }
+
+    private func placeTellomiField(_ background: ASDisplayNode, field: ASDisplayNode, bandMinX: CGFloat, bandWidth: CGFloat) {
+        background.isHidden = field.isHidden
+        guard !field.isHidden else {
+            return
+        }
+        let frame = CGRect(x: bandMinX + 24.0, y: field.frame.minY, width: max(0.0, bandWidth - 48.0), height: max(field.frame.height, 52.0))
+        background.frame = frame
+        field.frame = frame.insetBy(dx: 16.0, dy: 0.0)
+    }
+
+    @objc private func tellomiNameChanged() {
+        self.tellomiRefreshProceed()
+    }
+
+    private func tellomiRefreshProceed() {
+        let hasName = !(self.firstNameField.textField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        self.proceedNode.isEnabled = self.tellomiAgreement.agreed && hasName
     }
     
     func activateInput() {

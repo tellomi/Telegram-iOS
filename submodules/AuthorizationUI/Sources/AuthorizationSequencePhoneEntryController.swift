@@ -94,6 +94,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         if !otherAccountPhoneNumbers.1.isEmpty {
             self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
         }
+        if account != nil {
+            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLoginCopy(languageCode: presentationData.strings.baseLanguageCode).help, style: .plain, target: self, action: #selector(self.helpPressed))
+        }
         
         if let countriesConfiguration {
             AuthorizationSequenceCountrySelectionController.setupCountryCodes(countries: countriesConfiguration.countries, codesByPrefix: countriesConfiguration.countriesByPrefix)
@@ -112,7 +115,15 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         self.back()
     }
     
+    @objc private func helpPressed() {
+        self.openUrl(TellomiLoginChrome.helpURL)
+    }
+
     func updateNavigationItems() {
+        if self.account != nil {
+            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLoginCopy(languageCode: self.presentationData.strings.baseLanguageCode).help, style: .plain, target: self, action: #selector(self.helpPressed))
+            return
+        }
         guard let layout = self.validLayout, layout.size.width < 360.0 else {
             return
         }
@@ -197,6 +208,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
         self.controllerNode.checkPhone = { [weak self] in
             self?.nextPressed()
+        }
+        self.controllerNode.tellomiOpenUrl = { [weak self] url in
+            self?.openUrl(url)
         }
         
         if let account = self.account {
@@ -394,11 +408,20 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         guard self.confirmationController == nil else {
             return
         }
+        if self.account != nil && !self.controllerNode.tellomiAgreement.agreed {
+            self.hapticFeedback.error()
+            self.controllerNode.animateAgreementError()
+            return
+        }
         if self.controllerNode.isEmailLogin {
             let email = self.controllerNode.emailAddress
             guard tellomiIsLoginEmail(email) else {
                 self.hapticFeedback.error()
                 self.controllerNode.animateError()
+                return
+            }
+            if self.account != nil {
+                self.loginWithNumber?(email, self.controllerNode.syncContacts)
                 return
             }
             let copy = tellomiEmailLoginCopy(languageCode: self.presentationData.strings.baseLanguageCode)
@@ -433,6 +456,8 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
                 }
                 actions.append(TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {}))
                 self.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: self.presentationData.strings.Login_PhoneNumberAlreadyAuthorized, actions: actions), in: .window(.root))
+            } else if self.account != nil {
+                self.loginWithNumber?(self.controllerNode.currentNumber, self.controllerNode.syncContacts)
             } else {
                 if let validLayout = self.validLayout, validLayout.size.width > 320.0 {
                     let (code, formattedNumber) = self.controllerNode.formattedCodeAndNumber
