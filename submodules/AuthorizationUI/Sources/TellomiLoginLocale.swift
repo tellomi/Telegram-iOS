@@ -1,5 +1,6 @@
 import Foundation
 import TelegramCore
+import TelegramPresentationData
 
 /// Set after zh-hans / zh-hant has been applied once. A later choice in Settings is left alone.
 /// Reinstalling the app clears this key together with the saved langpack.
@@ -24,9 +25,10 @@ public func tellomiMarkSystemLangPackApplied() {
 }
 
 /// Language the Tellomi welcome and login chrome should use.
-/// A Chinese system shows Chinese immediately. The bundled pack is English, and the server
-/// langpack is only applied after Start, so `PresentationStrings.baseLanguageCode` is still `en`
-/// on that first screen. Once the automatic pack has been applied, a later choice in Settings wins.
+/// Pass `primaryComponent.languageCode`. `baseLanguageCode` is the pack's English fallback
+/// once zh-hans is applied, which kept the login screens in English after 「开始使用」.
+/// A Chinese system shows Chinese immediately. Once the automatic pack has been applied,
+/// a later choice in Settings wins.
 public func tellomiChromeLanguageCode(savedLanguageCode: String) -> String {
     if UserDefaults.standard.bool(forKey: tellomiSystemLangPackDefaultsKey) {
         return savedLanguageCode
@@ -55,4 +57,9 @@ public func tellomiLangPackCodePendingApplication(currentLanguageCode: String) -
         return nil
     }
     return code
+}
+
+/// Login and settings chrome. Uses the active pack, not its English base language.
+public func tellomiInterfaceLanguageCode(_ strings: PresentationStrings) -> String {
+    return tellomiChromeLanguageCode(savedLanguageCode: strings.primaryComponent.languageCode)
 }

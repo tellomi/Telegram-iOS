@@ -165,6 +165,7 @@ final class TellomiSocialRowNode: HighlightableButtonNode {
         self.borderColor = palette.rowBorder.cgColor
         self.clipsToBounds = true
         self.iconNode.image = icon
+        self.iconNode.contentMode = .scaleAspectFit
         self.iconNode.isUserInteractionEnabled = false
         self.labelNode.attributedText = NSAttributedString(string: title, font: Font.regular(16.0), textColor: palette.rowText)
         self.labelNode.isUserInteractionEnabled = false
@@ -185,8 +186,11 @@ final class TellomiSocialRowNode: HighlightableButtonNode {
 
     override func layout() {
         super.layout()
-        let iconSide: CGFloat = 22.0
-        self.iconNode.frame = CGRect(x: 16.0, y: floor((self.bounds.height - iconSide) / 2.0), width: iconSide, height: iconSide)
+        let maxSide: CGFloat = 22.0
+        let imageSize = self.iconNode.image?.size ?? CGSize(width: maxSide, height: maxSide)
+        let scale = min(maxSide / max(imageSize.width, 1.0), maxSide / max(imageSize.height, 1.0))
+        let iconSize = CGSize(width: floor(imageSize.width * scale), height: floor(imageSize.height * scale))
+        self.iconNode.frame = CGRect(x: 16.0 + (maxSide - iconSize.width) / 2.0, y: floor((self.bounds.height - iconSize.height) / 2.0), width: iconSize.width, height: iconSize.height)
         let titleSize = self.labelNode.updateLayout(CGSize(width: self.bounds.width - 80.0, height: self.bounds.height))
         self.labelNode.frame = CGRect(x: floor((self.bounds.width - titleSize.width) / 2.0), y: floor((self.bounds.height - titleSize.height) / 2.0), width: titleSize.width, height: titleSize.height)
     }
@@ -204,6 +208,7 @@ final class TellomiCircleButtonNode: HighlightableButtonNode {
         self.borderColor = palette.rowBorder.cgColor
         self.clipsToBounds = true
         self.iconNode.image = icon
+        self.iconNode.contentMode = .scaleAspectFit
         self.iconNode.isUserInteractionEnabled = false
         self.accessibilityLabel = accessibilityLabel
         self.accessibilityTraits = [.button]
@@ -212,8 +217,11 @@ final class TellomiCircleButtonNode: HighlightableButtonNode {
 
     override func layout() {
         super.layout()
-        let side: CGFloat = 22.0
-        self.iconNode.frame = CGRect(x: floor((self.bounds.width - side) / 2.0), y: floor((self.bounds.height - side) / 2.0), width: side, height: side)
+        let maxSide: CGFloat = 22.0
+        let imageSize = self.iconNode.image?.size ?? CGSize(width: maxSide, height: maxSide)
+        let scale = min(maxSide / max(imageSize.width, 1.0), maxSide / max(imageSize.height, 1.0))
+        let iconSize = CGSize(width: floor(imageSize.width * scale), height: floor(imageSize.height * scale))
+        self.iconNode.frame = CGRect(x: floor((self.bounds.width - iconSize.width) / 2.0), y: floor((self.bounds.height - iconSize.height) / 2.0), width: iconSize.width, height: iconSize.height)
     }
 }
 
@@ -351,10 +359,13 @@ final class TellomiPasswordFieldNode: ASDisplayNode, UITextFieldDelegate {
         self.backgroundNode.frame = fieldFrame
         let eyeSide: CGFloat = 44.0
         if self.eyeOnLeft {
-            self.eyeButton.frame = CGRect(x: fieldFrame.minX, y: fieldFrame.minY, width: eyeSide, height: fieldHeight)
+            // Same column as the phone field's country code, so the password text
+            // starts where the phone number starts. The eye stays 44pt so the glyph is not stretched.
+            let codeColumn: CGFloat = 78.0
+            self.eyeButton.frame = CGRect(x: fieldFrame.minX + floor((codeColumn - eyeSide) / 2.0), y: fieldFrame.minY, width: eyeSide, height: fieldHeight)
             self.divider.isHidden = false
-            self.divider.frame = CGRect(x: fieldFrame.minX + 46.0, y: fieldFrame.minY + 16.0, width: UIScreenPixel, height: fieldHeight - 32.0)
-            self.textField.frame = CGRect(x: fieldFrame.minX + 58.0, y: fieldFrame.minY, width: max(0.0, fieldFrame.width - 70.0), height: fieldHeight)
+            self.divider.frame = CGRect(x: fieldFrame.minX + codeColumn, y: fieldFrame.minY + 16.0, width: UIScreenPixel, height: fieldHeight - 32.0)
+            self.textField.frame = CGRect(x: fieldFrame.minX + codeColumn + 12.0, y: fieldFrame.minY, width: max(0.0, fieldFrame.width - codeColumn - 24.0), height: fieldHeight)
         } else {
             self.divider.isHidden = true
             self.eyeButton.frame = CGRect(x: fieldFrame.maxX - eyeSide, y: fieldFrame.minY, width: eyeSide, height: fieldHeight)

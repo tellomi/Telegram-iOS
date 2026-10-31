@@ -216,6 +216,25 @@ extension PeerInfoScreenNode {
                     push(ChangePhoneNumberController(context: self.context, bindPhone: true))
                 }
             }
+        case .loginEmail:
+            guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
+                return
+            }
+            guard let navigationController = controller.navigationController as? NavigationController else {
+                return
+            }
+            let existing: String?
+            if case let .user(user) = self.data?.peer {
+                existing = tellomiAccountContact(phone: user.phone, peerId: user.id).email
+            } else {
+                existing = nil
+            }
+            // Same screens as Settings → change phone: an entry field, then the code.
+            // `emailPattern` selects change vs first-time setup. The RPCs are the stock
+            // `account.sendVerifyEmailCode` / `account.verifyEmail` login-change purpose.
+            push(loginEmailSetupController(context: self.context, blocking: false, emailPattern: existing, navigationController: navigationController, completion: {
+            }, dismiss: {
+            }))
         case .username:
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
                 return

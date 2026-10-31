@@ -101,12 +101,19 @@ public func formatPhoneNumberToMask(_ string: String, mask: String) -> String {
     let replacementCharacter: Character = "X"
     let pattern = mask.replacingOccurrences( of: "[0-9]", with: "X", options: .regularExpression)
     var pureNumber = string.replacingOccurrences( of: "[^0-9]", with: "", options: .regularExpression)
-    for index in 0 ..< pattern.count {
-        guard index < pureNumber.count else { return pureNumber }
-        let stringIndex = pattern.index(pattern.startIndex, offsetBy: index)
-        let patternCharacter = pattern[stringIndex]
-        guard patternCharacter != replacementCharacter else { continue }
-        pureNumber.insert(patternCharacter, at: stringIndex)
+    // Indexes belong to one string. A pattern index used on the digit string traps
+    // once a phone sign-in formats the account number.
+    var digitIndex = pureNumber.startIndex
+    for patternCharacter in pattern {
+        if digitIndex == pureNumber.endIndex {
+            return pureNumber
+        }
+        if patternCharacter == replacementCharacter {
+            digitIndex = pureNumber.index(after: digitIndex)
+        } else {
+            pureNumber.insert(patternCharacter, at: digitIndex)
+            digitIndex = pureNumber.index(after: digitIndex)
+        }
     }
     return pureNumber
 }

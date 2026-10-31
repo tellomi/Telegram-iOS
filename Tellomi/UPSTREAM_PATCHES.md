@@ -209,9 +209,27 @@ Login fields and buttons follow light and dark. Light keeps `#111111` / white, d
 | `submodules/SettingsUI/Sources/ChangePhoneNumberController.swift` | Bind copy on the existing send-code flow. |
 | `submodules/TelegramPresentationData/Sources/PresentationData.swift` | `withTheme`. |
 
+## TestFlight 14.0.2 login
+
+Owner reports on 14.0.2 (build 58). The login screens stay the existing Tellomi chrome. These edits put that chrome back on the stock Telegram paths.
+
+| Owner item | File |
+| --- | --- |
+| Phone OTP crash after the code is accepted | `submodules/TelegramCore/Sources/Authorization.swift` `tellomiStoreAuthorizedUser`. `auth.signIn` built a `TelegramUser` and never wrote it into the peer table. The first signed-in screen reads that peer. Email sign-up reached the name screen first, so the peer arrived later; a phone code that logged straight in did not. The same write is on the password, sign-up, passkey, and recovery paths. |
+| Phone string indexes that trap only when a number is formatted | `submodules/PhoneNumberFormat/Sources/PhoneNumbers.swift` `formatPhoneNumberToMask`. `submodules/PhoneInputNode/Sources/PhoneInputNode.swift` no longer slices one string with another string's `endIndex` (the broken country-code edit). |
+| Login / OTP / sign-up Chinese, while 「开始使用」 already was | `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` `tellomiInterfaceLanguageCode`. Callers were passing `baseLanguageCode`. After zh-hans is applied that value is the pack's English fallback, so the login copy stayed English. |
+| iOS Settings lists 简体中文 | `Telegram/BUILD` `empty_languages` includes `zh-Hans` (empty `Localizable.strings`, same as the other bundled languages). `Telegram/Telegram-iOS/zh-Hans.lproj/InfoPlist.strings` is the permission copy. A phone set to Chinese can select that localization. `CFBundleDevelopmentRegion` stays `en`, which is the bundled string fallback. |
+| Welcome mark is Tellomi, not the paper plane | `Telegram/Telegram-iOS/Resources/intro/telegram_sphere@2x.png` is the Tellomi glyph. `telegram_plane1@2x.png` is empty, so the OpenGL intro does not draw the plane. The same two files under `submodules/RMIntro/Sources/platform/ios/Resources/` match. The page layout is unchanged. |
+| Wrong code on its own line | `AuthorizationSequenceCodeEntryControllerNode` puts the red line in the stack between the field and Log in. It reads 「请输入正确的验证码」 from `tellomiLoginCopy`. |
+| Code field stays put when the keyboard dismisses | The same node keeps the keyboard inset after `inputHeight` goes to zero. The stack is centered in that inset, which is where it sat while the keyboard was up. |
+| Country code opens the list | `PhoneAndCountryNode` in the login chrome disables the code field. A tap on that column is the existing `AuthorizationSequenceCountrySelectionController`. |
+| Apple / Google / Email / Other stay on the phone home | `layoutTellomiHome` no longer hides those rows when `inputHeight` is set. Apple, Google, and Other still present 「暂未开放」. Email still opens the email screen. |
+| Icons and password alignment | `TellomiSocialRowNode` / `TellomiCircleButtonNode` scale the glyph inside the slot. The phone password field uses the same 78pt column as the country code, so the password text lines up with the number. |
+| 绑定手机号 / 绑定邮箱 / change email | `PeerInfoSettingsItems` draws both as disclosure rows (icon, title, chevron), the same row as change phone. No phone → 绑定手机号 and the existing change-phone flow. No email → 绑定邮箱. An email row opens `loginEmailSetupController` (the stock login-email change: address, then code, `account.sendVerifyEmailCode` / `account.verifyEmail` with `emailVerifyPurposeLoginChange`). The address is stored with `tellomiRememberLoginEmail` because it is not a user field. |
+
 ## Welcome copy
 
-The intro used to read `en.lproj` (`Tour.Title1` = "Telegram", `Tour.StartButton` = "Start Messaging") and ignore the system language. A Chinese device stayed on that English tour until Start downloaded a langpack, and the carousel itself never changed. The six pages and the button now come from `tellomiIntroCopy()`: Simplified Chinese when `tellomiSystemLangPackCode()` is set, otherwise Tellomi English ("Get Started", not "Start Messaging"). The OpenGL pages are unchanged. The Start button uses the black login chrome.
+The intro used to read `en.lproj` (`Tour.Title1` = "Telegram", `Tour.StartButton` = "Start Messaging") and ignore the system language. A Chinese device stayed on that English tour until Start downloaded a langpack, and the carousel itself never changed. The six pages and the button now come from `tellomiIntroCopy()`: Simplified Chinese when `tellomiSystemLangPackCode()` is set, otherwise Tellomi English ("Get Started", not "Start Messaging"). The OpenGL page layout is unchanged. The center mark is the Tellomi glyph (see TestFlight 14.0.2 login). The Start button uses the black login chrome.
 
 ## Last seen year
 

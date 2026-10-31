@@ -205,6 +205,7 @@ empty_languages = [
     "tr",
     "uk",
     "uz",
+    "zh-Hans",
 ]
 
 [
