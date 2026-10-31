@@ -1,5 +1,6 @@
 import Foundation
 import AppBundle
+import TelegramCore
 
 private func loadStaticEmojiMapping() -> [(EmojiPagerContentComponent.StaticEmojiSegment, [String])] {
     guard let path = getAppBundle().path(forResource: "emoji1", ofType: "txt") else {

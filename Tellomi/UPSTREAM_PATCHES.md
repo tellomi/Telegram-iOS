@@ -115,7 +115,7 @@ Pickers hide a client-side list. The built-in entry is the Taiwan flag (U+1F1F9 
 | `submodules/TelegramCore/Sources/TellomiEmojiBlocklist.swift` | New. Default list, codepoint parsing, `isBlocked` / `filtering`. |
 | `submodules/TelegramCore/Sources/TellomiEmojiBlocklistAppConfig.swift` | New. Reads `emoji_blocklist` from `AppConfiguration`. |
 | `submodules/TelegramCore/Sources/TelegramEngine/Stickers/EmojiKeywords.swift` | `searchEmojiKeywords` drops blocked emoticons. Search and keyword suggestions share this. |
-| `submodules/TelegramUI/Components/EntityKeyboard/Sources/EmojiPagerContentComponentStaticEmoji.swift` | `staticEmojiMapping` filters the loaded `emoji1.txt` lists, including the flags page. |
+| `submodules/TelegramUI/Components/EntityKeyboard/Sources/EmojiPagerContentComponentStaticEmoji.swift` | `staticEmojiMapping` filters the loaded `emoji1.txt` lists, including the flags page. The file imports `TelegramCore`, where `TellomiEmojiBlocklist` is defined. |
 | `submodules/TelegramUI/Components/EntityKeyboard/Sources/EmojiPagerContentSignals.swift` | Frequently-used unicode emoji, sticker-alt recents, and builtin reactions in the reaction picker. |
 | `submodules/TelegramUI/Components/Chat/TopMessageReactions/Sources/TopMessageReactions.swift` | The quick reaction row skips a builtin reaction on the list. |
 | `submodules/ReactionSelectionNode/Sources/ReactionContextNode.swift` | Reaction search skips a custom emoji whose alt is blocked. Emoji-only search reads `staticEmojiMapping`. |
