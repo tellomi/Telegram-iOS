@@ -628,12 +628,13 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let dark = theme.overallDarkAppearance
         let palette = TellomiLoginChrome.palette(dark: dark)
         self.backgroundColor = theme.list.plainBackgroundColor
-        self.phoneInputNode.countryCodeField.textField.textColor = palette.fieldText
-        self.phoneInputNode.numberField.textField.textColor = palette.fieldText
-        self.phoneInputNode.countryCodeField.textField.tintColor = palette.accent
-        self.phoneInputNode.numberField.textField.tintColor = palette.accent
-        self.phoneInputNode.countryCodeField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.phoneInputNode.numberField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        let phoneInputNode = self.phoneAndCountryNode.phoneInputNode
+        phoneInputNode.countryCodeField.textField.textColor = palette.fieldText
+        phoneInputNode.numberField.textField.textColor = palette.fieldText
+        phoneInputNode.countryCodeField.textField.tintColor = palette.accent
+        phoneInputNode.numberField.textField.tintColor = palette.accent
+        phoneInputNode.countryCodeField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        phoneInputNode.numberField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
         self.emailFieldNode?.setPlaceholder(self.emailFieldNode?.textField.textField.attributedPlaceholder?.string ?? "", theme: theme)
         self.passwordFieldNode?.applyPalette(dark: dark, theme: theme)
         self.agreementRow?.setDark(dark)
