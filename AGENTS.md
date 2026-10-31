@@ -1,3 +1,4 @@
+项目硬规则见 docs/TELLOMI_RULES.md
 # AGENTS.md
 
 Guidance for coding agents working in this repository. The project guide is [`CLAUDE.md`](CLAUDE.md): how to build,
