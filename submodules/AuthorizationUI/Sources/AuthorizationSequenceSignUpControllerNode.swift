@@ -132,7 +132,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         self.firstNameField = TextFieldNode()
         self.firstNameField.textField.font = Font.regular(20.0)
-        self.firstNameField.textField.textColor = self.theme.list.itemPrimaryTextColor
+        self.firstNameField.textField.textColor = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).fieldText
         self.firstNameField.textField.textAlignment = .natural
         self.firstNameField.textField.returnKeyType = .next
         self.firstNameField.textField.attributedPlaceholder = NSAttributedString(string: self.strings.UserInfo_FirstNamePlaceholder, font: self.firstNameField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
@@ -142,12 +142,12 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             self.firstNameField.textField.textContentType = .givenName
         }
         self.firstNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.firstNameField.textField.tintColor = TellomiLoginChrome.accent
+        self.firstNameField.textField.tintColor = TellomiLoginChrome.palette(dark: theme.overallDarkAppearance).accent
         self.firstNameField.textField.accessibilityIdentifier = "Auth.SetName.FirstNameField"
 
         self.lastNameField = TextFieldNode()
         self.lastNameField.textField.font = Font.regular(20.0)
-        self.lastNameField.textField.textColor = self.theme.list.itemPrimaryTextColor
+        self.lastNameField.textField.textColor = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).fieldText
         self.lastNameField.textField.textAlignment = .natural
         self.lastNameField.textField.returnKeyType = .done
         self.lastNameField.textField.attributedPlaceholder = NSAttributedString(string: strings.UserInfo_LastNamePlaceholder, font: self.lastNameField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
@@ -157,7 +157,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             self.lastNameField.textField.textContentType = .familyName
         }
         self.lastNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.lastNameField.textField.tintColor = TellomiLoginChrome.accent
+        self.lastNameField.textField.tintColor = TellomiLoginChrome.palette(dark: theme.overallDarkAppearance).accent
         self.lastNameField.textField.accessibilityIdentifier = "Auth.SetName.LastNameField"
 
         self.currentPhotoNode = ASImageNode()
@@ -172,7 +172,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.addPhotoButton.addSubnode(self.currentPhotoNode)
         self.addPhotoButton.allowsGroupOpacity = true
         
-        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: strings.baseLanguageCode).continueAction, theme: TellomiLoginChrome.buttonTheme(), glass: false, height: 50.0, cornerRadius: 25.0)
+        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: strings.baseLanguageCode).continueAction, theme: TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance), glass: false, height: 50.0, cornerRadius: 25.0)
         self.proceedNode.progressType = .embedded
         self.proceedNode.accessibilityIdentifier = "Auth.SetName.ContinueButton"
         
@@ -187,8 +187,8 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.firstNameField.textField.delegate = self
         self.lastNameField.textField.delegate = self
         
-        TellomiLoginChrome.applyField(self.tellomiFirstBackground)
-        TellomiLoginChrome.applyField(self.tellomiLastBackground)
+        TellomiLoginChrome.applyField(self.tellomiFirstBackground, dark: theme.overallDarkAppearance)
+        TellomiLoginChrome.applyField(self.tellomiLastBackground, dark: theme.overallDarkAppearance)
         self.firstSeparatorNode.isHidden = true
         self.lastSeparatorNode.isHidden = true
 

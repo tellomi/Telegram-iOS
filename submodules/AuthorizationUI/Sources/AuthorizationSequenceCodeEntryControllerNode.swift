@@ -19,7 +19,8 @@ import TextNodeWithEntities
 
 final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextFieldDelegate {
     private let strings: PresentationStrings
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
+    var tellomiPrimaryActionTitle: String?
     
     private let animationNode: AnimatedStickerNode
     private let titleNode: ImmediateTextNode
@@ -207,7 +208,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         
         self.textField = TextFieldNode()
         self.textField.textField.font = Font.regular(20.0)
-        self.textField.textField.textColor = self.theme.list.itemPrimaryTextColor
+        self.textField.textField.textColor = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).fieldText
         self.textField.textField.textAlignment = .natural
         self.textField.textField.autocorrectionType = .yes
         self.textField.textField.autocorrectionType = .no
@@ -570,10 +571,10 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                 self.titleNode.attributedText = NSAttributedString(string: copy.codeTitleEmail, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
                 self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentEmail(self.email ?? self.phoneNumber), font: Font.regular(14.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
                 animationName = "IntroLetter"
-            case .sms:
+            case .sms, .otherSession:
                 let copy = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode)
                 self.titleNode.attributedText = NSAttributedString(string: copy.codeTitlePhone, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
-                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentPhone(self.phoneNumber), font: Font.regular(14.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
+                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentPhone(self.phoneNumber), font: Font.regular(14.0), textColor: TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).secondaryText, paragraphAlignment: .left)
             case .fragment:
                 self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterCodeFragmentTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
                
@@ -666,12 +667,12 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         let codeFieldSize = self.codeInputView.update(
             theme: CodeInputView.Theme(
                 inactiveBorder: self.tellomiCodeChrome ? 0xFFE5E5E5 : self.theme.list.itemPlainSeparatorColor.argb,
-                activeBorder: self.tellomiCodeChrome ? 0xFF111111 : self.theme.list.itemAccentColor.argb,
+                activeBorder: self.tellomiCodeChrome ? (self.theme.overallDarkAppearance ? 0xFFFFFFFF : 0xFF111111) : self.theme.list.itemAccentColor.argb,
                 succeedBorder: self.theme.list.itemDisclosureActions.constructive.fillColor.argb,
                 failedBorder: self.tellomiCodeChrome ? 0xFFFF3B30 : self.theme.list.itemDestructiveColor.argb,
-                foreground: self.theme.list.itemPrimaryTextColor.argb,
+                foreground: (self.tellomiCodeChrome ? TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).fieldText : self.theme.list.itemPrimaryTextColor).argb,
                 isDark: self.theme.overallDarkAppearance,
-                fill: self.tellomiCodeChrome ? 0xFFF2F3F5 : nil
+                fill: self.tellomiCodeChrome ? TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).fieldFill.argb : nil
             ),
             prefix: codePrefix,
             count: codeLength,
@@ -686,8 +687,8 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             self.animationNode.isHidden = true
             self.animationNode.visibility = false
             let copy = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode)
-            self.proceedNode.title = copy.login
-            self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme())
+            self.proceedNode.title = self.tellomiPrimaryActionTitle ?? copy.login
+            self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance))
             self.applyTellomiResendLabel()
         } else if layout.size.width > 320.0 {
             items.append(AuthorizationLayoutItem(node: self.animationNode, size: animationSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 10.0, maxValue: 10.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
@@ -702,7 +703,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         var additionalBottomInset: CGFloat = 20.0
         if let codeType = self.codeType {
             switch codeType {
-            case .otherSession:
+            case .otherSession where !self.tellomiCodeChrome:
                 items.append(AuthorizationLayoutItem(node: self.titleNode, size: titleSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 18.0, maxValue: 18.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
                 items.append(AuthorizationLayoutItem(node: self.currentOptionNode, size: currentOptionSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 10.0, maxValue: 10.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
                 
@@ -764,7 +765,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                     self.tellomiFieldBackground.isHidden = false
                     self.textField.textField.font = Font.regular(17.0)
                     self.textField.textField.keyboardType = .numberPad
-                    self.textField.textField.tintColor = TellomiLoginChrome.accent
+                    self.textField.textField.tintColor = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).accent
                     if #available(iOSApplicationExtension 12.0, iOS 12.0, *) {
                         self.textField.textField.textContentType = .oneTimeCode
                     }
@@ -843,7 +844,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                     self.dividerNode.isHidden = true
                     
                     switch codeType {
-                    case .email, .sms, .firebase, .call:
+                    case .email, .sms, .firebase, .call, .otherSession:
                         self.nextOptionButtonNode.isHidden = false
                         self.proceedNode.isHidden = false
                         self.proceedNode.isEnabled = self.tellomiCodeReady
@@ -1008,10 +1009,25 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
 
     private var tellomiCodeChrome: Bool {
         switch self.codeType {
-        case .sms, .email, .firebase, .call:
+        case .sms, .email, .firebase, .call, .otherSession:
             return true
         default:
             return false
+        }
+    }
+
+    func applyPresentationTheme(_ theme: PresentationTheme) {
+        self.theme = theme
+        let palette = TellomiLoginChrome.palette(dark: theme.overallDarkAppearance)
+        self.backgroundColor = theme.list.plainBackgroundColor
+        self.textField.textField.textColor = palette.fieldText
+        self.textField.textField.tintColor = palette.accent
+        self.textField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        if self.tellomiCodeChrome {
+            self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance))
+        }
+        if let layoutArguments = self.layoutArguments {
+            self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
         }
     }
 
@@ -1019,7 +1035,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         switch self.codeType {
         case .email:
             return !(self.textField.textField.text ?? "").isEmpty
-        case .sms, .firebase, .call:
+        case .sms, .firebase, .call, .otherSession:
             if let length = self.requiredCodeLength {
                 return self.codeInputView.text.count >= Int(length)
             }

@@ -25,17 +25,77 @@ enum TellomiLoginChrome {
     static let helpURL = "https://tellomi.cn/faq"
     static let fieldCornerRadius: CGFloat = 12.0
 
-    static func buttonTheme() -> SolidRoundedButtonTheme {
-        return SolidRoundedButtonTheme(
-            backgroundColor: self.buttonBackground,
-            foregroundColor: self.buttonForeground,
-            disabledBackgroundColor: self.buttonDisabledBackground,
-            disabledForegroundColor: self.buttonDisabledForeground
+    struct Palette {
+        let buttonBackground: UIColor
+        let buttonForeground: UIColor
+        let buttonDisabledBackground: UIColor
+        let buttonDisabledForeground: UIColor
+        let link: UIColor
+        let error: UIColor
+        let accent: UIColor
+        let checkbox: UIColor
+        let fieldFill: UIColor
+        let fieldText: UIColor
+        let secondaryText: UIColor
+        let placeholder: UIColor
+        let rowBorder: UIColor
+        let rowBackground: UIColor
+        let rowText: UIColor
+    }
+
+    /// Light matches the owner colors. Dark inverts the button and the field so
+    /// `#111111` is not drawn on a dark page and typed text is not white on `#F2F3F5`.
+    static func palette(dark: Bool) -> Palette {
+        if dark {
+            return Palette(
+                buttonBackground: UIColor.white,
+                buttonForeground: UIColor(rgb: 0x111111),
+                buttonDisabledBackground: UIColor(rgb: 0x3A3A3C),
+                buttonDisabledForeground: UIColor(rgb: 0x8E8E93),
+                link: UIColor(rgb: 0x3478F6),
+                error: UIColor(rgb: 0xFF453A),
+                accent: UIColor.white,
+                checkbox: UIColor.white,
+                fieldFill: UIColor(rgb: 0x2C2C2E),
+                fieldText: UIColor.white,
+                secondaryText: UIColor(rgb: 0x8E8E93),
+                placeholder: UIColor(rgb: 0x8E8E93),
+                rowBorder: UIColor(rgb: 0x3A3A3C),
+                rowBackground: UIColor(rgb: 0x1C1C1E),
+                rowText: UIColor.white
+            )
+        }
+        return Palette(
+            buttonBackground: self.buttonBackground,
+            buttonForeground: self.buttonForeground,
+            buttonDisabledBackground: self.buttonDisabledBackground,
+            buttonDisabledForeground: self.buttonDisabledForeground,
+            link: self.link,
+            error: self.error,
+            accent: self.accent,
+            checkbox: self.checkbox,
+            fieldFill: self.fieldFill,
+            fieldText: UIColor(rgb: 0x111111),
+            secondaryText: self.secondaryText,
+            placeholder: self.placeholder,
+            rowBorder: self.rowBorder,
+            rowBackground: UIColor.white,
+            rowText: UIColor(rgb: 0x111111)
         )
     }
 
-    static func applyField(_ node: ASDisplayNode) {
-        node.backgroundColor = self.fieldFill
+    static func buttonTheme(dark: Bool = false) -> SolidRoundedButtonTheme {
+        let palette = self.palette(dark: dark)
+        return SolidRoundedButtonTheme(
+            backgroundColor: palette.buttonBackground,
+            foregroundColor: palette.buttonForeground,
+            disabledBackgroundColor: palette.buttonDisabledBackground,
+            disabledForegroundColor: palette.buttonDisabledForeground
+        )
+    }
+
+    static func applyField(_ node: ASDisplayNode, dark: Bool = false) {
+        node.backgroundColor = self.palette(dark: dark).fieldFill
         node.cornerRadius = self.fieldCornerRadius
         node.clipsToBounds = true
     }
@@ -108,6 +168,12 @@ struct TellomiLoginCopy: Equatable {
     let wrongCode: String
     let startMessaging: String
     let ok: String
+    let bindPhoneTitle: String
+    let bindPhoneAction: String
+    let bindPhoneNotice: String
+    let emailLabel: String
+    let alreadyAuthorized: String
+    let switchToAccount: String
 
     func codeSentPhone(_ number: String) -> String {
         return String(format: self.codeSentPhoneFormat, number)
@@ -120,6 +186,11 @@ struct TellomiLoginCopy: Equatable {
     func resendCountdown(_ seconds: Int) -> String {
         return String(format: self.resendCountdownFormat, seconds)
     }
+}
+
+public func tellomiAccountLabels(languageCode: String) -> (email: String, bindPhone: String, bindAction: String) {
+    let copy = tellomiLoginCopy(languageCode: languageCode)
+    return (copy.emailLabel, copy.bindPhoneTitle, copy.bindPhoneAction)
 }
 
 func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
@@ -159,7 +230,13 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
             codeNotReceived: "收不到验证码?",
             wrongCode: "请输入正确的验证码",
             startMessaging: "开始聊天",
-            ok: "好"
+            ok: "好",
+            bindPhoneTitle: "绑定手机号",
+            bindPhoneAction: "绑定",
+            bindPhoneNotice: "绑定后可使用手机号登录",
+            emailLabel: "邮箱",
+            alreadyAuthorized: "该账号已登录",
+            switchToAccount: "切换到该账号"
         )
     }
     return TellomiLoginCopy(
@@ -197,7 +274,13 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
         codeNotReceived: "Didn't get a code?",
         wrongCode: "Enter the correct code",
         startMessaging: "Start Messaging",
-        ok: "OK"
+        ok: "OK",
+        bindPhoneTitle: "Link a phone number",
+        bindPhoneAction: "Link",
+        bindPhoneNotice: "You can sign in with this number after linking it.",
+        emailLabel: "Email",
+        alreadyAuthorized: "This account is already signed in",
+        switchToAccount: "Switch to this account"
     )
 }
 

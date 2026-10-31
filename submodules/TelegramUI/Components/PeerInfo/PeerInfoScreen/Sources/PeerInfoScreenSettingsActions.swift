@@ -203,13 +203,18 @@ extension PeerInfoScreenNode {
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
                 return
             }
-            if case let .user(user) = self.data?.peer, let phoneNumber = user.phone {
-                let introController = PrivacyIntroController(context: self.context, mode: .changePhoneNumber(phoneNumber), proceedAction: { [weak self] in
-                    if let strongSelf = self, let navigationController = strongSelf.controller?.navigationController as? NavigationController {
-                        navigationController.replaceTopController(ChangePhoneNumberController(context: strongSelf.context), animated: true)
-                    }
-                })
-                push(introController)
+            if case let .user(user) = self.data?.peer {
+                let contact = tellomiAccountContact(phone: user.phone, peerId: user.id)
+                if let phoneNumber = contact.phone, !phoneNumber.isEmpty {
+                    let introController = PrivacyIntroController(context: self.context, mode: .changePhoneNumber(phoneNumber), proceedAction: { [weak self] in
+                        if let strongSelf = self, let navigationController = strongSelf.controller?.navigationController as? NavigationController {
+                            navigationController.replaceTopController(ChangePhoneNumberController(context: strongSelf.context, bindPhone: false), animated: true)
+                        }
+                    })
+                    push(introController)
+                } else {
+                    push(ChangePhoneNumberController(context: self.context, bindPhone: true))
+                }
             }
         case .username:
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
@@ -256,10 +261,14 @@ extension PeerInfoScreenNode {
                 }
             })
         case .logout:
-            if case let .user(user) = self.data?.peer, let phoneNumber = user.phone {
-                if let controller = self.controller, let navigationController = controller.navigationController as? NavigationController {
-                    self.controller?.push(logoutOptionsController(context: self.context, navigationController: navigationController, canAddAccounts: true, phoneNumber: phoneNumber))
+            if let controller = self.controller, let navigationController = controller.navigationController as? NavigationController {
+                let phoneNumber: String
+                if case let .user(user) = self.data?.peer {
+                    phoneNumber = tellomiAccountContact(phone: user.phone, peerId: user.id).phone ?? ""
+                } else {
+                    phoneNumber = ""
                 }
+                self.controller?.push(logoutOptionsController(context: self.context, navigationController: navigationController, canAddAccounts: true, phoneNumber: phoneNumber))
             }
         case .rememberPassword:
             let context = self.context

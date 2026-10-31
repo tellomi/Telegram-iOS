@@ -26,7 +26,7 @@ The same helper is what New Contact and Change Phone Number open with, so those 
 
 ## Chinese system language
 
-The app ships only `en.lproj`. Start Messaging used to call `downloadAndApplyLocalization` with `"en"`. The welcome pages themselves are Tellomi copy now (see Welcome copy below); they do not wait for that download. `suggested_lang_code` adds a second button; it is not applied on its own. The saved pack lives in the account manager under `SharedDataKeys.localizationSettings`. `help.getConfig`'s suggestion is `PreferencesKeys.suggestedLocalization`. The language list cache is `Namespaces.CachedItemCollection.cachedAvailableLocalizations`. An update keeps all three. Reinstalling clears them. `UserDefaults` key `TellomiDidApplySystemLangPack` records that the automatic pack was applied, so a later choice in Settings is kept; reinstalling clears that key too.
+The app ships only `en.lproj`. Start Messaging used to call `downloadAndApplyLocalization` with `"en"`. The welcome pages themselves are Tellomi copy now (see Welcome copy below); they do not wait for that download. The welcome does not show a second language button. The saved pack lives in the account manager under `SharedDataKeys.localizationSettings`. `help.getConfig`'s suggestion is `PreferencesKeys.suggestedLocalization`. The language list cache is `Namespaces.CachedItemCollection.cachedAvailableLocalizations`. An update keeps all three. Reinstalling clears them. `UserDefaults` key `TellomiDidApplySystemLangPack` records that the automatic pack was applied, so a later choice in Settings is kept; reinstalling clears that key too. `tellomiSystemLangPackCode()` reads the global `AppleLanguages` list, because `Locale.preferredLanguages` is `en` when the bundle has no Chinese localization.
 
 | File | Change |
 | --- | --- |
@@ -176,6 +176,38 @@ Links open in Safari through the existing `openUrl`: 用户协议 `https://tello
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Login help no longer mails `recover@telegram.org` or `sms@telegram.org`. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | Start button is black. Welcome pages stay `tellomiIntroCopy()`. |
 | `submodules/CodeInputView/Sources/CodeInputView.swift` | Optional box fill and a width that spans the row, used by the SMS code screen. |
+
+## Login fixes after TestFlight 14.0.1
+
+Owner reports on 14.0.1. The welcome, login, and code screens follow the system language even when the bundle only ships `en.lproj` (`Locale.preferredLanguages` is then `en`). `UserDefaults` global `AppleLanguages` is the unfiltered list. `tellomiLangPackCode(preferredLanguages:)` maps `zh-Hans` / `zh-CN` / `zh` to `zh-hans` and `zh-Hant` / `zh-TW` / `zh-HK` / `zh-MO` to `zh-hant`. Anything else stays English. The welcome no longer asks `help.getConfig` for a second button, so 「使用英文继续」/ "Continue with English" is gone. The only button is 「开始使用」/ "Get Started".
+
+An in-app code (`sentCodeTypeApp`) uses the same code screen as SMS. After a code is accepted, the window waits until the signed-in root is ready (the chat list ready signal is capped at 2s) and installs that root before dismissing the code screen. A later language-pack callback cannot rebuild the welcome on top of a finished sign-in.
+
+Add Account never pushes the welcome. A signed-in account with no phone used to look like a fresh install (`otherAccountPhoneNumbers` dropped it), which opened the intro with no back. Every existing account stays in that list, with a placeholder when it has neither a phone nor an email. Back/Close leaves the flow. Typing a number or address that is already on the device shows 「该账号已登录」and switches to it. If a second session for the same peer is created anyway, it is dropped and the existing account stays current.
+
+Settings → Logout no longer requires `user.phone`, so an email session can log out. Settings → Account shows the phone when there is one and the email when there is one (phone above email). The account switcher subtitle prefers the phone, otherwise `a***@x.com`. The login address is stored on the device because it is not a user field. 「绑定手机号」opens the existing +86 change-number flow; the button says 「绑定」.
+
+Login fields and buttons follow light and dark. Light keeps `#111111` / white, disabled `#E5E5E5` / `#8E8E93`, links `#3478F6`, error red, checkbox black. Dark uses a white button and a dark field so typed text and the button stay readable. The authorization flow applies a theme change while it is on screen.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TellomiAccountIdentity.swift` | Email/phone split, mask, stored login email, identifier match, welcome-vs-add-account, langpack code. |
+| `submodules/TelegramCore/Sources/Authorization.swift` | Remembers an email login on the user id. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | System language from the global language list. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | No second language button. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | No welcome under Add Account. Do not rebuild login after authorization. Theme updates. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | 「该账号已登录」for phone and email. Bind-phone flag. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | In-app codes use the SMS code screen. Dark field text. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Light and dark palettes. Bind and account strings. |
+| `submodules/TelegramUI/Sources/AppDelegate.swift` | Every signed-in account is listed. Root is installed before the code screen is dismissed. |
+| `submodules/TelegramUI/Sources/ApplicationContext.swift` | Chat-list ready is capped so the first sign-in can show the main UI. |
+| `submodules/TelegramUI/Sources/SharedAccountContext.swift` | A second session for a peer already on the device is dropped. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift` | Logout without a phone. Bind vs change number. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | Phone row, email row, 「绑定手机号」. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift` | Header subtitle: phone, else masked email. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenMemberItem.swift` | Switcher subtitle. |
+| `submodules/SettingsUI/Sources/ChangePhoneNumberController.swift` | Bind copy on the existing send-code flow. |
+| `submodules/TelegramPresentationData/Sources/PresentationData.swift` | `withTheme`. |
 
 ## Welcome copy
 

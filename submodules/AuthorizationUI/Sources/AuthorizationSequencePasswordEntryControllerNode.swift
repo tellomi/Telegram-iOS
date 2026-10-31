@@ -99,17 +99,17 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         
         self.codeField = TextFieldNode()
         self.codeField.textField.font = Font.regular(20.0)
-        self.codeField.textField.textColor = self.theme.list.itemPrimaryTextColor
+        self.codeField.textField.textColor = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).fieldText
         self.codeField.textField.textAlignment = .natural
         self.codeField.textField.isSecureTextEntry = true
         self.codeField.textField.returnKeyType = .done
         self.codeField.textField.keyboardAppearance = self.theme.rootController.keyboardColor.keyboardAppearance
         self.codeField.textField.disableAutomaticKeyboardHandling = [.forward, .backward]
-        self.codeField.textField.tintColor = TellomiLoginChrome.accent
+        self.codeField.textField.tintColor = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).accent
         self.codeField.textField.font = Font.regular(17.0)
         self.codeField.textField.accessibilityHint = self.strings.Login_VoiceOver_Password
         
-        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: strings.baseLanguageCode).login, theme: TellomiLoginChrome.buttonTheme(), glass: false, height: 50.0, cornerRadius: 25.0)
+        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: strings.baseLanguageCode).login, theme: TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance), glass: false, height: 50.0, cornerRadius: 25.0)
         self.proceedNode.progressType = .embedded
         self.proceedNode.isEnabled = false
         
@@ -124,7 +124,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.codeField.textField.delegate = self
         self.codeField.textField.addTarget(self, action: #selector(self.textDidChange), for: .editingChanged)
         
-        TellomiLoginChrome.applyField(self.tellomiFieldBackground)
+        TellomiLoginChrome.applyField(self.tellomiFieldBackground, dark: theme.overallDarkAppearance)
         self.addSubnode(self.tellomiFieldBackground)
         self.addSubnode(self.codeSeparatorNode)
         self.addSubnode(self.codeField)

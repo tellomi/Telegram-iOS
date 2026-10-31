@@ -48,30 +48,3 @@ func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
     )
 }
 
-func tellomiNormalizedLoginEmail(_ raw: String) -> String {
-    return raw.trimmingCharacters(in: .whitespacesAndNewlines)
-}
-
-/// An address `auth.sendCode` can carry in `phone_number`. One `@`, a dotted domain, no whitespace.
-func tellomiIsLoginEmail(_ raw: String) -> Bool {
-    let value = tellomiNormalizedLoginEmail(raw)
-    if value.count < 3 || value.count > 254 {
-        return false
-    }
-    if value.contains(where: { $0.isWhitespace }) {
-        return false
-    }
-    let parts = value.split(separator: "@", omittingEmptySubsequences: false)
-    if parts.count != 2 {
-        return false
-    }
-    let local = parts[0]
-    let domain = parts[1]
-    if local.isEmpty || local.count > 64 {
-        return false
-    }
-    if domain.count < 3 || !domain.contains(".") || domain.hasPrefix(".") || domain.hasSuffix(".") || domain.contains("..") {
-        return false
-    }
-    return true
-}

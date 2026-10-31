@@ -15,7 +15,7 @@ import CoreTelephony
 import MessageUI
 import AuthorizationUI
 
-public func ChangePhoneNumberController(context: AccountContext) -> ViewController {
+public func ChangePhoneNumberController(context: AccountContext, bindPhone: Bool = false) -> ViewController {
     var dismissImpl: (() -> Void)?
     let presentationData = context.sharedContext.currentPresentationData.with { $0 }
     
@@ -25,6 +25,10 @@ public func ChangePhoneNumberController(context: AccountContext) -> ViewControll
     let controller = AuthorizationSequencePhoneEntryController(sharedContext: context.sharedContext, account: nil, countriesConfiguration: context.currentCountriesConfiguration.with { $0 }, apiId: 0, apiHash: "", isTestingEnvironment: false, otherAccountPhoneNumbers: (nil, []), network: context.account.network, presentationData: presentationData, openUrl: { _ in }, back: {
         dismissImpl?()
     })
+    if bindPhone {
+        controller.setTellomiBindPhone(true)
+    }
+    let bindActionTitle = bindPhone ? tellomiAccountLabels(languageCode: presentationData.strings.baseLanguageCode).bindAction : nil
     controller.loginWithNumber = { [weak controller] phoneNumber, _ in
         controller?.inProgress = true
         
@@ -113,6 +117,9 @@ public func ChangePhoneNumberController(context: AccountContext) -> ViewControll
             }
             codeController.openFragment = { url in
                 context.sharedContext.applicationBindings.openUrl(url)
+            }
+            if let bindActionTitle {
+                codeController.setTellomiPrimaryActionTitle(bindActionTitle)
             }
             codeController.updateData(number: formatPhoneNumber(context: context, number: phoneNumber), email: nil, codeType: next.type, nextType: nil, timeout: next.timeout, termsOfService: nil, previousCodeType: nil, isPrevious: false)
             dismissImpl = { [weak codeController] in

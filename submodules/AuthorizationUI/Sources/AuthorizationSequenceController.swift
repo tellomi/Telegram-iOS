@@ -50,7 +50,10 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     private var applicationStateDisposable: Disposable?
     private let tellomiLanguageDisposable = MetaDisposable()
     private let tellomiLanguageStringsDisposable = MetaDisposable()
+    private let presentationDataDisposable = MetaDisposable()
     private var tellomiLanguageGate = 0
+    private var tellomiLatestState: InnerState?
+    private var tellomiDidAuthorize = false
     
     private var didPlayPresentationAnimation = false
     
@@ -103,6 +106,29 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             self?.updateState(state: state)
         }).strict()
         
+        self.presentationDataDisposable.set((self.sharedContext.presentationData
+        |> deliverOnMainQueue).start(next: { [weak self] presentationData in
+            guard let self else {
+                return
+            }
+            guard presentationData.theme !== self.presentationData.theme else {
+                return
+            }
+            self.presentationData = self.presentationData.withTheme(presentationData.theme)
+            if self.isViewLoaded {
+                self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+            }
+            for controller in self.viewControllers {
+                if let controller = controller as? AuthorizationSequencePhoneEntryController {
+                    controller.applyPresentationTheme(self.presentationData)
+                } else if let controller = controller as? AuthorizationSequenceCodeEntryController {
+                    controller.applyPresentationTheme(self.presentationData)
+                } else if let controller = controller as? AuthorizationSequenceSplashController {
+                    controller.applyPresentationTheme(presentationData.theme)
+                }
+            }
+        }))
+
         self.applicationStateDisposable = (self.sharedContext.applicationBindings.applicationIsActive
         |> deliverOnMainQueue).start(next: { [weak self] isActive in
             guard let self else {
@@ -126,6 +152,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         self.applicationStateDisposable?.dispose()
         self.tellomiLanguageDisposable.dispose()
         self.tellomiLanguageStringsDisposable.dispose()
+        self.presentationDataDisposable.dispose()
     }
     
     override public func loadView() {
@@ -1233,7 +1260,12 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     }
     
     private func updateState(state: InnerState) {
+        if self.tellomiDidAuthorize {
+            return
+        }
+        self.tellomiLatestState = state
         if case .authorized = state {
+            self.tellomiDidAuthorize = true
             self.authorizationCompleted()
             return
         }
@@ -1253,7 +1285,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         return
                     }
                     self.tellomiLanguageGate = 2
-                    self.updateState(state: state)
+                    self.updateState(state: self.tellomiLatestState ?? state)
                 }
             }, completed: { [weak self] in
                 Queue.mainQueue().async {
@@ -1275,7 +1307,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             self.presentationData = self.presentationData.withStrings(strings)
                         }
                         self.tellomiLanguageGate = 2
-                        self.updateState(state: state)
+                        self.updateState(state: self.tellomiLatestState ?? state)
                     }))
                 }
             }))
@@ -1303,9 +1335,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     // keeps the code it was entered with.
                     let countryCode = number.isEmpty ? AuthorizationSequenceCountrySelectionController.defaultCountryCode() : storedCountryCode
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
                     var previousSplashController: AuthorizationSequenceSplashController?
                     for c in self.viewControllers {
                         if let c = c as? AuthorizationSequenceSplashController {
@@ -1324,9 +1353,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     self.tellomiActiveLoginNumber = number
                     let loginEmail = tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : nil
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
                     controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: loginEmail ?? "", splashController: nil))
                 
                     var isGoingBack = false
@@ -1367,41 +1393,23 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         self.tellomiActiveLoginNumber = number
                     }
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
                     controllers.append(self.passwordEntryController(hint: hint, suggestReset: suggestReset, syncContacts: syncContacts))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .passwordRecovery(_, _, _, emailPattern, syncContacts):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
                     controllers.append(self.passwordRecoveryController(emailPattern: emailPattern, syncContacts: syncContacts))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .awaitingAccountReset(protectedUntil, number, _):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
                     controllers.append(self.awaitingAccountResetController(protectedUntil: protectedUntil, number: number))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .signUp(number, _, firstName, lastName, termsOfService, _):
                     self.tellomiActiveLoginNumber = number
                     var controllers: [ViewController] = []
-                    var displayCancel = false
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    } else {
-                        displayCancel = true
-                    }
-                    controllers.append(self.signUpController(firstName: firstName, lastName: lastName, termsOfService: termsOfService, displayCancel: displayCancel, loginNumber: number))
+                    controllers.append(self.signUpController(firstName: firstName, lastName: lastName, termsOfService: termsOfService, displayCancel: true, loginNumber: number))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .payment(number, codeHash, storeProduct, premiumDays, supportEmailAddress, supportEmailSubject, _):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
                 controllers.append(self.paymentController(number: number, phoneCodeHash: codeHash, storeProduct: storeProduct, premiumDays: premiumDays, supportEmailAddress: supportEmailAddress, supportEmailSubject: supportEmailSubject))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
             }

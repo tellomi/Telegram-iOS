@@ -742,17 +742,25 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                     let isTestingEnvironment: Bool
                 }
                 
-                var existingAccountPeerKeys = Set<AccountPeerKey>()
+                var existingAccountPeerKeys: [AccountPeerKey: AccountRecordId] = [:]
+                for (id, context, _) in self.activeAccountsValue?.accounts ?? [] {
+                    existingAccountPeerKeys[AccountPeerKey(peerId: context.account.peerId, isTestingEnvironment: context.account.testingEnvironment)] = id
+                }
                 for accountRecord in addedAccounts {
                     if let account = accountRecord.1 {
-                        if existingAccountPeerKeys.contains(AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment)) {
+                        let peerKey = AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment)
+                        if let existingId = existingAccountPeerKeys[peerKey] {
+                            // Already signed in on this device. Drop the new session and stay on the existing one.
                             let _ = accountManager.transaction({ transaction in
+                                if transaction.getCurrent()?.0 == accountRecord.0 {
+                                    transaction.setCurrentId(existingId)
+                                }
                                 transaction.updateRecord(accountRecord.0, { _ in
                                     return nil
                                 })
                             }).start()
                         } else {
-                            existingAccountPeerKeys.insert(AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment))
+                            existingAccountPeerKeys[peerKey] = accountRecord.0
                             if let index = self.activeAccountsValue?.accounts.firstIndex(where: { $0.0 == account.id }) {
                                 self.activeAccountsValue?.accounts.remove(at: index)
                                 self.managedAccountDisposables.set(nil, forKey: account.id)
