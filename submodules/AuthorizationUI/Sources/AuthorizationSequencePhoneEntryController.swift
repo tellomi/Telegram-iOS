@@ -29,7 +29,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private let isTestingEnvironment: Bool
     private let otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)])
     private let network: Network
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
     private let openUrl: (String) -> Void
     
     private let back: () -> Void
@@ -65,6 +65,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private let termsDisposable = MetaDisposable()
     
     private let hapticFeedback = HapticFeedback()
+    private var tellomiBindPhone = false
     
     public init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, countriesConfiguration: CountriesConfiguration? = nil, apiId: Int32, apiHash: String, isTestingEnvironment: Bool, otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), network: Network, presentationData: PresentationData, openUrl: @escaping (String) -> Void, back: @escaping () -> Void) {
         self.sharedContext = sharedContext
@@ -118,6 +119,21 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     @objc private func helpPressed() {
         self.openUrl(TellomiLoginChrome.helpURL)
+    }
+
+    public func setTellomiBindPhone(_ bind: Bool) {
+        self.tellomiBindPhone = bind
+        if self.isNodeLoaded {
+            self.controllerNode.setTellomiBindPhone(bind)
+            self.controllerNode.applyPresentationTheme(self.presentationData.theme)
+        }
+    }
+
+    public func applyPresentationTheme(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        if self.isNodeLoaded {
+            self.controllerNode.applyPresentationTheme(presentationData.theme)
+        }
     }
 
     @objc private func tellomiSurfaceBackPressed() {
@@ -202,6 +218,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             strongSelf.view.endEditing(true)
             self?.present(debugController(sharedContext: strongSelf.sharedContext, context: nil, modal: true), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
         }, hasOtherAccounts: self.otherAccountPhoneNumbers.0 != nil)
+        self.controllerNode.setTellomiBindPhone(self.tellomiBindPhone)
         self.controllerNode.accountUpdated = { [weak self] account in
             guard let strongSelf = self else {
                 return
@@ -466,6 +483,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
                 self.controllerNode.animateError()
                 return
             }
+            if self.presentExistingAccountIfNeeded(identifier: email) {
+                return
+            }
             if self.account != nil {
                 self.loginWithNumber?(email, self.controllerNode.syncContacts)
                 return
@@ -485,23 +505,8 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         let (_, _, number) = self.controllerNode.codeAndNumber
         if !number.isEmpty {
             let logInNumber = cleanPhoneNumber(self.controllerNode.currentNumber, removePlus: true)
-            var existing: (String, AccountRecordId)?
-            for (number, id, isTestingEnvironment) in self.otherAccountPhoneNumbers.1 {
-                if isTestingEnvironment == self.isTestingEnvironment && cleanPhoneNumber(number, removePlus: true) == logInNumber {
-                    existing = (number, id)
-                }
-            }
-            
-            if let (_, id) = existing {
-                var actions: [TextAlertAction] = []
-                if let (current, _, _) = self.otherAccountPhoneNumbers.0, logInNumber != cleanPhoneNumber(current, removePlus: true) {
-                    actions.append(TextAlertAction(type: .genericAction, title: self.presentationData.strings.Login_PhoneNumberAlreadyAuthorizedSwitch, action: { [weak self] in
-                        self?.sharedContext.switchToAccount(id: id, fromSettingsController: nil, withChatListController: nil)
-                        self?.back()
-                    }))
-                }
-                actions.append(TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {}))
-                self.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: self.presentationData.strings.Login_PhoneNumberAlreadyAuthorized, actions: actions), in: .window(.root))
+            if self.presentExistingAccountIfNeeded(identifier: self.controllerNode.currentNumber) {
+                return
             } else if self.account != nil {
                 self.loginWithNumber?(self.controllerNode.currentNumber, self.controllerNode.syncContacts)
             } else {
@@ -533,6 +538,31 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
     }
     
+    /// True when this number or address is already signed in on the device. The alert switches to it.
+    private func presentExistingAccountIfNeeded(identifier: String) -> Bool {
+        var existing: AccountRecordId?
+        for (stored, id, isTestingEnvironment) in self.otherAccountPhoneNumbers.1 {
+            if isTestingEnvironment == self.isTestingEnvironment && tellomiLoginIdentifiersMatch(stored, identifier) {
+                existing = id
+            }
+        }
+        guard let id = existing else {
+            return false
+        }
+        let copy = tellomiLoginCopy(languageCode: self.presentationData.strings.baseLanguageCode)
+        let text = tellomiLoginPrefersChinese(languageCode: self.presentationData.strings.baseLanguageCode) ? copy.alreadyAuthorized : self.presentationData.strings.Login_PhoneNumberAlreadyAuthorized
+        let switchTitle = tellomiLoginPrefersChinese(languageCode: self.presentationData.strings.baseLanguageCode) ? copy.switchToAccount : self.presentationData.strings.Login_PhoneNumberAlreadyAuthorizedSwitch
+        let actions = [
+            TextAlertAction(type: .genericAction, title: switchTitle, action: { [weak self] in
+                self?.sharedContext.switchToAccount(id: id, fromSettingsController: nil, withChatListController: nil)
+                self?.back()
+            }),
+            TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})
+        ]
+        self.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: text, actions: actions), in: .window(.root))
+        return true
+    }
+
     public func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
         controller.dismiss(animated: true, completion: nil)
     }

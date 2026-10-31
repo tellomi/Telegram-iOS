@@ -1,21 +1,22 @@
 import Foundation
+import TelegramCore
 
 /// Set after zh-hans / zh-hant has been applied once. A later choice in Settings is left alone.
 /// Reinstalling the app clears this key together with the saved langpack.
 public let tellomiSystemLangPackDefaultsKey = "TellomiDidApplySystemLangPack"
 
+/// The system language list, not the list filtered by the app's `en.lproj`.
+/// An English-only bundle makes `Locale.preferredLanguages` report `en` on a Chinese phone.
+public func tellomiDevicePreferredLanguages() -> [String] {
+    if let global = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String], !global.isEmpty {
+        return global
+    }
+    return Locale.preferredLanguages
+}
+
 /// Server langpack for a Chinese system language. Nil for every other language.
 public func tellomiSystemLangPackCode() -> String? {
-    guard let language = Locale.preferredLanguages.first?.lowercased() else {
-        return nil
-    }
-    if language.hasPrefix("zh-hant") || language.hasPrefix("zh-tw") || language.hasPrefix("zh-hk") || language.hasPrefix("zh-mo") {
-        return "zh-hant"
-    }
-    if language.hasPrefix("zh-hans") || language.hasPrefix("zh-cn") || language == "zh" || language.hasPrefix("zh-") {
-        return "zh-hans"
-    }
-    return nil
+    return tellomiLangPackCode(preferredLanguages: tellomiDevicePreferredLanguages())
 }
 
 public func tellomiMarkSystemLangPackApplied() {

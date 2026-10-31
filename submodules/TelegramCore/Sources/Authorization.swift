@@ -1096,6 +1096,9 @@ public func authorizeWithCode(accountManager: AccountManager<TelegramAccountMana
                                         }
 
                                         let user = TelegramUser(user: apiUser)
+                                        if tellomiIsLoginEmail(number) {
+                                            tellomiRememberLoginEmail(peerId: user.id, login: number)
+                                        }
                                         var isSupportUser = false
                                         if let phone = user.phone, phone.hasPrefix("42") {
                                             isSupportUser = true
@@ -1519,6 +1522,9 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                     }
 
                     let user = TelegramUser(user: apiUser)
+                    if tellomiIsLoginEmail(number) {
+                        tellomiRememberLoginEmail(peerId: user.id, login: number)
+                    }
                     var isSupportUser = false
                     if let phone = user.phone, phone.hasPrefix("42") {
                         isSupportUser = true

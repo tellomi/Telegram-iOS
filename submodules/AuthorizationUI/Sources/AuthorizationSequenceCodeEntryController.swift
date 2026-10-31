@@ -34,6 +34,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     var termsOfService: (UnauthorizedAccountTermsOfService, Bool)?
     
     private let hapticFeedback = HapticFeedback()
+    private var tellomiPrimaryActionTitle: String?
     
     public var inProgress: Bool = false {
         didSet {
@@ -97,6 +98,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         
         self.controllerNode.view.disableAutomaticKeyboardHandling = [.forward, .backward]
         
+        self.controllerNode.tellomiPrimaryActionTitle = self.tellomiPrimaryActionTitle
         self.controllerNode.loginWithCode = { [weak self] code in
             self?.continueWithCode(code)
         }
@@ -186,7 +188,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     func updateNavigationItems() {
         if let (_, _, type, _, _, _, _) = self.data {
             switch type {
-            case .sms, .email, .firebase, .call:
+            case .sms, .email, .firebase, .call, .otherSession:
                 self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).help, style: .plain, target: self, action: #selector(self.tellomiHelpPressed))
                 return
             default:
@@ -273,6 +275,20 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         self.loginWithCode?(code)
     }
     
+    public func applyPresentationTheme(_ presentationData: PresentationData) {
+        if self.isNodeLoaded {
+            self.controllerNode.applyPresentationTheme(presentationData.theme)
+        }
+    }
+
+    public func setTellomiPrimaryActionTitle(_ title: String?) {
+        self.tellomiPrimaryActionTitle = title
+        if self.isNodeLoaded {
+            self.controllerNode.tellomiPrimaryActionTitle = title
+            self.controllerNode.applyPresentationTheme(self.theme)
+        }
+    }
+
     public func applyConfirmationCode(_ code: Int) {
         self.controllerNode.updateCode("\(code)")
     }

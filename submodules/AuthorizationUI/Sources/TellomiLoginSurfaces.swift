@@ -10,13 +10,14 @@ func tellomiSymbol(_ name: String, pointSize: CGFloat, weight: UIImage.SymbolWei
     return UIImage(systemName: name, withConfiguration: configuration)
 }
 
-func tellomiCheckboxImage(checked: Bool) -> UIImage? {
+func tellomiCheckboxImage(checked: Bool, dark: Bool = false) -> UIImage? {
     let diameter: CGFloat = 18.0
+    let palette = TellomiLoginChrome.palette(dark: dark)
     return generateImage(CGSize(width: diameter, height: diameter), rotatedContext: { size, context in
         context.clear(CGRect(origin: CGPoint(), size: size))
         let rect = CGRect(x: 1.0, y: 1.0, width: size.width - 2.0, height: size.height - 2.0)
         if checked {
-            context.setFillColor(TellomiLoginChrome.checkbox.cgColor)
+            context.setFillColor(palette.checkbox.cgColor)
             context.fillEllipse(in: rect)
             context.setStrokeColor(UIColor.white.cgColor)
             context.setLineWidth(1.6)
@@ -88,6 +89,8 @@ final class TellomiAgreementRow: ASDisplayNode {
     var onToggle: (() -> Void)?
     private var centered = false
     private var measuredText = CGSize()
+    private var dark = false
+    private var checked = false
 
     init(textNode: ImmediateTextNode) {
         self.textNode = textNode
@@ -103,8 +106,14 @@ final class TellomiAgreementRow: ASDisplayNode {
     }
 
     func setChecked(_ checked: Bool) {
-        self.checkbox.image = tellomiCheckboxImage(checked: checked)
+        self.checked = checked
+        self.checkbox.image = tellomiCheckboxImage(checked: checked, dark: self.dark)
         self.checkboxButton.accessibilityValue = checked ? "1" : "0"
+    }
+
+    func setDark(_ dark: Bool) {
+        self.dark = dark
+        self.setChecked(self.checked)
     }
 
     func updateLayout(width: CGFloat, centered: Bool) -> CGSize {
@@ -147,21 +156,31 @@ final class TellomiSocialRowNode: HighlightableButtonNode {
     /// Not `titleNode`: `ASButtonNode` already has that property, and a stored override does not compile.
     private let labelNode = ImmediateTextNode()
 
-    init(title: String, icon: UIImage?) {
+    init(title: String, icon: UIImage?, dark: Bool = false) {
         super.init()
-        self.backgroundColor = .white
+        let palette = TellomiLoginChrome.palette(dark: dark)
+        self.backgroundColor = palette.rowBackground
         self.cornerRadius = 12.0
         self.borderWidth = 1.0
-        self.borderColor = TellomiLoginChrome.rowBorder.cgColor
+        self.borderColor = palette.rowBorder.cgColor
         self.clipsToBounds = true
         self.iconNode.image = icon
         self.iconNode.isUserInteractionEnabled = false
-        self.labelNode.attributedText = NSAttributedString(string: title, font: Font.regular(16.0), textColor: UIColor(rgb: 0x111111))
+        self.labelNode.attributedText = NSAttributedString(string: title, font: Font.regular(16.0), textColor: palette.rowText)
         self.labelNode.isUserInteractionEnabled = false
         self.accessibilityLabel = title
         self.accessibilityTraits = [.button]
         self.addSubnode(self.iconNode)
         self.addSubnode(self.labelNode)
+    }
+
+    func applyPalette(dark: Bool) {
+        let palette = TellomiLoginChrome.palette(dark: dark)
+        self.backgroundColor = palette.rowBackground
+        self.borderColor = palette.rowBorder.cgColor
+        if let title = self.accessibilityLabel {
+            self.labelNode.attributedText = NSAttributedString(string: title, font: Font.regular(16.0), textColor: palette.rowText)
+        }
     }
 
     override func layout() {
@@ -178,10 +197,11 @@ final class TellomiCircleButtonNode: HighlightableButtonNode {
 
     init(icon: UIImage?, accessibilityLabel: String) {
         super.init()
-        self.backgroundColor = .white
+        let palette = TellomiLoginChrome.palette(dark: false)
+        self.backgroundColor = palette.rowBackground
         self.cornerRadius = 26.0
         self.borderWidth = 1.0
-        self.borderColor = TellomiLoginChrome.rowBorder.cgColor
+        self.borderColor = palette.rowBorder.cgColor
         self.clipsToBounds = true
         self.iconNode.image = icon
         self.iconNode.isUserInteractionEnabled = false
@@ -247,7 +267,7 @@ final class TellomiPasswordFieldNode: ASDisplayNode, UITextFieldDelegate {
         super.init()
 
         self.textField.textField.font = Font.regular(17.0)
-        self.textField.textField.textColor = theme.list.itemPrimaryTextColor
+        self.textField.textField.textColor = TellomiLoginChrome.palette(dark: theme.overallDarkAppearance).fieldText
         self.textField.textField.autocorrectionType = .no
         self.textField.textField.autocapitalizationType = .none
         self.textField.textField.isSecureTextEntry = true
@@ -261,7 +281,7 @@ final class TellomiPasswordFieldNode: ASDisplayNode, UITextFieldDelegate {
         }
         self.setPlaceholder(placeholder)
 
-        TellomiLoginChrome.applyField(self.backgroundNode)
+        TellomiLoginChrome.applyField(self.backgroundNode, dark: theme.overallDarkAppearance)
         self.divider.backgroundColor = UIColor(rgb: 0xE4E4E7)
         self.divider.isHidden = !eyeOnLeft
         self.eyeButton.accessibilityLabel = placeholder
@@ -289,6 +309,17 @@ final class TellomiPasswordFieldNode: ASDisplayNode, UITextFieldDelegate {
 
     func setPlaceholder(_ placeholder: String) {
         self.textField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: Font.regular(17.0), textColor: TellomiLoginChrome.placeholder)
+    }
+
+    func applyPalette(dark: Bool, theme: PresentationTheme) {
+        let palette = TellomiLoginChrome.palette(dark: dark)
+        self.textField.textField.textColor = palette.fieldText
+        self.textField.textField.tintColor = palette.accent
+        self.textField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        TellomiLoginChrome.applyField(self.backgroundNode, dark: dark)
+        let placeholder = self.textField.textField.placeholder ?? self.textField.textField.attributedPlaceholder?.string ?? ""
+        self.textField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: Font.regular(17.0), textColor: palette.placeholder)
+        self.updateEye()
     }
 
     @objc private func editingChanged() {

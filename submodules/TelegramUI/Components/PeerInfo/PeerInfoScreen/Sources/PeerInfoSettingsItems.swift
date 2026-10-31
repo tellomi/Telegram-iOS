@@ -13,6 +13,7 @@ import DeviceAccess
 import TelegramStringFormatting
 import PeerNameColorItem
 import WalletContext
+import AuthorizationUI
 
 enum SettingsSection: Int, CaseIterable {
     case edit
@@ -470,9 +471,22 @@ func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, conte
     }
     
     if case let .user(user) = data.peer {
-        items[.info]!.append(PeerInfoScreenDisclosureItem(id: ItemPhoneNumber, label: .text(user.phone.flatMap({ formatPhoneNumber(context: context, number: $0) }) ?? ""), text: presentationData.strings.Settings_PhoneNumber, icon: PresentationResourcesSettings.recentCalls, action: {
-            interaction.openSettings(.phoneNumber)
-        }))
+        let contact = tellomiAccountContact(phone: user.phone, peerId: user.id)
+        let accountCopy = tellomiAccountLabels(languageCode: presentationData.strings.baseLanguageCode)
+        if let phone = contact.phone, !phone.isEmpty {
+            items[.info]!.append(PeerInfoScreenDisclosureItem(id: ItemPhoneNumber, label: .text(formatPhoneNumber(context: context, number: phone)), text: presentationData.strings.Settings_PhoneNumber, icon: PresentationResourcesSettings.recentCalls, action: {
+                interaction.openSettings(.phoneNumber)
+            }))
+        }
+        if let email = contact.email, !email.isEmpty {
+            items[.info]!.append(PeerInfoScreenDisclosureItem(id: 30, label: .text(email), text: accountCopy.email, icon: PresentationResourcesSettings.email, action: {
+            }))
+        }
+        if contact.phone == nil {
+            items[.info]!.append(PeerInfoScreenActionItem(id: 31, text: accountCopy.bindPhone, alignment: .natural, action: {
+                interaction.openSettings(.phoneNumber)
+            }))
+        }
     }
     var username = ""
     if let addressName = data.peer?.addressName, !addressName.isEmpty {

@@ -275,12 +275,13 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         self.countryButtonArrow.isHidden = true
         self.countryButton.setBackgroundImage(nil, for: [])
         self.countryButton.setBackgroundImage(nil, for: .highlighted)
-        TellomiLoginChrome.applyField(self.tellomiBackground)
+        let palette = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance)
+        TellomiLoginChrome.applyField(self.tellomiBackground, dark: self.theme.overallDarkAppearance)
         self.phoneInputNode.countryCodeField.textField.textAlignment = .left
-        self.phoneInputNode.countryCodeField.textField.textColor = self.theme.list.itemPrimaryTextColor
-        self.phoneInputNode.numberField.textField.textColor = self.theme.list.itemPrimaryTextColor
-        self.phoneInputNode.countryCodeField.textField.tintColor = TellomiLoginChrome.accent
-        self.phoneInputNode.numberField.textField.tintColor = TellomiLoginChrome.accent
+        self.phoneInputNode.countryCodeField.textField.textColor = palette.fieldText
+        self.phoneInputNode.numberField.textField.textColor = palette.fieldText
+        self.phoneInputNode.countryCodeField.textField.tintColor = palette.accent
+        self.phoneInputNode.numberField.textField.tintColor = palette.accent
         let font = Font.regular(17.0)
         self.phoneInputNode.countryCodeField.textField.font = font
         self.phoneInputNode.numberField.textField.font = font
@@ -295,7 +296,7 @@ private final class PhoneAndCountryNode: ASDisplayNode {
             return
         }
         self.phoneInputNode.mask = nil
-        self.phoneInputNode.numberField.textField.attributedPlaceholder = NSAttributedString(string: self.tellomiPlaceholder, font: Font.regular(17.0), textColor: TellomiLoginChrome.placeholder)
+        self.phoneInputNode.numberField.textField.attributedPlaceholder = NSAttributedString(string: self.tellomiPlaceholder, font: Font.regular(17.0), textColor: TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).placeholder)
     }
 
     private func updateCountryButton(countryId: String, name: String) {
@@ -418,7 +419,7 @@ private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
     init(theme: PresentationTheme, placeholder: String) {
         self.textField = TextFieldNode()
         self.textField.textField.font = Font.regular(17.0)
-        self.textField.textField.textColor = theme.list.itemPrimaryTextColor
+        self.textField.textField.textColor = TellomiLoginChrome.palette(dark: theme.overallDarkAppearance).fieldText
         self.textField.textField.textAlignment = .natural
         self.textField.textField.autocorrectionType = .no
         self.textField.textField.autocapitalizationType = .none
@@ -434,7 +435,7 @@ private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
         }
 
         self.backgroundNode = ASDisplayNode()
-        TellomiLoginChrome.applyField(self.backgroundNode)
+        TellomiLoginChrome.applyField(self.backgroundNode, dark: theme.overallDarkAppearance)
 
         self.separatorNode = ASDisplayNode()
         self.separatorNode.isHidden = true
@@ -452,8 +453,13 @@ private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
         self.textField.textField.text = text
     }
 
-    func setPlaceholder(_ placeholder: String, theme _: PresentationTheme) {
-        self.textField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: Font.regular(17.0), textColor: TellomiLoginChrome.placeholder)
+    func setPlaceholder(_ placeholder: String, theme: PresentationTheme) {
+        let palette = TellomiLoginChrome.palette(dark: theme.overallDarkAppearance)
+        self.textField.textField.textColor = palette.fieldText
+        self.textField.textField.tintColor = palette.accent
+        self.textField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        TellomiLoginChrome.applyField(self.backgroundNode, dark: theme.overallDarkAppearance)
+        self.textField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: Font.regular(17.0), textColor: palette.placeholder)
     }
 
     @objc private func editingChanged() {
@@ -480,8 +486,9 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private let sharedContext: SharedAccountContext
     private var account: UnauthorizedAccount?
     private let strings: PresentationStrings
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
     private let hasOtherAccounts: Bool
+    private var tellomiBindPhone = false
     
     private let animationNode: AnimatedStickerNode
     private let managedAnimationNode: ManagedPhoneAnimationNode
@@ -611,6 +618,36 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private var tellomiLoginHome: Bool {
         return self.account != nil
     }
+
+    func setTellomiBindPhone(_ bind: Bool) {
+        self.tellomiBindPhone = bind
+    }
+
+    func applyPresentationTheme(_ theme: PresentationTheme) {
+        self.theme = theme
+        let dark = theme.overallDarkAppearance
+        let palette = TellomiLoginChrome.palette(dark: dark)
+        self.backgroundColor = theme.list.plainBackgroundColor
+        self.phoneInputNode.countryCodeField.textField.textColor = palette.fieldText
+        self.phoneInputNode.numberField.textField.textColor = palette.fieldText
+        self.phoneInputNode.countryCodeField.textField.tintColor = palette.accent
+        self.phoneInputNode.numberField.textField.tintColor = palette.accent
+        self.phoneInputNode.countryCodeField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        self.phoneInputNode.numberField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        self.emailFieldNode?.setPlaceholder(self.emailFieldNode?.textField.textField.attributedPlaceholder?.string ?? "", theme: theme)
+        self.passwordFieldNode?.applyPalette(dark: dark, theme: theme)
+        self.agreementRow?.setDark(dark)
+        self.appleRowNode?.applyPalette(dark: dark)
+        self.googleRowNode?.applyPalette(dark: dark)
+        self.emailRowNode?.applyPalette(dark: dark)
+        self.otherRowNode?.applyPalette(dark: dark)
+        if self.tellomiLoginHome || self.tellomiBindPhone {
+            self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: dark))
+        }
+        if let layoutArguments = self.layoutArguments {
+            self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
+        }
+    }
     
     init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, strings: PresentationStrings, theme: PresentationTheme, debugAction: @escaping () -> Void, hasOtherAccounts: Bool) {
         self.sharedContext = sharedContext
@@ -683,10 +720,11 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             let googleIcon = tellomiGoogleMark(side: 22.0)
             let mailIcon = tellomiSymbol("envelope", pointSize: 16.0)?.withTintColor(UIColor(rgb: 0x111111), renderingMode: .alwaysOriginal)
             let dotsIcon = tellomiDotsImage(side: 22.0)
-            self.appleRowNode = TellomiSocialRowNode(title: loginCopy.appleLogin, icon: appleIcon)
-            self.googleRowNode = TellomiSocialRowNode(title: loginCopy.googleLogin, icon: googleIcon)
-            self.emailRowNode = TellomiSocialRowNode(title: loginCopy.emailLogin, icon: mailIcon)
-            self.otherRowNode = TellomiSocialRowNode(title: loginCopy.otherLogin, icon: dotsIcon)
+            let rowDark = theme.overallDarkAppearance
+            self.appleRowNode = TellomiSocialRowNode(title: loginCopy.appleLogin, icon: appleIcon, dark: rowDark)
+            self.googleRowNode = TellomiSocialRowNode(title: loginCopy.googleLogin, icon: googleIcon, dark: rowDark)
+            self.emailRowNode = TellomiSocialRowNode(title: loginCopy.emailLogin, icon: mailIcon, dark: rowDark)
+            self.otherRowNode = TellomiSocialRowNode(title: loginCopy.otherLogin, icon: dotsIcon, dark: rowDark)
 
             let recoverNode = HighlightableButtonNode()
             recoverNode.setTitle(loginCopy.recoverAccount, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
@@ -728,7 +766,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         
         let loginCopy = tellomiLoginCopy(languageCode: strings.baseLanguageCode)
         let buttonTitle = account != nil ? loginCopy.verifyAndLogin : self.strings.Login_Continue
-        let buttonTheme = account != nil ? TellomiLoginChrome.buttonTheme() : SolidRoundedButtonTheme(theme: self.theme)
+        let buttonTheme = account != nil ? TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance) : SolidRoundedButtonTheme(theme: self.theme)
         self.proceedNode = SolidRoundedButtonNode(title: buttonTitle, theme: buttonTheme, glass: false, height: 50.0, cornerRadius: 25.0)
         self.proceedNode.progressType = .embedded
         self.proceedNode.isEnabled = false
@@ -1039,7 +1077,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         if self.emailLogin {
             title = emailCopy.title
         } else if self.account == nil {
-            title = self.strings.Login_NewNumber
+            let loginCopy = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode)
+            title = self.tellomiBindPhone ? loginCopy.bindPhoneTitle : self.strings.Login_NewNumber
         } else {
             title = self.strings.Login_PhoneTitle
         }
@@ -1047,6 +1086,11 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         if self.emailLogin {
             self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: Font.regular(17.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
             self.emailFieldNode?.setPlaceholder(emailCopy.placeholder, theme: self.theme)
+        } else if self.tellomiBindPhone {
+            let loginCopy = tellomiLoginCopy(languageCode: self.strings.baseLanguageCode)
+            self.noticeNode.attributedText = NSAttributedString(string: loginCopy.bindPhoneNotice, font: Font.regular(17.0), textColor: TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).secondaryText, paragraphAlignment: .center)
+            self.proceedNode.title = loginCopy.bindPhoneAction
+            self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance))
         }
         if let emailSwitchNode = self.emailSwitchNode {
             let switchTitle = self.emailLogin ? emailCopy.switchToPhone : emailCopy.switchToEmail
@@ -1158,7 +1202,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let titleFont = surface == .phoneCode ? Font.bold(20.0) : Font.semibold(22.0)
         self.titleNode.attributedText = NSAttributedString(string: title, font: titleFont, textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: titleAlignment)
         self.proceedNode.title = surface.isPassword ? loginCopy.login : loginCopy.verifyAndLogin
-        self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme())
+        self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance))
         let agreementKind: TellomiSignUpAgreement.Kind = surface.showsCarrierAgreement ? .phone : .email
         self.tellomiAgreement.setKind(agreementKind)
         if surface.isEmail {

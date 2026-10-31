@@ -261,7 +261,8 @@ final class AuthorizedApplicationContext {
             |> map { $0 && $1 }
             |> filter { $0 }
             |> take(1)
-            self.isReady.set(combinedReady)
+            // A chat list that never reports ready used to keep the window on the code screen.
+            self.isReady.set(combinedReady |> timeout(2.0, queue: .mainQueue(), alternate: .single(true)))
         } else {
             self.isReady.set(.single(true))
         }
