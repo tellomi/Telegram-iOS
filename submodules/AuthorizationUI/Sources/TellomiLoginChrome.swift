@@ -106,7 +106,6 @@ struct TellomiLoginCopy: Equatable {
     let unavailableBody: String
     let codeNotReceived: String
     let wrongCode: String
-    let wrongPassword: String
     let startMessaging: String
     let ok: String
 
@@ -159,7 +158,6 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
             unavailableBody: "该登录方式即将开放，请先使用手机号或邮箱。",
             codeNotReceived: "收不到验证码?",
             wrongCode: "请输入正确的验证码",
-            wrongPassword: "账号或密码错误，请重试。",
             startMessaging: "开始聊天",
             ok: "好"
         )
@@ -198,7 +196,6 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
         unavailableBody: "This sign-in method isn't open yet. Use a phone number or email.",
         codeNotReceived: "Didn't get a code?",
         wrongCode: "Enter the correct code",
-        wrongPassword: "Incorrect account or password. Try again.",
         startMessaging: "Start Messaging",
         ok: "OK"
     )
