@@ -35,8 +35,6 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     
     private let hapticFeedback = HapticFeedback()
     
-    private var appleSignInAllowed = false
-    
     public var inProgress: Bool = false {
         didSet {
             self.updateNavigationItems()
@@ -140,11 +138,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         }
         
         if let (number, email, codeType, nextType, timeout, previousCodeType, isPrevious) = self.data {
-            var appleSignInAllowed = false
-            if case let .email(_, _, _, _, appleSignInAllowedValue, _) = codeType {
-                appleSignInAllowed = appleSignInAllowedValue
-            }
-            self.controllerNode.updateData(number: number, email: email, codeType: codeType, nextType: nextType, timeout: timeout, appleSignInAllowed: appleSignInAllowed, previousCodeType: previousCodeType, isPrevious: isPrevious)
+            self.controllerNode.updateData(number: number, email: email, codeType: codeType, nextType: nextType, timeout: timeout, appleSignInAllowed: false, previousCodeType: previousCodeType, isPrevious: isPrevious)
         }
     }
     
@@ -179,7 +173,23 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         self.controllerNode.updatePasteVisibility()
     }
     
+    @objc private func tellomiHelpPressed() {
+        guard let url = URL(string: TellomiLoginChrome.helpURL) else {
+            return
+        }
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    }
+
     func updateNavigationItems() {
+        if let (_, _, type, _, _, _, _) = self.data {
+            switch type {
+            case .sms, .email, .firebase, .call:
+                self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLoginCopy(languageCode: self.strings.baseLanguageCode).help, style: .plain, target: self, action: #selector(self.tellomiHelpPressed))
+                return
+            default:
+                break
+            }
+        }
         guard let layout = self.validLayout, layout.size.width < 360.0 else {
             return
         }
@@ -197,15 +207,11 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         if self.data?.0 != number || self.data?.1 != email || self.data?.2 != codeType || self.data?.3 != nextType || self.data?.4 != timeout || self.data?.5 != previousCodeType || self.data?.6 != isPrevious {
             self.data = (number, email, codeType, nextType, timeout, previousCodeType, isPrevious)
                         
-            var appleSignInAllowed = false
-            if case let .email(_, _, _, _, appleSignInAllowedValue, _) = codeType {
-                appleSignInAllowed = appleSignInAllowedValue
-            }
-            
             if self.isNodeLoaded {
-                self.controllerNode.updateData(number: number, email: email, codeType: codeType, nextType: nextType, timeout: timeout, appleSignInAllowed: appleSignInAllowed, previousCodeType: previousCodeType, isPrevious: isPrevious)
+                self.controllerNode.updateData(number: number, email: email, codeType: codeType, nextType: nextType, timeout: timeout, appleSignInAllowed: false, previousCodeType: previousCodeType, isPrevious: isPrevious)
                 self.requestLayout(transition: .immediate)
             }
+            self.updateNavigationItems()
         }
     }
     

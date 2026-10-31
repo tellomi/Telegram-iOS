@@ -139,7 +139,29 @@ Leave `reset_available_period`, `reset_pending_date`, and `apple_signin_allowed`
 | --- | --- |
 | `submodules/AuthorizationUI/Sources/TellomiEmailLogin.swift` | New. Copy (Chinese when the langpack is `zh*`, otherwise English) and `tellomiIsLoginEmail`. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Email field and phone/email switch on the login home only. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Email Continue confirms the address and calls `loginWithNumber` with it, skipping the phone confirmation. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Email Continue calls `loginWithNumber` with the address. The login home sends the code immediately. Change Phone Number still asks to confirm. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Sends that string through `sendAuthorizationCode`. Shows the email on the code screen and does not insert the login-email setup page. Back restores the address. Email `sendCode` errors do not offer `recover@telegram.org`. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpController.swift` | Email sign-up is nickname-only and still requires the agreement checkbox. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Hides the last-name row and retitles the screen when the identifier is an email. |
+
+## Login screen restyle
+
+The login home, email step, code step, nickname step, and the existing cloud-password step use the same pink button, gray rounded field, and white background. Apple, Google, and other third-party buttons are not added. Sign in with Apple on the code screen stays off even if the server sets `apple_signin_allowed`. There is no「找回账号」row. There is no in-app agreement modal.
+
+「密码登录」is not a second sign-in. `auth.signIn` still needs a code. A cloud password (`SESSION_PASSWORD_NEEDED`) is the existing 2FA screen after the code, restyled, and it does not replace the OTP path.
+
+The phone field stays country +86. The email switch stays a text link. OTP length is whatever the server sends (the dev code is five digits); SMS and phone codes use the digit boxes, email uses one field. The pink button is light until the field is filled. Tapping it without the checkbox shakes the checkbox and does not send the code.
+
+Links open in Safari through the existing `openUrl` (`UIApplication.shared.open`): 用户协议 `https://tellomi.cn/legal/terms/`, 隐私政策 `https://tellomi.cn/legal/privacy/`, 运营商服务协议 and 帮助 `https://tellomi.cn/legal` and `https://tellomi.cn/faq`.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | New. Pink, gray, copy, legal and help URLs. |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Phone and email checkbox wording. Same toggle, no modal. |
+| `submodules/AuthorizationUI/Sources/TellomiEmailLogin.swift` | Email title, subtitle, and placeholder match the mockup. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Login-home title, gray phone and email fields, pink「验证并登录」, agreement, email text link. Hides the sticker, passkey notice, and contact-sync row. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Help opens the FAQ. Agreement is required before send. Login home skips the number and email confirmation alerts. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | Code titles, sent-to line, pink「登录」, resend countdown, sent toast. Email code is one field. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift` | Help on the code screen. Sign in with Apple is not shown. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Pink continue, gray name field. Nickname still has no password. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePasswordEntryControllerNode.swift` | The 2FA cloud-password screen uses the same pink button and gray field. |
