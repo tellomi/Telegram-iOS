@@ -260,6 +260,27 @@ The intro used to read `en.lproj` (`Tour.Title1` = "Telegram", `Tour.StartButton
 
 `stringForTimestamp` and `stringForMediumDate` showed a two-digit year as `tm_year - 100`. `tm_year` is years since 1900, so 2026 is 26 and 1970 is **-30**. A profile whose `userStatusOffline.was_online` is 0 (stored as presence `.present(until: 0)`, the Unix epoch) rendered as `01/01/-30`. Years before 2000 now print in full (`calendarDisplayYear`). A presence timestamp of 0 or less is "last seen a long time ago" instead of that date. The value still comes from the server; this only changes how 0 and pre-2000 dates are drawn.
 
+## Open in Chinese map apps
+
+A shared location or a venue opens `OpenInOptionsScreen`. The list was Apple Maps, then whatever `canOpenURL` said was installed (Google Maps, Yandex, and the rest). Mainland users need 高德, 百度, and 腾讯. Google Maps stays in that installed check. Apple Maps stays first and is always listed.
+
+Telegram stores WGS-84. 高德 is opened with `dev=1`, so the app converts. 百度 is opened with `coord_type=wgs84`. 腾讯's `qqmap://` marker and routeplan calls are GCJ-02 and do not take a coordinate type (that parameter is on the web URI), so those coordinates are converted here. Apple Maps is given the stored WGS-84 point. In China it applies the offset itself. The place name is the venue title. Directions start at the current location.
+
+Labels follow the same language rule as the login chrome. `zh-hans` / `zh-cn` / `zh` use 高德地图, 百度地图, 腾讯地图, 地图, and 谷歌地图. Anything else, including `zh-hant`, uses the English names. The server langpack has no keys for these, and the bundled strings are English, so the names are not `Localizable.strings` entries. `TellomiDidApplySystemLangPack` still decides whether the saved pack or the system language wins.
+
+`canOpenURL` only answers for schemes in `LSApplicationQueriesSchemes`. The plist the Bazel app links is the `TelegramInfoPlist` fragment in `Telegram/BUILD`. `Info.plist` and `InfoBazel.plist` are updated to match and are not that fragment.
+
+| File | Change |
+| --- | --- |
+| `submodules/OpenInExternalAppUI/Sources/TellomiMapOpenIn.swift` | New. Labels, order, GCJ-02, and the three URL builders. |
+| `submodules/OpenInExternalAppUI/Sources/OpenInOptions.swift` | Apple Maps, then 高德 / 百度 / 腾讯, then the existing apps. Google Maps is still hidden when it is not installed. |
+| `submodules/OpenInExternalAppUI/Sources/OpenInOptionsScreen.swift` | Apple Maps receives the venue name with the WGS-84 point. |
+| `submodules/LocationUI/Sources/LocationViewController.swift` | The open-in item carries the peer name used for a live location. The single-app Apple Maps path still prefers the venue title, then that name. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoStoryGridScreen/Sources/StorySearchGridScreen.swift` | A venue opened from stories keeps its `MapVenue`, so the place name and address reach the sheet. |
+| `Telegram/BUILD` `TelegramInfoPlist` | `iosamap`, `baidumap`, `qqmap`. |
+| `Telegram/Telegram-iOS/Info.plist`, `InfoBazel.plist` | The same three schemes. |
+| `submodules/OpenInExternalAppUI/Tests/TellomiMapOpenInTests.swift` | Host test of the URLs, the conversion, the labels, and the order. |
+
 ## Teamgram on screen
 
 There is no client string "Teamgram" in the auth, login, session, or profile UI. The word appears in comments and in `Tellomi/tellomi-server.json`.

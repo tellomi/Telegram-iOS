@@ -8,7 +8,7 @@ import UrlEscaping
 
 public enum OpenInItem {
     case url(url: String)
-    case location(location: TelegramMediaMap, directions: OpenInLocationDirections?)
+    case location(location: TelegramMediaMap, directions: OpenInLocationDirections?, placeName: String?)
 }
 
 public enum OpenInLocationDirections: Equatable {
@@ -48,22 +48,27 @@ public enum OpenInApplication: Equatable {
 public enum OpenInAction {
     case none
     case openUrl(url: String)
-    case openLocation(latitude: Double, longitude: Double, directions: OpenInLocationDirections?)
+    case openLocation(latitude: Double, longitude: Double, name: String?, directions: OpenInLocationDirections?)
 }
 
 public final class OpenInOption {
     public let identifier: String
     public let application: OpenInApplication
     public let action: () -> OpenInAction
+    private let titleOverride: String?
     
-    public init(identifier: String, application: OpenInApplication, action: @escaping () -> OpenInAction) {
+    public init(identifier: String, application: OpenInApplication, titleOverride: String? = nil, action: @escaping () -> OpenInAction) {
         self.identifier = identifier
         self.application = application
+        self.titleOverride = titleOverride
         self.action = action
     }
     
     public var title: String {
         get {
+            if let titleOverride = self.titleOverride {
+                return titleOverride
+            }
             switch self.application {
                 case .safari:
                     return "Safari"
@@ -77,12 +82,41 @@ public final class OpenInOption {
 }
 
 public func availableOpenInOptions(context: AccountContext, item: OpenInItem) -> [OpenInOption] {
-    return allOpenInOptions(context: context, item: item).filter { option in
+    let options = allOpenInOptions(context: context, item: item).filter { option in
         if case let .other(_, _, scheme, _) = option.application {
             return context.sharedContext.applicationBindings.canOpenUrl("\(scheme)://")
         } else {
             return true
         }
+    }
+    switch item {
+    case .location:
+        let order = tellomiOrderedLocationOpenInIdentifiers(options.map { $0.identifier })
+        let byIdentifier = Dictionary(options.map { ($0.identifier, $0) }, uniquingKeysWith: { first, _ in first })
+        return order.compactMap { byIdentifier[$0] }
+    case .url:
+        return options
+    }
+}
+
+private func tellomiCurrentOpenInLanguageCode(context: AccountContext) -> String {
+    let saved = context.sharedContext.currentPresentationData.with { $0 }.strings.primaryComponent.languageCode
+    let systemLanguages = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String] ?? []
+    let applied = UserDefaults.standard.bool(forKey: tellomiOpenInSystemLangPackDefaultsKey)
+    return tellomiOpenInLanguageCode(savedLanguageCode: saved, systemLanguages: systemLanguages, systemLangPackApplied: applied)
+}
+
+private func tellomiMapTravelMode(_ directions: OpenInLocationDirections?) -> TellomiMapTravelMode? {
+    guard let directions = directions else {
+        return nil
+    }
+    switch directions {
+    case .driving:
+        return .driving
+    case .walking:
+        return .walking
+    case .transit:
+        return .transit
     }
 }
 
@@ -208,10 +242,34 @@ private func allOpenInOptions(context: AccountContext, item: OpenInItem) -> [Ope
                 }
                 return .none
             }))
-        case let .location(location, directions):
+        case let .location(location, directions, explicitPlaceName):
             let lat = location.latitude
             let lon = location.longitude
-        
+            let languageCode = tellomiCurrentOpenInLanguageCode(context: context)
+            let venueTitle = location.venue?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let fallbackName = explicitPlaceName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let placeName = venueTitle.isEmpty ? fallbackName : venueTitle
+            let placeAddress = location.venue?.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let travelMode = tellomiMapTravelMode(directions)
+
+            options.append(OpenInOption(identifier: tellomiAppleMapsOpenInIdentifier, application: .maps, titleOverride: tellomiOpenInMapAppTitle(.apple, languageCode: languageCode), action: {
+                let name = placeName.isEmpty ? nil : placeName
+                // WGS-84. Apple Maps in China offsets this itself.
+                return .openLocation(latitude: lat, longitude: lon, name: name, directions: directions)
+            }))
+
+            options.append(OpenInOption(identifier: tellomiAmapOpenInIdentifier, application: .other(title: tellomiOpenInMapAppTitle(.amap, languageCode: languageCode), identifier: tellomiAmapAppStoreIdentifier, scheme: tellomiAmapURLScheme, store: "cn"), action: {
+                return .openUrl(url: tellomiAmapURL(latitude: lat, longitude: lon, name: placeName, mode: travelMode))
+            }))
+
+            options.append(OpenInOption(identifier: tellomiBaiduMapsOpenInIdentifier, application: .other(title: tellomiOpenInMapAppTitle(.baidu, languageCode: languageCode), identifier: tellomiBaiduMapsAppStoreIdentifier, scheme: tellomiBaiduMapURLScheme, store: "cn"), action: {
+                return .openUrl(url: tellomiBaiduMapURL(latitude: lat, longitude: lon, name: placeName, address: placeAddress, mode: travelMode))
+            }))
+
+            options.append(OpenInOption(identifier: tellomiTencentMapsOpenInIdentifier, application: .other(title: tellomiOpenInMapAppTitle(.tencent, languageCode: languageCode), identifier: tellomiTencentMapsAppStoreIdentifier, scheme: tellomiTencentMapURLScheme, store: "cn"), action: {
+                return .openUrl(url: tellomiTencentMapURL(latitude: lat, longitude: lon, name: placeName, address: placeAddress, mode: travelMode))
+            }))
+
             if directions == nil {
                 if let venue = location.venue, let venueId = venue.id, let provider = venue.provider, provider == "foursquare" {
                     options.append(OpenInOption(identifier: "foursquare", application: .other(title: "Foursquare", identifier: 306934924, scheme: "foursquare", store: nil), action: {
@@ -219,12 +277,8 @@ private func allOpenInOptions(context: AccountContext, item: OpenInItem) -> [Ope
                     }))
                 }
             }
-            
-            options.append(OpenInOption(identifier: "appleMaps", application: .maps, action: {
-                return .openLocation(latitude: lat, longitude: lon, directions: directions)
-            }))
-        
-            options.append(OpenInOption(identifier: "googleMaps", application: .other(title: "Google Maps", identifier: 585027354, scheme: "comgooglemaps-x-callback", store: nil), action: {
+
+            options.append(OpenInOption(identifier: "googleMaps", application: .other(title: tellomiOpenInMapAppTitle(.google, languageCode: languageCode), identifier: 585027354, scheme: "comgooglemaps-x-callback", store: nil), action: {
                 let coordinates = "\(lat),\(lon)"
                 if let directions = directions {
                     let directionsMode: String

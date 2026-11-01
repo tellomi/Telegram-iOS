@@ -38,9 +38,12 @@ public final class OpenInOptionsScreen: ViewControllerComponentContainer {
             switch action {
             case let .openUrl(url):
                 openUrl(url)
-            case let .openLocation(latitude, longitude, directions):
+            case let .openLocation(latitude, longitude, name, directions):
                 let placemark = MKPlacemark(coordinate: CLLocationCoordinate2DMake(latitude, longitude), addressDictionary: [:])
                 let mapItem = MKMapItem(placemark: placemark)
+                if let name = name, !name.isEmpty {
+                    mapItem.name = name
+                }
                 
                 if let directions = directions {
                     let options = [MKLaunchOptionsDirectionsModeKey: directions.launchOptions]
