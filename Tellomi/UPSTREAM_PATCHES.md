@@ -270,3 +270,17 @@ There is no client string "Teamgram" in the auth, login, session, or profile UI.
 | Profile title Teamgram and @teamgram | `user.first_name` and `user.username` on the user the server returns. The client does not invent a display name for that peer. |
 
 Replacing those on the client would disagree with the account the server stores. "Didn't get a code" opens `https://tellomi.cn/faq` instead of mailing `sms@telegram.org`.
+
+## Login code screen, pending code, and narrow digits
+
+Checked against the Android reports (mixed English on a Chinese phone, keyboard covering the login header, sixth code box clipped, untranslated Bind phone number, stale SMS number). The phone home, the agreement card, email entry, and Settings → Account already take Simplified Chinese from `tellomiLoginCopy` / `tellomiEmailLoginCopy` when `tellomiChromeLanguageCode` resolves to `zh*`. That reads `AppleLanguages`, not `Locale.preferredLanguages`, so an English-only bundle does not force English. Apple, Google, other methods, account recovery, and password login already present 「暂未开放」. Settings → Account draws 绑定手机号 / 绑定邮箱 as the same disclosure row as a phone number (icon, title, chevron). The phone home is top-pinned under the navigation bar and does not move when the keyboard opens (`disableAutomaticKeyboardHandling`), so Help stays above the title.
+
+The code screen did not. It centered in a region that started at the status bar and reserved a full keyboard, so on a short phone the title sat under Help. Six digit boxes used `max(preferred, fitted)` and kept the preferred width when the row was narrower than that, so the last box crossed the row on a 320pt width. Back asked "cancel verification?" and left `.confirmationCodeEntry` stored; the next launch opened that screen again. A `sendCode` that finished after Back, or after a newer number was submitted, wrote its own `phone_code_hash` and the code screen showed the earlier number.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Authorization.swift` | `TellomiLoginAttempt`. `sendAuthorizationCode` and `resendAuthorizationCode` write the code state only while that attempt is still current. The check and the write hold the same lock. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Each send takes an attempt. Back, close, and a new number retire it and cancel the in-flight request. A code state that is not the current attempt (including one restored at launch) is replaced with phone entry. The number is kept in the field; the hash is not. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift` | SMS, email, call, firebase, and other-session back returns immediately. The cancel dialog stays for word and phrase. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | The Tellomi code stack is centered under the navigation bar. When that band is shorter than the stack, the stack stays top-aligned there instead of moving up under Help. |
+| `submodules/CodeInputView/Sources/CodeInputView.swift` | Expanded digit boxes shrink, spacing first down to 4pt, so six boxes stay inside the width they were given. |

@@ -208,6 +208,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
+                strongSelf.tellomiAbandonPendingLogin()
                 if !strongSelf.otherAccountPhoneNumbers.1.isEmpty {
                     let _ = (strongSelf.sharedContext.accountManager.transaction { transaction -> Void in
                         transaction.removeAuth()
@@ -230,6 +231,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let self else {
                     return
                 }
+                let loginAttempt = self.tellomiBeginLoginAttempt(identifier: number)
                 self.tellomiActiveLoginNumber = number
                 controller?.inProgress = true
                 
@@ -237,10 +239,10 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 let authorizationPushConfiguration = self.sharedContext.authorizationPushConfiguration
                 |> take(1)
                 |> timeout(2.0, queue: .mainQueue(), alternate: .single(nil))
-                let _ = (authorizationPushConfiguration
+                self.actionDisposable.set((authorizationPushConfiguration
                 |> deliverOnMainQueue).startStandalone(next: { [weak self] authorizationPushConfiguration in
                     if let strongSelf = self {
-                        strongSelf.actionDisposable.set((sendAuthorizationCode(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, phoneNumber: number, apiId: strongSelf.apiId, apiHash: strongSelf.apiHash, pushNotificationConfiguration: authorizationPushConfiguration, firebaseSecretStream: strongSelf.sharedContext.firebaseSecretStream, syncContacts: syncContacts, disableAuthTokens: disableAuthTokens, forcedPasswordSetupNotice: { value in
+                        strongSelf.actionDisposable.set((sendAuthorizationCode(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, phoneNumber: number, apiId: strongSelf.apiId, apiHash: strongSelf.apiHash, pushNotificationConfiguration: authorizationPushConfiguration, firebaseSecretStream: strongSelf.sharedContext.firebaseSecretStream, syncContacts: syncContacts, disableAuthTokens: disableAuthTokens, attempt: loginAttempt, forcedPasswordSetupNotice: { value in
                             guard let entry = EngineCodableEntry(ApplicationSpecificCounterNotice(value: value)) else {
                                 return nil
                             }
@@ -330,7 +332,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             }
                         }))
                     }
-                })
+                }))
             }
             controller.loginWithPasskey = { [weak self, weak controller] passkey, syncContacts in
                 guard let self else {
@@ -664,7 +666,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     }
                 } else {
                     controller?.inProgress = true
-                    strongSelf.actionDisposable.set((resendAuthorizationCode(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, apiId: strongSelf.apiId, apiHash: strongSelf.apiHash, firebaseSecretStream: strongSelf.sharedContext.firebaseSecretStream)
+                    strongSelf.actionDisposable.set((resendAuthorizationCode(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, apiId: strongSelf.apiId, apiHash: strongSelf.apiHash, firebaseSecretStream: strongSelf.sharedContext.firebaseSecretStream, attempt: strongSelf.tellomiActiveLoginAttempt)
                     |> deliverOnMainQueue).startStrict(next: { result in
                         controller?.inProgress = false
                     }, error: { error in
@@ -749,8 +751,68 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     private var currentEmail: String?
     /// The identifier of the login in progress. An email is put back into the phone-entry state on Back.
     private var tellomiActiveLoginNumber: String = ""
+    /// Bumped on each send and on Back. A response whose id no longer matches does not write a code hash.
+    private let tellomiLoginAttemptToken = Atomic<Int>(value: 0)
+    private var tellomiLoginAttemptId: Int = 0
+    private var tellomiPendingIdentifier: String?
+
+    private func tellomiBeginLoginAttempt(identifier: String) -> TellomiLoginAttempt {
+        let id = self.tellomiLoginAttemptToken.modify { $0 + 1 }
+        self.tellomiLoginAttemptId = id
+        self.tellomiPendingIdentifier = identifier
+        return TellomiLoginAttempt(token: self.tellomiLoginAttemptToken, id: id)
+    }
+
+    private var tellomiActiveLoginAttempt: TellomiLoginAttempt {
+        return TellomiLoginAttempt(token: self.tellomiLoginAttemptToken, id: self.tellomiLoginAttemptId)
+    }
+
+    /// Back, close, and a new number invalidate the in-flight `auth.sendCode`.
+    private func tellomiAbandonPendingLogin() {
+        let _ = self.tellomiLoginAttemptToken.modify { $0 + 1 }
+        self.tellomiPendingIdentifier = nil
+        self.actionDisposable.set(nil)
+    }
+
+    private func tellomiCodeEntryBelongsToThisAttempt(_ number: String) -> Bool {
+        guard let pending = self.tellomiPendingIdentifier, tellomiLoginIdentifiersMatch(pending, number) else {
+            return false
+        }
+        return self.tellomiActiveLoginAttempt.isCurrent()
+    }
+
+    /// Country calling code plus the national number, for the phone field after a dropped code screen.
+    private func tellomiPhoneEntryParts(identifier: String) -> (countryCode: Int32, number: String) {
+        if tellomiIsLoginEmail(identifier) {
+            return (AuthorizationSequenceCountrySelectionController.defaultCountryCode(), tellomiNormalizedLoginEmail(identifier))
+        }
+        let digits = identifier.filter { $0 >= "0" && $0 <= "9" }
+        if let (_, countryCode) = AuthorizationSequenceCountrySelectionController.lookupCountryIdByNumber(digits, preferredCountries: ["86": "CN"]), let code = Int32(countryCode.code), digits.hasPrefix(countryCode.code) {
+            return (code, String(digits.dropFirst(countryCode.code.count)))
+        }
+        let fallback = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+        let prefix = String(fallback)
+        if digits.hasPrefix(prefix) {
+            return (fallback, String(digits.dropFirst(prefix.count)))
+        }
+        return (fallback, digits)
+    }
+
+    /// A code screen saved by a previous launch, or a response for a number the user already left.
+    /// The hash is dropped. The number stays in the phone field so they can send a new code.
+    private func tellomiDropPersistedCodeEntry(identifier: String) {
+        let account = self.account
+        let parts = self.tellomiPhoneEntryParts(identifier: identifier)
+        let _ = account.postbox.transaction { transaction in
+            guard let state = transaction.getState() as? UnauthorizedAccountState, case .confirmationCodeEntry = state.contents else {
+                return
+            }
+            transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .phoneEntry(countryCode: parts.countryCode, number: parts.number)))
+        }.startStandalone()
+    }
 
     private func returnToPhoneOrEmailEntry() {
+        self.tellomiAbandonPendingLogin()
         let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
         let restored = tellomiIsLoginEmail(self.tellomiActiveLoginNumber) ? tellomiNormalizedLoginEmail(self.tellomiActiveLoginNumber) : ""
         let _ = self.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: self.account.testingEnvironment, masterDatacenterId: self.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: restored))).startStandalone()
@@ -1350,6 +1412,12 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     controllers.append(self.phoneEntryController(countryCode: countryCode, number: number, splashController: previousSplashController))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty && (previousSplashController == nil || self.viewControllers.count > 2))
                 case let .confirmationCodeEntry(number, type, phoneCodeHash, timeout, nextType, _, previousCodeEntry, usePrevious):
+                    // A previous launch, or a sendCode for a number the user already replaced, must not
+                    // open the code screen. The hash belongs to that attempt.
+                    if !self.tellomiCodeEntryBelongsToThisAttempt(number) {
+                        self.tellomiDropPersistedCodeEntry(identifier: number)
+                        return
+                    }
                     self.tellomiActiveLoginNumber = number
                     let loginEmail = tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : nil
                     var controllers: [ViewController] = []
