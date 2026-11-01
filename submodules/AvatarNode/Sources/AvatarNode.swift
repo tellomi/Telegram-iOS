@@ -26,6 +26,7 @@ private let anonymousSavedMessagesDarkIcon = generateTintedImage(image: UIImage(
 private let myNotesIcon = generateTintedImage(image: UIImage(bundleImageName: "Avatar/MyNotesIcon"), color: .white)
 private let cameraIcon = generateTintedImage(image: UIImage(bundleImageName: "Avatar/CameraIcon"), color: .white)
 private let storyIcon = generateTintedImage(image: UIImage(bundleImageName: "Share/Story"), color: .white)
+private let tellomiMarkIcon = generateTintedImage(image: UIImage(bundleImageName: "Avatar/TellomiMark"), color: .white)
 
 public func avatarPlaceholderFont(size: CGFloat) -> UIFont {
     return Font.with(size: size, design: .round, weight: .bold)
@@ -130,6 +131,8 @@ public func calculateAvatarColors(context: AccountContext?, explicitColorIndex: 
             colors = [backgroundColors.1, backgroundColors.0]
         } else if case .cameraIcon = icon {
             colors = AvatarNode.repostColors
+        } else if case .tellomiMark = icon {
+            colors = [UIColor(rgb: 0x17171A), UIColor(rgb: 0x17171A)]
         } else {
             colors = AvatarNode.grayscaleColors
         }
@@ -222,6 +225,23 @@ public enum AvatarNodeIcon: Equatable {
     case repostIcon
     case cameraIcon
     case storyIcon
+    case tellomiMark
+}
+
+/// Official service (777000) and notification (333000) accounts draw the Tellomi mark
+/// when the client would otherwise paint a letter. A photo from the server is kept.
+private func tellomiServiceAvatarIcon(peer: EnginePeer?, representation: TelegramMediaImageRepresentation?, icon: AvatarNodeIcon) -> AvatarNodeIcon {
+    if icon != .none || representation != nil {
+        return icon
+    }
+    guard let peer, peer.id.namespace == Namespaces.Peer.CloudUser else {
+        return icon
+    }
+    let raw = peer.id.id._internalGetInt64Value()
+    if raw == 777000 || raw == 333000 {
+        return .tellomiMark
+    }
+    return icon
 }
 
 public enum AvatarNodeImageOverride: Equatable {
@@ -642,6 +662,7 @@ public final class AvatarNode: ASDisplayNode {
             } else if peer?.restrictionText(platform: "ios", contentSettings: contentSettings) == nil {
                 representation = peer?.smallProfileImage
             }
+            icon = tellomiServiceAvatarIcon(peer: peer, representation: representation, icon: icon)
             
             let updatedState: AvatarNodeState = .peerAvatar(peer?.id ?? EnginePeer.Id(0), peer?.nameColor, peer?.displayLetters ?? [], representation, clipStyle, cutoutRect)
             if updatedState != self.state || overrideImage != self.overrideImage || theme !== self.theme {
@@ -849,6 +870,7 @@ public final class AvatarNode: ASDisplayNode {
             } else if peer?.restrictionText(platform: "ios", contentSettings: genericContext.currentContentSettings.with { $0 }) == nil {
                 representation = peer?.smallProfileImage
             }
+            icon = tellomiServiceAvatarIcon(peer: peer, representation: representation, icon: icon)
             
             let updatedState: AvatarNodeState = .peerAvatar(peer?.id ?? EnginePeer.Id(0), peer?.nameColor, peer?.displayLetters ?? [], representation, clipStyle, cutoutRect)
             if updatedState != self.state || overrideImage != self.overrideImage || theme !== self.theme {
@@ -1109,6 +1131,15 @@ public final class AvatarNode: ASDisplayNode {
                     
                     if let storyIcon = storyIcon {
                         context.draw(storyIcon.cgImage!, in: CGRect(origin: CGPoint(x: floor((bounds.size.width - storyIcon.size.width) / 2.0), y: floor((bounds.size.height - storyIcon.size.height) / 2.0)), size: storyIcon.size))
+                    }
+                } else if case .tellomiMark = parameters.icon {
+                    context.translateBy(x: bounds.size.width / 2.0, y: bounds.size.height / 2.0)
+                    context.scaleBy(x: 1.0, y: -1.0)
+                    context.translateBy(x: -bounds.size.width / 2.0, y: -bounds.size.height / 2.0)
+                    if let tellomiMarkIcon = tellomiMarkIcon {
+                        let side = floor(bounds.size.width * 0.62)
+                        let origin = floor((bounds.size.width - side) / 2.0)
+                        context.draw(tellomiMarkIcon.cgImage!, in: CGRect(x: origin, y: origin, width: side, height: side))
                     }
                 } else if case .editAvatarIcon = parameters.icon, let theme = parameters.theme, !parameters.hasImage {
                     context.translateBy(x: bounds.size.width / 2.0, y: bounds.size.height / 2.0)

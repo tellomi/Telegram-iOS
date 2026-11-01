@@ -227,6 +227,31 @@ Owner reports on 14.0.2 (build 58). The login screens stay the existing Tellomi 
 | Icons and password alignment | `TellomiSocialRowNode` / `TellomiCircleButtonNode` scale the glyph inside the slot. The phone password field uses the same 78pt column as the country code, so the password text lines up with the number. |
 | 绑定手机号 / 绑定邮箱 / change email | `PeerInfoSettingsItems` draws both as disclosure rows (icon, title, chevron), the same row as change phone. No phone → 绑定手机号 and the existing change-phone flow. No email → 绑定邮箱. An email row opens `loginEmailSetupController` (the stock login-email change: address, then code, `account.sendVerifyEmailCode` / `account.verifyEmail` with `emailVerifyPurposeLoginChange`). The address is stored with `tellomiRememberLoginEmail` because it is not a user field. |
 
+## Chat list, settings, and login chrome (14.0.3对照)
+
+The server langpacks (`ios` `zh-hans` / `en`) already say Tellomi. The bundled `en.lproj` fallback and any string `getSingle` still reads do not. Official service user `777000` and notification user `333000` with no photo draw a letter from the name (T when the name is Telegram or Tellomi). Login confirmations still read `baseLanguageCode`, which stays `en` after zh-hans is applied, so the email dialog body stayed English next to Chinese chrome. Choosing a language in Settings did not set `TellomiDidApplySystemLangPack`, so the login chrome kept the system language after that choice.
+
+No version bump. The formal 14.0.3 build is not cut here.
+
+| File | Change |
+| --- | --- |
+| `build-system/GenerateStrings/GenerateStrings.py` | `getSingle` rewrites Telegram, 电报, and the other brand tokens, then the public hosts (`telegram.org`, `t.me`, `telegram.me`, `telegram.dog`). `t.me` is replaced only as its own host, so `not.me` stays. |
+| `submodules/TelegramPresentationData/Sources/TellomiBrandRewrite.swift` | The same rewrite for dictionaries and for a service account's display name. |
+| `submodules/TelegramPresentationData/Sources/PresentationData.swift` | `dictFromLocalization` runs that rewrite, so a downloaded pack is covered even when a key is read from the dict. |
+| `submodules/TelegramPresentationData/Sources/DefaultPresentationStrings.swift` | The bundled English dictionary is rewritten before it becomes the fallback pack. |
+| `submodules/LocalizedPeerData/Sources/PeerTitle.swift` | `777000` and `333000` display names replace a Telegram token with Tellomi. A service account with no name is Tellomi. |
+| `submodules/AvatarNode/Sources/AvatarNode.swift` | Those two peers, when they have no photo, draw `Avatar/TellomiMark` (the QR logo PDF) in white on `#17171A` instead of a letter. A photo from the server is kept. |
+| `submodules/TelegramUI/Images.xcassets/Avatar/TellomiMark.imageset` | That PDF. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Chinese confirm, edit, yes, and sign-up labels used when the chrome language is Chinese. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | The email confirm dialog uses `tellomiInterfaceLanguageCode`, not `baseLanguageCode`. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | The phone confirmation card uses the bundled Chinese labels on a Chinese chrome. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Sign-up title, help, and name placeholders do the same. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | Built-in rows: 简体中文, 繁體中文, English. |
+| `submodules/SettingsUI/Sources/Language Selection/LocalizationListControllerNode.swift` | Those rows are added when the server list does not already contain them, including while the list is still empty. Applying a language sets `TellomiDidApplySystemLangPack`, so the login chrome follows the choice. |
+| `submodules/SettingsUI/Sources/Search/SettingsSearchableItems.swift` | Settings search applies a language the same way. |
+
+Already in place, not changed: 绑定邮箱 uses `PresentationResourcesSettings.email` (`Item List/Icons/Email`). The login-home 邮箱登录 row uses the envelope symbol. Contact address label `Telegram` is the match key for saved contacts and is not a title.
+
 ## Welcome copy
 
 The intro used to read `en.lproj` (`Tour.Title1` = "Telegram", `Tour.StartButton` = "Start Messaging") and ignore the system language. A Chinese device stayed on that English tour until Start downloaded a langpack, and the carousel itself never changed. The six pages and the button now come from `tellomiIntroCopy()`: Simplified Chinese when `tellomiSystemLangPackCode()` is set, otherwise Tellomi English ("Get Started", not "Start Messaging"). The OpenGL page layout is unchanged. The center mark is the Tellomi glyph (see TestFlight 14.0.2 login). The Start button uses the black login chrome.

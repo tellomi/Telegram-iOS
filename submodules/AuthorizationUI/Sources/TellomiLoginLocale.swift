@@ -63,3 +63,13 @@ public func tellomiLangPackCodePendingApplication(currentLanguageCode: String) -
 public func tellomiInterfaceLanguageCode(_ strings: PresentationStrings) -> String {
     return tellomiChromeLanguageCode(savedLanguageCode: strings.primaryComponent.languageCode)
 }
+
+/// Rows the language screen always offers, even before `langpack.getLanguages` returns.
+/// Selecting one still downloads that pack. A later server list keeps its own copy of the same code.
+public func tellomiBuiltinInterfaceLanguages() -> [LocalizationInfo] {
+    return [
+        LocalizationInfo(languageCode: "zh-hans", baseLanguageCode: "en", customPluralizationCode: "zh", title: "Chinese (Simplified)", localizedTitle: "简体中文", isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""),
+        LocalizationInfo(languageCode: "zh-hant", baseLanguageCode: "en", customPluralizationCode: "zh", title: "Chinese (Traditional)", localizedTitle: "繁體中文", isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""),
+        LocalizationInfo(languageCode: "en", baseLanguageCode: nil, customPluralizationCode: nil, title: "English", localizedTitle: "English", isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""),
+    ]
+}

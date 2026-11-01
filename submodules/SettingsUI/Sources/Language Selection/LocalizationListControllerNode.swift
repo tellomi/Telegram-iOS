@@ -16,6 +16,7 @@ import UndoUI
 import TelegramUIPreferences
 import TranslateUI
 import PremiumUI
+import AuthorizationUI
 
 private enum LanguageListSection: ItemListSectionId {
     case translate
@@ -313,6 +314,18 @@ private final class LocalizationListSearchContainerNode: SearchDisplayController
     }
 }
 
+private func tellomiAppendBuiltinInterfaceLanguages(_ entries: inout [LanguageListEntry], existingIds: inout Set<String>, activeLanguageCode: String?, applyingCode: String?, revealedCode: String?) {
+    let known = Set(existingIds.map { $0.lowercased() })
+    for info in tellomiBuiltinInterfaceLanguages() {
+        if known.contains(info.languageCode.lowercased()) || existingIds.contains(info.languageCode) {
+            continue
+        }
+        existingIds.insert(info.languageCode)
+        let code = info.languageCode.lowercased()
+        entries.append(.localization(index: entries.count, info: info, type: .official, selected: code == activeLanguageCode?.lowercased(), activity: code == applyingCode?.lowercased(), revealed: code == revealedCode?.lowercased(), editing: false))
+    }
+}
+
 private struct LanguageListNodeTransition {
     let deletions: [ListViewDeleteItem]
     let insertions: [ListViewInsertItem]
@@ -591,10 +604,10 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                     existingIds.insert(info.languageCode)
                     entries.append(.localization(index: entries.count, info: info, type: .official, selected: info.languageCode == activeLanguageCode, activity: applyingCode == info.languageCode, revealed: revealedCode == info.languageCode, editing: false))
                 }
+                tellomiAppendBuiltinInterfaceLanguages(&entries, existingIds: &existingIds, activeLanguageCode: activeLanguageCode, applyingCode: applyingCode, revealedCode: revealedCode)
             } else {
-                for _ in 0 ..< 15 {
-                    entries.append(.localization(index: entries.count, info: nil, type: .official, selected: false, activity: false, revealed: false, editing: false))
-                }
+                entries.append(.localizationTitle(text: presentationData.strings.Localization_InterfaceLanguage.uppercased(), section: LanguageListSection.official.rawValue))
+                tellomiAppendBuiltinInterfaceLanguages(&entries, existingIds: &existingIds, activeLanguageCode: activeLanguageCode, applyingCode: applyingCode, revealedCode: revealedCode)
             }
             
             let previousState = previousState.swap(localizationListState)
@@ -768,6 +781,7 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             strongSelf.applyingCode.set(.single(info.languageCode))
             strongSelf.applyDisposable.set((strongSelf.context.engine.localization.downloadAndApplyLocalization(accountManager: strongSelf.context.sharedContext.accountManager, languageCode: info.languageCode)
                 |> deliverOnMainQueue).start(completed: { [weak self] in
+                    tellomiMarkSystemLangPackApplied()
                     self?.applyingCode.set(.single(nil))
                 
                     self?.context.engine.messages.refreshAttachMenuBots()

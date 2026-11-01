@@ -1667,20 +1667,24 @@ final class PhoneConfirmationController: ViewController {
             self.backgroundNode.backgroundColor = theme.list.itemBlocksBackgroundColor
             self.backgroundNode.cornerRadius = 42.0
             
+            let bundled = tellomiBundledChineseLoginCopy(strings)
+            let confirmText = bundled?.phoneConfirm ?? strings.Login_PhoneNumberConfirmation
+            let editText = bundled?.edit ?? strings.Login_Edit
+            let continueText = bundled?.continueAction ?? strings.Login_Continue
             self.textNode = ImmediateTextNode()
             self.textNode.displaysAsynchronously = false
-            self.textNode.attributedText = NSAttributedString(string: strings.Login_PhoneNumberConfirmation, font: Font.regular(17.0), textColor: theme.list.itemPrimaryTextColor)
+            self.textNode.attributedText = NSAttributedString(string: confirmText, font: Font.regular(17.0), textColor: theme.list.itemPrimaryTextColor)
             self.textNode.textAlignment = .center
             
             self.textActivateAreaNode = AccessibilityAreaNode()
             self.textActivateAreaNode.accessibilityTraits = .staticText
             
             self.cancelButton = HighlightableButtonNode()
-            self.cancelButton.setTitle(strings.Login_Edit, with: Font.regular(19.0), with: theme.list.itemAccentColor, for: .normal)
+            self.cancelButton.setTitle(editText, with: Font.regular(19.0), with: theme.list.itemAccentColor, for: .normal)
             self.cancelButton.accessibilityTraits = [.button]
-            self.cancelButton.accessibilityLabel = strings.Login_Edit
+            self.cancelButton.accessibilityLabel = editText
             
-            self.proceedNode = SolidRoundedButtonNode(title: strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5)
+            self.proceedNode = SolidRoundedButtonNode(title: continueText, theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5)
             self.proceedNode.progressType = .embedded
             self.proceedNode.accessibilityIdentifier = "Auth.PhoneConfirm.ContinueButton"
 
@@ -1938,7 +1942,8 @@ final class PhoneConfirmationController: ViewController {
             let textSize = self.textNode.updateLayout(backgroundSize)
             transition.updateFrame(node: self.textNode, frame: CGRect(origin: CGPoint(x: floorToScreenPixels((backgroundSize.width - textSize.width) / 2.0), y: 88.0), size: textSize).offsetBy(dx: backgroundFrame.minX, dy: backgroundFrame.minY))
             self.textActivateAreaNode.frame = self.textNode.frame
-            self.textActivateAreaNode.accessibilityLabel = "\(self.code) \(self.number). \(self.strings.Login_PhoneNumberConfirmation)"
+            let confirmText = tellomiBundledChineseLoginCopy(self.strings)?.phoneConfirm ?? self.strings.Login_PhoneNumberConfirmation
+            self.textActivateAreaNode.accessibilityLabel = "\(self.code) \(self.number). \(confirmText)"
             
             let proceedWidth = backgroundSize.width - innerInset * 2.0
             let proceedHeight = self.proceedNode.updateLayout(width: proceedWidth, transition: transition)

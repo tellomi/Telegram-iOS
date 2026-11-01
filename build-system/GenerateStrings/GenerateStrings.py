@@ -445,6 +445,102 @@ static NSString * _Nonnull getPluralizationSuffix(uint32_t lc, int32_t value) {
     }
 }
 
+static BOOL tellomiHostBoundary(NSString *value, NSUInteger index, NSUInteger length) {
+    if (index > 0) {
+        unichar previous = [value characterAtIndex:index - 1];
+        if (previous == '@' || previous == '.' || [[NSCharacterSet alphanumericCharacterSet] characterIsMember:previous]) {
+            return NO;
+        }
+    }
+    NSUInteger end = index + length;
+    if (end < value.length) {
+        unichar next = [value characterAtIndex:end];
+        if ([[NSCharacterSet alphanumericCharacterSet] characterIsMember:next]) {
+            return NO;
+        }
+    }
+    return YES;
+}
+
+static NSString *tellomiReplaceHostBoundary(NSString *value, NSString *from, NSString *to) {
+    if ([from isEqualToString:to] || [value rangeOfString:from].location == NSNotFound) {
+        return value;
+    }
+    NSMutableString *result = [[NSMutableString alloc] initWithCapacity:value.length];
+    NSUInteger index = 0;
+    BOOL changed = NO;
+    while (index < value.length) {
+        NSRange found = [value rangeOfString:from options:0 range:NSMakeRange(index, value.length - index)];
+        if (found.location == NSNotFound) {
+            break;
+        }
+        [result appendString:[value substringWithRange:NSMakeRange(index, found.location - index)]];
+        if (tellomiHostBoundary(value, found.location, from.length)) {
+            [result appendString:to];
+            changed = YES;
+        } else {
+            [result appendString:[value substringWithRange:found]];
+        }
+        index = NSMaxRange(found);
+    }
+    if (!changed) {
+        return value;
+    }
+    if (index < value.length) {
+        [result appendString:[value substringFromIndex:index]];
+    }
+    return result;
+}
+
+/// Same replacement as `tellomiRewriteBrand` in TelegramPresentationData.
+/// Downloaded packs and the bundled English fallback both pass through `getSingle`.
+static NSString * _Nonnull tellomiRewriteBrand(NSString * _Nullable value) {
+    if (value == nil || value.length == 0) {
+        return value ?: @"";
+    }
+    NSString *folded = value.lowercaseString;
+    if ([folded rangeOfString:@"telegram"].location == NSNotFound &&
+        [folded rangeOfString:@"t.me"].location == NSNotFound &&
+        [value rangeOfString:@"电报"].location == NSNotFound &&
+        [value rangeOfString:@"تيليجرام"].location == NSNotFound &&
+        [value rangeOfString:@"텔레그램"].location == NSNotFound &&
+        [value rangeOfString:@"टेलीग्राम"].location == NSNotFound) {
+        return value;
+    }
+    NSArray<NSString *> *tokens = @[@"Telegram", @"تيليجرام", @"텔레그램", @"टेलीग्राम", @"电报"];
+    for (NSString *token in tokens) {
+        if ([value rangeOfString:token].location != NSNotFound) {
+            value = [value stringByReplacingOccurrencesOfString:token withString:@"Tellomi"];
+        }
+    }
+    NSArray<NSArray<NSString *> *> *hosts = @[
+        @[@"getdesktop.telegram.org", @"tellomi.cn/download"],
+        @[@"desktop.telegram.org", @"tellomi.cn/download"],
+        @[@"web.telegram.org", @"tell.cc"],
+        @[@"ads.telegram.org", @"tell.cc"],
+        @[@"promote.telegram.org", @"tell.cc"],
+        @[@"translations.telegram.org", @"tellomi.cn"],
+        @[@"core.telegram.org", @"tellomi.cn"],
+        @[@"sms@telegram.org", @"support@tellomi.cn"],
+        @[@"recover@telegram.org", @"support@tellomi.cn"],
+        @[@"www.telegram.org", @"tell.cc"]
+    ];
+    for (NSArray<NSString *> *pair in hosts) {
+        if ([value rangeOfString:pair[0]].location != NSNotFound) {
+            value = [value stringByReplacingOccurrencesOfString:pair[0] withString:pair[1]];
+        }
+    }
+    value = tellomiReplaceHostBoundary(value, @"telegram.org", @"tell.cc");
+    if ([value rangeOfString:@"telegram.me"].location != NSNotFound) {
+        value = [value stringByReplacingOccurrencesOfString:@"telegram.me" withString:@"tell.cc"];
+    }
+    if ([value rangeOfString:@"telegram.dog"].location != NSNotFound) {
+        value = [value stringByReplacingOccurrencesOfString:@"telegram.dog" withString:@"tell.cc"];
+    }
+    value = tellomiReplaceHostBoundary(value, @"t.me", @"tell.cc");
+    return value;
+}
+
 static NSString * _Nonnull getSingle(_PresentationStrings * _Nullable strings, NSString * _Nonnull key,
     bool * _Nullable isFound) {
     NSString *result = nil;
@@ -479,12 +575,12 @@ static NSString * _Nonnull getSingle(_PresentationStrings * _Nullable strings, N
         if (isFound) {
             *isFound = false;
         }
-    } else {
-        if (isFound) {
-            *isFound = true;
-        }
+        return result;
     }
-    return result;
+    if (isFound) {
+        *isFound = true;
+    }
+    return tellomiRewriteBrand(result);
 }
 
 static NSString * _Nonnull getSingleIndirect(_PresentationStrings * _Nonnull strings, uint32_t keyId) {
