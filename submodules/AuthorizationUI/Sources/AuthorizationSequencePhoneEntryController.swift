@@ -490,10 +490,14 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
                 self.loginWithNumber?(email, self.controllerNode.syncContacts)
                 return
             }
-            let copy = tellomiEmailLoginCopy(languageCode: self.presentationData.strings.baseLanguageCode)
+            let languageCode = tellomiInterfaceLanguageCode(self.presentationData.strings)
+            let copy = tellomiEmailLoginCopy(languageCode: languageCode)
+            let bundled = tellomiBundledChineseLoginCopy(self.presentationData.strings)
+            let editTitle = bundled?.edit ?? self.presentationData.strings.Login_Edit
+            let yesTitle = bundled?.yes ?? self.presentationData.strings.Login_Yes
             var actions: [TextAlertAction] = []
-            actions.append(TextAlertAction(type: .genericAction, title: self.presentationData.strings.Login_Edit, action: {}))
-            actions.append(TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Login_Yes, action: { [weak self] in
+            actions.append(TextAlertAction(type: .genericAction, title: editTitle, action: {}))
+            actions.append(TextAlertAction(type: .defaultAction, title: yesTitle, action: { [weak self] in
                 guard let self else {
                     return
                 }
@@ -522,14 +526,18 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
                     (self.navigationController as? NavigationController)?.presentOverlay(controller: confirmationController, inGlobal: true, blockInteraction: true)
                     self.confirmationController = confirmationController
                 } else {
+                    let bundled = tellomiBundledChineseLoginCopy(self.presentationData.strings)
+                    let editTitle = bundled?.edit ?? self.presentationData.strings.Login_Edit
+                    let yesTitle = bundled?.yes ?? self.presentationData.strings.Login_Yes
+                    let confirmText = bundled?.phoneConfirm ?? self.presentationData.strings.Login_PhoneNumberConfirmation
                     var actions: [TextAlertAction] = []
-                    actions.append(TextAlertAction(type: .genericAction, title: self.presentationData.strings.Login_Edit, action: {}))
-                    actions.append(TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Login_Yes, action: { [weak self] in
+                    actions.append(TextAlertAction(type: .genericAction, title: editTitle, action: {}))
+                    actions.append(TextAlertAction(type: .defaultAction, title: yesTitle, action: { [weak self] in
                         if let strongSelf = self {
                             strongSelf.loginWithNumber?(strongSelf.controllerNode.currentNumber, strongSelf.controllerNode.syncContacts)
                         }
                     }))
-                    self.present(textAlertController(sharedContext: self.sharedContext, title: logInNumber, text: self.presentationData.strings.Login_PhoneNumberConfirmation, actions: actions), in: .window(.root))
+                    self.present(textAlertController(sharedContext: self.sharedContext, title: logInNumber, text: confirmText, actions: actions), in: .window(.root))
                 }
             }
         } else {

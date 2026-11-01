@@ -287,8 +287,9 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 90.0 : 10.0
                 
         let nicknameCopy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
-        let title = self.tellomiNicknameOnly ? nicknameCopy.nicknameTitle : self.strings.Login_InfoTitle
-        let help = self.tellomiNicknameOnly ? nicknameCopy.nicknameHelp : self.strings.Login_InfoHelp
+        let bundled = tellomiBundledChineseLoginCopy(self.strings)
+        let title = self.tellomiNicknameOnly ? nicknameCopy.nicknameTitle : (bundled?.signUpTitle ?? self.strings.Login_InfoTitle)
+        let help = self.tellomiNicknameOnly ? nicknameCopy.nicknameHelp : (bundled?.signUpHelp ?? self.strings.Login_InfoHelp)
         self.titleNode.attributedText = NSAttributedString(string: title, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
         self.currentOptionNode.attributedText = NSAttributedString(string: help, font: Font.regular(16.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.applyTellomiNicknameChrome()
@@ -382,8 +383,13 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
 
     private func applyTellomiNicknameChrome() {
         let copy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
-        let placeholder = self.tellomiNicknameOnly ? copy.nicknamePlaceholder : self.strings.UserInfo_FirstNamePlaceholder
+        let bundled = tellomiBundledChineseLoginCopy(self.strings)
+        let placeholder = self.tellomiNicknameOnly ? copy.nicknamePlaceholder : (bundled?.firstNamePlaceholder ?? self.strings.UserInfo_FirstNamePlaceholder)
         self.firstNameField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: self.firstNameField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
+        if !self.tellomiNicknameOnly {
+            let lastPlaceholder = bundled?.lastNamePlaceholder ?? self.strings.UserInfo_LastNamePlaceholder
+            self.lastNameField.textField.attributedPlaceholder = NSAttributedString(string: lastPlaceholder, font: self.lastNameField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
+        }
         self.firstNameField.textField.returnKeyType = self.tellomiNicknameOnly ? .done : .next
         if #available(iOSApplicationExtension 12.0, iOS 12.0, *) {
             self.firstNameField.textField.textContentType = self.tellomiNicknameOnly ? .nickname : .givenName

@@ -31,6 +31,7 @@ import AvatarEditorScreen
 import PeerSelectionScreen
 import DeviceModel
 import DebugSettingsUI
+import AuthorizationUI
 
 enum SettingsSearchableItemIcon {
     case profile
@@ -4087,6 +4088,7 @@ private func languageSearchableItems(context: AccountContext, localizations: [Lo
         
         let _ = (context.engine.localization.downloadAndApplyLocalization(accountManager: context.sharedContext.accountManager, languageCode: languageCode)
         |> deliverOnMainQueue).start(completed: { [weak controller] in
+            tellomiMarkSystemLangPackApplied()
             controller?.dismiss()
             present(.dismiss, nil)
         })

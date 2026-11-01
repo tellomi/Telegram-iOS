@@ -175,6 +175,13 @@ struct TellomiLoginCopy: Equatable {
     let emailLabel: String
     let alreadyAuthorized: String
     let switchToAccount: String
+    let phoneConfirm: String
+    let edit: String
+    let yes: String
+    let signUpTitle: String
+    let signUpHelp: String
+    let firstNamePlaceholder: String
+    let lastNamePlaceholder: String
 
     func codeSentPhone(_ number: String) -> String {
         return String(format: self.codeSentPhoneFormat, number)
@@ -238,7 +245,14 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
             bindEmailTitle: "绑定邮箱",
             emailLabel: "邮箱",
             alreadyAuthorized: "该账号已登录",
-            switchToAccount: "切换到该账号"
+            switchToAccount: "切换到该账号",
+            phoneConfirm: "这个号码正确吗？",
+            edit: "编辑",
+            yes: "是",
+            signUpTitle: "你的信息",
+            signUpHelp: "输入你的名字和添加头像.",
+            firstNamePlaceholder: "名字",
+            lastNamePlaceholder: "姓氏"
         )
     }
     return TellomiLoginCopy(
@@ -283,7 +297,14 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
         bindEmailTitle: "Link an email",
         emailLabel: "Email",
         alreadyAuthorized: "This account is already signed in",
-        switchToAccount: "Switch to this account"
+        switchToAccount: "Switch to this account",
+        phoneConfirm: "Is this the correct number?",
+        edit: "Edit",
+        yes: "Yes",
+        signUpTitle: "Your Info",
+        signUpHelp: "Enter your name and add a profile photo.",
+        firstNamePlaceholder: "First Name",
+        lastNamePlaceholder: "Last Name"
     )
 }
 
@@ -297,4 +318,15 @@ func tellomiLoginLanguageIsChinese(_ languageCode: String) -> Bool {
 func tellomiLoginPrefersChinese(languageCode: String) -> Bool {
     let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode).lowercased()
     return code == "zh" || code.hasPrefix("zh-")
+}
+
+/// Bundled Chinese for the login and sign-up labels that otherwise come from the
+/// English pack fallback. Nil when the chrome language is not Chinese, so another
+/// language chosen in Settings keeps that pack.
+func tellomiBundledChineseLoginCopy(_ strings: PresentationStrings) -> TellomiLoginCopy? {
+    let code = tellomiInterfaceLanguageCode(strings)
+    if tellomiLoginPrefersChinese(languageCode: code) {
+        return tellomiLoginCopy(languageCode: code)
+    }
+    return nil
 }
