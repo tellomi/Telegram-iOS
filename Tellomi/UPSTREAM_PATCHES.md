@@ -242,7 +242,7 @@ No version bump. The formal 14.0.3 build is not cut here.
 | `submodules/LocalizedPeerData/Sources/PeerTitle.swift` | `777000` and `333000` display names replace a Telegram token with Tellomi. A service account with no name is Tellomi. |
 | `submodules/AvatarNode/Sources/AvatarNode.swift` | Those two peers, when they have no photo, draw `Avatar/TellomiMark` (the QR logo PDF) in white on `#17171A` instead of a letter. A photo from the server is kept. |
 | `submodules/TelegramUI/Images.xcassets/Avatar/TellomiMark.imageset` | That PDF. |
-| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Chinese confirm, edit, yes, and sign-up labels used when the chrome language is Chinese. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Chinese confirm, edit, yes, and sign-up labels used when the chrome language is Chinese. `tellomiBundledChineseLoginCopy` takes `PresentationStrings`, so this file imports `TelegramPresentationData`. The other imports do not bring that type into scope. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | The email confirm dialog uses `tellomiInterfaceLanguageCode`, not `baseLanguageCode`. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | The phone confirmation card uses the bundled Chinese labels on a Chinese chrome. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Sign-up title, help, and name placeholders do the same. |
