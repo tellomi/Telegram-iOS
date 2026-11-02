@@ -1,0 +1,66 @@
+{
+  "character": "文",
+  "language": "zh",
+  "strokes": [
+    {
+      "role": "primary",
+      "points": [
+        [
+          169.3,
+          188.009
+        ],
+        [
+          198.3,
+          144.204
+        ],
+        [
+          227.3,
+          188.009
+        ]
+      ]
+    },
+    {
+      "role": "secondary",
+      "points": [
+        [
+          193.3,
+          100.4
+        ],
+        [
+          203.3,
+          108.364
+        ]
+      ]
+    },
+    {
+      "role": "secondary",
+      "points": [
+        [
+          167.3,
+          126.284
+        ],
+        [
+          229.3,
+          126.284
+        ]
+      ]
+    }
+  ],
+  "coordinateSpace": "lottie-canvas",
+  "yAxis": "down",
+  "unmirrored": true,
+  "canvas": [
+    300,
+    300
+  ],
+  "strokeWidth": 13.3,
+  "lineCap": "round",
+  "lineJoin": "round",
+  "letterBox": {
+    "x": 163.3,
+    "y": 100.4,
+    "width": 70.0,
+    "height": 89.6
+  },
+  "note": "Centerlines of the transcription letter. Same paths feed the iOS Lottie files. Draw unmirrored in RTL."
+}
