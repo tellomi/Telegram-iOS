@@ -79,10 +79,12 @@ final class TellomiAgreementRow: ASDisplayNode {
 
     func updateLayout(width: CGFloat, centered: Bool) -> CGSize {
         self.centered = centered
+        self.textNode.maximumNumberOfLines = 0
         let box: CGFloat = 18.0
         let gap: CGFloat = 8.0
-        let textWidth = max(0.0, width - box - gap)
-        let textSize = self.textNode.updateLayout(CGSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude))
+        let textWidth = max(1.0, width - box - gap)
+        // A huge height makes TextNode treat the line as the last one and truncate it.
+        let textSize = self.textNode.updateLayout(CGSize(width: textWidth, height: 1000.0))
         self.measuredText = textSize
         let height = max(44.0, textSize.height + 16.0)
         return CGSize(width: width, height: height)
@@ -97,8 +99,10 @@ final class TellomiAgreementRow: ASDisplayNode {
         let box: CGFloat = 18.0
         let gap: CGFloat = 8.0
         let textY: CGFloat = 13.0
-        let measured = self.measuredText.width > 0.0 ? self.measuredText : CGSize(width: max(0.0, self.bounds.width - box - gap), height: max(0.0, self.bounds.height - textY))
-        let groupWidth = box + gap + measured.width
+        let availableTextWidth = max(1.0, self.bounds.width - box - gap)
+        let measured = self.measuredText.width > 0.0 ? self.measuredText : CGSize(width: availableTextWidth, height: max(0.0, self.bounds.height - textY))
+        let textWidth = min(max(measured.width, 1.0), availableTextWidth)
+        let groupWidth = box + gap + textWidth
         let originX: CGFloat
         if self.centered {
             originX = max(0.0, floor((self.bounds.width - groupWidth) / 2.0))
@@ -108,7 +112,7 @@ final class TellomiAgreementRow: ASDisplayNode {
         let boxY = textY + 1.0
         self.checkbox.frame = CGRect(x: originX, y: boxY, width: box, height: box)
         self.checkboxButton.frame = CGRect(x: max(0.0, originX - 13.0), y: 0.0, width: 44.0, height: 44.0)
-        self.textNode.frame = CGRect(x: originX + box + gap, y: textY, width: measured.width, height: max(measured.height, 22.0))
+        self.textNode.frame = CGRect(x: originX + box + gap, y: textY, width: textWidth, height: max(measured.height, 22.0))
     }
 }
 
@@ -185,6 +189,9 @@ final class TellomiOrDividerNode: ASDisplayNode {
 
     func setTitle(_ title: String) {
         self.label.attributedText = NSAttributedString(string: title, font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText)
+        self.isAccessibilityElement = true
+        self.accessibilityLabel = title
+        self.accessibilityTraits = [.staticText]
     }
 
     func applyPalette(dark: Bool) {

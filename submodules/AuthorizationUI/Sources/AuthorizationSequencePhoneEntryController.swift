@@ -447,9 +447,17 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             if let (buttonFrame, buttonTitle, animationSnapshot, textSnapshot) = self.transitionInArguments {
                 self.controllerNode.willAnimateIn(buttonFrame: buttonFrame, buttonTitle: buttonTitle, animationSnapshot: animationSnapshot, textSnapshot: textSnapshot)
             }
-        }
-        // Login phone and email open with no keyboard. Change Phone Number still focuses its field.
-        if self.account == nil {
+            // Telegram finishes this fade from containerLayoutUpdated once the keyboard's
+            // inputHeight arrives. Login calls activateInput here the same way, but that
+            // call does not focus a field, so the fade is released on this turn instead.
+            Queue.mainQueue().justDispatch { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.controllerNode.activateInput()
+                self.completeIntroTransitionWithoutKeyboard()
+            }
+        } else {
             self.controllerNode.activateInput()
         }
     }
@@ -457,9 +465,19 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
-        if !self.animatingIn, self.account == nil {
+        if !self.animatingIn {
             self.controllerNode.activateInput()
         }
+    }
+
+    /// Login never raises a keyboard on open, so the intro fade cannot wait for inputHeight.
+    /// The keyboard path in containerLayoutUpdated is unchanged for a screen that does focus.
+    private func completeIntroTransitionWithoutKeyboard() {
+        guard self.account != nil, self.shouldAnimateIn, let (buttonFrame, buttonTitle, animationSnapshot, textSnapshot) = self.transitionInArguments else {
+            return
+        }
+        self.shouldAnimateIn = false
+        self.controllerNode.animateIn(buttonFrame: buttonFrame, buttonTitle: buttonTitle, animationSnapshot: animationSnapshot, textSnapshot: textSnapshot)
     }
     
     override public func viewWillDisappear(_ animated: Bool) {

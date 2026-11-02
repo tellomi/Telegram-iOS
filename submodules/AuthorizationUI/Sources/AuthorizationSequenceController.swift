@@ -1548,14 +1548,27 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         }
     }
 
-    /// Login follows the system appearance. The stored theme can still be the day theme when the window's trait arrives late, or when the system switches while this screen is up.
+    /// The auth flow is given whatever theme was current when it was built. That theme does not
+    /// follow the system appearance on its own (a light trait on this controller used to lock it
+    /// to the day theme). The screen's style is the source.
+    private func tellomiSystemIsDark() -> Bool {
+        if #available(iOS 13.0, *) {
+            let screenStyle = UIScreen.main.traitCollection.userInterfaceStyle
+            if screenStyle != .unspecified {
+                return screenStyle == .dark
+            }
+            if let windowStyle = self.view.window?.windowScene?.traitCollection.userInterfaceStyle, windowStyle != .unspecified {
+                return windowStyle == .dark
+            }
+        }
+        return self.presentationData.theme.overallDarkAppearance
+    }
+
     private func tellomiApplyAppearance(_ presentationData: PresentationData) {
         var presentationData = presentationData
-        if #available(iOS 13.0, *) {
-            let wantsDark = self.traitCollection.userInterfaceStyle == .dark
-            if self.traitCollection.userInterfaceStyle != .unspecified, presentationData.theme.overallDarkAppearance != wantsDark {
-                presentationData = presentationData.withTheme(wantsDark ? defaultDarkPresentationTheme : defaultPresentationTheme)
-            }
+        let wantsDark = self.tellomiSystemIsDark()
+        if presentationData.theme.overallDarkAppearance != wantsDark {
+            presentationData = presentationData.withTheme(wantsDark ? defaultDarkPresentationTheme : defaultPresentationTheme)
         }
         let themeChanged = presentationData.theme !== self.presentationData.theme || presentationData.theme.overallDarkAppearance != self.presentationData.theme.overallDarkAppearance
         self.presentationData = presentationData

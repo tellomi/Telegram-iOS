@@ -190,6 +190,7 @@ final class TellomiSignUpAgreement: NSObject {
         }
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = (self.centeredBody || self.kind != .phone) ? .center : .left
+        paragraph.lineBreakMode = .byWordWrapping
         result.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: result.length))
         return result
     }

@@ -119,7 +119,9 @@ public final class AuthorizationSequenceSplashController: ViewController {
     
     func applyPresentationTheme(_ theme: PresentationTheme) {
         self.theme = theme
+        self.statusBar.statusBarStyle = theme.intro.statusBarStyle.style
         self.startButton.updateTheme(TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance))
+        self.controller.updateAppearanceBackgroundColor(theme.list.plainBackgroundColor, primaryColor: theme.list.itemPrimaryTextColor, buttonColor: theme.intro.startButtonColor, accentColor: theme.list.itemAccentColor, regularDotColor: theme.intro.dotColor, highlightedDotColor: theme.list.itemAccentColor)
         if self.isNodeLoaded {
             self.controllerNode.backgroundColor = theme.list.plainBackgroundColor
         }

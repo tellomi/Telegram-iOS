@@ -1332,6 +1332,12 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     }
 
     func activateInput() {
+        // The controller calls this after the intro, same as Telegram. Login must not
+        // take first responder here: the number pad would cover the agreement row.
+        // Change Phone Number (no account) still focuses its field.
+        guard !self.tellomiLoginHome else {
+            return
+        }
         switch self.tellomiSurface {
         case .emailCode:
             self.emailFieldNode?.textField.textField.becomeFirstResponder()
