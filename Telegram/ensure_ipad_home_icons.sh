@@ -38,8 +38,14 @@ def png_size(path):
     data = path.read_bytes()
     if data[:8] != b"\x89PNG\r\n\x1a\n":
         fail("{} is not a PNG".format(path.name))
-    width, height = struct.unpack(">II", data[16:24])
-    return width, height
+    # Xcode/Bazel may emit Apple CgBI PNGs, where a CgBI chunk precedes IHDR.
+    pos = 8
+    while pos + 8 <= len(data):
+        length, kind = struct.unpack(">I4s", data[pos:pos + 8])
+        if kind == b"IHDR":
+            return struct.unpack(">II", data[pos + 8:pos + 16])
+        pos += 12 + length
+    fail("{} has no IHDR chunk".format(path.name))
 
 
 def icon_base(filename):
