@@ -360,6 +360,10 @@ alternate_icon_folders = [
 
 # Primary and alternate icons are Tellomi/Brand. The upstream PNG folders stay
 # in the tree so an upstream icon update does not have to be merged by hand.
+# alticonstool copies every PNG basename into both CFBundleIcons and
+# CFBundleIcons~ipad, so each alternate needs its own 76pt @2x (152) and
+# 83.5pt @2x (167) file. Premium and WhiteFilled did not inherit those from
+# upstream; they are rendered from the same Tellomi slot artwork.
 
 filegroup(
     name = "LaunchScreen",
@@ -950,6 +954,11 @@ sh_binary(
         "Telegram-iOS/AlternateIcons-iPad.plist",
     ],
     srcs = [":GenerateAddAlternateIcons"],
+)
+
+sh_binary(
+    name = "EnsureIpadHomeIcons",
+    srcs = ["ensure_ipad_home_icons.sh"],
 )
 
 plist_fragment(
@@ -1929,8 +1938,14 @@ ios_application(
     alternate_icons = [
         "//:TellomiAlternate_{}".format(name) for name in alternate_icon_folders
     ],
+    # Actool compiles the primary icon into Assets.car. ITMS-90892 still wants
+    # the 152 and 167 PNGs as loose files referenced by CFBundleIcons~ipad.
+    # The processor appends those names after the plist merge, which cannot
+    # itself repeat the CFBundleIcons~ipad key actool already wrote.
+    ipa_post_processor = ":EnsureIpadHomeIcons",
     resources = [
         ":LaunchScreen",
+        "//:TellomiLooseIpadHomeIcons",
         #":DefaultAppIcon",
     ],
     frameworks = [

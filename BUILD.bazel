@@ -12,6 +12,17 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+# 152 and 167 copies of the primary icon. The asset catalog already has these
+# slots; App Store still looks for loose PNGs named from CFBundleIcons~ipad.
+filegroup(
+    name = "TellomiLooseIpadHomeIcons",
+    srcs = [
+        "Tellomi/Brand/LooseIpadIcons/TellomiHomeIpad76@2x.png",
+        "Tellomi/Brand/LooseIpadIcons/TellomiHomeIpad83@2x.png",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 # Same filenames as the upstream *.alticon slots, with the traced Tellomi logo.
 [
     filegroup(

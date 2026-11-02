@@ -600,6 +600,107 @@ def check_app_store_submission() -> None:
     camera = (ROOT / "submodules/LegacyComponents/Sources/TGCameraInterfaceAssets.m").read_text(encoding="utf-8")
     if "TGDbnfsb" in font or "TGDbnfsb" in camera:
         fail("camera UI still looks up the bundled SF Camera font by name")
+    check_ipad_alternate_icons()
+    check_siri_vocabulary()
+
+
+def icon_base(filename: str) -> str:
+    return filename.rsplit(".", 1)[0].split("@", 1)[0]
+
+
+def check_ipad_alternate_icons() -> None:
+    """Every packaged alternate icon has 152 and 167 PNGs alticonstool will name."""
+    alternates = ROOT / "Tellomi/Brand/Alternates"
+    folders = sorted(path for path in alternates.glob("*.alticon") if path.is_dir())
+    if len(folders) < 12:
+        fail(f"expected the Tellomi alternate icon slots, found {len(folders)}")
+    for folder in folders:
+        sizes = {}
+        for png in folder.glob("*.png"):
+            sizes.setdefault(png_size(png), []).append(icon_base(png.name))
+        for needed in ((152, 152), (167, 167)):
+            if needed not in sizes:
+                fail(f"{folder.name} has no {needed[0]}x{needed[1]} PNG")
+            if not sizes[needed]:
+                fail(f"{folder.name} {needed} has no plist icon name")
+    # These four had no iPad files upstream. The names are what alticonstool writes
+    # into CFBundleIcons~ipad CFBundleAlternateIcons CFBundleIconFiles.
+    for stem in ("WhiteFilledIcon", "Premium", "PremiumBlack", "PremiumTurbo"):
+        for suffix, size in (("Ipad@2x.png", (152, 152)), ("LargeIpad@2x.png", (167, 167))):
+            path = alternates / f"{stem}.alticon" / f"{stem}{suffix}"
+            if png_size(path) != size:
+                fail(f"{path.name} is {png_size(path)}, expected {size}")
+    loose = ROOT / "Tellomi/Brand/LooseIpadIcons"
+    catalog = ROOT / "Tellomi/Brand/AppIcon.xcassets/AppIcon.appiconset"
+    pairs = (
+        ("TellomiHomeIpad76@2x.png", "AppIcon-ipad-76x76@2x.png", (152, 152)),
+        ("TellomiHomeIpad83@2x.png", "AppIcon-ipad-83_5x83_5@2x.png", (167, 167)),
+    )
+    for loose_name, catalog_name, size in pairs:
+        loose_path = loose / loose_name
+        catalog_path = catalog / catalog_name
+        if png_size(loose_path) != size:
+            fail(f"{loose_name} is {png_size(loose_path)}, expected {size}")
+        if loose_path.read_bytes() != catalog_path.read_bytes():
+            fail(f"{loose_name} is not the same render as {catalog_name}")
+    build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
+    root_build = (ROOT / "BUILD.bazel").read_text(encoding="utf-8")
+    if 'name = "TellomiLooseIpadHomeIcons"' not in root_build:
+        fail("the loose iPad home icons are not a Bazel filegroup")
+    if '"//:TellomiLooseIpadHomeIcons"' not in build:
+        fail("the app resources do not include the loose iPad home icons")
+    if 'ipa_post_processor = ":EnsureIpadHomeIcons"' not in build:
+        fail("the app does not run EnsureIpadHomeIcons")
+    script = (ROOT / "Telegram/ensure_ipad_home_icons.sh").read_text(encoding="utf-8")
+    for name in ("TellomiHomeIpad76", "TellomiHomeIpad83", "CFBundleAlternateIcons"):
+        if name not in script:
+            fail(f"EnsureIpadHomeIcons does not mention {name}")
+    info = (ROOT / "Telegram/Telegram-iOS/Info.plist").read_text(encoding="utf-8")
+    ipad = info.split("<key>CFBundleIcons~ipad</key>", 1)[1]
+    for name in (
+        "TellomiHomeIpad76",
+        "TellomiHomeIpad83",
+        "WhiteFilledIconIpad",
+        "WhiteFilledIconLargeIpad",
+        "PremiumIpad",
+        "PremiumLargeIpad",
+        "PremiumBlackIpad",
+        "PremiumBlackLargeIpad",
+        "PremiumTurboIpad",
+        "PremiumTurboLargeIpad",
+    ):
+        if name not in ipad:
+            fail(f"CFBundleIcons~ipad does not reference {name}")
+
+
+REQUIRED_INTENTS = (
+    "INSendMessageIntent",
+    "INStartAudioCallIntent",
+    "INSearchForMessagesIntent",
+    "INSetMessageAttributeIntent",
+    "INSearchCallHistoryIntent",
+)
+
+
+def check_siri_vocabulary() -> None:
+    import plistlib
+
+    for language in ("zh-Hans", "zh-Hant"):
+        path = ROOT / "Telegram/Telegram-iOS" / f"{language}.lproj" / "AppIntentVocabulary.plist"
+        if not path.is_file():
+            fail(f"missing {path.relative_to(ROOT)}")
+        data = plistlib.loads(path.read_bytes())
+        phrases = data.get("IntentPhrases") or []
+        by_name = {item.get("IntentName"): item.get("IntentExamples") or [] for item in phrases}
+        for intent in REQUIRED_INTENTS:
+            examples = by_name.get(intent) or []
+            if not examples or not any("Tellomi" in example for example in examples):
+                fail(f"{language} {intent} has no Tellomi example phrase")
+            if any("Telegram" in example for example in examples):
+                fail(f"{language} {intent} still says Telegram")
+    build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
+    if "Telegram-iOS/*.lproj/AppIntentVocabulary.plist" not in build:
+        fail("AppIntentVocabulary resources are not globbed into the app")
 
 
 def check_marketing_version() -> None:
