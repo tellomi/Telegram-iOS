@@ -1726,7 +1726,7 @@ private final class TextProcessingSheetComponent: Component {
                 }
             }
 
-            var displayInfoButton = true
+            var displayInfoButton = TellomiFeatureGate.with(appConfiguration: component.context.currentAppConfiguration.with { $0 }).translateEnabled
             let titleString: String
             switch component.mode {
             case .edit:

@@ -403,3 +403,16 @@ Stacked on the solid-wallpaper change. Day and dayClassic outgoing bubbles are w
 | Theme settings | Day and night only. No accent row, no tinted theme. |
 | `en.lproj/InfoPlist.strings` | `NSLocationAlwaysAndWhenInUseUsageDescription` is English. |
 | `zh-Hant.lproj/InfoPlist.strings` | Traditional Chinese for every `zh-Hans` permission key. Bundled by the InfoPlist glob. |
+
+## Hidden Telegram features
+
+Teamgram does not implement Premium, Stars, gifts, TON, Fragment, channel ads, Business, Boosts, Passport, AI compose, translation/Cocoon, or AI summary. Those entry points stay hidden unless `help.getAppConfig` turns them on. Stories stay. A missing key is off. `premium_purchase_blocked` and `stars_purchase_blocked` keep their official names and default to blocked. The other switches are `tellomi_*_enabled`.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TellomiFeatureGate.swift` | The one reader. `aiComposeEnabled` also keeps the secret-chat ban and the `ios_disable_ai_*` kill switch. |
+| `submodules/AccountContext/Sources/Premium.swift` | Premium and Stars follow that reader. Gift flags stay off unless `tellomi_gifts_enabled` is true and `stargifts_blocked` is false. The built-in default treats Premium as blocked. |
+| `submodules/WalletContext/Sources/WalletContext.swift` | `wallet_available` is not enough. `tellomi_wallet_enabled` must also be true. |
+| Chat composer, attachment panel, legacy input | The four `isAIEnabled = true` sites read `tellomi_ai_compose_enabled`. |
+| `TranslateUI` | `canTranslateText` / `canTranslateChats` return false unless `tellomi_translate_enabled`. That drops the translation header, including Cocoon. |
+| Settings, profiles, attach menu, chat input, search, deep links | Premium, Stars, gifts, wallet/TON, Business, Passport, Boosts, channel revenue, and AI summary rows and links are omitted. Fragment auction, anonymous-number, and ads top-up URLs are not opened unless `tellomi_fragment_enabled`. |

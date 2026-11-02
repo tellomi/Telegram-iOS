@@ -125,7 +125,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
                     engine: peerAccountContext.engine,
                     animationCache: context.animationCache,
                     animationRenderer: context.animationRenderer,
-                    isPremiumDisabled: false,
+                    isPremiumDisabled: !TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).premiumEnabled,
                     resolveInlineStickers: { fileIds in
                         return context.engine.stickers.resolveInlineStickers(fileIds: fileIds)
                     }
@@ -154,7 +154,8 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             interaction.openSettings(.profile)
         }))
         
-        if WalletConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 }).isAvailable {
+        let featureGate = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
+        if featureGate.walletEnabled, WalletConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 }).isAvailable {
             let balanceText: NSAttributedString
             if let balance = settings.walletBalance, balance > 10_000_000 {
                 var formattedLabel = formatTonAmountText(balance, dateTimeFormat: presentationData.dateTimeFormat)
@@ -276,15 +277,14 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         interaction.openSettings(.language)
     }))
     
-    let premiumConfiguration = PremiumConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
-    let isPremiumDisabled = premiumConfiguration.isPremiumDisabled
-    if !isPremiumDisabled || context.isPremium {
+    let featureGate = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
+    if featureGate.premiumEnabled {
         items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 100, label: .text(""), text: presentationData.strings.Settings_Premium, icon: PresentationResourcesSettings.premium, action: {
             interaction.openSettings(.premium)
         }))
     }
     if let starsState = data.starsState {
-        if !isPremiumDisabled || abs(starsState.balance.value) > 0 {
+        if featureGate.starsEnabled {
             let balanceText: NSAttributedString
             if abs(starsState.balance.value) > 0 {
                 let formattedLabel = formatStarsAmountText(starsState.balance, dateTimeFormat: presentationData.dateTimeFormat)
@@ -300,7 +300,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             }))
         }
     }
-    if let tonState = data.tonState {
+    if let tonState = data.tonState, featureGate.walletEnabled {
         if abs(tonState.balance.value) > 0 {
             let balanceText: NSAttributedString
             if abs(tonState.balance.value) > 0 {
@@ -317,21 +317,19 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             }))
         }
     }
-    if !isPremiumDisabled || context.isPremium {
+    if featureGate.businessEnabled {
         items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 104, label: .text(""), additionalBadgeLabel: nil, text: presentationData.strings.Settings_Business, icon: PresentationResourcesSettings.business, action: {
             interaction.openSettings(.businessSetup)
         }))
     }
-    if let starsState = data.starsState {
-        if !isPremiumDisabled || starsState.balance > StarsAmount.zero {
-            items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 105, label: .text(""), text: presentationData.strings.Settings_SendGift, icon: PresentationResourcesSettings.premiumGift, action: {
-                interaction.openSettings(.premiumGift)
-            }))
-        }
+    if featureGate.giftsEnabled {
+        items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 105, label: .text(""), text: presentationData.strings.Settings_SendGift, icon: PresentationResourcesSettings.premiumGift, action: {
+            interaction.openSettings(.premiumGift)
+        }))
     }
     
     if let settings = data.globalSettings {
-        if settings.hasPassport {
+        if settings.hasPassport && featureGate.passportEnabled {
             items[.extra]!.append(PeerInfoScreenDisclosureItem(id: 0, text: presentationData.strings.Settings_Passport, icon: PresentationResourcesSettings.passport, action: {
                 interaction.openSettings(.passport)
             }))

@@ -88,6 +88,7 @@ func openResolvedUrlImpl(
         updatedPresentationData = nil
     }
     let presentationData = updatedPresentationData?.initial ?? context.sharedContext.currentPresentationData.with { $0 }
+    let featureGate = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
     switch resolvedUrl {
         case let .externalUrl(url):
             context.sharedContext.openExternalUrl(context: context, urlContext: urlContext, url: url, forceExternal: forceExternal, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: navigationController, dismissInput: dismissInput)
@@ -1127,18 +1128,27 @@ func openResolvedUrlImpl(
                 }
             }
         case let .premiumOffer(reference):
+            guard featureGate.premiumEnabled else {
+                return
+            }
             dismissInput()
             let controller = context.sharedContext.makePremiumIntroController(context: context, source: .deeplink(reference), forceDark: false, dismissed: nil)
             if let navigationController = navigationController {
                 navigationController.pushViewController(controller, animated: true)
             }
         case let .premiumMultiGift(reference):
+            guard featureGate.giftsEnabled else {
+                return
+            }
             dismissInput()
             let controller = context.sharedContext.makePremiumGiftController(context: context, source: .deeplink(reference), completion: nil)
             if let navigationController = navigationController {
                 navigationController.pushViewController(controller, animated: true)
             }
         case let .starsTopup(amount, purpose):
+            guard featureGate.starsEnabled else {
+                return
+            }
             dismissInput()
             if let starsContext = context.starsContext {
                 let proceed = {
@@ -1173,6 +1183,9 @@ func openResolvedUrlImpl(
                 }
             }
         case .stars:
+            guard featureGate.starsEnabled else {
+                return
+            }
             dismissInput()
             if let starsContext = context.starsContext {
                 let controller = context.sharedContext.makeStarsTransactionsScreen(context: context, starsContext: starsContext)
@@ -1228,6 +1241,9 @@ func openResolvedUrlImpl(
                 navigationController.pushViewController(context.sharedContext.makeWalletScreen(context: context), animated: true)
             }
         case .ton:
+            guard featureGate.walletEnabled else {
+                return
+            }
             dismissInput()
             if let tonContext = context.tonContext {
                 let controller = context.sharedContext.makeStarsTransactionsScreen(context: context, starsContext: tonContext)
@@ -1641,6 +1657,9 @@ func openResolvedUrlImpl(
                 }
             })
         case let .boost(peerId, status, myBoostStatus):
+            guard featureGate.boostsEnabled else {
+                return
+            }
             var dismissedImpl: (() -> Void)?
             if let storyProgressPauseContext = contentContext as? StoryProgressPauseContext {
                 let updateExternalController = storyProgressPauseContext.update
@@ -1696,6 +1715,9 @@ func openResolvedUrlImpl(
                 }
             }
         case let .premiumGiftCode(slug):
+            guard featureGate.premiumEnabled || featureGate.giftsEnabled else {
+                return
+            }
             var forceDark = false
             if let updatedPresentationData, updatedPresentationData.initial.theme.overallDarkAppearance {
                 forceDark = true
@@ -1816,6 +1838,9 @@ func openResolvedUrlImpl(
                 }
             })
         case let .collectible(result):
+        guard featureGate.giftsEnabled || featureGate.fragmentEnabled else {
+            return
+        }
         switch result {
         case let .gift(gift):
             var dismissedImpl: (() -> Void)?
@@ -1846,6 +1871,9 @@ func openResolvedUrlImpl(
             present(textAlertController(context: context, updatedPresentationData: updatedPresentationData, title: nil, text: presentationData.strings.Resolve_GiftErrorNotFound, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), nil)
         }
         case let .auction(auctionContext):
+            guard featureGate.giftsEnabled else {
+                return
+            }
             if let auctionContext, case let .generic(gift) = auctionContext.gift {
                 if !auctionContext.isFinished, let currentBidPeerId = auctionContext.currentBidPeerId {
                     let controller = context.sharedContext.makeGiftAuctionBidScreen(
@@ -1932,6 +1960,9 @@ func openResolvedUrlImpl(
                 navigationController?.pushViewController(controller)
             }
         case let .giftCollection(peerId, id):
+            guard featureGate.giftsEnabled else {
+                return
+            }
             Task { @MainActor [weak navigationController] in
                 guard let peer = await context.engine.data.get(
                     TelegramEngine.EngineData.Item.Peer.Peer(id: peerId)
@@ -1953,6 +1984,9 @@ func openResolvedUrlImpl(
                 navigationController?.pushViewController(controller)
             }
         case let .sendGift(peerId):
+            guard featureGate.giftsEnabled else {
+                return
+            }
             Task { @MainActor [weak navigationController] in
                 if let peerId {
                     let giftOptions = await (context.engine.payments.premiumGiftCodeOptions(peerId: nil, onlyCached: true) |> filter { !$0.isEmpty }).get()
