@@ -93,13 +93,15 @@ The traced bubble fills the viewBox. `Tellomi/Brand/generate_icons.py` scales it
 
 ## Location purpose string
 
-`UIBackgroundModes` includes `location`, so the main Info.plist must contain `NSLocationAlwaysAndWhenInUseUsageDescription`. The key was already translated in `InfoPlist.strings` and missing from the plist, which is what App Store checks. The shipping string is the Bazel fragment in `Telegram/BUILD`. `en.lproj` is the development language, so that file carries the same Simplified Chinese sentence; otherwise it would replace the plist value. Other bundled languages still describe live location shared with friends.
+`UIBackgroundModes` includes `location`, so the main Info.plist must contain `NSLocationAlwaysAndWhenInUseUsageDescription`. The shipping string is the Bazel fragment in `Telegram/BUILD`. `en.lproj` is English for that key. `zh-Hans.lproj` and `zh-Hant.lproj` carry the Chinese sentences. Both languages already ship a real `Localizable.strings` from `AppStringResources`, so they stay out of `empty_languages`. `InfoPlistStringResources` globs every `*.lproj/InfoPlist.strings`, which is how the Traditional permission file is bundled.
 
 | File | Change |
 | --- | --- |
 | `Telegram/BUILD` `TelegramInfoPlist` | Adds the key. The app name is `{telegram_app_name}`. |
 | `Telegram/Telegram-iOS/Info.plist`, `InfoBazel.plist` | Same key, with Tellomi written out. These are not the plist the Bazel app links. |
-| `Telegram/Telegram-iOS/en.lproj/InfoPlist.strings` | The English-locale override is the same sentence. |
+| `Telegram/Telegram-iOS/en.lproj/InfoPlist.strings` | English for `NSLocationAlwaysAndWhenInUseUsageDescription`. |
+| `Telegram/Telegram-iOS/zh-Hant.lproj/InfoPlist.strings` | Traditional Chinese for every key in `zh-Hans`. |
+| `Telegram/BUILD` `InfoPlistStringResources` | The glob includes `zh-Hant.lproj/InfoPlist.strings`. `zh-Hant` stays out of `empty_languages` because `AppStringResources` already lists its `Localizable.strings`. |
 
 ## SF Camera fonts
 
@@ -389,3 +391,19 @@ APNs `alert.loc-key` is resolved by the system from the main app bundle. The Not
 | `Telegram/Telegram-iOS/zh-Hans.lproj/Localizable.strings` | New. Simplified sentences, for example `MESSAGE_AUDIO` = `%1$@ 发来一条语音消息`. |
 | `Telegram/Telegram-iOS/zh-Hant.lproj/Localizable.strings` | New. Traditional sentences. |
 | `Telegram/BUILD` | `zh-Hans` leaves `empty_languages`. Both Chinese files are in `AppStringResources`. |
+
+## Monochrome day and night
+
+Stacked on the solid-wallpaper change. Day and dayClassic outgoing bubbles are white (`#FFFFFF`, pressed `#E9E9EB`) with black text. Night accent is white and outgoing bubbles are `#2C2C2E`. Links, checks, switches, and unread badges follow black in day and white at night. The accent picker, tinted night theme, and theme editor are not offered. The send control draws an up arrow in the button’s foreground color and does not use the paper-plane imageset.
+
+`NSLocationAlwaysAndWhenInUseUsageDescription` in `en.lproj` is English. `zh-Hant.lproj/InfoPlist.strings` is Traditional Chinese for every `zh-Hans` key. The localization is the real `Localizable.strings` from the push-string change, not an empty generated file.
+
+| File | Change |
+| --- | --- |
+| `DefaultDayPresentationTheme.swift` | White outgoing bubbles, black links and checks, black switch, black start button, gray passcode. |
+| `DefaultDarkPresentationTheme.swift` | White accent, `#2C2C2E` outgoing bubbles. |
+| `DefaultDarkTintedPresentationTheme.swift` | Accent white. The theme is not in the picker. |
+| `PresentationResourcesChat.swift` | Send glyph is the existing up-arrow path. |
+| Theme settings | Day and night only. No accent row, no tinted theme. |
+| `en.lproj/InfoPlist.strings` | `NSLocationAlwaysAndWhenInUseUsageDescription` is English. |
+| `zh-Hant.lproj/InfoPlist.strings` | Traditional Chinese for every `zh-Hans` permission key. Bundled by the InfoPlist glob. |

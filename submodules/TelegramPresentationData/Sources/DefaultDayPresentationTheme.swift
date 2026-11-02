@@ -100,7 +100,7 @@ public func customizeDefaultDayTheme(theme: PresentationTheme, editing: Bool, ti
 
                 suggestedWallpaper = tellomiDefaultSolidWallpaper(dark: false)
             } else {
-                bubbleColors = [UIColor(rgb: 0xe1ffc7).rgb]
+                bubbleColors = [UIColor(rgb: 0xffffff).rgb]
                 suggestedWallpaper = tellomiDefaultSolidWallpaper(dark: false)
                 outgoingAccent = outgoingAccentColor
             }
@@ -211,7 +211,7 @@ public func customizeDefaultDayTheme(theme: PresentationTheme, editing: Bool, ti
                 let outgoingBubbleMixedColor = lightnessColor
                 outgoingSecondaryTextColor = outgoingBubbleFillColors?.first?.withMultiplied(hue: 1.344 * hueFactor, saturation: 4.554 * saturationFactor, brightness: 0.549).withAlphaComponent(0.8)
                 outgoingAccentTextColor = outgoingBubbleMixedColor.withMultiplied(hue: 1.302 * hueFactor, saturation: 4.554 * saturationFactor, brightness: 0.655)
-                outgoingLinkTextColor = UIColor(rgb: 0x004bad)
+                outgoingLinkTextColor = UIColor(rgb: 0x000000)
                 outgoingScamColor = UIColor(rgb: 0xff3b30)
                 outgoingControlColor = outgoingBubbleMixedColor.withMultiplied(hue: 1.283 * hueFactor, saturation: 3.176, brightness: 0.765)
                 outgoingInactiveControlColor = outgoingBubbleMixedColor.withMultiplied(hue: 1.207 * hueFactor, saturation: 1.721, brightness: 0.851)
@@ -407,12 +407,12 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
         primaryTextColor: UIColor(rgb: 0x000000),
         accentTextColor: defaultDayAccentColor,
         disabledTextColor: UIColor(rgb: 0xd0d0d0),
-        startButtonColor: UIColor(rgb: 0x2ca5e0),
+        startButtonColor: UIColor(rgb: 0x000000),
         dotColor: UIColor(rgb: 0xd9d9d9)
     )
     
     let passcode = PresentationThemePasscode(
-        backgroundColors: PresentationThemeGradientColors(topColor: UIColor(rgb: 0x46739e), bottomColor: UIColor(rgb: 0x2a5982)),
+        backgroundColors: PresentationThemeGradientColors(topColor: UIColor(rgb: 0x3a3a3c), bottomColor: UIColor(rgb: 0x000000)),
         buttonColor: .clear
     )
     
@@ -471,8 +471,8 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
     let switchColors = PresentationThemeSwitch(
         frameColor: UIColor(rgb: 0xe9e9ea),
         handleColor: UIColor(rgb: 0xffffff),
-        contentColor: UIColor(rgb: 0x35c759),
-        positiveColor: UIColor(rgb: 0x00c900),
+        contentColor: UIColor(rgb: 0x000000),
+        positiveColor: UIColor(rgb: 0x000000),
         negativeColor: UIColor(rgb: 0xff3b30)
     )
     
@@ -485,7 +485,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
         itemSecondaryTextColor: UIColor(rgb: 0x8e8e93),
         itemDisabledTextColor: UIColor(rgb: 0x8e8e93),
         itemAccentColor: defaultDayAccentColor,
-        itemHighlightedColor: UIColor(rgb: 0x00b12c),
+        itemHighlightedColor: UIColor(rgb: 0x000000),
         itemDestructiveColor: UIColor(rgb: 0xff3b30),
         itemPlaceholderTextColor: UIColor(rgb: 0xc8c8ce),
         itemBlocksBackgroundColor: UIColor(rgb: 0xffffff),
@@ -558,7 +558,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
         messageTextColor: UIColor(rgb: 0x8e8e93),
         messageHighlightedTextColor: UIColor(rgb: 0x000000),
         messageDraftTextColor: UIColor(rgb: 0xdd4b39),
-        checkmarkColor: day ? defaultDayAccentColor : UIColor(rgb: 0x21c004),
+        checkmarkColor: defaultDayAccentColor,
         pendingIndicatorColor: UIColor(rgb: 0x8e8e93),
         failedFillColor: UIColor(rgb: 0xff3b30),
         failedForegroundColor: UIColor(rgb: 0xffffff),
@@ -629,7 +629,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
             ),
             primaryTextColor: UIColor(rgb: 0x000000),
             secondaryTextColor: UIColor(rgb: 0x77828C, alpha: 1.0),
-            linkTextColor: UIColor(rgb: 0x004bad),
+            linkTextColor: UIColor(rgb: 0x000000),
             linkHighlightColor: defaultDayAccentColor.withAlphaComponent(0.3),
             scamColor: UIColor(rgb: 0xff3b30),
             textHighlightColor: UIColor(rgb: 0xffe438),
@@ -650,13 +650,13 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
         outgoing: PresentationThemePartedColors(
             bubble: PresentationThemeBubbleColor(
                 withWallpaper: PresentationThemeBubbleColorComponents(
-                    fill: [UIColor(rgb: 0xe1ffc7)],
-                    highlightedFill: UIColor(rgb: 0xbaff93),
+                    fill: [UIColor(rgb: 0xffffff)],
+                    highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: bubbleStrokeColor,
                     shadow: nil,
-                    reactionInactiveBackground: UIColor(rgb: 0x3fc33b).withMultipliedAlpha(0.12),
-                    reactionInactiveForeground: UIColor(rgb: 0x3fc33b),
-                    reactionActiveBackground: UIColor(rgb: 0x3fc33b),
+                    reactionInactiveBackground: UIColor(rgb: 0x000000).withMultipliedAlpha(0.08),
+                    reactionInactiveForeground: UIColor(rgb: 0x000000),
+                    reactionActiveBackground: UIColor(rgb: 0x000000),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xFEF1D4, alpha: 1.0),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xD3720A),
@@ -666,13 +666,13 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     reactionActiveMediaPlaceholder: UIColor(rgb: 0xffffff, alpha: 0.2)
                 ),
                 withoutWallpaper: PresentationThemeBubbleColorComponents(
-                    fill: [UIColor(rgb: 0xe1ffc7)],
-                    highlightedFill: UIColor(rgb: 0xbaff93),
+                    fill: [UIColor(rgb: 0xffffff)],
+                    highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: bubbleStrokeColor,
                     shadow: nil,
-                    reactionInactiveBackground: UIColor(rgb: 0x3fc33b).withMultipliedAlpha(0.12),
-                    reactionInactiveForeground: UIColor(rgb: 0x3fc33b),
-                    reactionActiveBackground: UIColor(rgb: 0x3fc33b),
+                    reactionInactiveBackground: UIColor(rgb: 0x000000).withMultipliedAlpha(0.08),
+                    reactionInactiveForeground: UIColor(rgb: 0x000000),
+                    reactionActiveBackground: UIColor(rgb: 0x000000),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xFEF1D4, alpha: 1.0),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xD3720A),
@@ -683,28 +683,28 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                 )
             ),
             primaryTextColor: UIColor(rgb: 0x000000),
-            secondaryTextColor: UIColor(rgb: 0x008c09, alpha: 0.8),
-            linkTextColor: UIColor(rgb: 0x004bad),
+            secondaryTextColor: UIColor(rgb: 0x8e8e93),
+            linkTextColor: UIColor(rgb: 0x000000),
             linkHighlightColor: defaultDayAccentColor.withAlphaComponent(0.3),
             scamColor: UIColor(rgb: 0xff3b30),
             textHighlightColor: UIColor(rgb: 0xffe438),
-            accentTextColor: UIColor(rgb: 0x00a700),
-            accentControlColor: UIColor(rgb: 0x3fc33b),
-            accentControlDisabledColor: UIColor(rgb: 0x3fc33b).withAlphaComponent(0.7),
-            mediaActiveControlColor: UIColor(rgb: 0x3fc33b),
-            mediaInactiveControlColor: UIColor(rgb: 0x93d987),
-            mediaControlInnerBackgroundColor: UIColor(rgb: 0xe1ffc7),
-            pendingActivityColor: UIColor(rgb: 0x42b649),
-            fileTitleColor: UIColor(rgb: 0x3faa3c),
-            fileDescriptionColor: UIColor(rgb: 0x6fb26a),
-            fileDurationColor: UIColor(rgb: 0x008c09, alpha: 0.8),
-            mediaPlaceholderColor: UIColor(rgb: 0xd2f2b6),
-            polls: PresentationThemeChatBubblePolls(radioButton: UIColor(rgb: 0x93d987), radioProgress: UIColor(rgb: 0x3fc33b), highlight: UIColor(rgb: 0x3fc33b).withAlphaComponent(0.08), separator: UIColor(rgb: 0x93d987), bar: UIColor(rgb: 0x00A700), barIconForeground: .white, barPositive: UIColor(rgb: 0x00A700), barNegative: UIColor(rgb: 0x00A700)),
+            accentTextColor: UIColor(rgb: 0x000000),
+            accentControlColor: UIColor(rgb: 0x000000),
+            accentControlDisabledColor: UIColor(rgb: 0x8e8e93),
+            mediaActiveControlColor: UIColor(rgb: 0x000000),
+            mediaInactiveControlColor: UIColor(rgb: 0xc7c7cc),
+            mediaControlInnerBackgroundColor: UIColor(rgb: 0xffffff),
+            pendingActivityColor: UIColor(rgb: 0x8e8e93),
+            fileTitleColor: UIColor(rgb: 0x000000),
+            fileDescriptionColor: UIColor(rgb: 0x8e8e93),
+            fileDurationColor: UIColor(rgb: 0x8e8e93),
+            mediaPlaceholderColor: UIColor(rgb: 0xe9e9eb),
+            polls: PresentationThemeChatBubblePolls(radioButton: UIColor(rgb: 0xc7c7cc), radioProgress: UIColor(rgb: 0x000000), highlight: UIColor(rgb: 0x000000).withAlphaComponent(0.08), separator: UIColor(rgb: 0xc7c7cc), bar: UIColor(rgb: 0x000000), barIconForeground: .white, barPositive: UIColor(rgb: 0x000000), barNegative: UIColor(rgb: 0x8e8e93)),
             actionButtonsFillColor: PresentationThemeVariableColor(withWallpaper: serviceBackgroundColor, withoutWallpaper: UIColor(rgb: 0x596e89, alpha: 0.35)),
             actionButtonsStrokeColor: PresentationThemeVariableColor(color: .clear),
             actionButtonsTextColor: PresentationThemeVariableColor(color: UIColor(rgb: 0xffffff)),
-            textSelectionColor: UIColor(rgb: 0xbbde9f),
-            textSelectionKnobColor: UIColor(rgb: 0x3fc33b)),
+            textSelectionColor: UIColor(rgb: 0x000000).withAlphaComponent(0.15),
+            textSelectionKnobColor: UIColor(rgb: 0x000000)),
         freeform: PresentationThemeBubbleColor(
             withWallpaper: PresentationThemeBubbleColorComponents(
                 fill: [UIColor(rgb: 0xffffff)],
@@ -740,8 +740,8 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
             )
         ),
         infoPrimaryTextColor: UIColor(rgb: 0x000000),
-        infoLinkTextColor: UIColor(rgb: 0x004bad),
-        outgoingCheckColor: UIColor(rgb: 0x19c700),
+        infoLinkTextColor: UIColor(rgb: 0x000000),
+        outgoingCheckColor: UIColor(rgb: 0x8e8e93),
         mediaDateAndStatusFillColor: UIColor(white: 0.0, alpha: 0.3),
         mediaDateAndStatusTextColor: UIColor(rgb: 0xffffff),
         shareButtonFillColor: PresentationThemeVariableColor(withWallpaper: serviceBackgroundColor, withoutWallpaper: UIColor(rgb: 0x748391, alpha: 0.45)),
@@ -793,7 +793,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
             ),
             primaryTextColor: UIColor(rgb: 0x000000),
             secondaryTextColor: UIColor(rgb: 0x525252, alpha: 0.6),
-            linkTextColor: UIColor(rgb: 0x004bad),
+            linkTextColor: UIColor(rgb: 0x000000),
             linkHighlightColor: defaultDayAccentColor.withAlphaComponent(0.3),
             scamColor: UIColor(rgb: 0xff3b30),
             textHighlightColor: UIColor(rgb: 0xffc738),
@@ -817,13 +817,13 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
         outgoing: PresentationThemePartedColors(
             bubble: PresentationThemeBubbleColor(
                 withWallpaper: PresentationThemeBubbleColorComponents(
-                    fill: [UIColor(rgb: 0x000000)],
-                    highlightedFill: UIColor(rgb: 0x2c2c2e),
+                    fill: [UIColor(rgb: 0xffffff)],
+                    highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: .clear,
                     shadow: nil,
-                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.12),
-                    reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                    reactionActiveBackground: UIColor(rgb: 0xffffff),
+                    reactionInactiveBackground: UIColor(rgb: 0x000000, alpha: 0.08),
+                    reactionInactiveForeground: UIColor(rgb: 0x000000),
+                    reactionActiveBackground: UIColor(rgb: 0x000000),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xFEF1D4, alpha: 1.0),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xD3720A),
@@ -833,13 +833,13 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     reactionActiveMediaPlaceholder: UIColor(rgb: 0xffffff, alpha: 0.2)
                 ),
                 withoutWallpaper: PresentationThemeBubbleColorComponents(
-                    fill: [UIColor(rgb: 0x000000)],
-                    highlightedFill: UIColor(rgb: 0x2c2c2e),
+                    fill: [UIColor(rgb: 0xffffff)],
+                    highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: .clear,
                     shadow: nil,
-                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.12),
-                    reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                    reactionActiveBackground: UIColor(rgb: 0xffffff),
+                    reactionInactiveBackground: UIColor(rgb: 0x000000, alpha: 0.08),
+                    reactionInactiveForeground: UIColor(rgb: 0x000000),
+                    reactionActiveBackground: UIColor(rgb: 0x000000),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xFEF1D4, alpha: 1.0),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xD3720A),
@@ -849,29 +849,29 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     reactionActiveMediaPlaceholder: UIColor(rgb: 0xffffff, alpha: 0.2)
                 )
             ),
-            primaryTextColor: UIColor(rgb: 0xffffff),
-            secondaryTextColor: UIColor(rgb: 0xffffff, alpha: 0.65),
-            linkTextColor: UIColor(rgb: 0xffffff),
-            linkHighlightColor: UIColor(rgb: 0xffffff, alpha: 0.3),
-            scamColor: UIColor(rgb: 0xffffff),
+            primaryTextColor: UIColor(rgb: 0x000000),
+            secondaryTextColor: UIColor(rgb: 0x8e8e93),
+            linkTextColor: UIColor(rgb: 0x000000),
+            linkHighlightColor: UIColor(rgb: 0x000000, alpha: 0.12),
+            scamColor: UIColor(rgb: 0xff3b30),
             textHighlightColor: UIColor(rgb: 0xffc738),
-            accentTextColor: UIColor(rgb: 0xffffff),
-            accentControlColor: UIColor(rgb: 0xffffff),
-            accentControlDisabledColor: UIColor(rgb: 0xffffff).withAlphaComponent(0.5),
-            mediaActiveControlColor: UIColor(rgb: 0xffffff),
-            mediaInactiveControlColor: UIColor(rgb: 0xffffff, alpha: 0.65),
-            mediaControlInnerBackgroundColor: .clear,
-            pendingActivityColor: UIColor(rgb: 0xffffff, alpha: 0.65),
-            fileTitleColor: UIColor(rgb: 0xffffff),
-            fileDescriptionColor: UIColor(rgb: 0xffffff, alpha: 0.65),
-            fileDurationColor: UIColor(rgb: 0xffffff, alpha: 0.65),
-            mediaPlaceholderColor: UIColor(rgb: 0x333333),
-            polls: PresentationThemeChatBubblePolls(radioButton: UIColor(rgb: 0xffffff, alpha: 0.65), radioProgress: UIColor(rgb: 0xffffff), highlight: UIColor(rgb: 0xffffff, alpha: 0.12), separator: UIColor(rgb: 0xffffff, alpha: 0.65), bar: UIColor(rgb: 0xffffff), barIconForeground: .clear, barPositive: UIColor(rgb: 0xffffff), barNegative: UIColor(rgb: 0xffffff)),
+            accentTextColor: UIColor(rgb: 0x000000),
+            accentControlColor: UIColor(rgb: 0x000000),
+            accentControlDisabledColor: UIColor(rgb: 0x8e8e93),
+            mediaActiveControlColor: UIColor(rgb: 0x000000),
+            mediaInactiveControlColor: UIColor(rgb: 0xc7c7cc),
+            mediaControlInnerBackgroundColor: UIColor(rgb: 0xffffff),
+            pendingActivityColor: UIColor(rgb: 0x8e8e93),
+            fileTitleColor: UIColor(rgb: 0x000000),
+            fileDescriptionColor: UIColor(rgb: 0x8e8e93),
+            fileDurationColor: UIColor(rgb: 0x8e8e93),
+            mediaPlaceholderColor: UIColor(rgb: 0xe9e9eb),
+            polls: PresentationThemeChatBubblePolls(radioButton: UIColor(rgb: 0xc7c7cc), radioProgress: UIColor(rgb: 0x000000), highlight: UIColor(rgb: 0x000000, alpha: 0.08), separator: UIColor(rgb: 0xc7c7cc), bar: UIColor(rgb: 0x000000), barIconForeground: .white, barPositive: UIColor(rgb: 0x000000), barNegative: UIColor(rgb: 0x8e8e93)),
             actionButtonsFillColor: PresentationThemeVariableColor(withWallpaper: serviceBackgroundColor, withoutWallpaper: UIColor(rgb: 0xffffff, alpha: 0.8)),
             actionButtonsStrokeColor: PresentationThemeVariableColor(withWallpaper: .clear, withoutWallpaper: defaultDayAccentColor),
             actionButtonsTextColor: PresentationThemeVariableColor(withWallpaper: UIColor(rgb: 0xffffff), withoutWallpaper: defaultDayAccentColor),
-            textSelectionColor: UIColor(rgb: 0xffffff, alpha: 0.2),
-            textSelectionKnobColor: UIColor(rgb: 0xffffff)),
+            textSelectionColor: UIColor(rgb: 0x000000, alpha: 0.12),
+            textSelectionKnobColor: UIColor(rgb: 0x000000)),
         freeform: PresentationThemeBubbleColor(
             withWallpaper: PresentationThemeBubbleColorComponents(
                 fill: [UIColor(rgb: 0xe5e5ea)],
@@ -907,8 +907,8 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
             )
         ),
         infoPrimaryTextColor: UIColor(rgb: 0x000000),
-        infoLinkTextColor: UIColor(rgb: 0x004bad),
-        outgoingCheckColor: UIColor(rgb: 0xffffff),
+        infoLinkTextColor: UIColor(rgb: 0x000000),
+        outgoingCheckColor: UIColor(rgb: 0x8e8e93),
         mediaDateAndStatusFillColor: UIColor(rgb: 0x000000, alpha: 0.3),
         mediaDateAndStatusTextColor: UIColor(rgb: 0xffffff),
         shareButtonFillColor: PresentationThemeVariableColor(withWallpaper: serviceBackgroundColor, withoutWallpaper: UIColor(rgb: 0xffffff, alpha: 0.8)),

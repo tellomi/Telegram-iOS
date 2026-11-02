@@ -807,7 +807,7 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
                                             let theme = themes[themes.index(before: previousThemeIndex.base)]
                                             newTheme = .cloud(PresentationCloudTheme(theme: theme, resolvedWallpaper: nil, creatorAccountId: theme.isCreator ? context.account.id : nil))
                                         } else {
-                                            newTheme = .builtin(.nightAccent)
+                                            newTheme = .builtin(.night)
                                         }
                                         selectThemeImpl?(newTheme)
                                     }
@@ -1120,11 +1120,9 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
         
         var defaultThemes: [PresentationThemeReference] = []
         if presentationData.autoNightModeTriggered {
-            defaultThemes.append(contentsOf: [.builtin(.nightAccent), .builtin(.night)])
+            defaultThemes.append(.builtin(.night))
         } else {
             defaultThemes.append(contentsOf: [
-                .builtin(.dayClassic),
-                .builtin(.nightAccent),
                 .builtin(.day),
                 .builtin(.night)
             ])
@@ -1139,7 +1137,7 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
         availableThemes.append(contentsOf: cloudThemes)
         
         var chatThemes = cloudThemes.filter { $0.emoticon != nil }
-        chatThemes.insert(.builtin(.dayClassic), at: 0)
+        chatThemes.insert(.builtin(.day), at: 0)
         
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(presentationData.strings.Appearance_Title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: themeSettingsControllerEntries(presentationData: presentationData, presentationThemeSettings: settings, chatSettings: chatSettings, mediaSettings: mediaSettings, themeReference: themeReference, availableThemes: availableThemes, availableAppIcons: availableAppIcons, currentAppIconName: currentAppIconName, isPremium: isPremium, chatThemes: chatThemes, animatedEmojiStickers: animatedEmojiStickers, accountPeer: accountPeer, nameColors: context.peerNameColors), style: .blocks, ensureVisibleItemTag: focusOnItemTag, animateChanges: false)
