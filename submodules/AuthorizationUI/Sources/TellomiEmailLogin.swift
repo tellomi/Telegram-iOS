@@ -18,7 +18,22 @@ struct TellomiEmailLoginCopy: Equatable {
 }
 
 func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
-    if tellomiLoginPrefersChinese(languageCode: languageCode) {
+    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
+    case .hant:
+        return TellomiEmailLoginCopy(
+            switchToEmail: "郵箱登入",
+            switchToPhone: "使用手機號登入",
+            title: "請輸入郵箱地址",
+            notice: "未註冊的郵箱驗證通過後將自動註冊",
+            placeholder: "請輸入郵箱地址",
+            invalid: "請輸入有效的郵箱地址",
+            confirm: "將向該郵箱發送驗證碼",
+            unavailable: "該郵箱無法使用",
+            nicknameTitle: "你的暱稱",
+            nicknameHelp: "填寫暱稱即可完成註冊",
+            nicknamePlaceholder: "暱稱"
+        )
+    case .hans:
         return TellomiEmailLoginCopy(
             switchToEmail: "邮箱登录",
             switchToPhone: "使用手机号登录",
@@ -32,8 +47,8 @@ func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
             nicknameHelp: "填写昵称即可完成注册",
             nicknamePlaceholder: "昵称"
         )
-    }
-    return TellomiEmailLoginCopy(
+    case .english:
+        return TellomiEmailLoginCopy(
         switchToEmail: "Email",
         switchToPhone: "Use phone number",
         title: "Enter your email",
@@ -46,5 +61,6 @@ func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
         nicknameHelp: "Enter a nickname to finish signing up.",
         nicknamePlaceholder: "Nickname"
     )
+    }
 }
 

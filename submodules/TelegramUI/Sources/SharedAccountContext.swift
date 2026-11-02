@@ -750,7 +750,15 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                     if let account = accountRecord.1 {
                         let peerKey = AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment)
                         if let existingId = existingAccountPeerKeys[peerKey] {
-                            // Already signed in on this device. Drop the new session and stay on the existing one.
+                            // Already signed in on this device. Log the new authorization out
+                            // before the local record is dropped, so the server does not keep it.
+                            let engine = TelegramEngine(account: account)
+                            let accountId = account.id
+                            self.managedAccountDisposables.set((engine.auth.logOut()
+                            |> deliverOnMainQueue).start(completed: { [weak self, engine] in
+                                withExtendedLifetime(engine) {}
+                                self?.managedAccountDisposables.set(nil, forKey: accountId)
+                            }), forKey: accountId)
                             let _ = accountManager.transaction({ transaction in
                                 if transaction.getCurrent()?.0 == accountRecord.0 {
                                     transaction.setCurrentId(existingId)

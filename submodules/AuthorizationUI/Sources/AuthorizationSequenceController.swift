@@ -665,44 +665,12 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         AuthorizationSequenceController.presentDidNotGetCodeUI(sharedContext: strongSelf.sharedContext, controller: controller, presentationData: strongSelf.presentationData, phoneNumber: number, mnc: mnc)
                     }
                 } else {
-                    controller?.inProgress = true
-                    strongSelf.actionDisposable.set((resendAuthorizationCode(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, apiId: strongSelf.apiId, apiHash: strongSelf.apiHash, firebaseSecretStream: strongSelf.sharedContext.firebaseSecretStream, attempt: strongSelf.tellomiActiveLoginAttempt)
-                    |> deliverOnMainQueue).startStrict(next: { result in
-                        controller?.inProgress = false
-                    }, error: { error in
-                        if let strongSelf = self, let controller = controller {
-                            controller.inProgress = false
-                            
-                            var actions: [TextAlertAction] = [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]
-                            
-                            let text: String
-                            switch error {
-                                case .limitExceeded:
-                                    text = strongSelf.presentationData.strings.Login_CodeFloodError
-                                case .invalidPhoneNumber:
-                                    text = strongSelf.presentationData.strings.Login_InvalidPhoneError
-                                case .phoneLimitExceeded:
-                                    text = strongSelf.presentationData.strings.Login_PhoneFloodError
-                                case .appOutdated:
-                                    text = strongSelf.presentationData.strings.Login_ErrorAppOutdated
-                                    let updateUrl = strongSelf.presentationData.strings.InviteText_URL
-                                    let sharedContext = strongSelf.sharedContext
-                                    actions = [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {
-                                        sharedContext.applicationBindings.openUrl(updateUrl)
-                                    })]
-                                case .phoneBanned:
-                                    text = strongSelf.presentationData.strings.Login_PhoneBannedError
-                                case .generic:
-                                    text = strongSelf.presentationData.strings.Login_UnknownError
-                                case .timeout:
-                                    text = strongSelf.presentationData.strings.Login_NetworkError
-                            }
-                            
-                            controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: actions), in: .window(.root))
-                        }
-                    }))
+                    strongSelf.tellomiResendLoginCode(controller: controller)
                 }
             }
+        }
+        controller.requestSmsCode = { [weak self, weak controller] in
+            self?.tellomiResendLoginCode(controller: controller)
         }
         controller.requestPreviousOption = { [weak self] in
             guard let self else {
@@ -746,6 +714,43 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         return controller
     }
     
+    private func tellomiResendLoginCode(controller: AuthorizationSequenceCodeEntryController?) {
+        controller?.inProgress = true
+        self.actionDisposable.set((self.engine.auth.resendLoginCode(accountManager: self.sharedContext.accountManager, apiId: self.apiId, apiHash: self.apiHash, firebaseSecretStream: self.sharedContext.firebaseSecretStream, attempt: self.tellomiActiveLoginAttempt)
+        |> deliverOnMainQueue).startStrict(next: { _ in
+            controller?.inProgress = false
+        }, error: { [weak self] error in
+            guard let self, let controller else {
+                return
+            }
+            controller.inProgress = false
+            var actions: [TextAlertAction] = [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]
+            let text: String
+            switch error {
+            case .limitExceeded:
+                text = self.presentationData.strings.Login_CodeFloodError
+            case .invalidPhoneNumber:
+                text = self.presentationData.strings.Login_InvalidPhoneError
+            case .phoneLimitExceeded:
+                text = self.presentationData.strings.Login_PhoneFloodError
+            case .appOutdated:
+                text = self.presentationData.strings.Login_ErrorAppOutdated
+                let updateUrl = self.presentationData.strings.InviteText_URL
+                let sharedContext = self.sharedContext
+                actions = [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {
+                    sharedContext.applicationBindings.openUrl(updateUrl)
+                })]
+            case .phoneBanned:
+                text = self.presentationData.strings.Login_PhoneBannedError
+            case .generic:
+                text = self.presentationData.strings.Login_UnknownError
+            case .timeout:
+                text = self.presentationData.strings.Login_NetworkError
+            }
+            controller.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: text, actions: actions), in: .window(.root))
+        }))
+    }
+
     private var signInWithAppleSetup = false
     private var appleSignInAllowed = false
     private var currentEmail: String?
