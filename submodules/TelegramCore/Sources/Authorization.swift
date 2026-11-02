@@ -588,8 +588,8 @@ public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccou
     return account.postbox.transaction { transaction -> Signal<Void, AuthorizationCodeRequestError> in
         if let state = transaction.getState() as? UnauthorizedAccountState {
             switch state.contents {
-                case let .confirmationCodeEntry(number, type, hash, _, nextType, syncContacts, previousCodeEntryValue, _):
-                    if nextType != nil {
+                case let .confirmationCodeEntry(number, type, hash, _, _, syncContacts, previousCodeEntryValue, _):
+                    do {
                         return account.network.request(Api.functions.auth.resendCode(flags: 0, phoneNumber: number, phoneCodeHash: hash, reason: nil), automaticFloodWait: false)
                         |> mapError { error -> AuthorizationCodeRequestError in
                             if error.errorDescription.hasPrefix("FLOOD_WAIT") {
@@ -693,8 +693,6 @@ public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccou
                             |> mapError { _ -> AuthorizationCodeRequestError in }
                             |> switchToLatest
                         }
-                    } else {
-                        return .fail(.generic(info: nil))
                     }
                 default:
                     return .complete()

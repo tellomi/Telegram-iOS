@@ -35,6 +35,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     private let nextOptionButtonNode: HighlightableButtonNode
     private let nextOptionArrowNode: ASImageNode
     private let missingCodeNode: HighlightableButtonNode
+    private let tellomiUseSmsNode: HighlightableButtonNode
     
     private let resetTextNode: ImmediateTextNode
     private let resetNode: HighlightableButtonNode
@@ -97,6 +98,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     var present: (ViewController, Any?) -> Void = { _, _ in }
     
     var openHelp: (() -> Void)?
+    var requestSmsCode: (() -> Void)?
     var requestNextOption: (() -> Void)?
     var requestAnotherOption: (() -> Void)?
     var requestPreviousOption: (() -> Void)?
@@ -183,6 +185,12 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.missingCodeNode.displaysAsynchronously = false
         self.missingCodeNode.isHidden = true
         self.missingCodeNode.accessibilityTraits = [.button]
+
+        self.tellomiUseSmsNode = HighlightableButtonNode()
+        self.tellomiUseSmsNode.displaysAsynchronously = false
+        self.tellomiUseSmsNode.isHidden = true
+        self.tellomiUseSmsNode.contentHorizontalAlignment = .left
+        self.tellomiUseSmsNode.accessibilityTraits = [.button]
         
         self.nextOptionArrowNode = ASImageNode()
         self.nextOptionArrowNode.displaysAsynchronously = false
@@ -305,6 +313,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.addSubnode(self.currentOptionInfoNode)
         self.addSubnode(self.nextOptionButtonNode)
         self.addSubnode(self.missingCodeNode)
+        self.addSubnode(self.tellomiUseSmsNode)
         self.nextOptionButtonNode.addSubnode(self.nextOptionArrowNode)
         self.addSubnode(self.animationNode)
         self.addSubnode(self.resetNode)
@@ -355,6 +364,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         
         self.nextOptionButtonNode.addTarget(self, action: #selector(self.nextOptionNodePressed), forControlEvents: .touchUpInside)
         self.missingCodeNode.addTarget(self, action: #selector(self.missingCodePressed), forControlEvents: .touchUpInside)
+        self.tellomiUseSmsNode.addTarget(self, action: #selector(self.tellomiUseSmsPressed), forControlEvents: .touchUpInside)
         self.proceedNode.pressed = { [weak self] in
             self?.proceedPressed()
         }
@@ -572,10 +582,16 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                 self.titleNode.attributedText = NSAttributedString(string: copy.codeTitleEmail, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
                 self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentEmail(self.email ?? self.phoneNumber), font: Font.regular(14.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
                 animationName = "IntroLetter"
-            case .sms, .otherSession:
+            case .sms:
                 let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                let secondary = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).secondaryText
                 self.titleNode.attributedText = NSAttributedString(string: copy.codeTitlePhone, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
-                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentPhone(self.phoneNumber), font: Font.regular(14.0), textColor: TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).secondaryText, paragraphAlignment: .left)
+                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentPhone(self.phoneNumber), font: Font.regular(14.0), textColor: secondary, paragraphAlignment: .left)
+            case .otherSession:
+                let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                let secondary = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).secondaryText
+                self.titleNode.attributedText = NSAttributedString(string: copy.codeTitlePhone, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
+                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentApp, font: Font.regular(14.0), textColor: secondary, paragraphAlignment: .left)
             case .fragment:
                 self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterCodeFragmentTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
                
@@ -592,10 +608,16 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             case .phrase:
                 self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterPhraseTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
                 textFieldPlaceholder = self.strings.Login_EnterPhrasePlaceholder
-            case .call, .firebase:
+            case .call:
                 let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                let secondary = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).secondaryText
                 self.titleNode.attributedText = NSAttributedString(string: copy.codeTitlePhone, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
-                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentPhone(self.phoneNumber), font: Font.regular(14.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
+                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentCall(self.phoneNumber), font: Font.regular(14.0), textColor: secondary, paragraphAlignment: .left)
+            case .firebase:
+                let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                let secondary = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).secondaryText
+                self.titleNode.attributedText = NSAttributedString(string: copy.codeTitlePhone, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
+                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentPhone(self.phoneNumber), font: Font.regular(14.0), textColor: secondary, paragraphAlignment: .left)
             default:
                 self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterCodeTelegramTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
             }
@@ -690,6 +712,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         
         var items: [AuthorizationLayoutItem] = []
         let tellomiCode = self.tellomiCodeChrome
+        self.tellomiUseSmsNode.isHidden = true
         if tellomiCode {
             self.animationNode.isHidden = true
             self.animationNode.visibility = false
@@ -746,6 +769,16 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                 let optionItemSize = tellomiCode ? CGSize(width: maximumWidth - 48.0, height: currentOptionSize.height) : currentOptionSize
                 items.append(AuthorizationLayoutItem(node: self.titleNode, size: titleItemSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: tellomiCode ? 28.0 : 18.0, maxValue: tellomiCode ? 36.0 : 18.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
                 items.append(AuthorizationLayoutItem(node: self.currentOptionNode, size: optionItemSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 8.0, maxValue: 8.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+                if tellomiCode, case .otherSession = codeType {
+                    let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                    self.tellomiUseSmsNode.isHidden = false
+                    self.tellomiUseSmsNode.setTitle(copy.useSms, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
+                    self.tellomiUseSmsNode.accessibilityLabel = copy.useSms
+                    let smsSize = self.tellomiUseSmsNode.measure(CGSize(width: maximumWidth - 48.0, height: 36.0))
+                    items.append(AuthorizationLayoutItem(node: self.tellomiUseSmsNode, size: CGSize(width: maximumWidth - 48.0, height: max(28.0, smsSize.height)), spacingBefore: AuthorizationLayoutItemSpacing(weight: 8.0, maxValue: 8.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+                } else {
+                    self.tellomiUseSmsNode.isHidden = true
+                }
                 
                 var canReset = false
                 var pendingDate: Int32?
@@ -1012,7 +1045,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let showsMissing: Bool
         switch self.codeType {
-        case .sms, .call, .firebase:
+        case .sms, .call, .firebase, .otherSession, .email:
             showsMissing = true
         default:
             showsMissing = false
@@ -1362,8 +1395,16 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.requestAnotherOption?()
     }
 
+    var tellomiResendIsActive: Bool {
+        return (self.currentTimeoutTime ?? 0) <= 0
+    }
+
     @objc private func missingCodePressed() {
         self.openHelp?()
+    }
+
+    @objc private func tellomiUseSmsPressed() {
+        self.requestSmsCode?()
     }
     
     @objc func previousOptionNodePressed() {

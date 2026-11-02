@@ -107,6 +107,15 @@ final class TellomiSignUpAgreement: NSObject {
         self.applyText()
     }
 
+    /// Rewrites the sentence after a pre-login language change. The tap recognizer stays.
+    func refreshLanguage() {
+        self.chinese = tellomiLoginPrefersChinese(languageCode: "")
+        guard self.node != nil else {
+            return
+        }
+        self.applyText()
+    }
+
     func setAgreed(_ agreed: Bool) {
         self.agreed = agreed
         self.applyText()
@@ -124,7 +133,28 @@ final class TellomiSignUpAgreement: NSObject {
         func link(_ s: String, _ url: String) {
             result.append(NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: accent, NSAttributedString.Key(rawValue: TelegramTextAttributes.URL): url]))
         }
-        if self.chinese {
+        if self.chinese && tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: "")) == .hant {
+            switch self.kind {
+            case .signUp:
+                toggle("我已閱讀並同意", color: body)
+                link("《用戶服務協議》", TellomiSignUpAgreement.termsURL)
+                toggle("和", color: body)
+                link("《隱私政策》", TellomiSignUpAgreement.privacyURL)
+            case .phone:
+                toggle("已閱讀並同意 ", color: body)
+                link("用戶協議", TellomiSignUpAgreement.termsURL)
+                toggle(" 和 ", color: body)
+                link("隱私政策", TellomiSignUpAgreement.privacyURL)
+                toggle(" 以及 ", color: body)
+                link("運營商服務協議", TellomiLoginChrome.legalURL)
+                toggle("，運營商將對你提供的手機號進行驗證", color: body)
+            case .email:
+                toggle("已閱讀並同意 ", color: body)
+                link("用戶協議", TellomiSignUpAgreement.termsURL)
+                toggle(" 和 ", color: body)
+                link("隱私政策", TellomiSignUpAgreement.privacyURL)
+            }
+        } else if self.chinese {
             switch self.kind {
             case .signUp:
                 toggle("我已阅读并同意", color: body)

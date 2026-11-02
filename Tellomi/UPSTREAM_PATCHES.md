@@ -290,7 +290,7 @@ There is no client string "Teamgram" in the auth, login, session, or profile UI.
 | Active session named Teamgram | `authorization.appName` from `account.getAuthorizations`, drawn in `ItemListRecentSessionItem` / `RecentSessionScreen`. `initConnection` has no app-name field. The server names the session from `api_id` (this client sends `100001`). |
 | Profile title Teamgram and @teamgram | `user.first_name` and `user.username` on the user the server returns. The client does not invent a display name for that peer. |
 
-Replacing those on the client would disagree with the account the server stores. "Didn't get a code" opens `https://tellomi.cn/faq` instead of mailing `sms@telegram.org`.
+Replacing those on the client would disagree with the account the server stores. "Didn't get a code" opens `https://tellomi.cn/help/` instead of mailing `sms@telegram.org`.
 
 ## Login code screen, pending code, and narrow digits
 
@@ -306,3 +306,30 @@ The code screen did not. It centered in a region that started at the status bar 
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift` | SMS, email, call, firebase, and other-session back returns immediately. The cancel dialog stays for word and phrase. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | The Tellomi code stack is centered under the navigation bar. When that band is shorter than the stack, the stack stays top-aligned there instead of moving up under Help. |
 | `submodules/CodeInputView/Sources/CodeInputView.swift` | Expanded digit boxes shrink, spacing first down to 4pt, so six boxes stay inside the width they were given. |
+
+## Login language, sent-code copy, duplicate session
+
+Mirrors Android `tellomi/Telegram` #31 on the phone and code screens. The top-right control is no longer Help. It is the current language plus ▾ (`简体中文 ▾`, `繁體中文 ▾`, `English ▾`). The card is the same centered login card as the agreement prompt, titled「选择语言 / Language」, with those three built-in rows, a check on the current one, and Cancel. There is no Other row and no `langpack.getStrings` call. Upstream language screens need a logged-in account.
+
+The choice is stored in `UserDefaults` `TellomiPreferredInterfaceLanguage` and on the account manager under `SharedDataKeys.localizationSettings`, and `TellomiDidApplySystemLangPack` is set so the automatic pack does not replace it. Login chrome reads that key first and redraws from the bundled `tellomiLoginCopy` (简体, 繁體, English) without a network round-trip. The phone number, email, password, and code already typed stay in the fields. A pack already stored for that same code is kept. A different code is stored with an empty pack at version 0; string lookup falls back to the bundled English `en.lproj` until the existing logged-in langpack sync fills it. Settings ▸ Language writes the same `UserDefaults` key when a pack finishes downloading, so that choice is what login uses next time.
+
+Help moved to「收不到验证码？」on the code screen (SMS, call, in-app, Firebase, and email). The card's Help row opens `https://tellomi.cn/help/` (`TellomiLoginChrome.helpURL`; `/faq` 404s). SMS, call, and Firebase also offer Resend on that card once the countdown has finished. An in-app code (`sentCodeTypeApp`, `.otherSession`) says「验证码已发送到你在其他设备上登录的 Tellomi」and shows「改用短信接收」, which calls `auth.resendCode` through `TelegramEngineUnauthorized.Auth.resendLoginCode`. SMS, call, and email keep their own lines. Traditional copy is bundled too; Android could not ship `zh-rTW`.
+
+Signing in an account that is already on the device sends `auth.logOut` on the new `Account` (`TelegramEngine.Auth.logOut`) before the local record is removed. The engine is held until that RPC finishes.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | Preferred-language key, script (hans / hant / en), button title, apply. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Help URL is `https://tellomi.cn/help/`. Sent-code, language, and cancel strings in zh-Hans, zh-Hant, and English. |
+| `submodules/AuthorizationUI/Sources/TellomiEmailLogin.swift`, `TellomiSignUpAgreement.swift` | Traditional login and agreement sentences. |
+| `submodules/AuthorizationUI/Sources/TellomiChoicePrompt.swift` | New. Language card and the code-not-received card. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Language button. Redraw keeps the typed number. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Relabels the home when the language changes. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift` | Language button. Code-not-received card. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | App / SMS / call / email lines.「改用短信接收」. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Resend goes through the engine, including an app code with no `next_type`. |
+| `submodules/TelegramCore/Sources/Authorization.swift` | `auth.resendCode` is sent even when `next_type` is empty. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Auth/TelegramEngineAuth.swift` | `resendLoginCode`, `logOut`. |
+| `submodules/TelegramCore/Sources/TellomiInterfaceLanguage.swift` | New. Writes the language code into `localizationSettings` with no network. |
+| `submodules/TelegramUI/Sources/SharedAccountContext.swift` | `auth.logOut` on a duplicate login before the record is dropped. |
+| `submodules/SettingsUI/Sources/Language Selection/LocalizationListControllerNode.swift`, `Search/SettingsSearchableItems.swift` | A Settings language writes the same preference key. |

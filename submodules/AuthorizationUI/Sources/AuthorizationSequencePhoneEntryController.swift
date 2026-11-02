@@ -97,7 +97,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
         }
         if account != nil {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(presentationData.strings)).help, style: .plain, target: self, action: #selector(self.helpPressed))
+            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(presentationData.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
         }
         
         if let countriesConfiguration {
@@ -117,8 +117,36 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         self.back()
     }
     
-    @objc private func helpPressed() {
-        self.openUrl(TellomiLoginChrome.helpURL)
+    @objc private func languagePressed() {
+        self.presentTellomiLanguage()
+    }
+
+    private func presentTellomiLanguage() {
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
+        let current = tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode))
+        var rows: [TellomiChoiceRow] = []
+        for info in tellomiBuiltinInterfaceLanguages() {
+            let script = tellomiLoginScript(languageCode: info.languageCode)
+            let checked = script == current
+            let code = info.languageCode
+            rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
+                guard let self, !checked else {
+                    return
+                }
+                tellomiApplyInterfaceLanguage(accountManager: self.sharedContext.accountManager, languageCode: code)
+                self.refreshTellomiLanguage()
+            }))
+        }
+        let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.presentationData.theme.overallDarkAppearance)
+        self.present(prompt, in: .window(.root))
+    }
+
+    private func refreshTellomiLanguage() {
+        self.updateNavigationItems()
+        guard self.isNodeLoaded, let layout = self.validLayout else {
+            return
+        }
+        self.controllerNode.containerLayoutUpdated(layout, navigationBarHeight: self.navigationLayout(layout: layout).navigationFrame.maxY, transition: .immediate)
     }
 
     public func setTellomiBindPhone(_ bind: Bool) {
@@ -164,8 +192,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
 
     func updateNavigationItems() {
         if self.account != nil {
-            let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: copy.help, style: .plain, target: self, action: #selector(self.helpPressed))
+            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
             if self.isNodeLoaded, self.controllerNode.tellomiSurface != .phoneCode {
                 let backTitle = tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)) ? "返回" : "Back"
                 self.navigationItem.leftBarButtonItem = UIBarButtonItem(backButtonAppearanceWithTitle: backTitle, target: self, action: #selector(self.tellomiSurfaceBackPressed))
@@ -406,6 +433,11 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private var animatingIn = false
     override public func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        if self.shouldAnimateIn {
+            self.updateNavigationItems()
+        } else {
+            self.refreshTellomiLanguage()
+        }
         
         if self.shouldAnimateIn {
             self.animatingIn = true

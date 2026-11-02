@@ -781,7 +781,7 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             strongSelf.applyingCode.set(.single(info.languageCode))
             strongSelf.applyDisposable.set((strongSelf.context.engine.localization.downloadAndApplyLocalization(accountManager: strongSelf.context.sharedContext.accountManager, languageCode: info.languageCode)
                 |> deliverOnMainQueue).start(completed: { [weak self] in
-                    tellomiMarkSystemLangPackApplied()
+                    tellomiRememberInterfaceLanguage(info.languageCode)
                     self?.applyingCode.set(.single(nil))
                 
                     self?.context.engine.messages.refreshAttachMenuBots()

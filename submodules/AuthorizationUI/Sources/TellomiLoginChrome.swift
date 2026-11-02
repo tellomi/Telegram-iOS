@@ -23,7 +23,7 @@ enum TellomiLoginChrome {
     static let rowBorder = UIColor(rgb: 0xE6E6E6)
     /// Terms, privacy, and the carrier note all open on this host, in Safari.
     static let legalURL = "https://tellomi.cn/legal"
-    static let helpURL = "https://tellomi.cn/faq"
+    static let helpURL = "https://tellomi.cn/help/"
     static let fieldCornerRadius: CGFloat = 12.0
 
     struct Palette {
@@ -183,6 +183,11 @@ struct TellomiLoginCopy: Equatable {
     let signUpHelp: String
     let firstNamePlaceholder: String
     let lastNamePlaceholder: String
+    let chooseLanguage: String
+    let codeSentApp: String
+    let codeSentCallFormat: String
+    let useSms: String
+    let cancel: String
 
     func codeSentPhone(_ number: String) -> String {
         return String(format: self.codeSentPhoneFormat, number)
@@ -190,6 +195,10 @@ struct TellomiLoginCopy: Equatable {
 
     func codeSentEmail(_ address: String) -> String {
         return String(format: self.codeSentEmailFormat, address)
+    }
+
+    func codeSentCall(_ number: String) -> String {
+        return String(format: self.codeSentCallFormat, number)
     }
 
     func resendCountdown(_ seconds: Int) -> String {
@@ -203,7 +212,10 @@ public func tellomiAccountLabels(languageCode: String) -> (email: String, bindPh
 }
 
 func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
-    if tellomiLoginPrefersChinese(languageCode: languageCode) {
+    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
+    case .hant:
+        return tellomiLoginCopyHant()
+    case .hans:
         return TellomiLoginCopy(
             phoneTitle: "登录发现更多精彩",
             phonePlaceholder: "请输入手机号",
@@ -236,7 +248,7 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
             agreementTitle: "用户协议及隐私政策",
             unavailableTitle: "暂未开放",
             unavailableBody: "该登录方式即将开放，请先使用手机号或邮箱。",
-            codeNotReceived: "收不到验证码?",
+            codeNotReceived: "收不到验证码？",
             wrongCode: "请输入正确的验证码",
             startMessaging: "开始聊天",
             ok: "好",
@@ -253,10 +265,15 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
             signUpTitle: "你的信息",
             signUpHelp: "输入你的名字和添加头像.",
             firstNamePlaceholder: "名字",
-            lastNamePlaceholder: "姓氏"
+            lastNamePlaceholder: "姓氏",
+            chooseLanguage: "选择语言 / Language",
+            codeSentApp: "验证码已发送到你在其他设备上登录的 Tellomi",
+            codeSentCallFormat: "正在拨打 %@ 播报验证码",
+            useSms: "改用短信接收",
+            cancel: "取消"
         )
-    }
-    return TellomiLoginCopy(
+    case .english:
+        return TellomiLoginCopy(
         phoneTitle: "Log in to see more",
         phonePlaceholder: "Phone number",
         verifyAndLogin: "Verify and log in",
@@ -288,7 +305,7 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
         agreementTitle: "Terms and Privacy",
         unavailableTitle: "Not available yet",
         unavailableBody: "This sign-in method isn't open yet. Use a phone number or email.",
-        codeNotReceived: "Didn't get a code?",
+        codeNotReceived: "Didn't get the code?",
         wrongCode: "Enter the correct code",
         startMessaging: "Start Messaging",
         ok: "OK",
@@ -305,7 +322,72 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
         signUpTitle: "Your Info",
         signUpHelp: "Enter your name and add a profile photo.",
         firstNamePlaceholder: "First Name",
-        lastNamePlaceholder: "Last Name"
+        lastNamePlaceholder: "Last Name",
+        chooseLanguage: "选择语言 / Language",
+        codeSentApp: "The code was sent to the Tellomi app on your other devices.",
+        codeSentCallFormat: "Calling %@ to dictate the code.",
+        useSms: "Get the code by SMS",
+        cancel: "Cancel"
+    )
+    }
+}
+
+private func tellomiLoginCopyHant() -> TellomiLoginCopy {
+    return TellomiLoginCopy(
+        phoneTitle: "登入發現更多精彩",
+        phonePlaceholder: "請輸入手機號",
+        verifyAndLogin: "驗證並登入",
+        codeTitlePhone: "請輸入驗證碼",
+        codeTitleEmail: "輸入驗證碼",
+        login: "登入",
+        codePlaceholder: "請輸入驗證碼",
+        resend: "重新發送",
+        codeSentToast: "驗證碼發送成功",
+        help: "幫助",
+        continueAction: "繼續",
+        cloudPasswordTitle: "輸入雲端密碼",
+        codeSentPhoneFormat: "簡訊已發送至 %@",
+        codeSentEmailFormat: "郵件已發送至 %@",
+        resendCountdownFormat: "%d 秒後重新發送",
+        passwordLogin: "密碼登入",
+        codeLogin: "驗證碼登入",
+        orDivider: "或",
+        appleLogin: "Apple 登入",
+        googleLogin: "Google 登入",
+        emailLogin: "郵箱登入",
+        otherLogin: "其他登入方式",
+        recoverAccount: "找回帳號",
+        phonePasswordTitle: "手機號密碼登入",
+        emailPasswordTitle: "郵箱密碼登入",
+        passwordPlaceholder: "請輸入密碼",
+        agreeAndLogin: "同意並登入",
+        disagree: "不同意",
+        agreementTitle: "用戶協議及隱私政策",
+        unavailableTitle: "暫未開放",
+        unavailableBody: "該登入方式即將開放，請先使用手機號或郵箱。",
+        codeNotReceived: "收不到驗證碼？",
+        wrongCode: "請輸入正確的驗證碼",
+        startMessaging: "開始聊天",
+        ok: "好",
+        bindPhoneTitle: "綁定手機號",
+        bindPhoneAction: "綁定",
+        bindPhoneNotice: "綁定後可使用手機號登入",
+        bindEmailTitle: "綁定郵箱",
+        emailLabel: "郵箱",
+        alreadyAuthorized: "該帳號已登入",
+        switchToAccount: "切換到該帳號",
+        phoneConfirm: "這個號碼正確嗎？",
+        edit: "編輯",
+        yes: "是",
+        signUpTitle: "你的資訊",
+        signUpHelp: "輸入你的名字和新增頭像.",
+        firstNamePlaceholder: "名字",
+        lastNamePlaceholder: "姓氏",
+        chooseLanguage: "选择语言 / Language",
+        codeSentApp: "驗證碼已發送到你在其他裝置上登入的 Tellomi",
+        codeSentCallFormat: "正在撥打 %@ 播報驗證碼",
+        useSms: "改用簡訊接收",
+        cancel: "取消"
     )
 }
 
@@ -317,8 +399,7 @@ func tellomiLoginLanguageIsChinese(_ languageCode: String) -> Bool {
 /// Chinese when the langpack or the system language is Chinese. An empty
 /// preferred-language list (no signal) stays Chinese: mainland is the default.
 func tellomiLoginPrefersChinese(languageCode: String) -> Bool {
-    let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode).lowercased()
-    return code == "zh" || code.hasPrefix("zh-")
+    return tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) != .english
 }
 
 /// Bundled Chinese for the login and sign-up labels that otherwise come from the

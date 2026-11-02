@@ -26,6 +26,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     
     var reset: (() -> Void)?
     public var requestNextOption: (() -> Void)?
+    var requestSmsCode: (() -> Void)?
     public var requestPreviousOption: (() -> Void)?
     var resetEmail: (() -> Void)?
     var retryResetEmail: (() -> Void)?
@@ -114,7 +115,10 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
             self?.continueWithCode(code)
         }
         self.controllerNode.openHelp = { [weak self] in
-            self?.tellomiHelpPressed()
+            self?.presentTellomiCodeOptions()
+        }
+        self.controllerNode.requestSmsCode = { [weak self] in
+            self?.requestSmsCode?()
         }
         
         self.controllerNode.signInWithApple = { [weak self] in
@@ -158,6 +162,11 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         }
     }
     
+    override public func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        self.refreshTellomiLanguage()
+    }
+
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
@@ -189,18 +198,76 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         self.controllerNode.updatePasteVisibility()
     }
     
-    @objc private func tellomiHelpPressed() {
+    @objc private func languagePressed() {
+        self.presentTellomiLanguage()
+    }
+
+    private func presentTellomiLanguage() {
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        let current = tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: self.strings.primaryComponent.languageCode))
+        var rows: [TellomiChoiceRow] = []
+        for info in tellomiBuiltinInterfaceLanguages() {
+            let script = tellomiLoginScript(languageCode: info.languageCode)
+            let checked = script == current
+            let code = info.languageCode
+            rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
+                guard let self, !checked else {
+                    return
+                }
+                tellomiApplyInterfaceLanguage(accountManager: self.sharedContext.accountManager, languageCode: code)
+                self.refreshTellomiLanguage()
+            }))
+        }
+        let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.theme.overallDarkAppearance)
+        self.present(prompt, in: .window(.root))
+    }
+
+    private func presentTellomiCodeOptions() {
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        var rows: [TellomiChoiceRow] = []
+        let offerResend: Bool
+        if let type = self.data?.2 {
+            switch type {
+            case .otherSession, .email:
+                offerResend = false
+            default:
+                offerResend = self.controllerNode.tellomiResendIsActive
+            }
+        } else {
+            offerResend = false
+        }
+        if offerResend {
+            rows.append(TellomiChoiceRow(title: copy.resend, style: .link, action: { [weak self] in
+                self?.requestSmsCode?()
+            }))
+        }
+        rows.append(TellomiChoiceRow(title: copy.help, style: .link, action: { [weak self] in
+            self?.tellomiOpenHelp()
+        }))
+        let prompt = TellomiChoicePromptController(promptTitle: copy.codeNotReceived, rows: rows, cancelTitle: copy.cancel, dark: self.theme.overallDarkAppearance)
+        self.present(prompt, in: .window(.root))
+    }
+
+    private func tellomiOpenHelp() {
         guard let url = URL(string: TellomiLoginChrome.helpURL) else {
             return
         }
         UIApplication.shared.open(url, options: [:], completionHandler: nil)
     }
 
+    private func refreshTellomiLanguage() {
+        self.updateNavigationItems()
+        guard self.isNodeLoaded, let layout = self.validLayout else {
+            return
+        }
+        self.controllerNode.containerLayoutUpdated(layout, navigationBarHeight: self.navigationLayout(layout: layout).navigationFrame.maxY, transition: .immediate)
+    }
+
     func updateNavigationItems() {
         if let (_, _, type, _, _, _, _) = self.data {
             switch type {
             case .sms, .email, .firebase, .call, .otherSession:
-                self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).help, style: .plain, target: self, action: #selector(self.tellomiHelpPressed))
+                self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
                 return
             default:
                 break

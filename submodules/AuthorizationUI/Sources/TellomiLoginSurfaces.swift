@@ -175,6 +175,13 @@ final class TellomiSocialRowNode: HighlightableButtonNode {
         self.addSubnode(self.labelNode)
     }
 
+    func setTitle(_ title: String, dark: Bool) {
+        let palette = TellomiLoginChrome.palette(dark: dark)
+        self.labelNode.attributedText = NSAttributedString(string: title, font: Font.regular(16.0), textColor: palette.rowText)
+        self.accessibilityLabel = title
+        self.setNeedsLayout()
+    }
+
     func applyPalette(dark: Bool) {
         let palette = TellomiLoginChrome.palette(dark: dark)
         self.backgroundColor = palette.rowBackground

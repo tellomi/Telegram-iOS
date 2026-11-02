@@ -294,6 +294,14 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         self.setNeedsLayout()
     }
 
+    func updateTellomiPlaceholder(_ placeholder: String) {
+        guard self.tellomiCompact, self.tellomiPlaceholder != placeholder else {
+            return
+        }
+        self.tellomiPlaceholder = placeholder
+        self.applyTellomiPlaceholder()
+    }
+
     private func applyTellomiPlaceholder() {
         guard self.tellomiCompact else {
             return
@@ -1216,6 +1224,19 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance))
         let agreementKind: TellomiSignUpAgreement.Kind = surface.showsCarrierAgreement ? .phone : .email
         self.tellomiAgreement.setKind(agreementKind)
+        self.tellomiAgreement.refreshLanguage()
+        self.phoneAndCountryNode.updateTellomiPlaceholder(loginCopy.phonePlaceholder)
+        let rowDark = self.theme.overallDarkAppearance
+        self.appleRowNode?.setTitle(loginCopy.appleLogin, dark: rowDark)
+        self.googleRowNode?.setTitle(loginCopy.googleLogin, dark: rowDark)
+        self.emailRowNode?.setTitle(loginCopy.emailLogin, dark: rowDark)
+        self.otherRowNode?.setTitle(loginCopy.otherLogin, dark: rowDark)
+        self.recoverNode?.setTitle(loginCopy.recoverAccount, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
+        self.recoverNode?.accessibilityLabel = loginCopy.recoverAccount
+        self.circleAppleNode?.accessibilityLabel = loginCopy.appleLogin
+        self.circleGoogleNode?.accessibilityLabel = loginCopy.googleLogin
+        self.circleEmailNode?.accessibilityLabel = loginCopy.emailLogin
+        self.circleMoreNode?.accessibilityLabel = loginCopy.otherLogin
         if surface.isEmail {
             self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
             self.emailFieldNode?.setPlaceholder(emailCopy.placeholder, theme: self.theme)
