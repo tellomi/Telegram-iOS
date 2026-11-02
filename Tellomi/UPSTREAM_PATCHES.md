@@ -401,4 +401,5 @@ Stacked on the solid-wallpaper change. Day and dayClassic outgoing bubbles are w
 | `DefaultDarkTintedPresentationTheme.swift` | Accent white. The theme is not in the picker. |
 | `PresentationResourcesChat.swift` | Send glyph is the existing up-arrow path. |
 | Theme settings | Day and night only. No accent row, no tinted theme. |
-| `Telegram/BUILD`, `en.lproj` and `zh-Hans.lproj` InfoPlist | Natural Chinese permission sentences. |
+| `en.lproj/InfoPlist.strings` | `NSLocationAlwaysAndWhenInUseUsageDescription` is English. |
+| `zh-Hant.lproj/InfoPlist.strings`, `empty_languages` | Traditional Chinese for every `zh-Hans` permission key. |
