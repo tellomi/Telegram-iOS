@@ -801,14 +801,8 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     /// A code screen saved by a previous launch, or a response for a number the user already left.
     /// The hash is dropped. The number stays in the phone field so they can send a new code.
     private func tellomiDropPersistedCodeEntry(identifier: String) {
-        let account = self.account
         let parts = self.tellomiPhoneEntryParts(identifier: identifier)
-        let _ = account.postbox.transaction { transaction in
-            guard let state = transaction.getState() as? UnauthorizedAccountState, case .confirmationCodeEntry = state.contents else {
-                return
-            }
-            transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .phoneEntry(countryCode: parts.countryCode, number: parts.number)))
-        }.startStandalone()
+        let _ = self.engine.auth.replaceConfirmationCodeEntryWithPhoneEntry(countryCode: parts.countryCode, number: parts.number).startStandalone()
     }
 
     private func returnToPhoneOrEmailEntry() {
