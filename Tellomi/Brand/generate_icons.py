@@ -238,6 +238,11 @@ def write_appiconset(mark_scale):
         json.dumps({"images": images, "info": {"author": "xcode", "version": 1}}, indent=2) + "\n",
         encoding="utf-8",
     )
+    # Loose copies App Store reads from CFBundleIcons~ipad, outside Assets.car.
+    loose = ROOT / "LooseIpadIcons"
+    loose.mkdir(parents=True, exist_ok=True)
+    shutil.copy(out / "AppIcon-ipad-76x76@2x.png", loose / "TellomiHomeIpad76@2x.png")
+    shutil.copy(out / "AppIcon-ipad-83_5x83_5@2x.png", loose / "TellomiHomeIpad83@2x.png")
 
 
 def frame_scale(mark_scale, fraction):
@@ -310,10 +315,19 @@ def write_alternates(mark_scale):
         svg = slot_svg(name, mark_scale)
         out = dest_root / folder.name
         out.mkdir()
+        present = set()
         for png in folder.glob("*.png"):
             with Image.open(png) as image:
                 pixels = image.size[0]
+            present.add(pixels)
             render(svg, pixels, out / png.name)
+        # ITMS-90892: every iPad alternate icon needs 76pt @2x and 83.5pt @2x
+        # outside the asset catalog. Upstream never shipped these for Premium
+        # or WhiteFilled, so render them from the same slot artwork.
+        if 152 not in present:
+            render(svg, 152, out / "{}Ipad@2x.png".format(name))
+        if 167 not in present:
+            render(svg, 167, out / "{}LargeIpad@2x.png".format(name))
 
 
 def write_composer_glyph(mark_scale):

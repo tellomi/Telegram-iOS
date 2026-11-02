@@ -172,6 +172,59 @@ jobs:
             zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
           fi
 
+      # Proof runs are not published. Print the iPad icon plist and the loose
+      # PNGs from the IPA so the App Store icon check can be read from the log.
+      - name: Inspect iPad icons and Siri vocabulary
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          python3 - << 'PY'
+          import plistlib
+          import struct
+          import zipfile
+
+          archive = zipfile.ZipFile("build/artifacts/Telegram.ipa")
+          names = archive.namelist()
+          infos = [
+              name for name in names
+              if name.endswith(".app/Info.plist")
+              and "PlugIns/" not in name
+              and "Frameworks/" not in name
+              and "/Watch/" not in name
+          ]
+          print("app Info.plist:", infos)
+          raw = archive.read(infos[0])
+          plist = plistlib.loads(raw)
+          ipad = plist["CFBundleIcons~ipad"]
+          primary = ipad["CFBundlePrimaryIcon"]
+          print("primary CFBundleIconFiles:", primary.get("CFBundleIconFiles"))
+          print("primary CFBundleIconName:", primary.get("CFBundleIconName"))
+          for icon_id, entry in sorted(ipad.get("CFBundleAlternateIcons", {}).items()):
+              print("alternate", icon_id, entry.get("CFBundleIconFiles"))
+          prefix = infos[0].rsplit("/", 1)[0] + "/"
+
+          def png_size(data):
+              return struct.unpack(">II", data[16:24])
+
+          print("loose iPad-sized PNGs:")
+          for name in sorted(names):
+              if not name.startswith(prefix) or not name.endswith(".png"):
+                  continue
+              if name.count("/") != prefix.count("/"):
+                  continue
+              width, height = png_size(archive.read(name))
+              if (width, height) in ((152, 152), (167, 167)):
+                  print(f"  {width}x{height} {name}")
+          vocabs = sorted(name for name in names if name.endswith("AppIntentVocabulary.plist"))
+          print("AppIntentVocabulary:", vocabs)
+          for language in ("zh-Hans", "zh-Hant"):
+              matches = [name for name in vocabs if f"/{language}.lproj/" in name]
+              if len(matches) != 1:
+                  raise SystemExit(f"missing {language} vocabulary: {matches}")
+              phrases = plistlib.loads(archive.read(matches[0]))["IntentPhrases"]
+              print(language, [item["IntentName"] for item in phrases])
+          PY
+
       # actions/create-release@v1 and actions/upload-release-asset@v1 run on
       # Node 12, which current GitHub images reject. gh is on the image.
       # workflow_dispatch of a non-master ref (a proof run) must not publish.
