@@ -389,16 +389,16 @@ public struct PresentationResourcesChat {
                 }
                 
                 context.clear(CGRect(origin: CGPoint(), size: size))
-                let color: UIColor
-                if [.day, .night].contains(theme.referenceTheme.baseTheme) && !theme.chat.message.outgoing.bubble.withWallpaper.hasSingleFillColor {
-                    color = .white
-                } else {
-                    color = theme.chat.inputPanel.actionControlForegroundColor
-                }
-                
-                if let image = generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/SendIcon"), color: color) {
-                    image.draw(in: CGRect(origin: CGPoint(x: floorToScreenPixels((size.width - image.size.width) * 0.5), y: floorToScreenPixels((size.height - image.size.height) * 0.5)), size: image.size))
-                }
+                // Arrow, not the paper-plane SendIcon. The circle is the button fill
+                // (black in day, white at night). This drawing does not use the imageset
+                // MingCute phase 1 replaces, so the two changes do not collide.
+                context.setStrokeColor(theme.chat.inputPanel.actionControlForegroundColor.cgColor)
+                context.setFillColor(theme.chat.inputPanel.actionControlForegroundColor.cgColor)
+                context.setLineWidth(2.0)
+                context.setLineCap(.round)
+                context.setLineJoin(.round)
+                let _ = try? drawSvgPath(context, path: "M11,14.6666667 L16.4310816,9.40016333 L16.4310816,9.40016333 C16.4694824,9.36292619 16.5305176,9.36292619 16.5689184,9.40016333 L22,14.6666667 S ")
+                let _ = try? drawSvgPath(context, path: "M16.5,9.33333333 C17.0522847,9.33333333 17.5,9.78104858 17.5,10.3333333 L17.5,24 C17.5,24.5522847 17.0522847,25 16.5,25 C15.9477153,25 15.5,24.5522847 15.5,24 L15.5,10.3333333 C15.5,9.78104858 15.9477153,9.33333333 16.5,9.33333333 Z ")
             })
         })
     }

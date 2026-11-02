@@ -4,7 +4,7 @@ import TelegramCore
 import TelegramUIPreferences
 
 public let defaultDarkPresentationTheme = makeDefaultDarkPresentationTheme(preview: false)
-public let defaultDarkColorPresentationTheme = customizeDefaultDarkPresentationTheme(theme: defaultDarkPresentationTheme, editing: false, title: nil, accentColor: UIColor(rgb: 0x3e88f7), backgroundColors: [], bubbleColors: [], animateBubbleColors: false, wallpaper: nil, baseColor: nil)
+public let defaultDarkColorPresentationTheme = customizeDefaultDarkPresentationTheme(theme: defaultDarkPresentationTheme, editing: false, title: nil, accentColor: UIColor(rgb: 0xffffff), backgroundColors: [], bubbleColors: [0x2c2c2e, 0x2c2c2e], animateBubbleColors: false, wallpaper: nil, baseColor: nil)
 
 private extension PresentationThemeBaseColor {
     var colorWallpaper: (BuiltinWallpaperData, Int32, [UInt32])? {
@@ -561,8 +561,8 @@ public func makeDefaultDarkPresentationTheme(extendingThemeReference: Presentati
         outgoing: PresentationThemePartedColors(
             bubble: PresentationThemeBubbleColor(
                 withWallpaper: PresentationThemeBubbleColorComponents(
-                    fill: [UIColor(rgb: 0x61BCF9), UIColor(rgb: 0x0088ff)],
-                    highlightedFill: UIColor(rgb: 0x61BCF9),
+                    fill: [UIColor(rgb: 0x2c2c2e)],
+                    highlightedFill: UIColor(rgb: 0x3a3a3c),
                     stroke: .clear,
                     shadow: nil,
                     reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.1),
@@ -577,8 +577,8 @@ public func makeDefaultDarkPresentationTheme(extendingThemeReference: Presentati
                     reactionActiveMediaPlaceholder: UIColor(rgb: 0x000000, alpha: 0.1)
                 ),
                 withoutWallpaper: PresentationThemeBubbleColorComponents(
-                    fill: [UIColor(rgb: 0x61BCF9), UIColor(rgb: 0x0088ff)],
-                    highlightedFill: UIColor(rgb: 0x61BCF9),
+                    fill: [UIColor(rgb: 0x2c2c2e)],
+                    highlightedFill: UIColor(rgb: 0x3a3a3c),
                     stroke: .clear,
                     shadow: nil,
                     reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.1),

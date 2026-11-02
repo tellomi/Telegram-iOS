@@ -291,7 +291,6 @@ private func themePickerControllerEntries(presentationData: PresentationData, pr
     entries.append(.themesHeader(presentationData.theme, presentationData.strings.Themes_SelectTheme.uppercased()))
     entries.append(.themes(presentationData.theme, presentationData.strings, chatThemes, themeReference, nightMode, animatedEmojiStickers, presentationThemeSettings.themeSpecificAccentColors, presentationThemeSettings.themeSpecificChatWallpapers))
     
-    entries.append(.customHeader(presentationData.theme, presentationData.strings.Themes_BuildOwn.uppercased()))
     entries.append(.chatPreview(presentationData.theme, presentationData.chatWallpaper, presentationData.chatFontSize, presentationData.chatBubbleCorners, presentationData.strings, presentationData.dateTimeFormat, presentationData.nameDisplayOrder, [ChatPreviewMessageItem(outgoing: false, reply: (presentationData.strings.Appearance_PreviewReplyAuthor, presentationData.strings.Appearance_PreviewReplyText), text: presentationData.strings.Appearance_PreviewIncomingText, nameColor: .preset(.blue), backgroundEmojiId: nil), ChatPreviewMessageItem(outgoing: true, reply: nil, text: presentationData.strings.Appearance_PreviewOutgoingText, nameColor: .preset(.blue), backgroundEmojiId: nil)]))
     
     let generalThemes: [PresentationThemeReference] = availableThemes.filter { reference in
@@ -302,43 +301,8 @@ private func themePickerControllerEntries(presentationData: PresentationData, pr
         }
     }
 
-    let generalThemeReference: PresentationThemeReference
-    if case let .cloud(theme) = themeReference, let settings = theme.theme.settings {
-        if let baseTheme = presentationThemeSettings.themePreferredBaseTheme[themeReference.index] {
-            generalThemeReference = .builtin(PresentationBuiltinThemeReference(baseTheme: baseTheme))
-        } else if let first = settings.first {
-            generalThemeReference = .builtin(PresentationBuiltinThemeReference(baseTheme: first.baseTheme))
-        } else {
-            generalThemeReference = themeReference
-        }
-    } else {
-        generalThemeReference = themeReference
-    }
-    
     entries.append(.theme(presentationData.theme, presentationData.strings, generalThemes, availableThemes, themeReference, presentationThemeSettings.themeSpecificAccentColors, presentationThemeSettings.themeSpecificChatWallpapers, presentationThemeSettings.themeSpecificAccentColors[themeReference.index], presentationThemeSettings.themePreferredBaseTheme))
 
-    if case let .builtin(builtinTheme) = generalThemeReference {
-        let colorThemes = availableThemes.filter { reference in
-            if case let .cloud(theme) = reference, let settings = theme.theme.settings, settings.contains(where: { $0.baseTheme == builtinTheme.baseTheme }) {
-                return true
-            } else {
-                return false
-            }
-        }
-
-        var colorOption: ThemeSettingsColorOption?
-        if case .builtin = themeReference {
-            colorOption = presentationThemeSettings.themeSpecificAccentColors[themeReference.index].flatMap { .accentColor($0) }
-        } else {
-            colorOption = .theme(themeReference)
-        }
-
-        entries.append(.accentColor(presentationData.theme, generalThemeReference, themeReference, colorThemes, colorOption))
-    }
-    
-    entries.append(.editTheme(presentationData.theme, presentationData.strings.Themes_EditCurrentTheme))
-    entries.append(.createTheme(presentationData.theme, presentationData.strings.Themes_CreateNewTheme))
-    
     return entries
 }
 
@@ -657,7 +621,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
                                                 let theme = themes[themes.index(before: previousThemeIndex.base)]
                                                 newTheme = .cloud(PresentationCloudTheme(theme: theme, resolvedWallpaper: nil, creatorAccountId: theme.isCreator ? context.account.id : nil))
                                             } else {
-                                                newTheme = .builtin(.nightAccent)
+                                                newTheme = .builtin(.night)
                                             }
                                             selectThemeImpl?(nil, newTheme, false)
                                         }
@@ -993,11 +957,9 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
         
         var defaultThemes: [PresentationThemeReference] = []
         if presentationData.autoNightModeTriggered {
-            defaultThemes.append(contentsOf: [.builtin(.nightAccent), .builtin(.night)])
+            defaultThemes.append(.builtin(.night))
         } else {
             defaultThemes.append(contentsOf: [
-                .builtin(.dayClassic),
-                .builtin(.nightAccent),
                 .builtin(.day),
                 .builtin(.night)
             ])
@@ -1012,7 +974,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
         availableThemes.append(contentsOf: cloudThemes)
         
         var chatThemes = cloudThemes.filter { $0.emoticon != nil }
-        chatThemes.insert(.builtin(.dayClassic), at: 0)
+        chatThemes.insert(.builtin(.day), at: 0)
         
         let nightMode = nightModePreview || presentationData.autoNightModeTriggered
         

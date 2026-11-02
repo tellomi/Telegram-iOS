@@ -385,3 +385,18 @@ APNs `alert.loc-key` is resolved by the system from the main app bundle. The Not
 | `Telegram/Telegram-iOS/zh-Hans.lproj/Localizable.strings` | New. Simplified sentences, for example `MESSAGE_AUDIO` = `%1$@ 发来一条语音消息`. |
 | `Telegram/Telegram-iOS/zh-Hant.lproj/Localizable.strings` | New. Traditional sentences. |
 | `Telegram/BUILD` | `zh-Hans` leaves `empty_languages`. Both Chinese files are in `AppStringResources`. |
+
+## Monochrome day and night
+
+Stacked on the solid-wallpaper change. Day and dayClassic outgoing bubbles are white (`#FFFFFF`, pressed `#E9E9EB`) with black text. Night accent is white and outgoing bubbles are `#2C2C2E`. Links, checks, switches, and unread badges follow black in day and white at night. The accent picker, tinted night theme, and theme editor are not offered. The send control draws an up arrow in the button’s foreground color and does not use the paper-plane imageset.
+
+System permission strings in `zh-Hans`, the development `en` table, and the Bazel plist are the same natural Chinese sentences. The machine-translated location line lived in the server language pack, not in these files.
+
+| File | Change |
+| --- | --- |
+| `DefaultDayPresentationTheme.swift` | White outgoing bubbles, black links and checks, black switch, black start button, gray passcode. |
+| `DefaultDarkPresentationTheme.swift` | White accent, `#2C2C2E` outgoing bubbles. |
+| `DefaultDarkTintedPresentationTheme.swift` | Accent white. The theme is not in the picker. |
+| `PresentationResourcesChat.swift` | Send glyph is the existing up-arrow path. |
+| Theme settings | Day and night only. No accent row, no tinted theme. |
+| `Telegram/BUILD`, `en.lproj` and `zh-Hans.lproj` InfoPlist | Natural Chinese permission sentences. |

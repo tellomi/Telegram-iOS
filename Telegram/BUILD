@@ -1763,29 +1763,29 @@ plist_fragment(
         <true/>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>We need this so that you can take and share photos and videos.</string>
+    <string>需要相机权限，以便拍照、录像和进行视频通话。</string>
     <key>NSContactsUsageDescription</key>
-    <string>{telegram_app_name} stores your contacts heavily encrypted in the cloud to let you connect with your friends across all your devices.</string>
+    <string>当你与朋友联系时，{telegram_app_name} 会把通讯录同步到加密的云端，以便在你的设备上找到他们。</string>
     <key>NSFaceIDUsageDescription</key>
-    <string>You can use Face ID to unlock the app.</string>
+    <string>你可以使用面容 ID 解锁应用。</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>当你分享位置、发送实时位置，或查看附近的人时，{telegram_app_name} 需要使用你的位置。开启实时位置后，应用在后台也会继续使用位置信息。</string>
     <key>NSLocationAlwaysUsageDescription</key>
-    <string>When you send your location to your friends, {telegram_app_name} needs access to show them a map. You also need this to send locations from an Apple Watch.</string>
+    <string>当你在聊天中与朋友分享实时位置时，{telegram_app_name} 需要在后台使用位置，以便在分享期间持续更新。从 Apple Watch 发送位置也需要这项权限。</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>When you send your location to your friends, {telegram_app_name} needs access to show them a map.</string>
+    <string>当你向朋友发送位置时，{telegram_app_name} 需要使用你的位置来显示地图。</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>We need this so that you can record and share voice messages and videos with sound.</string>
+    <string>需要麦克风权限，以便录制并分享语音消息和有声视频。</string>
     <key>NSMotionUsageDescription</key>
-    <string>When you send your location to your friends, {telegram_app_name} needs access to show them a map.</string>
+    <string>当你向朋友发送位置时，{telegram_app_name} 需要使用你的位置来显示地图。</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
-    <string>We need this so that you can share photos and videos from your photo library.</string>
+    <string>需要权限，以便把照片和视频保存到相册。</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>We need this so that you can share photos and videos from your photo library.</string>
+    <string>需要照片权限，以便从相册分享照片和视频，并保存你拍摄的内容。</string>
     <key>NSSiriUsageDescription</key>
-    <string>You can use Siri to send messages.</string>
+    <string>你可以使用 Siri 发送消息。</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>We need this to transcribe audio messages on your request.</string>
+    <string>需要语音识别权限，以便在你要求时把语音消息转成文字。</string>
     <key>NSUserActivityTypes</key>
     <array>
         <string>INSendMessageIntent</string>
