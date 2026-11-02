@@ -330,6 +330,26 @@ Left as they are, because they are not the default chrome accent: message link b
 | `submodules/TelegramUI/Components/Settings/WallpaperGridScreen/Sources/ThemeGridControllerNode.swift` | The gallery's built-in slot is the solid color. |
 | `submodules/HashtagSearchUI/Sources/HashtagSearchControllerNode.swift` | The forced dark search background is solid black. |
 
+## MingCute icons, phase 1
+
+The most visible template icons are MingCute outlines (and fills where a
+selected state is a different drawing). `Tellomi/Icons/generate_icons.py`
+writes a black PDF at the old point size. The catalog still tints it.
+`TabChats`, `TabContacts`, `TabCalls`, `TabSettings`, and `TabNews` are not
+played. The selected tab is the fill image and scales from 0.86 to 1.
+Attach-menu tabs and chat-list swipes are static images too. Login screens
+are unchanged.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/Icons/mapping.csv`, `generate_icons.py`, `MingCute/` | The mapping, the converter, and the Apache-2.0 SVGs it reads. |
+| `submodules/TelegramUI/Images.xcassets` | The imagesets named in the csv. |
+| `submodules/ChatListUI/Sources/ChatListController.swift`, `ContactListUI`, `CallListUI`, `News/NewsScreen`, `PeerInfo/PeerInfoScreen` | Line icon, fill icon, no tab Lottie. |
+| `submodules/TabBarUI/Sources/TabBarNode.swift` | Selection scale when the item has no Lottie name. |
+| `submodules/AttachmentUI/Sources/AttachmentPanel.swift` | Attach tabs use the line or fill image. |
+| `submodules/ChatListUI/Sources/Node/ChatListItem.swift` | Swipe actions use `Chat List/Swipe`. |
+| `submodules/TelegramUI/Resources/Animations/Tab*` | The sixteen tab Lottie files nothing references anymore are deleted. `ForumTabs.tgs` stays. |
+
 ## Login language, sent-code copy, duplicate session
 
 Mirrors Android `tellomi/Telegram` #31 on the phone and code screens. The top-right control is no longer Help. It is the current language plus ▾ (`简体中文 ▾`, `繁體中文 ▾`, `English ▾`). The card is the same centered login card as the agreement prompt, titled「选择语言 / Language」, with those three built-in rows, a check on the current one, and Cancel. There is no Other row and no `langpack.getStrings` call. Upstream language screens need a logged-in account.
