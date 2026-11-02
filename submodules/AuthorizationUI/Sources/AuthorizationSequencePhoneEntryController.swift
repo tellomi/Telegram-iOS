@@ -124,16 +124,18 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private func presentTellomiLanguage() {
         let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
         let current = tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode))
-        let rows: [TellomiChoiceRow] = tellomiBuiltinInterfaceLanguages().map { info in
+        var rows: [TellomiChoiceRow] = []
+        for info in tellomiBuiltinInterfaceLanguages() {
             let script = tellomiLoginScript(languageCode: info.languageCode)
             let checked = script == current
-            return TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
+            let code = info.languageCode
+            rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
                 guard let self, !checked else {
                     return
                 }
-                tellomiApplyInterfaceLanguage(accountManager: self.sharedContext.accountManager, languageCode: info.languageCode)
+                tellomiApplyInterfaceLanguage(accountManager: self.sharedContext.accountManager, languageCode: code)
                 self.refreshTellomiLanguage()
-            })
+            }))
         }
         let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.presentationData.theme.overallDarkAppearance)
         self.present(prompt, in: .window(.root))

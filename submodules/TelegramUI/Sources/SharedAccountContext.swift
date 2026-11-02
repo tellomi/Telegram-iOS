@@ -717,7 +717,10 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             }
             
             differenceDisposable.set((combineLatest(queue: .mainQueue(), mappedAddedAccounts, addedAuthSignal)
-            |> deliverOnMainQueue).start(next: { mappedAddedAccounts, authAccount in
+            |> deliverOnMainQueue).start(next: { [weak self] mappedAddedAccounts, authAccount in
+                guard let self else {
+                    return
+                }
                 print("SharedAccountContextImpl: accounts processed in \(CFAbsoluteTimeGetCurrent() - startTime)")
                 
                 var addedAccounts: [(AccountRecordId, Account?, Int32, AccountInitialData)] = []
@@ -755,9 +758,9 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                             let engine = TelegramEngine(account: account)
                             let accountId = account.id
                             self.managedAccountDisposables.set((engine.auth.logOut()
-                            |> deliverOnMainQueue).start(completed: { [weak self, engine] in
+                            |> deliverOnMainQueue).start(completed: { [self, engine] in
                                 withExtendedLifetime(engine) {}
-                                self?.managedAccountDisposables.set(nil, forKey: accountId)
+                                self.managedAccountDisposables.set(nil, forKey: accountId)
                             }), forKey: accountId)
                             let _ = accountManager.transaction({ transaction in
                                 if transaction.getCurrent()?.0 == accountRecord.0 {
