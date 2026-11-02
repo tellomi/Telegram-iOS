@@ -302,7 +302,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         let innerInset: CGFloat = 16.0
         
         let noticeSize = self.currentOptionNode.measure(CGSize(width: maximumWidth - 28.0, height: CGFloat.greatestFiniteMagnitude))
-        let termsSize = self.agreementRow.updateLayout(width: maximumWidth - 28.0, centered: true)
+        let termsSize = self.agreementRow.updateLayout(width: maximumWidth - 28.0, centered: false)
         
         let avatarSize: CGSize = CGSize(width: 110.0, height: 110.0)
         var items: [AuthorizationLayoutItem] = []

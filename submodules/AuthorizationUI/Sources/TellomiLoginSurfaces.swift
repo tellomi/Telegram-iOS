@@ -126,7 +126,8 @@ final class TellomiAgreementRow: ASDisplayNode {
         let textWidth = max(0.0, width - box - gap)
         self.availableTextWidth = textWidth
         self.textNode.maximumNumberOfLines = 0
-        self.textNode.textAlignment = .center
+        self.textNode.textAlignment = .natural
+        self.textNode.accessibilityIdentifier = "Auth.Login.AgreementText"
         // A finite height. The typesetter treats a line as the last one when two line-heights
         // no longer fit, and an infinite height is not what leaves the English sentence clipped.
         let textSize = self.textNode.updateLayout(CGSize(width: textWidth, height: 240.0))
@@ -147,19 +148,17 @@ final class TellomiAgreementRow: ASDisplayNode {
         let textY: CGFloat = 13.0
         let textWidth = self.availableTextWidth > 0.0 ? self.availableTextWidth : max(0.0, self.bounds.width - box - gap)
         let measured = self.measuredText.height > 0.0 ? self.measuredText : CGSize(width: textWidth, height: max(0.0, self.bounds.height - textY))
-        // The text column is the width the sentence was measured at. A narrower frame, left over
-        // from a shorter language, center-clips the English line ("and agree to the Terms and Priv").
-        let groupWidth = box + gap + textWidth
-        let originX: CGFloat
-        if self.centered {
-            originX = max(0.0, floor((self.bounds.width - groupWidth) / 2.0))
-        } else {
-            originX = 0.0
-        }
+        // Hug the glyphs. A full-width frame with center alignment left the short Chinese sentence
+        // in the middle of the row, away from the checkbox. English already filled its line.
+        let usedTextWidth = measured.width > 1.0 ? min(textWidth, measured.width) : textWidth
+        let originX: CGFloat = 0.0
+        _ = self.centered
         let boxY = textY + 1.0
         self.checkbox.frame = CGRect(x: originX, y: boxY, width: box, height: box)
         self.checkboxButton.frame = CGRect(x: max(0.0, originX - 13.0), y: 0.0, width: 44.0, height: 44.0)
-        self.textNode.frame = CGRect(x: originX + box + gap, y: textY, width: textWidth, height: max(measured.height, 22.0))
+        self.textNode.frame = CGRect(x: originX + box + gap, y: textY, width: usedTextWidth, height: max(measured.height, 22.0))
+        self.textNode.isAccessibilityElement = true
+        self.textNode.accessibilityIdentifier = "Auth.Login.AgreementText"
     }
 }
 

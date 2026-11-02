@@ -520,6 +520,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        if let navigationBar = self.navigationBar {
+            self.controllerNode.tellomiInstallKeyboardDismissTap(on: navigationBar.view)
+        }
         
         if !self.animatingIn {
             self.controllerNode.activateInput()

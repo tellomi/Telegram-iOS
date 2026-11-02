@@ -96,6 +96,44 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertTrue(raised, "verify button did not move up with the keyboard (was \(restingMinY), now \(verify.frame.minY))")
         XCTAssertGreaterThan(app.keyboards.count, 0)
         self.assertLoginRowsDoNotOverlap(keyboardUp: true)
+        let headerBottom = app.buttons["Auth.Login.Language"].frame.maxY
+        let form = app.scrollViews["Auth.Login.Form"]
+        let emailFrame = self.screenFrame(email, scroll: form)
+        XCTAssertGreaterThan(emailFrame.minY, headerBottom, "email field is under the header at \(emailFrame), header ends at \(headerBottom)")
+        XCTAssertGreaterThan(emailFrame.intersection(form.frame).height, 30.0, "email field is not in the form while the keyboard is up \(emailFrame) form \(form.frame)")
+    }
+
+    func testEmailKeyboardDismissesThreeWays() throws {
+        self.openEmailLogin()
+        let globe = app.buttons["Auth.Login.Language"]
+        XCTAssertTrue(globe.waitForExistence(timeout: 5.0))
+
+        self.showEmailKeyboard()
+        let headerBlank = app.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.0)).withOffset(CGVector(dx: app.frame.midX, dy: globe.frame.maxY + 20.0))
+        headerBlank.tap()
+        self.waitUntilKeyboardHidden()
+        XCTAssertEqual(app.keyboards.count, 0, "a tap on the header blank should dismiss the keyboard")
+
+        self.showEmailKeyboard()
+        var tappedReturn = false
+        for name in ["Done", "完成", "Return", "return"] {
+            let button = app.keyboards.buttons[name]
+            if button.exists {
+                button.tap()
+                tappedReturn = true
+                break
+            }
+        }
+        XCTAssertTrue(tappedReturn, "keyboard has no Done or Return key")
+        self.waitUntilKeyboardHidden()
+        XCTAssertEqual(app.keyboards.count, 0, "Done should dismiss the keyboard")
+
+        self.showEmailKeyboard()
+        let dragStart = app.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.0)).withOffset(CGVector(dx: app.frame.midX, dy: globe.frame.maxY + 28.0))
+        let dragEnd = dragStart.withOffset(CGVector(dx: 0.0, dy: 140.0))
+        dragStart.press(forDuration: 0.05, thenDragTo: dragEnd)
+        self.waitUntilKeyboardHidden()
+        XCTAssertEqual(app.keyboards.count, 0, "dragging the form from a blank area should dismiss the keyboard")
     }
 
     func testChineseLanguageDefaultsCountryCodeTo86() throws {
@@ -118,6 +156,13 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertTrue(agreement.waitForExistence(timeout: 5.0))
         let agreementText = agreement.label
         XCTAssertTrue(agreementText.contains("用户协议") || agreementText.contains("已阅读并同意"), "agreement stayed \(agreementText)")
+        let box = app.buttons["Auth.Agreement.Checkbox"]
+        let sentence = app.otherElements["Auth.Login.AgreementText"]
+        let sentenceText = app.staticTexts["Auth.Login.AgreementText"]
+        let text = sentence.exists ? sentence : sentenceText
+        XCTAssertTrue(text.waitForExistence(timeout: 5.0))
+        XCTAssertLessThanOrEqual(text.frame.minX - box.frame.maxX, 24.0, "Chinese agreement \(text.frame) is not next to the checkbox \(box.frame)")
+        XCTAssertGreaterThan(text.frame.minX, box.frame.minX)
 
         let switchToPhone = app.buttons["Auth.Login.SwitchToPhone"]
         XCTAssertTrue(switchToPhone.waitForExistence(timeout: 5.0))
@@ -181,6 +226,27 @@ final class TellomiLoginUITests: XCTestCase {
         let list = app.tables["Auth.Country.List"]
         XCTAssertTrue(list.waitForExistence(timeout: 5.0))
         XCTAssertGreaterThan(list.cells.count, 0)
+    }
+
+    private func showEmailKeyboard() {
+        if app.keyboards.count > 0 {
+            return
+        }
+        let email = app.textFields["Auth.PhoneEntry.EmailField"]
+        XCTAssertTrue(email.waitForExistence(timeout: 5.0))
+        email.tap()
+        let deadline = Date().addingTimeInterval(5.0)
+        while Date() < deadline && app.keyboards.count == 0 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTAssertGreaterThan(app.keyboards.count, 0, "email field did not raise the keyboard")
+    }
+
+    private func waitUntilKeyboardHidden() {
+        let deadline = Date().addingTimeInterval(4.0)
+        while Date() < deadline && app.keyboards.count > 0 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
     }
 
     private func dismissLoginKeyboard() {

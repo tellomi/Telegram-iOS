@@ -331,17 +331,24 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         let fieldFrame = CGRect(x: inset, y: floor((size.height - fieldHeight) / 2.0), width: max(0.0, size.width - inset * 2.0), height: fieldHeight)
         self.tellomiBackground.frame = fieldFrame
 
-        let codeWidth: CGFloat = 78.0
-        self.tellomiDivider.frame = CGRect(x: fieldFrame.minX + codeWidth, y: fieldFrame.minY + 16.0, width: UIScreenPixel, height: fieldHeight - 32.0)
+        let codeOrigin: CGFloat = 14.0
+        let codeGap: CGFloat = 6.0
+        let codeFont = self.phoneInputNode.countryCodeField.textField.font ?? Font.regular(17.0)
+        let codeString = self.phoneInputNode.countryCodeField.textField.text ?? ""
+        let measuredCode = ceil((codeString as NSString).size(withAttributes: [.font: codeFont]).width)
+        let codeTextWidth = max(28.0, measuredCode)
         let chevronSize = self.tellomiChevron.image?.size ?? CGSize(width: 10.0, height: 6.0)
-        self.tellomiChevron.frame = CGRect(x: fieldFrame.minX + codeWidth - 14.0 - chevronSize.width, y: fieldFrame.midY - chevronSize.height / 2.0, width: chevronSize.width, height: chevronSize.height)
+        let chevronX = codeOrigin + codeTextWidth + codeGap
+        self.tellomiChevron.frame = CGRect(x: fieldFrame.minX + chevronX, y: fieldFrame.midY - chevronSize.height / 2.0, width: chevronSize.width, height: chevronSize.height)
+        let codeWidth = max(78.0, chevronX + chevronSize.width + 12.0)
+        self.tellomiDivider.frame = CGRect(x: fieldFrame.minX + codeWidth, y: fieldFrame.minY + 16.0, width: UIScreenPixel, height: fieldHeight - 32.0)
 
         self.countryButton.isHidden = false
         self.countryButton.frame = CGRect(x: fieldFrame.minX, y: fieldFrame.minY, width: codeWidth, height: fieldHeight)
         self.countryButton.backgroundColor = nil
 
         self.phoneInputNode.frame = fieldFrame
-        self.phoneInputNode.countryCodeField.frame = CGRect(x: 14.0, y: 0.0, width: 46.0, height: fieldHeight)
+        self.phoneInputNode.countryCodeField.frame = CGRect(x: codeOrigin, y: 0.0, width: codeTextWidth, height: fieldHeight)
         let numberFrame = CGRect(x: codeWidth + 12.0, y: 0.0, width: max(0.0, fieldFrame.width - codeWidth - 24.0), height: fieldHeight)
         self.phoneInputNode.numberField.frame = numberFrame
         self.phoneInputNode.placeholderNode.frame = numberFrame
@@ -558,8 +565,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     /// Last laid-out height of that column. A shrink is the keyboard (or any inset) taking space.
     private var tellomiFormViewportHeight: CGFloat = 0.0
     private var tellomiFormKeyboardVisible = false
-    /// While this is set, the column keeps its bottom edge on the agreement as the keyboard moves. A drag clears it.
-    private var tellomiFormFollowsKeyboard = false
     private(set) var tellomiSurface: TellomiLoginSurface = .phoneCode
     /// Apple / Google / phone switch. Only the email root sets this.
     private let tellomiShowsHomeRows: Bool
@@ -1023,10 +1028,13 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         super.didLoad()
         
         self.emailSwitchNode?.view.accessibilityIdentifier = "Auth.PhoneEntry.EmailSwitch"
-        self.titleNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.debugTap(_:))))
-        let dismissKeyboard = UITapGestureRecognizer(target: self, action: #selector(self.tellomiDismissKeyboardTap(_:)))
-        dismissKeyboard.cancelsTouchesInView = false
-        self.view.addGestureRecognizer(dismissKeyboard)
+        let titleTap = UITapGestureRecognizer(target: self, action: #selector(self.debugTap(_:)))
+        titleTap.cancelsTouchesInView = false
+        self.titleNode.view.addGestureRecognizer(titleTap)
+        self.tellomiInstallKeyboardDismissTap(on: self.view)
+        if let formScroll = self.tellomiFormScrollNode {
+            self.tellomiInstallKeyboardDismissTap(on: formScroll.view)
+        }
         if self.account != nil {
             let regionProbe = UILabel(frame: CGRect(x: 8.0, y: 200.0, width: 4.0, height: 4.0))
             regionProbe.isAccessibilityElement = true
@@ -1282,7 +1290,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.noticeActivateAreaNode.frame = self.noticeNode.frame
     }
     
-    /// Stacks the email home in the band above the agreement. When the rows fit, they are centered the way `layoutAuthorizationItems` centers the stock phone screen. When the keyboard shrinks the band, the column scrolls with that inset so the last rows stay on the agreement instead of sliding under it.
+    /// Stacks the email home in the band above the agreement. When the rows fit, they are centered the way `layoutAuthorizationItems` centers the stock phone screen. When the keyboard shrinks the band, the column scrolls only far enough to keep the focused field inside the band, under the header.
     private func placeTellomiForm(_ items: [AuthorizationLayoutItem], in bounds: CGRect, columnWidth: CGFloat, keyboardVisible: Bool, transition: ContainedViewLayoutTransition) {
         guard let scroll = self.tellomiFormScrollNode else {
             let _ = layoutAuthorizationItems(bounds: bounds, items: items, transition: transition, failIfDoesNotFit: false)
@@ -1321,16 +1329,11 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let maxOffset = max(0.0, contentHeight - bounds.height)
         let keyboardAppeared = keyboardVisible && !self.tellomiFormKeyboardVisible
         let viewportShrunk = self.tellomiFormViewportHeight > bounds.height + 0.5
-        if keyboardVisible && maxOffset > 0.5 && (keyboardAppeared || viewportShrunk || self.tellomiFormViewportHeight == 0.0) {
-            self.tellomiFormFollowsKeyboard = true
-        } else if !keyboardVisible {
-            self.tellomiFormFollowsKeyboard = false
-        }
         self.tellomiFormKeyboardVisible = keyboardVisible
         self.tellomiFormViewportHeight = bounds.height
         var offsetY = min(max(0.0, scrollView.contentOffset.y), maxOffset)
-        if self.tellomiFormFollowsKeyboard {
-            offsetY = maxOffset
+        if keyboardVisible && (keyboardAppeared || viewportShrunk) {
+            offsetY = self.tellomiOffsetKeepingFocusVisible(in: scroll, viewportHeight: bounds.height, maxOffset: maxOffset)
         } else if !keyboardVisible && maxOffset < 0.5 {
             offsetY = 0.0
         }
@@ -1345,6 +1348,43 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             scrollView.contentOffset = CGPoint(x: 0.0, y: offsetY)
         }
         self.tellomiPublishFormAccessibilityFrames()
+    }
+
+    /// Scroll just enough that the focused field stays fully inside the column. Never scroll past its top, which is what hid the email field under the header.
+    private func tellomiOffsetKeepingFocusVisible(in scroll: TellomiLoginFormScrollNode, viewportHeight: CGFloat, maxOffset: CGFloat) -> CGFloat {
+        guard viewportHeight > 1.0, let node = self.tellomiFocusedInputNode() else {
+            return 0.0
+        }
+        guard node.supernode === scroll else {
+            return 0.0
+        }
+        let field = node.frame
+        let padding: CGFloat = 8.0
+        var offset = field.maxY + padding - viewportHeight
+        if field.minY - padding < offset {
+            offset = field.minY - padding
+        }
+        offset = min(offset, max(0.0, field.minY - padding))
+        return min(max(0.0, offset), maxOffset)
+    }
+
+    private func tellomiFocusedInputNode() -> ASDisplayNode? {
+        switch self.tellomiSurface {
+        case .emailCode:
+            return self.emailFieldNode
+        case .emailPassword:
+            if self.passwordFieldNode?.textField.textField.isFirstResponder == true {
+                return self.passwordFieldNode
+            }
+            return self.emailFieldNode
+        case .phonePassword:
+            if self.passwordFieldNode?.textField.textField.isFirstResponder == true {
+                return self.passwordFieldNode
+            }
+            return self.phoneAndCountryNode
+        case .phoneCode:
+            return self.phoneAndCountryNode
+        }
     }
 
     /// Screen coordinates. A child left at its content origin is what made XCTest report `y = 7`.
@@ -1469,7 +1509,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.circleMoreNode?.isHidden = true
 
         let proceedHeight = self.proceedNode.updateLayout(width: contentWidth, transition: transition)
-        let agreementSize = self.agreementRow?.updateLayout(width: contentWidth, centered: true) ?? self.agreementNode.updateLayout(CGSize(width: contentWidth, height: 80.0))
+        let agreementSize = self.agreementRow?.updateLayout(width: contentWidth, centered: false) ?? self.agreementNode.updateLayout(CGSize(width: contentWidth, height: 80.0))
         let titleSize = self.titleNode.measure(CGSize(width: contentWidth, height: 80.0))
         let noticeSize = self.noticeNode.isHidden ? CGSize() : self.noticeNode.updateLayout(CGSize(width: contentWidth, height: 60.0))
 
@@ -1687,6 +1727,16 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.tellomiUnavailable?()
     }
     
+    func tellomiInstallKeyboardDismissTap(on view: UIView) {
+        if view.gestureRecognizers?.contains(where: { $0.name == "tellomiDismissKeyboard" }) == true {
+            return
+        }
+        let tap = UITapGestureRecognizer(target: self, action: #selector(self.tellomiDismissKeyboardTap(_:)))
+        tap.name = "tellomiDismissKeyboard"
+        tap.cancelsTouchesInView = false
+        view.addGestureRecognizer(tap)
+    }
+
     /// Done, a tap outside the field, and a drag on the form all resign the real `UITextField`.
     /// Resigning a wrapper leaves the caret gone and `keyboards.count` at 1.
     func tellomiResignLoginInput() {
@@ -1722,6 +1772,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private var debugTapCounter: (Double, Int) = (0.0, 0)
     @objc private func debugTap(_ recognizer: UITapGestureRecognizer) {
         if case .ended = recognizer.state {
+            self.tellomiResignLoginInput()
             let timestamp = CACurrentMediaTime()
             if self.debugTapCounter.0 < timestamp - 0.4 {
                 self.debugTapCounter.0 = timestamp
@@ -1822,19 +1873,12 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
 
 extension AuthorizationSequencePhoneEntryControllerNode: UIScrollViewDelegate {
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-        self.tellomiFormFollowsKeyboard = false
         self.tellomiResignLoginInput()
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard let scroll = self.tellomiFormScrollNode, scrollView === scroll.scrollView else {
             return
-        }
-        if self.tellomiFormFollowsKeyboard {
-            let maxOffset = max(0.0, scrollView.contentSize.height - scrollView.bounds.height)
-            if abs(scrollView.contentOffset.y - maxOffset) > 0.5 {
-                scrollView.contentOffset = CGPoint(x: 0.0, y: maxOffset)
-            }
         }
         self.tellomiPublishFormAccessibilityFrames()
     }

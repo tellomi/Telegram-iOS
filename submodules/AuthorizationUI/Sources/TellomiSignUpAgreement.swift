@@ -24,6 +24,8 @@ final class TellomiSignUpAgreement: NSObject {
     private(set) var agreed = false
     /// The code `refreshLanguage` last built the sentence from. Empty until the first refresh.
     private var resolvedLanguageCode = ""
+    /// Login rows lead next to the checkbox. The agreement card passes `centered: true`.
+    private var sentenceAlignment: NSTextAlignment = .natural
     private var appliedTheme: PresentationTheme?
     private weak var node: ImmediateTextNode?
     private var openUrl: ((String) -> Void)?
@@ -38,6 +40,7 @@ final class TellomiSignUpAgreement: NSObject {
     /// This installs a single-tap recognizer and expands the hit rect.
     func install(on node: ImmediateTextNode, theme: PresentationTheme, kind: Kind = .signUp, chinese: Bool = true, togglesOnText: Bool = true, centered: Bool = false, openUrl: @escaping (String) -> Void, changed: @escaping (Bool) -> Void) {
         _ = chinese
+        self.sentenceAlignment = centered ? .center : .natural
         self.appliedTheme = theme
         self.node = node
         self.openUrl = openUrl
@@ -158,7 +161,7 @@ final class TellomiSignUpAgreement: NSObject {
             link("Privacy Policy", TellomiSignUpAgreement.privacyURL)
         }
         let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center
+        paragraph.alignment = self.sentenceAlignment
         paragraph.lineBreakMode = .byWordWrapping
         result.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: result.length))
         return result
