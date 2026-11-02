@@ -727,10 +727,8 @@ public func makeDefaultDarkPresentationTheme(extendingThemeReference: Presentati
         badgeTextColor:  UIColor(rgb: 0x000000)
     )
 
-    let defaultPatternWallpaper: TelegramWallpaper = defaultBuiltinWallpaper(data: .default, colors: defaultDarkWallpaperGradientColors.map(\.rgb), intensity: -34)
-    
     let chat = PresentationThemeChat(
-        defaultWallpaper: defaultPatternWallpaper,
+        defaultWallpaper: tellomiDefaultSolidWallpaper(dark: true),
         animateMessageColors: false,
         message: message,
         serviceMessage: serviceMessage,
