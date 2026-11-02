@@ -176,34 +176,6 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
     }
 
-    /// Weibo, WeChat, and QQ stay hidden. The sheet is only 找回账号 and 取消.
-    private func presentTellomiOtherMethods() {
-        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
-        let sheet = ActionSheetController(presentationData: self.presentationData)
-        let dismiss: () -> Void = { [weak sheet] in
-            sheet?.dismissAnimated()
-        }
-        sheet.setItemGroups([
-            ActionSheetItemGroup(items: [
-                ActionSheetButtonItem(title: copy.recoverAccount, action: { [weak self] in
-                    dismiss()
-                    self?.presentTellomiUnavailable()
-                })
-            ]),
-            ActionSheetItemGroup(items: [
-                ActionSheetButtonItem(title: copy.cancel, font: .bold, action: {
-                    dismiss()
-                })
-            ])
-        ])
-        self.present(sheet, in: .window(.root))
-    }
-
-    private func presentTellomiUnavailable() {
-        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
-        self.present(textAlertController(sharedContext: self.sharedContext, title: copy.unavailableTitle, text: copy.unavailableBody, actions: [TextAlertAction(type: .defaultAction, title: copy.ok, action: {})]), in: .window(.root))
-    }
-
     private func presentTellomiAgreementPrompt() {
         let kind: TellomiSignUpAgreement.Kind = self.controllerNode.tellomiSurface.agreementPinnedToBottom ? .phone : .email
         let prompt = TellomiAgreementPromptController(kind: kind, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), dark: self.presentationData.theme.overallDarkAppearance, openUrl: { [weak self] url in
@@ -318,12 +290,6 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
         self.controllerNode.tellomiOpenUrl = { [weak self] url in
             self?.openUrl(url)
-        }
-        self.controllerNode.tellomiUnavailable = { [weak self] in
-            self?.presentTellomiUnavailable()
-        }
-        self.controllerNode.tellomiOtherMethods = { [weak self] in
-            self?.presentTellomiOtherMethods()
         }
         self.controllerNode.tellomiSurfaceChanged = { [weak self] in
             self?.updateNavigationItems()
@@ -533,11 +499,6 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             self.hapticFeedback.error()
             self.controllerNode.animateAgreementError()
             self.presentTellomiAgreementPrompt()
-            return
-        }
-        if self.account != nil && self.controllerNode.isPasswordLogin {
-            // There is no password sign-in RPC. Same notice as Apple, Google, and 找回账号.
-            self.presentTellomiUnavailable()
             return
         }
         if self.controllerNode.isEmailLogin {

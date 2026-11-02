@@ -628,35 +628,19 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private let noticeActivateAreaNode: AccessibilityAreaNode
     private let phoneAndCountryNode: PhoneAndCountryNode
     private let emailFieldNode: TellomiEmailFieldNode?
-    private let emailSwitchNode: HighlightableButtonNode?
     private let contactSyncNode: ContactSyncNode
     private let agreementNode: ImmediateTextNode
     private let agreementRow: TellomiAgreementRow?
     let tellomiAgreement = TellomiSignUpAgreement()
     var tellomiOpenUrl: ((String) -> Void)?
-    var tellomiUnavailable: (() -> Void)?
-    var tellomiOtherMethods: (() -> Void)?
     var tellomiSurfaceChanged: (() -> Void)?
-    /// Where 密码登录 was opened from. Back and 验证码登录 return there. Email has no password RPC.
-    private var tellomiPasswordReturn: TellomiLoginSurface = .phoneCode
     private let proceedNode: SolidRoundedButtonNode
     private(set) var tellomiSurface: TellomiLoginSurface = .phoneCode
     private var emailLogin: Bool {
         return self.tellomiSurface.isEmail
     }
-    private let passwordFieldNode: TellomiPasswordFieldNode?
-    private let modeIconNode: ASImageNode?
     private let orDividerNode: TellomiOrDividerNode?
-    private let appleRowNode: TellomiSocialRowNode?
-    private let googleRowNode: TellomiSocialRowNode?
     private let emailRowNode: TellomiSocialRowNode?
-    private let otherRowNode: TellomiSocialRowNode?
-    private let recoverNode: HighlightableButtonNode?
-    private let circleGoogleNode: TellomiCircleButtonNode?
-    private let circleAppleNode: TellomiCircleButtonNode?
-    private let circleEmailNode: TellomiCircleButtonNode?
-    private let circleMoreNode: TellomiCircleButtonNode?
-    private let passwordErrorNode: ImmediateTextNode?
     private var passkeyNotice = false
     private var layoutArguments: (ContainerViewLayout, CGFloat)?
     
@@ -675,14 +659,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
 
     var isEmailLogin: Bool {
         return self.emailLogin
-    }
-
-    var isPasswordLogin: Bool {
-        return self.tellomiSurface.isPassword
-    }
-
-    var password: String {
-        return self.passwordFieldNode?.text ?? ""
     }
 
     var emailAddress: String {
@@ -721,10 +697,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             self.phoneAndCountryNode.countryButton.isEnabled = !self.inProgress
             self.emailFieldNode?.textField.alpha = self.inProgress ? 0.6 : 1.0
             self.emailFieldNode?.textField.textField.isEnabled = !self.inProgress
-            self.passwordFieldNode?.textField.alpha = self.inProgress ? 0.6 : 1.0
-            self.passwordFieldNode?.textField.textField.isEnabled = !self.inProgress
-            self.emailSwitchNode?.isUserInteractionEnabled = !self.inProgress
-            self.emailSwitchNode?.alpha = self.inProgress ? 0.6 : 1.0
             
             if self.inProgress != oldValue {
                 if self.inProgress {
@@ -771,7 +743,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.phoneAndCountryNode.theme = theme
         self.phoneAndCountryNode.applyTellomiChrome()
         self.emailFieldNode?.setPlaceholder(self.emailFieldNode?.textField.textField.attributedPlaceholder?.string ?? "", theme: theme)
-        self.passwordFieldNode?.applyPalette(dark: dark, theme: theme)
         self.agreementRow?.setDark(dark)
         self.applyTellomiMarks(dark: dark)
         if self.tellomiLoginHome || self.tellomiBindPhone {
@@ -827,81 +798,20 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             let emailFieldNode = TellomiEmailFieldNode(theme: theme, placeholder: copy.placeholder)
             emailFieldNode.isHidden = true
             self.emailFieldNode = emailFieldNode
-            let emailSwitchNode = HighlightableButtonNode()
-            emailSwitchNode.displaysAsynchronously = false
-            emailSwitchNode.setTitle(loginCopy.passwordLogin, with: Font.regular(15.0), with: TellomiLoginChrome.link, for: [])
-            emailSwitchNode.accessibilityLabel = loginCopy.passwordLogin
-            emailSwitchNode.accessibilityTraits = [.button]
-            emailSwitchNode.contentHorizontalAlignment = .left
-            emailSwitchNode.contentEdgeInsets = UIEdgeInsets(top: 0.0, left: 48.0, bottom: 0.0, right: 24.0)
-            self.emailSwitchNode = emailSwitchNode
             self.phoneAndCountryNode.setTellomiStyle(placeholder: loginCopy.phonePlaceholder)
-
-            let modeIconNode = ASImageNode()
-            modeIconNode.image = tellomiSymbol("arrow.left.arrow.right", pointSize: 13.0, weight: .medium)?.withTintColor(TellomiLoginChrome.link, renderingMode: .alwaysOriginal)
-            modeIconNode.isUserInteractionEnabled = false
-            self.modeIconNode = modeIconNode
-
-            self.passwordFieldNode = TellomiPasswordFieldNode(theme: theme, placeholder: loginCopy.passwordPlaceholder, eyeOnLeft: true)
-            self.passwordFieldNode?.isHidden = true
 
             let orDividerNode = TellomiOrDividerNode()
             orDividerNode.setTitle(loginCopy.orDivider)
             orDividerNode.applyPalette(dark: theme.overallDarkAppearance)
             self.orDividerNode = orDividerNode
 
-            let marks = tellomiLoginMarks(dark: theme.overallDarkAppearance)
             let rowDark = theme.overallDarkAppearance
-            self.appleRowNode = TellomiSocialRowNode(title: loginCopy.appleLogin, icon: marks.apple, dark: rowDark)
-            self.googleRowNode = TellomiSocialRowNode(title: loginCopy.googleLogin, icon: marks.google, dark: rowDark)
-            self.emailRowNode = TellomiSocialRowNode(title: loginCopy.emailLogin, icon: marks.mail, dark: rowDark)
-            self.otherRowNode = TellomiSocialRowNode(title: loginCopy.otherLogin, icon: marks.dots, dark: rowDark)
-            self.appleRowNode?.accessibilityIdentifier = "Auth.Login.Apple"
-            self.googleRowNode?.accessibilityIdentifier = "Auth.Login.Google"
+            self.emailRowNode = TellomiSocialRowNode(title: loginCopy.emailLogin, icon: tellomiMailIcon(dark: rowDark), dark: rowDark)
             self.emailRowNode?.accessibilityIdentifier = "Auth.Login.Email"
-            self.otherRowNode?.accessibilityIdentifier = "Auth.Login.OtherMethods"
-
-            let recoverNode = HighlightableButtonNode()
-            recoverNode.setTitle(loginCopy.recoverAccount, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
-            recoverNode.accessibilityLabel = loginCopy.recoverAccount
-            recoverNode.accessibilityTraits = [.button]
-            recoverNode.accessibilityIdentifier = "Auth.Login.RecoverAccount"
-            self.recoverNode = recoverNode
-
-            self.circleGoogleNode = TellomiCircleButtonNode(icon: marks.google, accessibilityLabel: loginCopy.googleLogin, dark: rowDark)
-            self.circleAppleNode = TellomiCircleButtonNode(icon: marks.apple, accessibilityLabel: loginCopy.appleLogin, dark: rowDark)
-            self.circleEmailNode = TellomiCircleButtonNode(icon: marks.mail, accessibilityLabel: loginCopy.emailLogin, dark: rowDark)
-            self.circleMoreNode = TellomiCircleButtonNode(icon: marks.dots, accessibilityLabel: loginCopy.otherLogin, dark: rowDark)
-            self.circleGoogleNode?.accessibilityIdentifier = "Auth.Login.CircleGoogle"
-            self.circleAppleNode?.accessibilityIdentifier = "Auth.Login.CircleApple"
-            self.circleEmailNode?.accessibilityIdentifier = "Auth.Login.CircleEmail"
-            self.circleMoreNode?.accessibilityIdentifier = "Auth.Login.More"
-            self.circleGoogleNode?.isHidden = true
-            self.circleAppleNode?.isHidden = true
-            self.circleEmailNode?.isHidden = true
-            self.circleMoreNode?.isHidden = true
-
-            let passwordErrorNode = ImmediateTextNode()
-            passwordErrorNode.maximumNumberOfLines = 0
-            passwordErrorNode.displaysAsynchronously = false
-            passwordErrorNode.isHidden = true
-            self.passwordErrorNode = passwordErrorNode
         } else {
             self.emailFieldNode = nil
-            self.emailSwitchNode = nil
-            self.passwordFieldNode = nil
-            self.modeIconNode = nil
             self.orDividerNode = nil
-            self.appleRowNode = nil
-            self.googleRowNode = nil
             self.emailRowNode = nil
-            self.otherRowNode = nil
-            self.recoverNode = nil
-            self.circleGoogleNode = nil
-            self.circleAppleNode = nil
-            self.circleEmailNode = nil
-            self.circleMoreNode = nil
-            self.passwordErrorNode = nil
         }
         
         let loginCopy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings))
@@ -936,39 +846,17 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         if let emailFieldNode = self.emailFieldNode {
             self.addSubnode(emailFieldNode)
         }
-        if let emailSwitchNode = self.emailSwitchNode {
-            self.addSubnode(emailSwitchNode)
-        }
         self.addSubnode(self.contactSyncNode)
         if let agreementRow = self.agreementRow {
             self.addSubnode(agreementRow)
         } else {
             self.addSubnode(self.agreementNode)
         }
-        if let passwordFieldNode = self.passwordFieldNode {
-            self.addSubnode(passwordFieldNode)
-        }
-        if let modeIconNode = self.modeIconNode {
-            self.addSubnode(modeIconNode)
-        }
         if let orDividerNode = self.orDividerNode {
             self.addSubnode(orDividerNode)
         }
-        for node in [self.appleRowNode, self.googleRowNode, self.emailRowNode, self.otherRowNode] {
-            if let node {
-                self.addSubnode(node)
-            }
-        }
-        if let recoverNode = self.recoverNode {
-            self.addSubnode(recoverNode)
-        }
-        for node in [self.circleGoogleNode, self.circleAppleNode, self.circleEmailNode, self.circleMoreNode] {
-            if let node {
-                self.addSubnode(node)
-            }
-        }
-        if let passwordErrorNode = self.passwordErrorNode {
-            self.addSubnode(passwordErrorNode)
+        if let emailRowNode = self.emailRowNode {
+            self.addSubnode(emailRowNode)
         }
         self.addSubnode(self.proceedNode)
         self.addSubnode(self.animationNode)
@@ -1007,23 +895,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.emailFieldNode?.returnPressed = { [weak self] in
             self?.checkPhone?()
         }
-        self.emailSwitchNode?.addTarget(self, action: #selector(self.emailSwitchPressed), forControlEvents: .touchUpInside)
-        self.passwordFieldNode?.textChanged = { [weak self] _ in
-            self?.clearPasswordError()
-            self?.refreshProceedEnabled()
-        }
-        self.passwordFieldNode?.returnPressed = { [weak self] in
-            self?.checkPhone?()
-        }
-        self.appleRowNode?.addTarget(self, action: #selector(self.tellomiUnavailablePressed), forControlEvents: .touchUpInside)
-        self.googleRowNode?.addTarget(self, action: #selector(self.tellomiUnavailablePressed), forControlEvents: .touchUpInside)
-        self.otherRowNode?.addTarget(self, action: #selector(self.tellomiOtherPressed), forControlEvents: .touchUpInside)
-        self.recoverNode?.addTarget(self, action: #selector(self.tellomiUnavailablePressed), forControlEvents: .touchUpInside)
-        self.circleGoogleNode?.addTarget(self, action: #selector(self.tellomiUnavailablePressed), forControlEvents: .touchUpInside)
-        self.circleAppleNode?.addTarget(self, action: #selector(self.tellomiUnavailablePressed), forControlEvents: .touchUpInside)
-        self.circleMoreNode?.addTarget(self, action: #selector(self.tellomiOtherPressed), forControlEvents: .touchUpInside)
         self.emailRowNode?.addTarget(self, action: #selector(self.tellomiEmailRowPressed), forControlEvents: .touchUpInside)
-        self.circleEmailNode?.addTarget(self, action: #selector(self.tellomiEmailRowPressed), forControlEvents: .touchUpInside)
         self.agreementRow?.onToggle = { [weak self] in
             guard let self else {
                 return
@@ -1074,7 +946,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     override func didLoad() {
         super.didLoad()
         
-        self.emailSwitchNode?.view.accessibilityIdentifier = "Auth.PhoneEntry.EmailSwitch"
         self.titleNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.debugTap(_:))))
         #if DEBUG && false
         self.noticeNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.debugQrTap(_:))))
@@ -1106,9 +977,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         ]
         if let emailFieldNode = self.emailFieldNode {
             nodes.append(emailFieldNode)
-        }
-        if let emailSwitchNode = self.emailSwitchNode {
-            nodes.append(emailSwitchNode)
         }
 
         for node in nodes {
@@ -1142,9 +1010,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         ]
         if let emailFieldNode = self.emailFieldNode {
             nodes.append(emailFieldNode)
-        }
-        if let emailSwitchNode = self.emailSwitchNode {
-            nodes.append(emailSwitchNode)
         }
         
         self.animationNode.layer.animateScale(from: 0.3, to: 1.0, duration: 0.3)
@@ -1232,11 +1097,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             self.proceedNode.title = loginCopy.bindPhoneAction
             self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance))
         }
-        if let emailSwitchNode = self.emailSwitchNode {
-            let switchTitle = self.emailLogin ? emailCopy.switchToPhone : emailCopy.switchToEmail
-            emailSwitchNode.setTitle(switchTitle, with: Font.regular(17.0), with: self.theme.list.itemAccentColor, for: [])
-            emailSwitchNode.accessibilityLabel = switchTitle
-        }
         self.titleActivateAreaNode.accessibilityLabel = self.titleNode.attributedText?.string ?? ""
         
         // iPhone Duo: beside a side strip the content keeps to the band between the side insets. With equal
@@ -1271,10 +1131,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             items.append(AuthorizationLayoutItem(node: emailFieldNode, size: CGSize(width: maximumWidth, height: 64.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 30.0, maxValue: 30.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         } else {
             items.append(AuthorizationLayoutItem(node: self.phoneAndCountryNode, size: CGSize(width: maximumWidth, height: 115.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 30.0, maxValue: 30.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
-        }
-        if let emailSwitchNode = self.emailSwitchNode {
-            let measured = emailSwitchNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
-            items.append(AuthorizationLayoutItem(node: emailSwitchNode, size: CGSize(width: maximumWidth, height: max(44.0, measured.height)), spacingBefore: AuthorizationLayoutItemSpacing(weight: 8.0, maxValue: 8.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         }
         
         if layout.size.width > 320.0 {
@@ -1329,49 +1185,29 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         case .phoneCode:
             title = loginCopy.phoneTitle
             titleAlignment = .center
-        case .phonePassword:
-            title = loginCopy.phonePasswordTitle
-            titleAlignment = .left
         case .emailCode:
             title = emailCopy.title
-            titleAlignment = .left
-        case .emailPassword:
-            title = loginCopy.emailPasswordTitle
             titleAlignment = .left
         }
         let titleFont = surface == .phoneCode ? Font.bold(20.0) : Font.semibold(22.0)
         self.titleNode.attributedText = NSAttributedString(string: title, font: titleFont, textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: titleAlignment)
-        self.proceedNode.title = surface.isPassword ? loginCopy.login : loginCopy.verifyAndLogin
+        self.proceedNode.title = loginCopy.verifyAndLogin
         self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance))
         let agreementKind: TellomiSignUpAgreement.Kind = surface.agreementPinnedToBottom ? .phone : .email
         self.tellomiAgreement.setKind(agreementKind)
         self.tellomiAgreement.refreshLanguage()
         self.phoneAndCountryNode.updateTellomiPlaceholder(loginCopy.phonePlaceholder)
         let rowDark = self.theme.overallDarkAppearance
-        self.appleRowNode?.setTitle(loginCopy.appleLogin, dark: rowDark)
-        self.googleRowNode?.setTitle(loginCopy.googleLogin, dark: rowDark)
         self.emailRowNode?.setTitle(loginCopy.emailLogin, dark: rowDark)
-        self.otherRowNode?.setTitle(loginCopy.otherLogin, dark: rowDark)
-        self.recoverNode?.setTitle(loginCopy.recoverAccount, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
-        self.recoverNode?.accessibilityLabel = loginCopy.recoverAccount
-        self.circleAppleNode?.accessibilityLabel = loginCopy.appleLogin
-        self.circleGoogleNode?.accessibilityLabel = loginCopy.googleLogin
-        self.circleEmailNode?.accessibilityLabel = loginCopy.emailLogin
-        self.circleMoreNode?.accessibilityLabel = loginCopy.otherLogin
+        self.emailRowNode?.accessibilityLabel = loginCopy.emailLogin
         if surface.isEmail {
             self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
             self.emailFieldNode?.setPlaceholder(emailCopy.placeholder, theme: self.theme)
-            self.noticeNode.isHidden = surface != .emailCode
+            self.noticeNode.isHidden = false
         } else {
             self.noticeNode.attributedText = NSAttributedString(string: "", font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText)
             self.noticeNode.isHidden = true
         }
-        if let emailSwitchNode = self.emailSwitchNode {
-            let switchTitle = surface.isPassword ? loginCopy.codeLogin : loginCopy.passwordLogin
-            emailSwitchNode.setTitle(switchTitle, with: Font.regular(15.0), with: TellomiLoginChrome.link, for: [])
-            emailSwitchNode.accessibilityLabel = switchTitle
-        }
-        self.passwordFieldNode?.setPlaceholder(loginCopy.passwordPlaceholder)
         self.titleActivateAreaNode.accessibilityLabel = title
 
         let insetsDiffer = layout.safeInsets.left != layout.safeInsets.right
@@ -1392,27 +1228,11 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
 
         let showPhone = !surface.isEmail
         let showEmail = surface.isEmail
-        let showPassword = surface.isPassword
-        // The keyboard covers the phone home. It does not move the fields or the agreement.
         let showHomeRows = surface == .phoneCode
-        let showCircles = surface != .phoneCode
         self.phoneAndCountryNode.isHidden = !showPhone
         self.emailFieldNode?.isHidden = !showEmail
-        self.passwordFieldNode?.isHidden = !showPassword
-        self.passwordFieldNode?.setEyeOnLeft(!surface.isEmail)
-        self.emailSwitchNode?.isHidden = false
-        self.modeIconNode?.isHidden = false
         self.orDividerNode?.isHidden = !showHomeRows
-        self.appleRowNode?.isHidden = !showHomeRows
-        self.googleRowNode?.isHidden = !showHomeRows
         self.emailRowNode?.isHidden = !showHomeRows
-        self.otherRowNode?.isHidden = !showHomeRows
-        self.recoverNode?.isHidden = !showHomeRows
-        let showEmailCircle = showCircles && !surface.isEmail
-        self.circleGoogleNode?.isHidden = !showCircles
-        self.circleAppleNode?.isHidden = !showCircles
-        self.circleEmailNode?.isHidden = !showEmailCircle
-        self.circleMoreNode?.isHidden = !showCircles
 
         let proceedHeight = self.proceedNode.updateLayout(width: contentWidth, transition: transition)
         let agreementCentered = !surface.agreementPinnedToBottom
@@ -1437,27 +1257,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             transition.updateFrame(node: emailFieldNode, frame: CGRect(x: columnX, y: y, width: columnWidth, height: fieldHeight))
             y += fieldHeight + 4.0
         }
-        if showPassword, let passwordFieldNode = self.passwordFieldNode {
-            transition.updateFrame(node: passwordFieldNode, frame: CGRect(x: columnX, y: y, width: columnWidth, height: fieldHeight))
-            y += fieldHeight
-            if let passwordErrorNode = self.passwordErrorNode, !passwordErrorNode.isHidden {
-                let errorSize = passwordErrorNode.updateLayout(CGSize(width: contentWidth, height: 40.0))
-                transition.updateFrame(node: passwordErrorNode, frame: CGRect(x: contentX, y: y + 4.0, width: contentWidth, height: errorSize.height))
-                y += errorSize.height + 8.0
-            } else {
-                y += 4.0
-            }
-        }
-
-        if let emailSwitchNode = self.emailSwitchNode {
-            let linkHeight: CGFloat = 32.0
-            transition.updateFrame(node: emailSwitchNode, frame: CGRect(x: columnX, y: y, width: columnWidth, height: linkHeight))
-            if let modeIconNode = self.modeIconNode {
-                let iconSide: CGFloat = 16.0
-                transition.updateFrame(node: modeIconNode, frame: CGRect(x: contentX, y: y + floor((linkHeight - iconSide) / 2.0), width: iconSide, height: iconSide))
-            }
-            y += linkHeight + 8.0
-        }
 
         transition.updateFrame(node: self.proceedNode, frame: CGRect(x: contentX, y: y, width: contentWidth, height: proceedHeight))
         y += proceedHeight + 16.0
@@ -1467,17 +1266,9 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
                 transition.updateFrame(node: orDividerNode, frame: CGRect(x: contentX, y: y, width: contentWidth, height: 24.0))
                 y += 36.0
             }
-            let rowHeight: CGFloat = 48.0
-            let rowGap: CGFloat = 12.0
-            for row in [self.appleRowNode, self.googleRowNode, self.emailRowNode, self.otherRowNode] {
-                if let row {
-                    transition.updateFrame(node: row, frame: CGRect(x: contentX, y: y, width: contentWidth, height: rowHeight))
-                    y += rowHeight + rowGap
-                }
-            }
-            if let recoverNode = self.recoverNode {
-                y += 4.0
-                transition.updateFrame(node: recoverNode, frame: CGRect(x: contentX, y: y, width: contentWidth, height: 36.0))
+            if let emailRowNode = self.emailRowNode {
+                transition.updateFrame(node: emailRowNode, frame: CGRect(x: contentX, y: y, width: contentWidth, height: 48.0))
+                y += 48.0
             }
             let safeBottom = max(layout.safeInsets.bottom, layout.intrinsicInsets.bottom)
             let bottom = layout.size.height - safeBottom - agreementSize.height - 8.0
@@ -1486,35 +1277,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             }
         } else if let agreementRow = self.agreementRow {
             transition.updateFrame(node: agreementRow, frame: CGRect(x: contentX, y: y, width: contentWidth, height: agreementSize.height))
-        }
-
-        if showCircles {
-            let circle: CGFloat = 52.0
-            let safeBottom = max(max(layout.safeInsets.bottom, layout.intrinsicInsets.bottom), 16.0)
-            let keyboard = layout.inputHeight ?? 0.0
-            // Email keeps the icon row just above the keyboard. Password leaves it at the bottom, under the keyboard.
-            let lift = (surface.isEmail && keyboard > 20.0) ? keyboard : safeBottom
-            let bottomY = layout.size.height - lift - circle - 12.0
-            var icons: [ASDisplayNode] = []
-            if let circleGoogleNode = self.circleGoogleNode {
-                icons.append(circleGoogleNode)
-            }
-            if let circleAppleNode = self.circleAppleNode {
-                icons.append(circleAppleNode)
-            }
-            if showEmailCircle, let circleEmailNode = self.circleEmailNode {
-                icons.append(circleEmailNode)
-            }
-            if let circleMoreNode = self.circleMoreNode {
-                icons.append(circleMoreNode)
-            }
-            let gap: CGFloat = 22.0
-            let total = circle * CGFloat(icons.count) + gap * CGFloat(max(icons.count - 1, 0))
-            var x = columnX + floor((columnWidth - total) / 2.0)
-            for icon in icons {
-                transition.updateFrame(node: icon, frame: CGRect(x: x, y: bottomY, width: circle, height: circle))
-                x += circle + gap
-            }
         }
 
         if let agreementRow = self.agreementRow {
@@ -1527,18 +1289,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
 
     func activateInput() {
         switch self.tellomiSurface {
-        case .emailCode, .emailPassword:
-            if self.tellomiSurface.isPassword, !self.emailAddress.isEmpty, self.password.isEmpty {
-                self.passwordFieldNode?.textField.textField.becomeFirstResponder()
-            } else {
-                self.emailFieldNode?.textField.textField.becomeFirstResponder()
-            }
-        case .phonePassword:
-            if !self.phoneAndCountryNode.phoneInputNode.number.isEmpty, self.password.isEmpty {
-                self.passwordFieldNode?.textField.textField.becomeFirstResponder()
-            } else {
-                self.phoneAndCountryNode.phoneInputNode.numberField.textField.becomeFirstResponder()
-            }
+        case .emailCode:
+            self.emailFieldNode?.textField.textField.becomeFirstResponder()
         case .phoneCode:
             self.phoneAndCountryNode.phoneInputNode.numberField.textField.becomeFirstResponder()
         }
@@ -1553,33 +1305,21 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         }
     }
 
-    private func clearPasswordError() {
-        guard self.passwordErrorNode?.isHidden == false else {
-            return
-        }
-        self.passwordErrorNode?.isHidden = true
-        if let (layout, navigationBarHeight) = self.layoutArguments {
-            self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
-        }
-    }
-
     func animateAgreementError() {
         self.agreementNode.layer.addShakeAnimation()
     }
 
     private func refreshProceedEnabled() {
-        let passwordReady = !self.tellomiSurface.isPassword || !self.password.isEmpty
         if self.emailLogin {
-            self.proceedNode.isEnabled = tellomiIsLoginEmail(self.emailAddress) && passwordReady
+            self.proceedNode.isEnabled = tellomiIsLoginEmail(self.emailAddress)
             return
         }
         let number = self.phoneAndCountryNode.phoneInputNode.number
-        let isServiceNumber = number.hasPrefix("+999")
-        if isServiceNumber {
-            self.proceedNode.isEnabled = passwordReady
+        if number.hasPrefix("+999") {
+            self.proceedNode.isEnabled = true
             return
         }
-        self.proceedNode.isEnabled = self.phoneAndCountryNode.hasCountry && tellomiPhoneNumberIsComplete(number) && passwordReady
+        self.proceedNode.isEnabled = self.phoneAndCountryNode.hasCountry && tellomiPhoneNumberIsComplete(number)
     }
 
     func setTellomiSurface(_ surface: TellomiLoginSurface, address: String? = nil) {
@@ -1590,7 +1330,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         if let address, let emailFieldNode = self.emailFieldNode {
             emailFieldNode.setText(address)
         }
-        self.clearPasswordError()
         self.refreshProceedEnabled()
         if let (layout, navigationBarHeight) = self.layoutArguments {
             self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
@@ -1602,12 +1341,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         switch self.tellomiSurface {
         case .phoneCode:
             return false
-        case .phonePassword:
-            self.setTellomiSurface(self.tellomiPasswordReturn == .emailCode ? .emailCode : .phoneCode)
-            return true
-        case .emailPassword:
-            self.setTellomiSurface(.emailCode)
-            return true
         case .emailCode:
             self.setTellomiSurface(.phoneCode)
             return true
@@ -1619,26 +1352,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.agreementRow?.setChecked(agreed)
     }
 
-    @objc private func emailSwitchPressed() {
-        if self.inProgress {
-            return
-        }
-        switch self.tellomiSurface {
-        case .phoneCode:
-            self.tellomiPasswordReturn = .phoneCode
-            self.setTellomiSurface(.phonePassword)
-        case .phonePassword:
-            self.setTellomiSurface(self.tellomiPasswordReturn == .emailCode ? .emailCode : .phoneCode)
-        case .emailCode:
-            // There is no email-password RPC. The link opens phone + password.
-            self.tellomiPasswordReturn = .emailCode
-            self.setTellomiSurface(.phonePassword)
-        case .emailPassword:
-            self.setTellomiSurface(.emailCode)
-        }
-        self.activateInput()
-    }
-
     @objc private func tellomiEmailRowPressed() {
         if self.inProgress {
             return
@@ -1647,33 +1360,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.activateInput()
     }
 
-    @objc private func tellomiUnavailablePressed() {
-        self.tellomiUnavailable?()
-    }
-
-    @objc private func tellomiOtherPressed() {
-        self.tellomiOtherMethods?()
-    }
-
     private func applyTellomiMarks(dark: Bool) {
-        let marks = tellomiLoginMarks(dark: dark)
-        self.appleRowNode?.setIcon(marks.apple)
-        self.appleRowNode?.applyPalette(dark: dark)
-        self.googleRowNode?.setIcon(marks.google)
-        self.googleRowNode?.applyPalette(dark: dark)
-        self.emailRowNode?.setIcon(marks.mail)
+        self.emailRowNode?.setIcon(tellomiMailIcon(dark: dark))
         self.emailRowNode?.applyPalette(dark: dark)
-        self.otherRowNode?.setIcon(marks.dots)
-        self.otherRowNode?.applyPalette(dark: dark)
         self.orDividerNode?.applyPalette(dark: dark)
-        self.circleAppleNode?.setIcon(marks.apple)
-        self.circleAppleNode?.applyPalette(dark: dark)
-        self.circleGoogleNode?.setIcon(marks.google)
-        self.circleGoogleNode?.applyPalette(dark: dark)
-        self.circleEmailNode?.setIcon(marks.mail)
-        self.circleEmailNode?.applyPalette(dark: dark)
-        self.circleMoreNode?.setIcon(marks.dots)
-        self.circleMoreNode?.applyPalette(dark: dark)
     }
     
     private var debugTapCounter: (Double, Int) = (0.0, 0)

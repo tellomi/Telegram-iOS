@@ -105,29 +105,13 @@ enum TellomiLoginChrome {
 /// Which login-home screen is showing. Change Phone Number does not use this.
 enum TellomiLoginSurface: Equatable {
     case phoneCode
-    case phonePassword
     case emailCode
-    case emailPassword
 
     var isEmail: Bool {
-        switch self {
-        case .emailCode, .emailPassword:
-            return true
-        case .phoneCode, .phonePassword:
-            return false
-        }
+        return self == .emailCode
     }
 
-    var isPassword: Bool {
-        switch self {
-        case .phonePassword, .emailPassword:
-            return true
-        case .phoneCode, .emailCode:
-            return false
-        }
-    }
-
-    /// Phone home pins the agreement to the bottom of the screen. Password and email center it under the button.
+    /// Phone home pins the agreement to the bottom of the screen. Email centers it under the button.
     var agreementPinnedToBottom: Bool {
         return self == .phoneCode
     }

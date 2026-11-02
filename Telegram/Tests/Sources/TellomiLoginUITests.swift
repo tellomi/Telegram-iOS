@@ -21,8 +21,11 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertTrue(phone.isHittable)
         XCTAssertFalse(app.textFields["Auth.PhoneEntry.EmailField"].isHittable)
         XCTAssertTrue(app.buttons["Auth.Login.Email"].isHittable)
-        XCTAssertTrue(app.buttons["Auth.Login.OtherMethods"].isHittable)
-        XCTAssertTrue(app.buttons["Auth.Login.RecoverAccount"].isHittable)
+        XCTAssertFalse(app.buttons["Auth.Login.Apple"].exists)
+        XCTAssertFalse(app.buttons["Auth.Login.Google"].exists)
+        XCTAssertFalse(app.buttons["Auth.Login.OtherMethods"].exists)
+        XCTAssertFalse(app.buttons["Auth.Login.RecoverAccount"].exists)
+        XCTAssertFalse(app.buttons["Auth.PhoneEntry.EmailSwitch"].exists)
     }
 
     func testContinueStaysDisabledUntilTheNumberIsComplete() throws {
@@ -39,20 +42,6 @@ final class TellomiLoginUITests: XCTestCase {
         waitForExpectations(timeout: 5.0)
     }
 
-    func testPasswordScreenReturnsToThePhoneCode() throws {
-        self.openPhoneLogin()
-        let switchButton = app.buttons["Auth.PhoneEntry.EmailSwitch"]
-        XCTAssertTrue(switchButton.waitForExistence(timeout: 5.0))
-        switchButton.tap()
-        let password = app.secureTextFields["Auth.PhoneEntry.PasswordField"]
-        let passwordField = password.exists ? password : app.textFields["Auth.PhoneEntry.PasswordField"]
-        XCTAssertTrue(passwordField.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(passwordField.isHittable)
-        switchButton.tap()
-        XCTAssertTrue(app.textFields["Auth.PhoneEntry.PhoneNumberField"].waitForExistence(timeout: 5.0))
-        XCTAssertFalse(passwordField.isHittable)
-    }
-
     func testEmailScreenOpensFromThePhoneHome() throws {
         self.openPhoneLogin()
         app.buttons["Auth.Login.Email"].tap()
@@ -60,21 +49,9 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertTrue(email.waitForExistence(timeout: 5.0))
         XCTAssertTrue(email.isHittable)
         XCTAssertFalse(app.textFields["Auth.PhoneEntry.PhoneNumberField"].isHittable)
-        XCTAssertTrue(app.buttons["Auth.Login.More"].waitForExistence(timeout: 5.0))
-        XCTAssertFalse(app.buttons["Auth.Login.CircleEmail"].isHittable)
-    }
-
-    func testOtherMethodsSheetIsRecoverAndCancel() throws {
-        self.openPhoneLogin()
-        app.buttons["Auth.Login.OtherMethods"].tap()
-        let recover = self.button(named: ["找回账号", "找回帳號", "Recover account"])
-        let cancel = self.button(named: ["取消", "Cancel"])
-        XCTAssertTrue(recover.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(cancel.waitForExistence(timeout: 5.0))
-        XCTAssertFalse(app.buttons["微博登录"].exists)
-        XCTAssertFalse(app.buttons["微信登录"].exists)
-        XCTAssertFalse(app.buttons["QQ 登录"].exists)
-        cancel.tap()
+        XCTAssertFalse(app.buttons["Auth.PhoneEntry.EmailSwitch"].exists)
+        XCTAssertFalse(app.buttons["Auth.Login.More"].exists)
+        XCTAssertFalse(app.buttons["Auth.Login.CircleApple"].exists)
     }
 
     func testAgreementPromptDoesNotSendTheCode() throws {
@@ -144,15 +121,5 @@ final class TellomiLoginUITests: XCTestCase {
         }
         let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
         XCTAssertTrue(phone.waitForExistence(timeout: 25.0), "phone login did not appear after Start")
-    }
-
-    private func button(named titles: [String]) -> XCUIElement {
-        for title in titles {
-            let button = app.buttons[title]
-            if button.exists {
-                return button
-            }
-        }
-        return app.buttons[titles[0]]
     }
 }
