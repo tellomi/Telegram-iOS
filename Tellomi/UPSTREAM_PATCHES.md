@@ -218,7 +218,7 @@ Owner reports on 14.0.2 (build 58). The login screens stay the existing Tellomi 
 | Phone OTP crash after the code is accepted | `submodules/TelegramCore/Sources/Authorization.swift` `tellomiStoreAuthorizedUser`. `auth.signIn` built a `TelegramUser` and never wrote it into the peer table. The first signed-in screen reads that peer. Email sign-up reached the name screen first, so the peer arrived later; a phone code that logged straight in did not. The same write is on the password, sign-up, passkey, and recovery paths. |
 | Phone string indexes that trap only when a number is formatted | `submodules/PhoneNumberFormat/Sources/PhoneNumbers.swift` `formatPhoneNumberToMask`. `submodules/PhoneInputNode/Sources/PhoneInputNode.swift` no longer slices one string with another string's `endIndex` (the broken country-code edit). |
 | Login / OTP / sign-up Chinese, while 「开始使用」 already was | `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` `tellomiInterfaceLanguageCode`. Callers were passing `baseLanguageCode`. After zh-hans is applied that value is the pack's English fallback, so the login copy stayed English. |
-| iOS Settings lists 简体中文 | `Telegram/BUILD` `empty_languages` includes `zh-Hans` (empty `Localizable.strings`, same as the other bundled languages). `Telegram/Telegram-iOS/zh-Hans.lproj/InfoPlist.strings` is the permission copy. A phone set to Chinese can select that localization. `CFBundleDevelopmentRegion` stays `en`, which is the bundled string fallback. |
+| iOS Settings lists 简体中文 | `Telegram/Telegram-iOS/zh-Hans.lproj` is a real localization. `InfoPlist.strings` is the permission copy. `Localizable.strings` holds the APNs `loc-key` fallback (see Push localization below). `CFBundleDevelopmentRegion` stays `en`, which is the bundled string fallback for every other key. |
 | Welcome mark is Tellomi, not the paper plane | `Telegram/Telegram-iOS/Resources/intro/telegram_sphere@2x.png` is the Tellomi glyph. `telegram_plane1@2x.png` is empty, so the OpenGL intro does not draw the plane. The same two files under `submodules/RMIntro/Sources/platform/ios/Resources/` match. The page layout is unchanged. |
 | Wrong code on its own line | `AuthorizationSequenceCodeEntryControllerNode` puts the red line in the stack between the field and Log in. It reads 「请输入正确的验证码」 from `tellomiLoginCopy`. |
 | Code field stays put when the keyboard dismisses | The same node keeps the keyboard inset after `inputHeight` goes to zero. The stack is centered in that inset, which is where it sat while the keyboard was up. |
@@ -352,3 +352,16 @@ Signing in an account that is already on the device sends `auth.logOut` on the n
 | `submodules/TelegramCore/Sources/TellomiInterfaceLanguage.swift` | New. Writes the language code into `localizationSettings` with no network. |
 | `submodules/TelegramUI/Sources/SharedAccountContext.swift` | `auth.logOut` on a duplicate login before the record is dropped. |
 | `submodules/SettingsUI/Sources/Language Selection/LocalizationListControllerNode.swift`, `Search/SettingsSearchableItems.swift` | A Settings language writes the same preference key. |
+
+## Push localization fallback
+
+APNs `alert.loc-key` is resolved by the system from the main app bundle. The Notification Service extension does not ship `Localizable.strings`, and when it times out Apple shows the outer payload. That payload's keys are `MESSAGE_AUDIO`, `CHAT_MESSAGE_*`, `CHANNEL_MESSAGE_*`, `PINNED_TEXT`, not the `PUSH_*` names in `en.lproj`. `zh-Hans` used to be an empty generated file, so a Chinese device had nothing to look up.
+
+`loc-args` follow `pkg/push` on the server: a private message is the sender name (and the text, for `MESSAGE_TEXT` / `PINNED_TEXT`); a group is sender, chat title, then text; a channel is the channel title, then text. `PINNED_*` is not prefixed. The format string includes the name, because a loc-key alert has no separate title when the extension does not run.
+
+| File | Change |
+| --- | --- |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | The APNs key names, in addition to `PUSH_*`. |
+| `Telegram/Telegram-iOS/zh-Hans.lproj/Localizable.strings` | New. Simplified sentences, for example `MESSAGE_AUDIO` = `%1$@ 发来一条语音消息`. |
+| `Telegram/Telegram-iOS/zh-Hant.lproj/Localizable.strings` | New. Traditional sentences. |
+| `Telegram/BUILD` | `zh-Hans` leaves `empty_languages`. Both Chinese files are in `AppStringResources`. |

@@ -17243,3 +17243,61 @@ Error: %8$@";
 "Gift.Delete.Title" = "Delete Gift";
 "Gift.Delete.Text" = "Do you want to delete this gift?\n\nIt will disappear from your profile and can't be restored.";
 "Gift.Delete.Success" = "Gift Deleted";
+
+/* APNs alert loc-key fallback.
+   Used when the Notification Service extension does not run.
+   Names match the server loc-key, not the PUSH_* strings above.
+   Private: %1$@ sender, %2$@ text. Group: %1$@ sender, %2$@ chat, %3$@ text.
+   Channel: %1$@ channel, %2$@ text. PINNED_* is not prefixed.
+*/
+
+"MESSAGE_NOTEXT" = "%1$@ sent you a message";
+"MESSAGE_PHOTO" = "%1$@ sent you a photo";
+"MESSAGE_PHOTO_SECRET" = "%1$@ sent you a self-destructing photo";
+"MESSAGE_VIDEO" = "%1$@ sent you a video";
+"MESSAGE_VIDEO_SECRET" = "%1$@ sent you a self-destructing video";
+"MESSAGE_GIF" = "%1$@ sent you a GIF";
+"MESSAGE_ROUND" = "%1$@ sent you a video message";
+"MESSAGE_AUDIO" = "%1$@ sent you a voice message";
+"MESSAGE_STICKER" = "%1$@ sent you a sticker";
+"MESSAGE_DOC" = "%1$@ sent you a file";
+"MESSAGE_GEO" = "%1$@ sent you a map";
+"MESSAGE_GEOLIVE" = "%1$@ started sharing their live location";
+"MESSAGE_CONTACT" = "%1$@ shared a contact with you";
+"MESSAGE_POLL" = "%1$@ sent you a poll";
+"MESSAGE_QUIZ" = "%1$@ sent you a quiz";
+"MESSAGE_TEXT" = "%1$@: %2$@";
+"CHAT_MESSAGE_NOTEXT" = "%1$@ sent a message to %2$@";
+"CHAT_MESSAGE_PHOTO" = "%1$@ sent a photo to %2$@";
+"CHAT_MESSAGE_PHOTO_SECRET" = "%1$@ sent a self-destructing photo to %2$@";
+"CHAT_MESSAGE_VIDEO" = "%1$@ sent a video to %2$@";
+"CHAT_MESSAGE_VIDEO_SECRET" = "%1$@ sent a self-destructing video to %2$@";
+"CHAT_MESSAGE_GIF" = "%1$@ sent a GIF to %2$@";
+"CHAT_MESSAGE_ROUND" = "%1$@ sent a video message to %2$@";
+"CHAT_MESSAGE_AUDIO" = "%1$@ sent a voice message to %2$@";
+"CHAT_MESSAGE_STICKER" = "%1$@ sent a sticker to %2$@";
+"CHAT_MESSAGE_DOC" = "%1$@ sent a file to %2$@";
+"CHAT_MESSAGE_GEO" = "%1$@ sent a map to %2$@";
+"CHAT_MESSAGE_GEOLIVE" = "%1$@ started sharing their live location in %2$@";
+"CHAT_MESSAGE_CONTACT" = "%1$@ shared a contact in %2$@";
+"CHAT_MESSAGE_POLL" = "%1$@ sent a poll to %2$@";
+"CHAT_MESSAGE_QUIZ" = "%1$@ sent a quiz to %2$@";
+"CHAT_MESSAGE_TEXT" = "%1$@ in %2$@: %3$@";
+"CHANNEL_MESSAGE_NOTEXT" = "%1$@ posted a message";
+"CHANNEL_MESSAGE_PHOTO" = "%1$@ posted a photo";
+"CHANNEL_MESSAGE_PHOTO_SECRET" = "%1$@ posted a self-destructing photo";
+"CHANNEL_MESSAGE_VIDEO" = "%1$@ posted a video";
+"CHANNEL_MESSAGE_VIDEO_SECRET" = "%1$@ posted a self-destructing video";
+"CHANNEL_MESSAGE_GIF" = "%1$@ posted a GIF";
+"CHANNEL_MESSAGE_ROUND" = "%1$@ posted a video message";
+"CHANNEL_MESSAGE_AUDIO" = "%1$@ posted a voice message";
+"CHANNEL_MESSAGE_STICKER" = "%1$@ posted a sticker";
+"CHANNEL_MESSAGE_DOC" = "%1$@ posted a file";
+"CHANNEL_MESSAGE_GEO" = "%1$@ posted a map";
+"CHANNEL_MESSAGE_GEOLIVE" = "%1$@ posted a live location";
+"CHANNEL_MESSAGE_CONTACT" = "%1$@ posted a contact";
+"CHANNEL_MESSAGE_POLL" = "%1$@ posted a poll";
+"CHANNEL_MESSAGE_QUIZ" = "%1$@ posted a quiz";
+"CHANNEL_MESSAGE_TEXT" = "%1$@: %2$@";
+"PINNED_TEXT" = "%1$@ pinned \"%2$@\"";
+"PINNED_NOTEXT" = "%1$@ pinned a message";

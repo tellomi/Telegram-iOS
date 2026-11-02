@@ -205,7 +205,6 @@ empty_languages = [
     "tr",
     "uk",
     "uz",
-    "zh-Hans",
 ]
 
 [
@@ -292,6 +291,9 @@ filegroup(
     name = "AppStringResources",
     srcs = [
         "Telegram-iOS/en.lproj/Localizable.strings",
+        # APNs loc-key fallback. These are real files, not the empty stubs above.
+        "Telegram-iOS/zh-Hans.lproj/Localizable.strings",
+        "Telegram-iOS/zh-Hant.lproj/Localizable.strings",
     ] + [
         "{}.lproj/Localizable.strings".format(language) for language in empty_languages
     ],

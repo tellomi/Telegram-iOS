@@ -1,0 +1,57 @@
+/* APNs alert loc-key fallback.
+   Used when the Notification Service extension does not run.
+   Names match the server loc-key, not the PUSH_* strings above.
+   Private: %1$@ sender, %2$@ text. Group: %1$@ sender, %2$@ chat, %3$@ text.
+   Channel: %1$@ channel, %2$@ text. PINNED_* is not prefixed.
+*/
+
+"MESSAGE_NOTEXT" = "%1$@ 发来一条消息";
+"MESSAGE_PHOTO" = "%1$@ 发来一张图片";
+"MESSAGE_PHOTO_SECRET" = "%1$@ 发来一张阅后即焚图片";
+"MESSAGE_VIDEO" = "%1$@ 发来一段视频";
+"MESSAGE_VIDEO_SECRET" = "%1$@ 发来一段阅后即焚视频";
+"MESSAGE_GIF" = "%1$@ 发来一张 GIF";
+"MESSAGE_ROUND" = "%1$@ 发来一条视频消息";
+"MESSAGE_AUDIO" = "%1$@ 发来一条语音消息";
+"MESSAGE_STICKER" = "%1$@ 发来一张贴纸";
+"MESSAGE_DOC" = "%1$@ 发来一个文件";
+"MESSAGE_GEO" = "%1$@ 发来一个位置";
+"MESSAGE_GEOLIVE" = "%1$@ 开始共享实时位置";
+"MESSAGE_CONTACT" = "%1$@ 分享了一个联系人";
+"MESSAGE_POLL" = "%1$@ 发来一个投票";
+"MESSAGE_QUIZ" = "%1$@ 发来一个问答";
+"MESSAGE_TEXT" = "%1$@：%2$@";
+"CHAT_MESSAGE_NOTEXT" = "%1$@ 在「%2$@」发来一条消息";
+"CHAT_MESSAGE_PHOTO" = "%1$@ 在「%2$@」发来一张图片";
+"CHAT_MESSAGE_PHOTO_SECRET" = "%1$@ 在「%2$@」发来一张阅后即焚图片";
+"CHAT_MESSAGE_VIDEO" = "%1$@ 在「%2$@」发来一段视频";
+"CHAT_MESSAGE_VIDEO_SECRET" = "%1$@ 在「%2$@」发来一段阅后即焚视频";
+"CHAT_MESSAGE_GIF" = "%1$@ 在「%2$@」发来一张 GIF";
+"CHAT_MESSAGE_ROUND" = "%1$@ 在「%2$@」发来一条视频消息";
+"CHAT_MESSAGE_AUDIO" = "%1$@ 在「%2$@」发来一条语音消息";
+"CHAT_MESSAGE_STICKER" = "%1$@ 在「%2$@」发来一张贴纸";
+"CHAT_MESSAGE_DOC" = "%1$@ 在「%2$@」发来一个文件";
+"CHAT_MESSAGE_GEO" = "%1$@ 在「%2$@」发来一个位置";
+"CHAT_MESSAGE_GEOLIVE" = "%1$@ 在「%2$@」开始共享实时位置";
+"CHAT_MESSAGE_CONTACT" = "%1$@ 在「%2$@」分享了一个联系人";
+"CHAT_MESSAGE_POLL" = "%1$@ 在「%2$@」发来一个投票";
+"CHAT_MESSAGE_QUIZ" = "%1$@ 在「%2$@」发来一个问答";
+"CHAT_MESSAGE_TEXT" = "%1$@ 在「%2$@」：%3$@";
+"CHANNEL_MESSAGE_NOTEXT" = "%1$@ 发布了一条消息";
+"CHANNEL_MESSAGE_PHOTO" = "%1$@ 发布了一张图片";
+"CHANNEL_MESSAGE_PHOTO_SECRET" = "%1$@ 发布了一张阅后即焚图片";
+"CHANNEL_MESSAGE_VIDEO" = "%1$@ 发布了一段视频";
+"CHANNEL_MESSAGE_VIDEO_SECRET" = "%1$@ 发布了一段阅后即焚视频";
+"CHANNEL_MESSAGE_GIF" = "%1$@ 发布了一张 GIF";
+"CHANNEL_MESSAGE_ROUND" = "%1$@ 发布了一条视频消息";
+"CHANNEL_MESSAGE_AUDIO" = "%1$@ 发布了一条语音消息";
+"CHANNEL_MESSAGE_STICKER" = "%1$@ 发布了一张贴纸";
+"CHANNEL_MESSAGE_DOC" = "%1$@ 发布了一个文件";
+"CHANNEL_MESSAGE_GEO" = "%1$@ 发布了一个位置";
+"CHANNEL_MESSAGE_GEOLIVE" = "%1$@ 发布了实时位置";
+"CHANNEL_MESSAGE_CONTACT" = "%1$@ 发布了一个联系人";
+"CHANNEL_MESSAGE_POLL" = "%1$@ 发布了一个投票";
+"CHANNEL_MESSAGE_QUIZ" = "%1$@ 发布了一个问答";
+"CHANNEL_MESSAGE_TEXT" = "%1$@：%2$@";
+"PINNED_TEXT" = "%1$@ 置顶了「%2$@」";
+"PINNED_NOTEXT" = "%1$@ 置顶了一条消息";
