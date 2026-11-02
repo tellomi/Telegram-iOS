@@ -89,7 +89,7 @@ The traced bubble fills the viewBox. `Tellomi/Brand/generate_icons.py` scales it
 
 ## Location purpose string
 
-`UIBackgroundModes` includes `location`, so the main Info.plist must contain `NSLocationAlwaysAndWhenInUseUsageDescription`. The shipping string is the Bazel fragment in `Telegram/BUILD`. `en.lproj` is English for that key. `zh-Hans.lproj` and `zh-Hant.lproj` carry the Chinese sentences. `zh-Hant` is in `empty_languages`, same as `zh-Hans`, so the bundle has an empty `Localizable.strings` for it. `InfoPlistStringResources` globs every `*.lproj/InfoPlist.strings`.
+`UIBackgroundModes` includes `location`, so the main Info.plist must contain `NSLocationAlwaysAndWhenInUseUsageDescription`. The shipping string is the Bazel fragment in `Telegram/BUILD`. `en.lproj` is English for that key. `zh-Hans.lproj` and `zh-Hant.lproj` carry the Chinese sentences. Both languages already ship a real `Localizable.strings` from `AppStringResources`, so they stay out of `empty_languages`. `InfoPlistStringResources` globs every `*.lproj/InfoPlist.strings`, which is how the Traditional permission file is bundled.
 
 | File | Change |
 | --- | --- |
@@ -97,7 +97,7 @@ The traced bubble fills the viewBox. `Tellomi/Brand/generate_icons.py` scales it
 | `Telegram/Telegram-iOS/Info.plist`, `InfoBazel.plist` | Same key, with Tellomi written out. These are not the plist the Bazel app links. |
 | `Telegram/Telegram-iOS/en.lproj/InfoPlist.strings` | English for `NSLocationAlwaysAndWhenInUseUsageDescription`. |
 | `Telegram/Telegram-iOS/zh-Hant.lproj/InfoPlist.strings` | Traditional Chinese for every key in `zh-Hans`. |
-| `Telegram/BUILD` `empty_languages` | Includes `zh-Hant`. |
+| `Telegram/BUILD` `InfoPlistStringResources` | The glob includes `zh-Hant.lproj/InfoPlist.strings`. `zh-Hant` stays out of `empty_languages` because `AppStringResources` already lists its `Localizable.strings`. |
 
 ## SF Camera fonts
 
@@ -392,7 +392,7 @@ APNs `alert.loc-key` is resolved by the system from the main app bundle. The Not
 
 Stacked on the solid-wallpaper change. Day and dayClassic outgoing bubbles are white (`#FFFFFF`, pressed `#E9E9EB`) with black text. Night accent is white and outgoing bubbles are `#2C2C2E`. Links, checks, switches, and unread badges follow black in day and white at night. The accent picker, tinted night theme, and theme editor are not offered. The send control draws an up arrow in the button’s foreground color and does not use the paper-plane imageset.
 
-`NSLocationAlwaysAndWhenInUseUsageDescription` in `en.lproj` is English. `zh-Hant.lproj/InfoPlist.strings` is Traditional Chinese for every `zh-Hans` key, and `zh-Hant` is in `empty_languages`.
+`NSLocationAlwaysAndWhenInUseUsageDescription` in `en.lproj` is English. `zh-Hant.lproj/InfoPlist.strings` is Traditional Chinese for every `zh-Hans` key. The localization is the real `Localizable.strings` from the push-string change, not an empty generated file.
 
 | File | Change |
 | --- | --- |
@@ -402,4 +402,4 @@ Stacked on the solid-wallpaper change. Day and dayClassic outgoing bubbles are w
 | `PresentationResourcesChat.swift` | Send glyph is the existing up-arrow path. |
 | Theme settings | Day and night only. No accent row, no tinted theme. |
 | `en.lproj/InfoPlist.strings` | `NSLocationAlwaysAndWhenInUseUsageDescription` is English. |
-| `zh-Hant.lproj/InfoPlist.strings`, `empty_languages` | Traditional Chinese for every `zh-Hans` permission key. |
+| `zh-Hant.lproj/InfoPlist.strings` | Traditional Chinese for every `zh-Hans` permission key. Bundled by the InfoPlist glob. |
