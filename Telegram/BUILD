@@ -1749,6 +1749,9 @@ plist_fragment(
         <string>yangomaps</string>
         <string>vivaldi</string>
         <string>rizogo</string>
+        <string>iosamap</string>
+        <string>baidumap</string>
+        <string>qqmap</string>
     </array>
     <key>LSRequiresIPhoneOS</key>
     <true/>

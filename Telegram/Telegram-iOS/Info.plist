@@ -265,6 +265,9 @@
 		<string>ucbrowser</string>
 		<string>dolphin</string>
 		<string>instagram-stories</string>
+		<string>iosamap</string>
+		<string>baidumap</string>
+		<string>qqmap</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
