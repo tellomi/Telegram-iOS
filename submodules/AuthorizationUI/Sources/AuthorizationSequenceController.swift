@@ -385,10 +385,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 }))
             }
         }
-        if controller.account != nil {
-            controller.tellomiInitialSurface = .emailCode
-            controller.tellomiShowsHomeRows = true
-        }
+        // This builder is the login flow. Change Phone Number constructs its own controller with no account and does not come through here.
+        controller.tellomiInitialSurface = .emailCode
+        controller.tellomiShowsHomeRows = true
         controller.updateData(countryCode: countryCode, countryName: nil, number: number)
         return controller
     }
