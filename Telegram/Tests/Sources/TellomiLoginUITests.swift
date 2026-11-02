@@ -75,10 +75,29 @@ final class TellomiLoginUITests: XCTestCase {
 
     func testEmailLoginRowsDoNotOverlap() throws {
         self.openEmailLogin()
-        self.assertLoginRowsDoNotOverlap()
-        app.textFields["Auth.PhoneEntry.EmailField"].tap()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
-        self.assertLoginRowsDoNotOverlap()
+        let verify = app.buttons["Auth.PhoneEntry.ContinueButton"]
+        XCTAssertTrue(verify.waitForExistence(timeout: 5.0))
+        let screenHeight = app.frame.height
+        // The email field takes focus after Start, so the keyboard may already be up.
+        let keyboardAlreadyUp = verify.frame.height > 1.0 && verify.frame.maxY < screenHeight - 160.0
+        if !keyboardAlreadyUp {
+            self.assertLoginRowsDoNotOverlap(keyboardUp: false)
+            let email = app.textFields["Auth.PhoneEntry.EmailField"]
+            XCTAssertTrue(email.isHittable)
+            let restingMinY = verify.frame.minY
+            email.tap()
+            let deadline = Date().addingTimeInterval(5.0)
+            var raised = false
+            while Date() < deadline {
+                if verify.exists, verify.frame.minY < restingMinY - 80.0 {
+                    raised = true
+                    break
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            XCTAssertTrue(raised, "verify button did not move up with the keyboard (was \(restingMinY), now \(verify.frame.minY))")
+        }
+        self.assertLoginRowsDoNotOverlap(keyboardUp: true)
     }
 
     func testChineseLanguageDefaultsCountryCodeTo86() throws {
@@ -88,10 +107,11 @@ final class TellomiLoginUITests: XCTestCase {
         globe.tap()
         let list = app.tables["Auth.Language.List"]
         XCTAssertTrue(list.waitForExistence(timeout: 5.0))
-        var simplified = app.staticTexts["简体中文"]
+        // Two rows are titled 简体中文 (Classic and the normal pack). The English subtitle is one row.
+        var simplified = list.cells.containing(.staticText, identifier: "Chinese (Simplified)").firstMatch
         if !simplified.waitForExistence(timeout: 2.0) {
             list.swipeUp()
-            simplified = app.staticTexts["简体中文"]
+            simplified = list.cells.containing(.staticText, identifier: "Chinese (Simplified)").firstMatch
         }
         XCTAssertTrue(simplified.waitForExistence(timeout: 5.0))
         simplified.tap()
@@ -163,7 +183,7 @@ final class TellomiLoginUITests: XCTestCase {
         return false
     }
 
-    private func assertLoginRowsDoNotOverlap() {
+    private func assertLoginRowsDoNotOverlap(keyboardUp: Bool) {
         let other = app.buttons["Auth.Login.OtherMethods"]
         let recover = app.buttons["Auth.Login.RecoverAccount"]
         let agreement = self.element("Auth.Login.Agreement")
@@ -172,11 +192,31 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertTrue(recover.waitForExistence(timeout: 5.0))
         XCTAssertTrue(agreement.waitForExistence(timeout: 5.0))
         XCTAssertTrue(verify.waitForExistence(timeout: 5.0))
+        if keyboardUp {
+            let form = app.otherElements["Auth.Login.Form"]
+            XCTAssertTrue(form.waitForExistence(timeout: 2.0))
+            let deadline = Date().addingTimeInterval(3.0)
+            while Date() < deadline {
+                let formClearsButton = form.frame.maxY <= verify.frame.minY + 1.0
+                if formClearsButton && other.isHittable && recover.isHittable && self.framesAreDisjoint(other, verify) && self.framesAreDisjoint(recover, agreement) {
+                    break
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            XCTAssertLessThanOrEqual(form.frame.maxY, verify.frame.minY + 1.0, "login column should end above the verify button while the keyboard is up, form \(form.frame) button \(verify.frame)")
+            XCTAssertTrue(other.isHittable, "other methods should stay on screen above the keyboard, frame \(other.frame)")
+            XCTAssertTrue(recover.isHittable, "recover account should stay on screen above the keyboard, frame \(recover.frame)")
+        }
         self.assertDisjoint(other, agreement, "other methods and agreement")
         self.assertDisjoint(other, verify, "other methods and verify")
         self.assertDisjoint(recover, agreement, "recover account and agreement")
         self.assertDisjoint(recover, verify, "recover account and verify")
         self.assertDisjoint(agreement, verify, "agreement and verify")
+    }
+
+    private func framesAreDisjoint(_ a: XCUIElement, _ b: XCUIElement) -> Bool {
+        let hit = a.frame.intersection(b.frame)
+        return hit.isNull || hit.width < 1.0 || hit.height < 1.0
     }
 
     private func element(_ identifier: String) -> XCUIElement {

@@ -532,6 +532,11 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private let proceedNode: SolidRoundedButtonNode
     /// The email home column scrolls when the keyboard leaves less room than the rows, so the agreement and the primary button stay clear of them.
     private let tellomiFormScrollNode: ASScrollNode?
+    /// Last laid-out height of that column. A shrink is the keyboard (or any inset) taking space.
+    private var tellomiFormViewportHeight: CGFloat = 0.0
+    private var tellomiFormKeyboardVisible = false
+    /// While this is set, the column keeps its bottom edge on the agreement as the keyboard moves. A drag clears it.
+    private var tellomiFormFollowsKeyboard = false
     private(set) var tellomiSurface: TellomiLoginSurface = .phoneCode
     /// Apple / Google / phone switch. Only the email root sets this.
     private let tellomiShowsHomeRows: Bool
@@ -793,6 +798,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             formScroll.view.showsVerticalScrollIndicator = true
             formScroll.view.delaysContentTouches = false
             formScroll.view.keyboardDismissMode = .none
+            formScroll.clipsToBounds = true
+            formScroll.canCancelAllTouchesInViews = true
             if #available(iOS 11.0, *) {
                 formScroll.view.contentInsetAdjustmentBehavior = .never
             }
@@ -843,6 +850,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.backgroundColor = theme.list.plainBackgroundColor
         
         if let formScroll = self.tellomiFormScrollNode {
+            formScroll.view.delegate = self
             self.addSubnode(formScroll)
         }
         self.addSubnode(self.titleNode)
@@ -1248,14 +1256,14 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.noticeActivateAreaNode.frame = self.noticeNode.frame
     }
     
-    /// Stacks the email home in the band above the agreement. When the rows fit, they are centered the way `layoutAuthorizationItems` centers the stock phone screen. When they do not, the column scrolls and the agreement and primary button stay put.
-    private func placeTellomiForm(_ items: [AuthorizationLayoutItem], in bounds: CGRect, columnWidth: CGFloat, transition: ContainedViewLayoutTransition) {
+    /// Stacks the email home in the band above the agreement. When the rows fit, they are centered the way `layoutAuthorizationItems` centers the stock phone screen. When the keyboard shrinks the band, the column scrolls with that inset so the last rows stay on the agreement instead of sliding under it.
+    private func placeTellomiForm(_ items: [AuthorizationLayoutItem], in bounds: CGRect, columnWidth: CGFloat, keyboardVisible: Bool, transition: ContainedViewLayoutTransition) {
         guard let scroll = self.tellomiFormScrollNode else {
             let _ = layoutAuthorizationItems(bounds: bounds, items: items, transition: transition, failIfDoesNotFit: false)
             return
         }
         scroll.isHidden = false
-        transition.updateFrame(node: scroll, frame: bounds)
+        scroll.clipsToBounds = true
         let gap: CGFloat = 12.0
         var fixed: CGFloat = 0.0
         for item in items {
@@ -1283,6 +1291,32 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         }
         let contentHeight = max(bounds.height, y - gap + 8.0)
         scroll.view.contentSize = CGSize(width: bounds.width, height: contentHeight)
+        let maxOffset = max(0.0, contentHeight - bounds.height)
+        let keyboardAppeared = keyboardVisible && !self.tellomiFormKeyboardVisible
+        let viewportShrunk = self.tellomiFormViewportHeight > bounds.height + 0.5
+        if keyboardVisible && maxOffset > 0.5 && (keyboardAppeared || viewportShrunk || self.tellomiFormViewportHeight == 0.0) {
+            self.tellomiFormFollowsKeyboard = true
+        } else if !keyboardVisible {
+            self.tellomiFormFollowsKeyboard = false
+        }
+        self.tellomiFormKeyboardVisible = keyboardVisible
+        self.tellomiFormViewportHeight = bounds.height
+        var offsetY = min(max(0.0, scroll.view.contentOffset.y), maxOffset)
+        if self.tellomiFormFollowsKeyboard {
+            offsetY = maxOffset
+        } else if !keyboardVisible && maxOffset < 0.5 {
+            offsetY = 0.0
+        }
+        if abs(scroll.view.contentOffset.y - offsetY) > 0.5 {
+            scroll.view.contentOffset = CGPoint(x: 0.0, y: offsetY)
+        }
+        transition.updateFrame(node: scroll, frame: bounds)
+        // The frame animation's bounds run includes contentOffset. Drop it so the inset above
+        // sticks instead of holding the pre-keyboard origin for the whole keyboard animation.
+        scroll.layer.removeAnimation(forKey: "bounds")
+        if abs(scroll.view.contentOffset.y - offsetY) > 0.5 {
+            scroll.view.contentOffset = CGPoint(x: 0.0, y: offsetY)
+        }
     }
 
     private func layoutTellomiHome(_ layout: ContainerViewLayout, insets: UIEdgeInsets, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
@@ -1452,7 +1486,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let contentTop = max(navigationBarHeight, insets.top)
         let contentBottom = agreementFrame.minY - 8.0
         let contentBounds = CGRect(x: bandMinX, y: contentTop, width: bandWidth, height: max(0.0, contentBottom - contentTop))
-        self.placeTellomiForm(items, in: contentBounds, columnWidth: columnWidth, transition: transition)
+        let keyboardVisible = (layout.inputHeight ?? 0.0) > 0.0
+        self.placeTellomiForm(items, in: contentBounds, columnWidth: columnWidth, keyboardVisible: keyboardVisible, transition: transition)
         if let emailSwitchNode = self.emailSwitchNode, let modeIconNode = self.modeIconNode {
             let iconSide: CGFloat = 16.0
             let iconFrame = CGRect(x: emailSwitchNode.frame.minX + 24.0, y: emailSwitchNode.frame.minY + floor((emailSwitchNode.frame.height - iconSide) / 2.0), width: iconSide, height: iconSide)
@@ -1701,6 +1736,22 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
                 strongSelf.exportTokenDisposable.set(nil)
             }
         }))
+    }
+}
+
+extension AuthorizationSequencePhoneEntryControllerNode: UIScrollViewDelegate {
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        self.tellomiFormFollowsKeyboard = false
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard self.tellomiFormFollowsKeyboard, let scroll = self.tellomiFormScrollNode, scrollView === scroll.view else {
+            return
+        }
+        let maxOffset = max(0.0, scrollView.contentSize.height - scrollView.bounds.height)
+        if abs(scrollView.contentOffset.y - maxOffset) > 0.5 {
+            scrollView.contentOffset = CGPoint(x: 0.0, y: maxOffset)
+        }
     }
 }
 
