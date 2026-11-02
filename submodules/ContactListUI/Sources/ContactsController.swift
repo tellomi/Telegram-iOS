@@ -160,17 +160,18 @@ public class ContactsController: ViewController {
         self.tabBarItem.title = self.presentationData.strings.Contacts_Title
         
         let icon: UIImage?
+        let selectedIcon: UIImage?
         if useSpecialTabBarIcons() {
             icon = UIImage(bundleImageName: "Chat List/Tabs/Holiday/IconContacts")
+            selectedIcon = icon
         } else {
             icon = UIImage(bundleImageName: "Chat List/Tabs/IconContacts")
+            selectedIcon = UIImage(bundleImageName: "Chat List/Tabs/IconContactsFilled")
         }
         
         self.tabBarItem.image = icon
-        self.tabBarItem.selectedImage = icon
-        if !self.presentationData.reduceMotion {
-            self.tabBarItem.animationName = "TabContacts"
-        }
+        self.tabBarItem.selectedImage = selectedIcon
+        self.tabBarItem.animationName = nil
         
         self.navigationItem.backBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Back, style: .plain, target: nil, action: nil)
         
@@ -253,11 +254,7 @@ public class ContactsController: ViewController {
         
         self.title = self.presentationData.strings.Contacts_Title
         self.tabBarItem.title = self.presentationData.strings.Contacts_Title
-        if !self.presentationData.reduceMotion {
-            self.tabBarItem.animationName = "TabContacts"
-        } else {
-            self.tabBarItem.animationName = nil
-        }
+        self.tabBarItem.animationName = nil
         self.navigationItem.backBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Back, style: .plain, target: nil, action: nil)
         if self.navigationItem.rightBarButtonItem != nil {
             self.navigationItem.rightBarButtonItem = UIBarButtonItem(image: PresentationResourcesRootController.navigationAddIcon(self.presentationData.theme), style: .plain, target: self, action: #selector(self.addPressed))

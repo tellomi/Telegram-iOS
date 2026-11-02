@@ -346,18 +346,18 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     self.tabBarItem.title = self.presentationData.strings.DialogList_Title
                     
                     let icon: UIImage?
+                    let selectedIcon: UIImage?
                     if useSpecialTabBarIcons() {
                         icon = UIImage(bundleImageName: "Chat List/Tabs/Holiday/IconChats")
+                        selectedIcon = icon
                     } else {
                         icon = UIImage(bundleImageName: "Chat List/Tabs/IconChats")
+                        selectedIcon = UIImage(bundleImageName: "Chat List/Tabs/IconChatsFilled")
                     }
                     
                     self.tabBarItem.image = icon
-                    self.tabBarItem.selectedImage = icon
-                    if !self.presentationData.reduceMotion {
-                        self.tabBarItem.animationName = "TabChats"
-                        self.tabBarItem.animationOffset = CGPoint(x: 0.0, y: UIScreenPixel)
-                    }
+                    self.tabBarItem.selectedImage = selectedIcon
+                    self.tabBarItem.animationName = nil
                     
                     self.primaryContext?.leftButton = NavigationBarComponent.Button(id: "edit",
                         content: .text(title: self.presentationData.strings.Common_Edit, isBold: false),
@@ -935,11 +935,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             backBarButtonItem.accessibilityLabel = self.presentationData.strings.Common_Back
             self.navigationItem.backBarButtonItem = backBarButtonItem
             
-            if !self.presentationData.reduceMotion {
-                self.tabBarItem.animationName = "TabChats"
-            } else {
-                self.tabBarItem.animationName = nil
-            }
+            self.tabBarItem.animationName = nil
         } else {
             let backBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Back, style: .plain, target: nil, action: nil)
             backBarButtonItem.accessibilityLabel = self.presentationData.strings.Common_Back

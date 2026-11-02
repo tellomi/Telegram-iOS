@@ -6837,10 +6837,13 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
             }
             
             let icon: UIImage?
+            let selectedIcon: UIImage?
             if useSpecialTabBarIcons() {
                 icon = UIImage(bundleImageName: "Chat List/Tabs/Holiday/IconSettings")
+                selectedIcon = icon
             } else {
                 icon = UIImage(bundleImageName: "Chat List/Tabs/IconSettings")
+                selectedIcon = UIImage(bundleImageName: "Chat List/Tabs/IconSettingsFilled")
             }
             
             let tabBarItem: Signal<(String, UIImage?, UIImage?, String?, Bool, Bool), NoError> = combineLatest(queue: .mainQueue(), self.context.sharedContext.presentationData, notificationsAuthorizationStatus.get(), notificationsWarningSuppressed.get(), context.engine.notices.getServerProvidedSuggestions(), accountTabBarAvatar, accountTabBarAvatarBadge)
@@ -6852,7 +6855,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
                 if accountTabBarAvatarBadge > 0 {
                     otherAccountsBadge = compactNumericCountString(Int(accountTabBarAvatarBadge), decimalSeparator: presentationData.dateTimeFormat.decimalSeparator)
                 }
-                return (presentationData.strings.Settings_Title, accountTabBarAvatar?.0 ?? icon, accountTabBarAvatar?.1 ?? icon, notificationsWarning || phoneNumberWarning || passwordWarning ? "!" : otherAccountsBadge, accountTabBarAvatar != nil, presentationData.reduceMotion)
+                return (presentationData.strings.Settings_Title, accountTabBarAvatar?.0 ?? icon, accountTabBarAvatar?.1 ?? selectedIcon, notificationsWarning || phoneNumberWarning || passwordWarning ? "!" : otherAccountsBadge, accountTabBarAvatar != nil, presentationData.reduceMotion)
             }
             
             self.tabBarItemDisposable = (tabBarItem |> deliverOnMainQueue).startStrict(next: { [weak self] title, image, selectedImage, badgeValue, isAvatar, reduceMotion in
@@ -6860,7 +6863,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
                     strongSelf.tabBarItem.title = title
                     strongSelf.tabBarItem.image = image
                     strongSelf.tabBarItem.selectedImage = selectedImage
-                    strongSelf.tabBarItem.animationName = isAvatar || reduceMotion ? nil : "TabSettings"
+                    strongSelf.tabBarItem.animationName = nil
                     strongSelf.tabBarItem.ringSelection = isAvatar
                     strongSelf.tabBarItem.badgeValue = badgeValue
                 }
