@@ -1045,7 +1045,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let showsMissing: Bool
         switch self.codeType {
-        case .sms, .call, .firebase, .otherSession, .email:
+        case .sms, .call, .firebase, .otherSession:
             showsMissing = true
         default:
             showsMissing = false
@@ -1176,7 +1176,6 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     
     private var tellomiStickyError = false
     private var tellomiErrorVisible = false
-    private var tellomiErrorGeneration = 0
 
     func animateError(text: String) {
         let errorOriginY: CGFloat
@@ -1202,8 +1201,14 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             errorOriginOffset = 11.0
         }
 
-        let shown = self.tellomiCodeChrome ? tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).wrongCode : text
-        let alignment: NSTextAlignment = tellomiEmail ? .left : .center
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        let shown: String
+        if self.tellomiCodeChrome {
+            shown = tellomiEmail ? copy.wrongCode : copy.wrongSmsCode
+        } else {
+            shown = text
+        }
+        let alignment: NSTextAlignment = self.tellomiCodeChrome ? .left : .center
         let errorColor = self.tellomiCodeChrome ? TellomiLoginChrome.error : self.theme.list.itemDestructiveColor
         self.errorTextNode.attributedText = NSAttributedString(string: shown, font: Font.regular(13.0), textColor: errorColor, paragraphAlignment: alignment)
         self.tellomiStickyError = tellomiEmail
@@ -1211,24 +1216,9 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             // Own line between the field and Log in. An absolute frame landed on the title
             // or was clipped against the button once the keyboard moved the stack.
             self.tellomiErrorVisible = true
-            self.tellomiErrorGeneration += 1
-            let generation = self.tellomiErrorGeneration
             self.errorTextNode.alpha = 1.0
             if let (layout, navigationBarHeight) = self.layoutArguments {
                 self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
-            }
-            if tellomiEmail {
-                return
-            }
-            Queue.mainQueue().after(1.6) {
-                guard self.tellomiErrorGeneration == generation else {
-                    return
-                }
-                self.tellomiErrorVisible = false
-                self.errorTextNode.alpha = 0.0
-                if let (layout, navigationBarHeight) = self.layoutArguments {
-                    self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
-                }
             }
             return
         }
@@ -1294,8 +1284,10 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         if self.tellomiStickyError || self.tellomiErrorVisible {
             self.tellomiStickyError = false
             self.tellomiErrorVisible = false
-            self.tellomiErrorGeneration += 1
             self.errorTextNode.alpha = 0.0
+            if let (layout, navigationBarHeight) = self.layoutArguments {
+                self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
+            }
         }
         self.proceedNode.isEnabled = !text.isEmpty
         self.updateNextEnabled?(!text.isEmpty)
@@ -1306,9 +1298,8 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     }
     
     private func codeChanged(text: String) {
-        if self.tellomiErrorVisible, !text.isEmpty {
+        if self.tellomiErrorVisible {
             self.tellomiErrorVisible = false
-            self.tellomiErrorGeneration += 1
             self.errorTextNode.alpha = 0.0
             if let (layout, navigationBarHeight) = self.layoutArguments {
                 self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)

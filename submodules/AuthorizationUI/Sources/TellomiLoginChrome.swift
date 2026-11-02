@@ -127,8 +127,8 @@ enum TellomiLoginSurface: Equatable {
         }
     }
 
-    /// Phone OTP home is the only screen whose agreement mentions the carrier.
-    var showsCarrierAgreement: Bool {
+    /// Phone home pins the agreement to the bottom of the screen. Password and email center it under the button.
+    var agreementPinnedToBottom: Bool {
         return self == .phoneCode
     }
 }
@@ -166,7 +166,9 @@ struct TellomiLoginCopy: Equatable {
     let unavailableTitle: String
     let unavailableBody: String
     let codeNotReceived: String
+    /// Email code. SMS uses `wrongSmsCode`.
     let wrongCode: String
+    let wrongSmsCode: String
     let startMessaging: String
     let ok: String
     let bindPhoneTitle: String
@@ -250,6 +252,7 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
             unavailableBody: "该登录方式即将开放，请先使用手机号或邮箱。",
             codeNotReceived: "收不到验证码？",
             wrongCode: "请输入正确的验证码",
+            wrongSmsCode: "验证码错误，请重新输入",
             startMessaging: "开始聊天",
             ok: "好",
             bindPhoneTitle: "绑定手机号",
@@ -307,6 +310,7 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
         unavailableBody: "This sign-in method isn't open yet. Use a phone number or email.",
         codeNotReceived: "Didn't get the code?",
         wrongCode: "Enter the correct code",
+        wrongSmsCode: "Wrong code. Please enter it again.",
         startMessaging: "Start Messaging",
         ok: "OK",
         bindPhoneTitle: "Link a phone number",
@@ -367,6 +371,7 @@ private func tellomiLoginCopyHant() -> TellomiLoginCopy {
         unavailableBody: "該登入方式即將開放，請先使用手機號或郵箱。",
         codeNotReceived: "收不到驗證碼？",
         wrongCode: "請輸入正確的驗證碼",
+        wrongSmsCode: "驗證碼錯誤，請重新輸入",
         startMessaging: "開始聊天",
         ok: "好",
         bindPhoneTitle: "綁定手機號",

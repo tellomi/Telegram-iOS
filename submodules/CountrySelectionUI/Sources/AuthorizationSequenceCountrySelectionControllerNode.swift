@@ -223,6 +223,7 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
         self.needsSubtitle = strings.baseLanguageCode != "en"
         
         self.tableView = UITableView(frame: CGRect(), style: glass ? .insetGrouped : .plain)
+        self.tableView.accessibilityIdentifier = "Auth.Country.List"
         if #available(iOS 15.0, *) {
             self.tableView.sectionHeaderTopPadding = 0.0
         }

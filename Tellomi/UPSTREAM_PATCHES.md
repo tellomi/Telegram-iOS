@@ -435,3 +435,19 @@ Empty chat, empty folder, no-results, calls placeholder, two-factor intro, and t
 | `animations.c`, `RMIntroViewController.m` | Draw the six marks and slide them with the page. |
 | `ChatListEmpty.tgs`, `ChatListFilterEmpty.tgs`, `ChatListNoResults.tgs`, `CallsPlaceholder.tgs`, `TwoFactorSetupIntro.tgs`, `IntroPhone.tgs` | Monochrome mark. |
 | `Telegram/Telegram-iOS/*.alticon` | Deleted. Not packaged. |
+
+## Login screens matched to the 2026-11-03 spec
+
+The phone screen is the login home. Primary buttons stay black (white in dark mode), disabled gray. The agreement sentence is only 已阅读并同意 用户协议 和 隐私政策. The carrier sentence is gone from the home and from the agreement card. SMS boxes use the length in `sentCode`. The top-right control is still the language name plus ▾ and the three-language card. It is not 帮助.
+
+The keyboard does not move the phone, password, or email fields. On the email screen the round icons sit just above the keyboard. 其他登录方式 and the ⋯ button open the existing action sheet with 找回账号 and 取消. Weibo, WeChat, and QQ are not rows. Email 密码登录 opens the phone password screen, because there is no email-password RPC. 登录 on that screen, and Apple, Google, and 找回账号, still present 暂未开放. There is no account-recovery entry point that can run before a code, and Sign in with Apple is only the server-gated alternative on an email-code screen (`appleSignInAllowed` stays false there).
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Carrier sentence removed. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | SMS error copy. Phone home still pins the agreement. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginSurfaces.swift` | Clear button, dark icons, dark agreement card. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Other-methods sheet. Language button identifier. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Valid number enables the button. Email password link opens phone password. Icons ride the email keyboard. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | SMS error stays until the code changes. Email code has no 收不到验证码? row. |
+| `Telegram/Tests/Sources/TellomiLoginUITests.swift` | Phone-default checks. |

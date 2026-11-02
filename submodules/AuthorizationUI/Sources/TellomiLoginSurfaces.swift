@@ -64,10 +64,27 @@ func tellomiGoogleMark(side: CGFloat) -> UIImage? {
     })
 }
 
-func tellomiDotsImage(side: CGFloat) -> UIImage? {
+struct TellomiLoginMarks {
+    let apple: UIImage?
+    let google: UIImage?
+    let mail: UIImage?
+    let dots: UIImage?
+}
+
+func tellomiLoginMarks(dark: Bool) -> TellomiLoginMarks {
+    let ink = TellomiLoginChrome.palette(dark: dark).rowText
+    return TellomiLoginMarks(
+        apple: tellomiSymbol("apple.logo", pointSize: 20.0)?.withTintColor(ink, renderingMode: .alwaysOriginal),
+        google: tellomiGoogleMark(side: 22.0),
+        mail: tellomiSymbol("envelope", pointSize: 16.0)?.withTintColor(ink, renderingMode: .alwaysOriginal),
+        dots: tellomiDotsImage(side: 22.0, color: ink)
+    )
+}
+
+func tellomiDotsImage(side: CGFloat, color: UIColor = UIColor(rgb: 0x111111)) -> UIImage? {
     return generateImage(CGSize(width: side, height: side), rotatedContext: { size, context in
         context.clear(CGRect(origin: CGPoint(), size: size))
-        context.setFillColor(UIColor(rgb: 0x111111).cgColor)
+        context.setFillColor(color.cgColor)
         let dot: CGFloat = 3.2
         let y = (size.height - dot) / 2.0
         let gap: CGFloat = 5.0
@@ -103,6 +120,7 @@ final class TellomiAgreementRow: ASDisplayNode {
         self.addSubnode(self.checkbox)
         self.addSubnode(self.checkboxButton)
         self.checkboxButton.addTarget(self, action: #selector(self.checkboxPressed), forControlEvents: .touchUpInside)
+        self.accessibilityIdentifier = "Auth.Login.Agreement"
     }
 
     func setChecked(_ checked: Bool) {
@@ -191,6 +209,10 @@ final class TellomiSocialRowNode: HighlightableButtonNode {
         }
     }
 
+    func setIcon(_ icon: UIImage?) {
+        self.iconNode.image = icon
+    }
+
     override func layout() {
         super.layout()
         let maxSide: CGFloat = 22.0
@@ -206,9 +228,9 @@ final class TellomiSocialRowNode: HighlightableButtonNode {
 final class TellomiCircleButtonNode: HighlightableButtonNode {
     private let iconNode = ASImageNode()
 
-    init(icon: UIImage?, accessibilityLabel: String) {
+    init(icon: UIImage?, accessibilityLabel: String, dark: Bool) {
         super.init()
-        let palette = TellomiLoginChrome.palette(dark: false)
+        let palette = TellomiLoginChrome.palette(dark: dark)
         self.backgroundColor = palette.rowBackground
         self.cornerRadius = 26.0
         self.borderWidth = 1.0
@@ -220,6 +242,19 @@ final class TellomiCircleButtonNode: HighlightableButtonNode {
         self.accessibilityLabel = accessibilityLabel
         self.accessibilityTraits = [.button]
         self.addSubnode(self.iconNode)
+    }
+
+    func setIcon(_ icon: UIImage?) {
+        self.iconNode.image = icon
+        if !self.bounds.isEmpty {
+            self.setNeedsLayout()
+        }
+    }
+
+    func applyPalette(dark: Bool) {
+        let palette = TellomiLoginChrome.palette(dark: dark)
+        self.backgroundColor = palette.rowBackground
+        self.borderColor = palette.rowBorder.cgColor
     }
 
     override func layout() {
@@ -249,6 +284,12 @@ final class TellomiOrDividerNode: ASDisplayNode {
 
     func setTitle(_ title: String) {
         self.label.attributedText = NSAttributedString(string: title, font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText)
+    }
+
+    func applyPalette(dark: Bool) {
+        let color = TellomiLoginChrome.palette(dark: dark).rowBorder
+        self.left.backgroundColor = color
+        self.right.backgroundColor = color
     }
 
     override func layout() {
@@ -384,12 +425,14 @@ final class TellomiPasswordFieldNode: ASDisplayNode, UITextFieldDelegate {
 final class TellomiAgreementPromptController: ViewController {
     private let kind: TellomiSignUpAgreement.Kind
     private let chinese: Bool
+    private let dark: Bool
     private let openUrl: (String) -> Void
     var agreed: (() -> Void)?
 
-    init(kind: TellomiSignUpAgreement.Kind, chinese: Bool, openUrl: @escaping (String) -> Void) {
+    init(kind: TellomiSignUpAgreement.Kind, chinese: Bool, dark: Bool, openUrl: @escaping (String) -> Void) {
         self.kind = kind
         self.chinese = chinese
+        self.dark = dark
         self.openUrl = openUrl
         super.init(navigationBarPresentationData: nil)
         self.statusBar.statusBarStyle = .Ignore
@@ -400,7 +443,7 @@ final class TellomiAgreementPromptController: ViewController {
     }
 
     override func loadDisplayNode() {
-        self.displayNode = TellomiAgreementPromptNode(kind: self.kind, chinese: self.chinese, openUrl: { [weak self] url in
+        self.displayNode = TellomiAgreementPromptNode(kind: self.kind, chinese: self.chinese, dark: self.dark, openUrl: { [weak self] url in
             self?.openUrl(url)
         }, agree: { [weak self] in
             self?.agreed?()
@@ -422,18 +465,19 @@ private final class TellomiAgreementPromptNode: ASDisplayNode {
     private let agreement = TellomiSignUpAgreement()
     private let dismissPrompt: () -> Void
 
-    init(kind: TellomiSignUpAgreement.Kind, chinese: Bool, openUrl: @escaping (String) -> Void, agree: @escaping () -> Void, dismiss: @escaping () -> Void) {
+    init(kind: TellomiSignUpAgreement.Kind, chinese: Bool, dark: Bool, openUrl: @escaping (String) -> Void, agree: @escaping () -> Void, dismiss: @escaping () -> Void) {
         self.dismissPrompt = dismiss
         let copy = tellomiLoginCopy(languageCode: chinese ? "zh" : "en")
-        self.agreeButton = SolidRoundedButtonNode(title: copy.agreeAndLogin, theme: TellomiLoginChrome.buttonTheme(), glass: false, height: 48.0, cornerRadius: 24.0)
+        let palette = TellomiLoginChrome.palette(dark: dark)
+        self.agreeButton = SolidRoundedButtonNode(title: copy.agreeAndLogin, theme: TellomiLoginChrome.buttonTheme(dark: dark), glass: false, height: 48.0, cornerRadius: 24.0)
         super.init()
 
         self.dimNode.backgroundColor = UIColor(white: 0.0, alpha: 0.45)
-        self.cardNode.backgroundColor = .white
+        self.cardNode.backgroundColor = palette.rowBackground
         self.cardNode.cornerRadius = 16.0
         self.cardNode.clipsToBounds = true
 
-        self.titleNode.attributedText = NSAttributedString(string: copy.agreementTitle, font: Font.semibold(17.0), textColor: UIColor(rgb: 0x111111), paragraphAlignment: .center)
+        self.titleNode.attributedText = NSAttributedString(string: copy.agreementTitle, font: Font.semibold(17.0), textColor: palette.rowText, paragraphAlignment: .center)
         self.titleNode.maximumNumberOfLines = 0
         self.titleNode.displaysAsynchronously = false
 
@@ -443,8 +487,10 @@ private final class TellomiAgreementPromptNode: ASDisplayNode {
         self.bodyNode.linkHighlightColor = TellomiLoginChrome.link.withAlphaComponent(0.15)
         self.agreement.install(on: self.bodyNode, theme: defaultPresentationTheme, kind: kind, chinese: chinese, togglesOnText: false, centered: true, openUrl: openUrl, changed: { _ in })
 
-        self.declineNode.setTitle(copy.disagree, with: Font.regular(15.0), with: TellomiLoginChrome.secondaryText, for: .normal)
+        self.declineNode.setTitle(copy.disagree, with: Font.regular(15.0), with: palette.secondaryText, for: .normal)
         self.declineNode.accessibilityTraits = [.button]
+        self.declineNode.accessibilityIdentifier = "Auth.Login.Disagree"
+        self.agreeButton.accessibilityIdentifier = "Auth.Login.Agree"
         self.agreeButton.pressed = { agree() }
         self.declineNode.addTarget(self, action: #selector(self.declinePressed), forControlEvents: .touchUpInside)
 

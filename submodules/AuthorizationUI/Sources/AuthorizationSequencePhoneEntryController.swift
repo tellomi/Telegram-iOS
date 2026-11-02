@@ -97,7 +97,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
         }
         if account != nil {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(presentationData.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+            self.navigationItem.rightBarButtonItem = self.tellomiLanguageItem()
         }
         
         if let countriesConfiguration {
@@ -117,6 +117,12 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         self.back()
     }
     
+    private func tellomiLanguageItem() -> UIBarButtonItem {
+        let item = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+        item.accessibilityIdentifier = "Auth.Login.Language"
+        return item
+    }
+
     @objc private func languagePressed() {
         self.presentTellomiLanguage()
     }
@@ -170,14 +176,37 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
     }
 
+    /// Weibo, WeChat, and QQ stay hidden. The sheet is only 找回账号 and 取消.
+    private func presentTellomiOtherMethods() {
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
+        let sheet = ActionSheetController(presentationData: self.presentationData)
+        let dismiss: () -> Void = { [weak sheet] in
+            sheet?.dismissAnimated()
+        }
+        sheet.setItemGroups([
+            ActionSheetItemGroup(items: [
+                ActionSheetButtonItem(title: copy.recoverAccount, action: { [weak self] in
+                    dismiss()
+                    self?.presentTellomiUnavailable()
+                })
+            ]),
+            ActionSheetItemGroup(items: [
+                ActionSheetButtonItem(title: copy.cancel, font: .bold, action: {
+                    dismiss()
+                })
+            ])
+        ])
+        self.present(sheet, in: .window(.root))
+    }
+
     private func presentTellomiUnavailable() {
         let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
         self.present(textAlertController(sharedContext: self.sharedContext, title: copy.unavailableTitle, text: copy.unavailableBody, actions: [TextAlertAction(type: .defaultAction, title: copy.ok, action: {})]), in: .window(.root))
     }
 
     private func presentTellomiAgreementPrompt() {
-        let kind: TellomiSignUpAgreement.Kind = self.controllerNode.tellomiSurface.showsCarrierAgreement ? .phone : .email
-        let prompt = TellomiAgreementPromptController(kind: kind, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), openUrl: { [weak self] url in
+        let kind: TellomiSignUpAgreement.Kind = self.controllerNode.tellomiSurface.agreementPinnedToBottom ? .phone : .email
+        let prompt = TellomiAgreementPromptController(kind: kind, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), dark: self.presentationData.theme.overallDarkAppearance, openUrl: { [weak self] url in
             self?.openUrl(url)
         })
         prompt.agreed = { [weak self] in
@@ -192,7 +221,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
 
     func updateNavigationItems() {
         if self.account != nil {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+            self.navigationItem.rightBarButtonItem = self.tellomiLanguageItem()
             if self.isNodeLoaded, self.controllerNode.tellomiSurface != .phoneCode {
                 let backTitle = tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)) ? "返回" : "Back"
                 self.navigationItem.leftBarButtonItem = UIBarButtonItem(backButtonAppearanceWithTitle: backTitle, target: self, action: #selector(self.tellomiSurfaceBackPressed))
@@ -292,6 +321,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
         self.controllerNode.tellomiUnavailable = { [weak self] in
             self?.presentTellomiUnavailable()
+        }
+        self.controllerNode.tellomiOtherMethods = { [weak self] in
+            self?.presentTellomiOtherMethods()
         }
         self.controllerNode.tellomiSurfaceChanged = { [weak self] in
             self?.updateNavigationItems()

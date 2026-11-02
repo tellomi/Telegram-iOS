@@ -267,7 +267,9 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         if let (_, _, type, _, _, _, _) = self.data {
             switch type {
             case .sms, .email, .firebase, .call, .otherSession:
-                self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+                let item = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+                item.accessibilityIdentifier = "Auth.Login.Language"
+                self.navigationItem.rightBarButtonItem = item
                 return
             default:
                 break

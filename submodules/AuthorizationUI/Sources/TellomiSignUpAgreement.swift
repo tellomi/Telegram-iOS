@@ -145,9 +145,6 @@ final class TellomiSignUpAgreement: NSObject {
                 link("用戶協議", TellomiSignUpAgreement.termsURL)
                 toggle(" 和 ", color: body)
                 link("隱私政策", TellomiSignUpAgreement.privacyURL)
-                toggle(" 以及 ", color: body)
-                link("運營商服務協議", TellomiLoginChrome.legalURL)
-                toggle("，運營商將對你提供的手機號進行驗證", color: body)
             case .email:
                 toggle("已閱讀並同意 ", color: body)
                 link("用戶協議", TellomiSignUpAgreement.termsURL)
@@ -166,9 +163,6 @@ final class TellomiSignUpAgreement: NSObject {
                 link("用户协议", TellomiSignUpAgreement.termsURL)
                 toggle(" 和 ", color: body)
                 link("隐私政策", TellomiSignUpAgreement.privacyURL)
-                toggle(" 以及 ", color: body)
-                link("运营商服务协议", TellomiLoginChrome.legalURL)
-                toggle("，运营商将对你提供的手机号进行验证", color: body)
             case .email:
                 toggle("已阅读并同意 ", color: body)
                 link("用户协议", TellomiSignUpAgreement.termsURL)
@@ -192,7 +186,6 @@ final class TellomiSignUpAgreement: NSObject {
                 link("Terms", TellomiSignUpAgreement.termsURL)
                 toggle(" and ", color: body)
                 link("Privacy Policy", TellomiSignUpAgreement.privacyURL)
-                toggle(", and the carrier will verify this phone number.", color: body)
             }
         }
         let paragraph = NSMutableParagraphStyle()
