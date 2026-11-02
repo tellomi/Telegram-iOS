@@ -304,23 +304,30 @@ def slot_svg(name, mark_scale):
 
 
 def write_alternates(mark_scale):
-    upstream = Path(__file__).resolve().parents[2] / "Telegram" / "Telegram-iOS"
+    # Sizes come from the icons already in Tellomi/Brand/Alternates.
+    # The upstream Telegram-iOS/*.alticon folders are not the packaged art.
     dest_root = ROOT / "Alternates"
-    if dest_root.exists():
-        shutil.rmtree(dest_root)
+    slots = []
+    for folder in sorted(dest_root.glob("*.alticon")):
+        name = folder.name[: -len(".alticon")]
+        files = []
+        for png in sorted(folder.glob("*.png")):
+            with Image.open(png) as image:
+                files.append((png.name, image.size[0]))
+        slots.append((name, folder.name, files))
+    if not slots:
+        raise SystemExit("Tellomi/Brand/Alternates has no .alticon slots to resize")
+    shutil.rmtree(dest_root)
     dest_root.mkdir()
 
-    for folder in sorted(upstream.glob("*.alticon")):
-        name = folder.name[: -len(".alticon")]
+    for name, folder_name, files in slots:
         svg = slot_svg(name, mark_scale)
-        out = dest_root / folder.name
+        out = dest_root / folder_name
         out.mkdir()
         present = set()
-        for png in folder.glob("*.png"):
-            with Image.open(png) as image:
-                pixels = image.size[0]
+        for filename, pixels in files:
             present.add(pixels)
-            render(svg, pixels, out / png.name)
+            render(svg, pixels, out / filename)
         # ITMS-90892: every iPad alternate icon needs 76pt @2x and 83.5pt @2x
         # outside the asset catalog. Upstream never shipped these for Premium
         # or WhiteFilled, so render them from the same slot artwork.
