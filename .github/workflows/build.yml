@@ -144,18 +144,38 @@ jobs:
             --configuration=release_sim_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
+          # Bazel prints the product as bazel-bin/Telegram/Telegram.ipa.
+          # That symlink is the stable path. The real file for
+          # release_sim_arm64 lives under
+          # bazel-out/ios_sim_arm64-opt-ios-sim_arm64-min*-ST-*/bin/,
+          # not the device applebin_ios-ios_arm*-opt-ST-* directory the
+          # old glob used (run 41374450746).
           OUTPUT_PATH="build/artifacts"
           rm -rf "$OUTPUT_PATH"
           mkdir -p "$OUTPUT_PATH"
           shopt -s nullglob
-          ipas=(bazel-out/applebin_ios-ios_*arm*-opt-ST-*/bin/Telegram/Telegram.ipa)
-          if [ ${#ipas[@]} -eq 0 ]; then
-            echo "No Telegram.ipa under bazel-out"
+          ipa=""
+          if [ -e bazel-bin/Telegram/Telegram.ipa ]; then
+            ipa="bazel-bin/Telegram/Telegram.ipa"
+          else
+            candidates=(
+              bazel-out/ios_sim_arm64-opt-*/bin/Telegram/Telegram.ipa
+              bazel-out/applebin_ios-ios_*arm*-opt-ST-*/bin/Telegram/Telegram.ipa
+            )
+            if [ ${#candidates[@]} -gt 0 ]; then
+              ipa="${candidates[0]}"
+            fi
+          fi
+          if [ -z "$ipa" ]; then
+            echo "No Telegram.ipa at bazel-bin/Telegram/Telegram.ipa or under bazel-out"
             exit 1
           fi
-          cp "${ipas[@]}" "$OUTPUT_PATH/"
+          echo "Collecting IPA from ${ipa}"
+          cp -L "$ipa" "$OUTPUT_PATH/Telegram.ipa"
+          test -s "$OUTPUT_PATH/Telegram.ipa"
 
-          dsyms=(bazel-out/applebin_ios-ios_*arm*-opt-ST-*/bin/Telegram/*.dSYM)
+          ipa_dir="$(dirname "$ipa")"
+          dsyms=("$ipa_dir"/*.dSYM)
           if [ ${#dsyms[@]} -gt 0 ]; then
             mkdir -p build/DSYMs
             for f in "${dsyms[@]}"; do
