@@ -419,13 +419,15 @@ Teamgram does not implement Premium, Stars, gifts, TON, Fragment, channel ads, B
 
 ## Welcome art and empty states
 
-The six-page OpenGL tour is unchanged as a mechanism. The paper-plane and sphere textures are the traced logo from `Tellomi/Brand/logo.svg`. The words are a dating app, in English, Simplified Chinese, and Traditional Chinese, in the same page order.
+The six-page OpenGL tour still pages with the same scroll. Page 1 draws the Tellomi logo. Pages 2-6 each draw one MingCute mark (location, cellphone, chat-3, pic, lock) at the logo's ink size, sliding with `scroll_offset`. The old per-page Telegram scenes are not drawn.
 
 Empty chat, empty folder, no-results, calls placeholder, two-factor intro, and the phone-entry sticker are one monochrome mark instead of the duck. Other bundled stickers are still the upstream files.
 
 | File | Change |
 | --- | --- |
 | `submodules/AuthorizationUI/Sources/TellomiIntroCopy.swift` | Dating copy. Traditional is its own set. |
-| `submodules/RMIntro/.../telegram_plane1@2x.png`, `telegram_sphere@2x.png` | Logo textures. |
+| `Tellomi/Brand/Intro/*.svg` | MingCute sources for the five later pages. |
+| `Telegram-iOS/Resources/intro/intro_page_*.png` | Logo plus those five marks. The same files are under `RMIntro`. |
+| `animations.c`, `RMIntroViewController.m` | Draw the six marks and slide them with the page. |
 | `ChatListEmpty.tgs`, `ChatListFilterEmpty.tgs`, `ChatListNoResults.tgs`, `CallsPlaceholder.tgs`, `TwoFactorSetupIntro.tgs`, `IntroPhone.tgs` | Monochrome mark. |
 | `Telegram/Telegram-iOS/*.alticon` | Deleted. Not packaged. |
