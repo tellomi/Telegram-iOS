@@ -657,6 +657,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     var tellomiSurfaceChanged: (() -> Void)?
     private let proceedNode: SolidRoundedButtonNode
     private(set) var tellomiSurface: TellomiLoginSurface = .phoneCode
+    private var tellomiDismissTap: UITapGestureRecognizer?
     private var emailLogin: Bool {
         return self.tellomiSurface.isEmail
     }
@@ -926,6 +927,12 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.agreementRow?.onLink = { [weak self] url in
             self?.tellomiOpenUrl?(url)
         }
+        self.agreementRow?.onPreferredHeight = { [weak self] _ in
+            guard let self, let (layout, navigationBarHeight) = self.layoutArguments else {
+                return
+            }
+            self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
+        }
         self.phoneAndCountryNode.keyPressed = { [weak self] num in
             if let strongSelf = self, !strongSelf.managedAnimationNode.isHidden {
                 strongSelf.managedAnimationNode.animate(num: num)
@@ -974,6 +981,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         if self.tellomiLoginHome {
             let tap = UITapGestureRecognizer(target: self, action: #selector(self.tellomiBackgroundTapped(_:)))
             tap.cancelsTouchesInView = false
+            tap.delegate = self
+            self.tellomiDismissTap = tap
             self.view.addGestureRecognizer(tap)
             let swipe = UISwipeGestureRecognizer(target: self, action: #selector(self.tellomiDismissKeyboard))
             swipe.direction = .down
@@ -993,19 +1002,33 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     }
 
     @objc private func tellomiBackgroundTapped(_ gesture: UITapGestureRecognizer) {
-        let point = gesture.location(in: self.view)
-        guard let hit = self.view.hitTest(point, with: nil) else {
-            self.tellomiDismissKeyboard()
+        guard gesture.state == .ended else {
             return
         }
-        var view: UIView? = hit
-        while let current = view, current !== self.view {
-            if current is UITextField || current is UIControl {
-                return
-            }
-            view = current.superview
+        let point = gesture.location(in: self.view)
+        let hit = self.view.hitTest(point, with: nil)
+        if self.tellomiViewKeepsKeyboard(hit) {
+            return
         }
         self.tellomiDismissKeyboard()
+    }
+
+    /// Checkbox, agreement text, and the other login controls are plain views, not `UIControl`s.
+    /// A tap on them must not fall through to the keyboard-dismiss recognizer.
+    private func tellomiViewKeepsKeyboard(_ view: UIView?) -> Bool {
+        guard let view else {
+            return false
+        }
+        if view is UIControl || view is UITextField || view is UITextView {
+            return true
+        }
+        let hosts = [self.agreementRow?.view, self.emailRowNode?.view, self.proceedNode.view, self.phoneAndCountryNode.view, self.emailFieldNode?.view].compactMap { $0 }
+        for host in hosts {
+            if view === host || view.isDescendant(of: host) {
+                return true
+            }
+        }
+        return false
     }
 
     @objc private func tellomiDragged(_ gesture: UIPanGestureRecognizer) {
@@ -2081,5 +2104,14 @@ private final class ManagedPhoneAnimationNode: ManagedAnimationNode {
         }
         let index = max(0, min(self.nodes.count - 1, num - 1))
         self.nodes[index].animatePress()
+    }
+}
+
+extension AuthorizationSequencePhoneEntryControllerNode: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard gestureRecognizer === self.tellomiDismissTap else {
+            return true
+        }
+        return !self.tellomiViewKeepsKeyboard(touch.view)
     }
 }

@@ -51,11 +51,14 @@ final class TellomiAgreementRow: ASDisplayNode {
     private let checkboxButton = HighlightableButtonNode()
     var onToggle: (() -> Void)?
     var onLink: ((String) -> Void)?
+    /// Fired when `layout()` finds the row is shorter than the wrapped text, so the parent can grow the frame.
+    var onPreferredHeight: ((CGFloat) -> Void)?
     private var centered = false
     private var measuredText = CGSize()
     private var dark = false
     private var checked = false
     private var labelTapInstalled = false
+    private var reportingHeight = false
 
     init(textNode: ImmediateTextNode) {
         self.textNode = textNode
@@ -63,6 +66,7 @@ final class TellomiAgreementRow: ASDisplayNode {
         self.label.numberOfLines = 0
         self.label.lineBreakMode = .byWordWrapping
         self.label.backgroundColor = .clear
+        self.clipsToBounds = false
         self.label.isUserInteractionEnabled = true
         self.label.isAccessibilityElement = true
         self.label.accessibilityTraits = .staticText
@@ -95,26 +99,69 @@ final class TellomiAgreementRow: ASDisplayNode {
         self.centered = centered
         self.textNode.isHidden = true
         self.textNode.isAccessibilityElement = false
-        let box: CGFloat = 18.0
-        let gap: CGFloat = 8.0
-        let textWidth = max(1.0, width - box - gap)
-        let attributed = self.textNode.attributedText ?? NSAttributedString()
-        self.label.attributedText = attributed
+        let measured = self.measureText(rowWidth: width)
+        self.measuredText = measured
+        self.applyLabelText()
+        return CGSize(width: width, height: self.rowHeight(for: measured))
+    }
+
+    /// Wrapped size at the width the row actually has: the row minus the checkbox and the gap.
+    /// The label always occupies that full width when the sentence wraps, so a later layout pass
+    /// cannot shrink it back to the first line.
+    private func measureText(rowWidth: CGFloat) -> CGSize {
+        let textWidth = self.textWidth(in: rowWidth)
+        let text = self.wrappingText(self.textNode.attributedText ?? NSAttributedString())
+        guard text.length > 0, textWidth > 1.0 else {
+            return CGSize(width: textWidth, height: 18.0)
+        }
+        let storage = NSTextStorage(attributedString: text)
+        let manager = NSLayoutManager()
+        let container = NSTextContainer(size: CGSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0.0
+        container.lineBreakMode = .byWordWrapping
+        container.maximumNumberOfLines = 0
+        manager.addTextContainer(container)
+        storage.addLayoutManager(manager)
+        manager.ensureLayout(for: container)
+        let used = manager.usedRect(for: container)
+        var lines = 0
+        manager.enumerateLineFragments(forGlyphRange: manager.glyphRange(for: container)) { _, _, _, _, _ in
+            lines += 1
+        }
+        let height = ceil(max(used.height, 18.0))
+        let width = lines > 1 ? textWidth : min(textWidth, ceil(max(used.width, 1.0)))
+        return CGSize(width: width, height: height)
+    }
+
+    private func textWidth(in rowWidth: CGFloat) -> CGFloat {
+        return max(1.0, rowWidth - 18.0 - 8.0)
+    }
+
+    private func rowHeight(for text: CGSize) -> CGFloat {
+        return max(44.0, text.height + 16.0)
+    }
+
+    private func wrappingText(_ source: NSAttributedString) -> NSAttributedString {
+        let text = NSMutableAttributedString(attributedString: source)
+        guard text.length > 0 else {
+            return text
+        }
+        let paragraph = (text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        text.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: text.length))
+        return text
+    }
+
+    private func applyLabelText() {
+        let text = self.wrappingText(self.textNode.attributedText ?? NSAttributedString())
         self.label.numberOfLines = 0
         self.label.lineBreakMode = .byWordWrapping
-        self.label.preferredMaxLayoutWidth = textWidth
-        let plain = attributed.string
+        self.label.attributedText = text
+        self.label.lineBreakMode = .byWordWrapping
+        self.label.numberOfLines = 0
+        let plain = text.string
         self.label.accessibilityLabel = plain
         self.accessibilityLabel = plain
-        let bounds = attributed.boundingRect(with: CGSize(width: textWidth, height: 10000.0), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).size
-        let fitted = self.label.sizeThatFits(CGSize(width: textWidth, height: 10000.0))
-        let textHeight = ceil(max(bounds.height, fitted.height, 18.0))
-        let wraps = textHeight > 24.0
-        let usedWidth = wraps ? textWidth : min(textWidth, ceil(max(bounds.width, fitted.width, 1.0)))
-        let textSize = CGSize(width: usedWidth, height: textHeight)
-        self.measuredText = textSize
-        let height = max(44.0, textSize.height + 16.0)
-        return CGSize(width: width, height: height)
     }
 
     @objc private func checkboxPressed() {
@@ -179,9 +226,19 @@ final class TellomiAgreementRow: ASDisplayNode {
         let box: CGFloat = 18.0
         let gap: CGFloat = 8.0
         let textY: CGFloat = 13.0
-        let availableTextWidth = max(1.0, self.bounds.width - box - gap)
-        let measured = self.measuredText.height > 0.0 ? self.measuredText : CGSize(width: availableTextWidth, height: max(18.0, self.bounds.height - textY))
+        let rowWidth = self.bounds.width > 1.0 ? self.bounds.width : (self.measuredText.width + box + gap)
+        let measured = self.measureText(rowWidth: rowWidth)
+        self.measuredText = measured
+        self.applyLabelText()
+        let needed = self.rowHeight(for: measured)
+        if !self.reportingHeight, self.bounds.height > 1.0, needed > self.bounds.height + 1.0 {
+            self.reportingHeight = true
+            self.onPreferredHeight?(needed)
+            self.reportingHeight = false
+        }
+        let availableTextWidth = self.textWidth(in: rowWidth)
         let textWidth = min(max(measured.width, 1.0), availableTextWidth)
+        self.label.preferredMaxLayoutWidth = textWidth
         let groupWidth = box + gap + textWidth
         let originX: CGFloat
         if self.centered {

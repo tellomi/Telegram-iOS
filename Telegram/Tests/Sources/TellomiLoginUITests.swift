@@ -107,6 +107,37 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertGreaterThan(list.cells.count, 0)
     }
 
+    func testEnglishAgreementWrapsAndCheckboxKeepsTheKeyboard() throws {
+        self.openPhoneLogin()
+        let language = app.buttons["Auth.Login.Language"]
+        XCTAssertTrue(language.waitForExistence(timeout: 5.0))
+        if !language.label.contains("English") {
+            language.tap()
+            let english = app.buttons["English"]
+            XCTAssertTrue(english.waitForExistence(timeout: 5.0))
+            english.tap()
+        }
+        let agreement = app.descendants(matching: .any)["Auth.Login.Agreement"]
+        XCTAssertTrue(agreement.waitForExistence(timeout: 5.0))
+        let englishSentence = NSPredicate(format: "label CONTAINS %@", "Privacy")
+        expectation(for: englishSentence, evaluatedWith: agreement)
+        waitForExpectations(timeout: 5.0)
+        XCTAssertGreaterThan(agreement.frame.height, 30.0, "English agreement is still one line: \(agreement.frame) \(agreement.label)")
+
+        let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
+        let checkbox = app.buttons["Auth.Agreement.Checkbox"]
+        XCTAssertTrue(checkbox.waitForExistence(timeout: 5.0))
+        phone.tap()
+        let hittable = NSPredicate(format: "isHittable == true")
+        expectation(for: hittable, evaluatedWith: checkbox)
+        waitForExpectations(timeout: 5.0)
+        XCTAssertTrue(self.keyboardIsVisible(), "tapping the phone field should show the keyboard")
+        checkbox.tap()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        XCTAssertTrue(self.keyboardIsVisible(), "toggling the agreement checkbox dismissed the keyboard")
+        XCTAssertEqual(checkbox.value as? String, "1")
+    }
+
     func testSendCodeLeavesThePhoneScreen() throws {
         self.openPhoneLogin()
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))
