@@ -28,6 +28,13 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Auth.Login.OtherMethods"].exists)
         XCTAssertFalse(app.buttons["Auth.Login.RecoverAccount"].exists)
         XCTAssertFalse(app.buttons["Auth.PhoneEntry.EmailSwitch"].exists)
+        let agreement = app.descendants(matching: .any)["Auth.Login.Agreement"]
+        XCTAssertTrue(agreement.waitForExistence(timeout: 5.0))
+        XCTAssertFalse(agreement.label.isEmpty, "agreement accessibility label is empty")
+        XCTAssertTrue(agreement.label.contains("Privacy") || agreement.label.contains("隐私") || agreement.label.contains("隱私"), "agreement label is truncated: \(agreement.label)")
+        let send = app.buttons["Auth.PhoneEntry.ContinueButton"]
+        XCTAssertTrue(send.waitForExistence(timeout: 5.0))
+        XCTAssertLessThan(send.frame.maxY, agreement.frame.minY, "verify button overlaps the agreement row")
     }
 
     func testContinueStaysDisabledUntilTheNumberIsComplete() throws {
@@ -87,6 +94,13 @@ final class TellomiLoginUITests: XCTestCase {
         self.openPhoneLogin()
         let country = app.buttons["Auth.PhoneEntry.CountryButton"]
         XCTAssertTrue(country.waitForExistence(timeout: 5.0))
+        let language = app.buttons["Auth.Login.Language"]
+        if language.label.contains("中文") {
+            let localized = country.label.unicodeScalars.contains { scalar in
+                scalar.value >= 0x4E00 && scalar.value <= 0x9FFF
+            }
+            XCTAssertTrue(localized, "country accessibility label is not localized: \(country.label)")
+        }
         country.tap()
         let list = app.tables["Auth.Country.List"]
         XCTAssertTrue(list.waitForExistence(timeout: 5.0))
@@ -110,14 +124,25 @@ final class TellomiLoginUITests: XCTestCase {
         waitForExpectations(timeout: 5.0)
         send.tap()
 
-        let deadline = Date().addingTimeInterval(30.0)
+        let deadline = Date().addingTimeInterval(12.0)
         while Date() < deadline {
-            if app.textFields["Auth.CodeEntry.CodeField"].exists || app.alerts.firstMatch.exists {
+            if app.textFields["Auth.CodeEntry.CodeField"].exists {
                 return
             }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            let alert = app.descendants(matching: .any)["Auth.Login.ErrorAlert"]
+            if alert.exists {
+                let nested = alert.staticTexts.allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }.joined(separator: "\n")
+                let message = [alert.label, nested].filter { !$0.isEmpty }.joined(separator: "\n")
+                XCTFail("server error alert: \(message.isEmpty ? "(no text)" : message)")
+                return
+            }
+            if app.alerts.firstMatch.exists {
+                XCTFail("system alert: \(app.alerts.firstMatch.label)")
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         }
-        XCTFail("send code did not reach the code screen or an error alert within 30s")
+        XCTFail("send code did not reach the code screen or an error alert")
     }
 
     private func openPhoneLogin() {

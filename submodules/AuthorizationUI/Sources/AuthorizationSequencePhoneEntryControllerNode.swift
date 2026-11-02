@@ -389,13 +389,34 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         self.phoneInputNode.numberField.textField.attributedPlaceholder = NSAttributedString(string: self.tellomiPlaceholder, font: Font.regular(17.0), textColor: TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).placeholder)
     }
 
+    private var tellomiCountryId: String?
+
     private func updateCountryButton(countryId: String, name: String) {
         if self.tellomiCompact {
+            self.tellomiCountryId = countryId
             self.countryButton.setTitle("", with: Font.regular(17.0), with: .clear, for: [])
-            self.countryButton.accessibilityLabel = name
+            self.countryButton.accessibilityLabel = self.tellomiLocalizedCountryName(id: countryId, fallback: name)
             return
         }
         self.countryButton.setCountryTitle(countryId: countryId, name: name, font: Font.regular(20.0), color: self.theme.list.itemAccentColor)
+    }
+
+    func tellomiRefreshCountryAccessibility() {
+        guard self.tellomiCompact, let id = self.tellomiCountryId else {
+            return
+        }
+        let fallback = self.countryButton.accessibilityLabel ?? id
+        self.countryButton.accessibilityLabel = self.tellomiLocalizedCountryName(id: id, fallback: fallback)
+    }
+
+    /// `lookupCountryNameById` formats with `strings.baseLanguageCode`, which stays English
+    /// before the Chinese langpack is applied, so CN reads "China mainland".
+    private func tellomiLocalizedCountryName(id: String, fallback: String) -> String {
+        let locale = tellomiRegionLocale(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        if let name = locale.localizedString(forRegionCode: id), !name.isEmpty {
+            return name
+        }
+        return fallback
     }
 
     @objc func countryPressed() {
@@ -902,6 +923,9 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             }
             self.tellomiAgreement.setAgreed(!self.tellomiAgreement.agreed)
         }
+        self.agreementRow?.onLink = { [weak self] url in
+            self?.tellomiOpenUrl?(url)
+        }
         self.phoneAndCountryNode.keyPressed = { [weak self] num in
             if let strongSelf = self, !strongSelf.managedAnimationNode.isHidden {
                 strongSelf.managedAnimationNode.animate(num: num)
@@ -999,10 +1023,14 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private var forcedButtonFrame: CGRect?
     
     func willAnimateIn(buttonFrame: CGRect, buttonTitle: String, animationSnapshot: UIView, textSnapshot: UIView) {
-        self.proceedNode.frame = buttonFrame
-        
-        self.proceedNode.isEnabled = true
-        self.proceedNode.title = buttonTitle
+        // Change Phone Number morphs the splash button into Continue. Login already placed
+        // 验证并登录 under the field; copying the splash frame parks it on the agreement row
+        // until the next keyboard layout.
+        if !self.tellomiLoginHome {
+            self.proceedNode.frame = buttonFrame
+            self.proceedNode.isEnabled = true
+            self.proceedNode.title = buttonTitle
+        }
         
         self.animationSnapshotView = animationSnapshot
         self.view.insertSubview(animationSnapshot, at: 0)
@@ -1244,6 +1272,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.emailRowNode?.accessibilityLabel = loginCopy.emailLogin
         self.orDividerNode?.setTitle(loginCopy.orDivider)
         self.orDividerNode?.setNeedsLayout()
+        self.phoneAndCountryNode.tellomiRefreshCountryAccessibility()
         if surface.isEmail {
             self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
             self.emailFieldNode?.setPlaceholder(emailCopy.placeholder, theme: self.theme)
@@ -1266,7 +1295,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.animationNode.visibility = false
         self.managedAnimationNode.isHidden = true
         self.contactSyncNode.isHidden = true
-        self.agreementNode.isHidden = false
+        self.agreementNode.isHidden = true
         self.agreementRow?.isHidden = false
         self.proceedNode.isHidden = false
 
@@ -1305,6 +1334,9 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         transition.updateFrame(node: self.proceedNode, frame: CGRect(x: contentX, y: y, width: contentWidth, height: proceedHeight))
         y += proceedHeight + 16.0
 
+        let keyboardHeight = layout.inputHeight ?? 0.0
+        let bottomInset = keyboardHeight > 0.0 ? keyboardHeight : max(layout.safeInsets.bottom, layout.intrinsicInsets.bottom)
+        let aboveBottom = layout.size.height - bottomInset - agreementSize.height - 8.0
         if showHomeRows {
             if let orDividerNode = self.orDividerNode {
                 transition.updateFrame(node: orDividerNode, frame: CGRect(x: contentX, y: y, width: contentWidth, height: 24.0))
@@ -1314,13 +1346,18 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
                 transition.updateFrame(node: emailRowNode, frame: CGRect(x: contentX, y: y, width: contentWidth, height: 48.0))
                 y += 48.0
             }
-            let safeBottom = max(layout.safeInsets.bottom, layout.intrinsicInsets.bottom)
-            let bottom = layout.size.height - safeBottom - agreementSize.height - 8.0
+            // Keyboard up: pin the agreement just above it so the checkbox stays tappable.
+            // Keyboard down: pin it to the safe-area bottom, under the email row.
+            let agreementY = keyboardHeight > 0.0 ? aboveBottom : max(y + 12.0, aboveBottom)
             if let agreementRow = self.agreementRow {
-                transition.updateFrame(node: agreementRow, frame: CGRect(x: contentX, y: max(y + 12.0, bottom), width: contentWidth, height: agreementSize.height))
+                transition.updateFrame(node: agreementRow, frame: CGRect(x: contentX, y: agreementY, width: contentWidth, height: agreementSize.height))
             }
         } else if let agreementRow = self.agreementRow {
-            transition.updateFrame(node: agreementRow, frame: CGRect(x: contentX, y: y, width: contentWidth, height: agreementSize.height))
+            var agreementY = y
+            if keyboardHeight > 0.0, agreementY + agreementSize.height > layout.size.height - keyboardHeight - 8.0 {
+                agreementY = aboveBottom
+            }
+            transition.updateFrame(node: agreementRow, frame: CGRect(x: contentX, y: agreementY, width: contentWidth, height: agreementSize.height))
         }
 
         if let agreementRow = self.agreementRow {

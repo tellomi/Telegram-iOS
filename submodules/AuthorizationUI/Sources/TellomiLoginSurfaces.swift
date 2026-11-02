@@ -4,6 +4,7 @@ import AsyncDisplayKit
 import Display
 import SolidRoundedButtonNode
 import TelegramPresentationData
+import TextFormat
 
 func tellomiSymbol(_ name: String, pointSize: CGFloat, weight: UIImage.SymbolWeight = .regular) -> UIImage? {
     let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: weight)
@@ -44,26 +45,39 @@ func tellomiMailIcon(dark: Bool) -> UIImage? {
 /// checkbox is tappable without relying on glyph hit-testing.
 final class TellomiAgreementRow: ASDisplayNode {
     let textNode: ImmediateTextNode
+    /// Visible sentence. TextNode truncates this line (ellipsis, empty accessibility label) even with an unlimited line count.
+    private let label = UILabel()
     private let checkbox = ASImageNode()
     private let checkboxButton = HighlightableButtonNode()
     var onToggle: (() -> Void)?
+    var onLink: ((String) -> Void)?
     private var centered = false
     private var measuredText = CGSize()
     private var dark = false
     private var checked = false
+    private var labelTapInstalled = false
 
     init(textNode: ImmediateTextNode) {
         self.textNode = textNode
         super.init()
+        self.label.numberOfLines = 0
+        self.label.lineBreakMode = .byWordWrapping
+        self.label.backgroundColor = .clear
+        self.label.isUserInteractionEnabled = true
+        self.label.isAccessibilityElement = true
+        self.label.accessibilityTraits = .staticText
+        self.label.accessibilityIdentifier = "Auth.Login.Agreement"
         self.checkbox.image = tellomiCheckboxImage(checked: false)
         self.checkbox.isUserInteractionEnabled = false
         self.checkboxButton.accessibilityTraits = [.button]
         self.checkboxButton.accessibilityIdentifier = "Auth.Agreement.Checkbox"
+        self.textNode.isHidden = true
+        self.textNode.isAccessibilityElement = false
         self.addSubnode(self.textNode)
         self.addSubnode(self.checkbox)
         self.addSubnode(self.checkboxButton)
         self.checkboxButton.addTarget(self, action: #selector(self.checkboxPressed), forControlEvents: .touchUpInside)
-        self.accessibilityIdentifier = "Auth.Login.Agreement"
+        self.isAccessibilityElement = false
     }
 
     func setChecked(_ checked: Bool) {
@@ -79,12 +93,25 @@ final class TellomiAgreementRow: ASDisplayNode {
 
     func updateLayout(width: CGFloat, centered: Bool) -> CGSize {
         self.centered = centered
-        self.textNode.maximumNumberOfLines = 0
+        self.textNode.isHidden = true
+        self.textNode.isAccessibilityElement = false
         let box: CGFloat = 18.0
         let gap: CGFloat = 8.0
         let textWidth = max(1.0, width - box - gap)
-        // A huge height makes TextNode treat the line as the last one and truncate it.
-        let textSize = self.textNode.updateLayout(CGSize(width: textWidth, height: 1000.0))
+        let attributed = self.textNode.attributedText ?? NSAttributedString()
+        self.label.attributedText = attributed
+        self.label.numberOfLines = 0
+        self.label.lineBreakMode = .byWordWrapping
+        self.label.preferredMaxLayoutWidth = textWidth
+        let plain = attributed.string
+        self.label.accessibilityLabel = plain
+        self.accessibilityLabel = plain
+        let bounds = attributed.boundingRect(with: CGSize(width: textWidth, height: 10000.0), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).size
+        let fitted = self.label.sizeThatFits(CGSize(width: textWidth, height: 10000.0))
+        let textHeight = ceil(max(bounds.height, fitted.height, 18.0))
+        let wraps = textHeight > 24.0
+        let usedWidth = wraps ? textWidth : min(textWidth, ceil(max(bounds.width, fitted.width, 1.0)))
+        let textSize = CGSize(width: usedWidth, height: textHeight)
         self.measuredText = textSize
         let height = max(44.0, textSize.height + 16.0)
         return CGSize(width: width, height: height)
@@ -94,13 +121,66 @@ final class TellomiAgreementRow: ASDisplayNode {
         self.onToggle?()
     }
 
+    @objc private func labelTapped(_ gesture: UITapGestureRecognizer) {
+        guard gesture.state == .ended else {
+            return
+        }
+        let point = gesture.location(in: self.label)
+        if let url = self.linkURL(at: point), !url.isEmpty {
+            self.onLink?(url)
+        } else {
+            self.onToggle?()
+        }
+    }
+
+    private func linkURL(at point: CGPoint) -> String? {
+        guard let text = self.label.attributedText, text.length > 0, self.label.bounds.width > 0.0 else {
+            return nil
+        }
+        let storage = NSTextStorage(attributedString: text)
+        let manager = NSLayoutManager()
+        let container = NSTextContainer(size: CGSize(width: self.label.bounds.width, height: max(self.label.bounds.height, 10000.0)))
+        container.lineFragmentPadding = 0.0
+        container.lineBreakMode = .byWordWrapping
+        container.maximumNumberOfLines = 0
+        manager.addTextContainer(container)
+        storage.addLayoutManager(manager)
+        let glyphIndex = manager.glyphIndex(for: point, in: container, fractionOfDistanceThroughGlyph: nil)
+        let glyphRect = manager.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: container)
+        guard glyphRect.insetBy(dx: -8.0, dy: -8.0).contains(point) else {
+            return nil
+        }
+        let characterIndex = manager.characterIndexForGlyph(at: glyphIndex)
+        guard characterIndex >= 0, characterIndex < text.length else {
+            return nil
+        }
+        return text.attribute(NSAttributedString.Key(rawValue: TelegramTextAttributes.URL), at: characterIndex, effectiveRange: nil) as? String
+    }
+
+    private func installLabelIfNeeded() {
+        guard self.isNodeLoaded, self.label.superview == nil else {
+            return
+        }
+        self.view.addSubview(self.label)
+        if !self.labelTapInstalled {
+            self.label.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.labelTapped(_:))))
+            self.labelTapInstalled = true
+        }
+    }
+
+    override func didLoad() {
+        super.didLoad()
+        self.installLabelIfNeeded()
+    }
+
     override func layout() {
         super.layout()
+        self.installLabelIfNeeded()
         let box: CGFloat = 18.0
         let gap: CGFloat = 8.0
         let textY: CGFloat = 13.0
         let availableTextWidth = max(1.0, self.bounds.width - box - gap)
-        let measured = self.measuredText.width > 0.0 ? self.measuredText : CGSize(width: availableTextWidth, height: max(0.0, self.bounds.height - textY))
+        let measured = self.measuredText.height > 0.0 ? self.measuredText : CGSize(width: availableTextWidth, height: max(18.0, self.bounds.height - textY))
         let textWidth = min(max(measured.width, 1.0), availableTextWidth)
         let groupWidth = box + gap + textWidth
         let originX: CGFloat
@@ -112,7 +192,13 @@ final class TellomiAgreementRow: ASDisplayNode {
         let boxY = textY + 1.0
         self.checkbox.frame = CGRect(x: originX, y: boxY, width: box, height: box)
         self.checkboxButton.frame = CGRect(x: max(0.0, originX - 13.0), y: 0.0, width: 44.0, height: 44.0)
-        self.textNode.frame = CGRect(x: originX + box + gap, y: textY, width: textWidth, height: max(measured.height, 22.0))
+        let textFrame = CGRect(x: originX + box + gap, y: textY, width: textWidth, height: max(measured.height, 22.0))
+        self.label.frame = textFrame
+        self.textNode.frame = textFrame
+        if self.isNodeLoaded {
+            self.view.bringSubviewToFront(self.checkbox.view)
+            self.view.bringSubviewToFront(self.checkboxButton.view)
+        }
     }
 }
 
