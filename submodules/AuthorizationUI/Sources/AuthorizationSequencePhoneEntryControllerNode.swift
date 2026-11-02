@@ -947,9 +947,51 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         super.didLoad()
         
         self.titleNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.debugTap(_:))))
+        if self.tellomiLoginHome {
+            let tap = UITapGestureRecognizer(target: self, action: #selector(self.tellomiBackgroundTapped(_:)))
+            tap.cancelsTouchesInView = false
+            self.view.addGestureRecognizer(tap)
+            let swipe = UISwipeGestureRecognizer(target: self, action: #selector(self.tellomiDismissKeyboard))
+            swipe.direction = .down
+            swipe.cancelsTouchesInView = false
+            self.view.addGestureRecognizer(swipe)
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(self.tellomiDragged(_:)))
+            pan.cancelsTouchesInView = false
+            self.view.addGestureRecognizer(pan)
+        }
         #if DEBUG && false
         self.noticeNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.debugQrTap(_:))))
         #endif
+    }
+
+    @objc private func tellomiDismissKeyboard() {
+        self.view.endEditing(true)
+    }
+
+    @objc private func tellomiBackgroundTapped(_ gesture: UITapGestureRecognizer) {
+        let point = gesture.location(in: self.view)
+        guard let hit = self.view.hitTest(point, with: nil) else {
+            self.tellomiDismissKeyboard()
+            return
+        }
+        var view: UIView? = hit
+        while let current = view, current !== self.view {
+            if current is UITextField || current is UIControl {
+                return
+            }
+            view = current.superview
+        }
+        self.tellomiDismissKeyboard()
+    }
+
+    @objc private func tellomiDragged(_ gesture: UIPanGestureRecognizer) {
+        guard gesture.state == .ended || gesture.state == .changed else {
+            return
+        }
+        let translation = gesture.translation(in: self.view)
+        if translation.y > 24.0 && translation.y > abs(translation.x) {
+            self.tellomiDismissKeyboard()
+        }
     }
     
     private var animationSnapshotView: UIView?
@@ -1200,6 +1242,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let rowDark = self.theme.overallDarkAppearance
         self.emailRowNode?.setTitle(loginCopy.emailLogin, dark: rowDark)
         self.emailRowNode?.accessibilityLabel = loginCopy.emailLogin
+        self.orDividerNode?.setTitle(loginCopy.orDivider)
+        self.orDividerNode?.setNeedsLayout()
         if surface.isEmail {
             self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
             self.emailFieldNode?.setPlaceholder(emailCopy.placeholder, theme: self.theme)
@@ -1330,6 +1374,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         if let address, let emailFieldNode = self.emailFieldNode {
             emailFieldNode.setText(address)
         }
+        self.phoneAndCountryNode.phoneInputNode.numberField.textField.keyboardType = .numberPad
+        self.view.endEditing(true)
         self.refreshProceedEnabled()
         if let (layout, navigationBarHeight) = self.layoutArguments {
             self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
@@ -1357,7 +1403,6 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             return
         }
         self.setTellomiSurface(.emailCode)
-        self.activateInput()
     }
 
     private func applyTellomiMarks(dark: Bool) {
@@ -1368,6 +1413,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     
     private var debugTapCounter: (Double, Int) = (0.0, 0)
     @objc private func debugTap(_ recognizer: UITapGestureRecognizer) {
+        self.tellomiDismissKeyboard()
         if case .ended = recognizer.state {
             let timestamp = CACurrentMediaTime()
             if self.debugTapCounter.0 < timestamp - 0.4 {

@@ -17,7 +17,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
     
     private let accountManager: AccountManager<TelegramAccountManagerTypes>
     private let account: UnauthorizedAccount
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
     
     private let controller: RMIntroViewController
     
@@ -118,7 +118,11 @@ public final class AuthorizationSequenceSplashController: ViewController {
     }
     
     func applyPresentationTheme(_ theme: PresentationTheme) {
+        self.theme = theme
         self.startButton.updateTheme(TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance))
+        if self.isNodeLoaded {
+            self.controllerNode.backgroundColor = theme.list.plainBackgroundColor
+        }
         if self.isViewLoaded {
             self.view.backgroundColor = theme.list.plainBackgroundColor
         }

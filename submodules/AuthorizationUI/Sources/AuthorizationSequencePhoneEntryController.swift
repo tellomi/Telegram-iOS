@@ -165,6 +165,11 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
 
     public func applyPresentationTheme(_ presentationData: PresentationData) {
         self.presentationData = presentationData
+        self.statusBar.statusBarStyle = presentationData.theme.intro.statusBarStyle.style
+        if self.isViewLoaded {
+            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        }
+        self.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), strings: NavigationBarStrings(presentationStrings: presentationData.strings)), transition: .immediate)
         if self.isNodeLoaded {
             self.controllerNode.applyPresentationTheme(presentationData.theme)
         }
@@ -442,10 +447,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             if let (buttonFrame, buttonTitle, animationSnapshot, textSnapshot) = self.transitionInArguments {
                 self.controllerNode.willAnimateIn(buttonFrame: buttonFrame, buttonTitle: buttonTitle, animationSnapshot: animationSnapshot, textSnapshot: textSnapshot)
             }
-            Queue.mainQueue().justDispatch {
-                self.controllerNode.activateInput()
-            }
-        } else {
+        }
+        // Login phone and email open with no keyboard. Change Phone Number still focuses its field.
+        if self.account == nil {
             self.controllerNode.activateInput()
         }
     }
@@ -453,7 +457,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
-        if !self.animatingIn {
+        if !self.animatingIn, self.account == nil {
             self.controllerNode.activateInput()
         }
     }

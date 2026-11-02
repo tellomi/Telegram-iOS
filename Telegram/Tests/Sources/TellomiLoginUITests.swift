@@ -19,6 +19,8 @@ final class TellomiLoginUITests: XCTestCase {
         self.openPhoneLogin()
         let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
         XCTAssertTrue(phone.isHittable)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        XCTAssertFalse(self.keyboardIsVisible(), "phone login should open without a keyboard")
         XCTAssertFalse(app.textFields["Auth.PhoneEntry.EmailField"].isHittable)
         XCTAssertTrue(app.buttons["Auth.Login.Email"].isHittable)
         XCTAssertFalse(app.buttons["Auth.Login.Apple"].exists)
@@ -93,7 +95,12 @@ final class TellomiLoginUITests: XCTestCase {
 
     func testSendCodeLeavesThePhoneScreen() throws {
         self.openPhoneLogin()
-        app.buttons["Auth.Agreement.Checkbox"].tap()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        XCTAssertFalse(self.keyboardIsVisible(), "phone login should open without a keyboard")
+        let checkbox = app.buttons["Auth.Agreement.Checkbox"]
+        XCTAssertTrue(checkbox.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(checkbox.isHittable)
+        checkbox.tap()
         let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
         phone.tap()
         phone.typeText("13800000000")
@@ -121,5 +128,9 @@ final class TellomiLoginUITests: XCTestCase {
         }
         let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
         XCTAssertTrue(phone.waitForExistence(timeout: 25.0), "phone login did not appear after Start")
+    }
+
+    private func keyboardIsVisible() -> Bool {
+        return app.keyboards.firstMatch.exists
     }
 }

@@ -110,25 +110,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         
         self.presentationDataDisposable.set((self.sharedContext.presentationData
         |> deliverOnMainQueue).start(next: { [weak self] presentationData in
-            guard let self else {
-                return
-            }
-            guard presentationData.theme !== self.presentationData.theme else {
-                return
-            }
-            self.presentationData = self.presentationData.withTheme(presentationData.theme)
-            if self.isViewLoaded {
-                self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
-            }
-            for controller in self.viewControllers {
-                if let controller = controller as? AuthorizationSequencePhoneEntryController {
-                    controller.applyPresentationTheme(self.presentationData)
-                } else if let controller = controller as? AuthorizationSequenceCodeEntryController {
-                    controller.applyPresentationTheme(self.presentationData)
-                } else if let controller = controller as? AuthorizationSequenceSplashController {
-                    controller.applyPresentationTheme(presentationData.theme)
-                }
-            }
+            self?.tellomiApplyAppearance(presentationData)
         }))
 
         self.applicationStateDisposable = (self.sharedContext.applicationBindings.applicationIsActive
@@ -1550,9 +1532,55 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
+        self.tellomiApplyAppearance(self.sharedContext.currentPresentationData.with { $0 })
         if !self.didPlayPresentationAnimation {
             self.didPlayPresentationAnimation = true
             self.animateIn()
+        }
+    }
+
+    override public func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if #available(iOS 13.0, *) {
+            if previousTraitCollection?.userInterfaceStyle != self.traitCollection.userInterfaceStyle {
+                self.tellomiApplyAppearance(self.sharedContext.currentPresentationData.with { $0 })
+            }
+        }
+    }
+
+    /// Login follows the system appearance. The stored theme can still be the day theme when the window's trait arrives late, or when the system switches while this screen is up.
+    private func tellomiApplyAppearance(_ presentationData: PresentationData) {
+        var presentationData = presentationData
+        if #available(iOS 13.0, *) {
+            let wantsDark = self.traitCollection.userInterfaceStyle == .dark
+            if self.traitCollection.userInterfaceStyle != .unspecified, presentationData.theme.overallDarkAppearance != wantsDark {
+                presentationData = presentationData.withTheme(wantsDark ? defaultDarkPresentationTheme : defaultPresentationTheme)
+            }
+        }
+        let themeChanged = presentationData.theme !== self.presentationData.theme || presentationData.theme.overallDarkAppearance != self.presentationData.theme.overallDarkAppearance
+        self.presentationData = presentationData
+        guard themeChanged else {
+            return
+        }
+        if self.isViewLoaded {
+            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        }
+        let navigationStatusBar: NavigationStatusBarStyle
+        switch presentationData.theme.rootController.statusBarStyle {
+        case .black:
+            navigationStatusBar = .black
+        case .white:
+            navigationStatusBar = .white
+        }
+        self.updateTheme(NavigationControllerTheme(statusBar: navigationStatusBar, navigationBar: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), emptyAreaColor: presentationData.theme.list.plainBackgroundColor, separatorColor: .clear, opaqueBackgroundColor: presentationData.theme.list.plainBackgroundColor))
+        for controller in self.viewControllers {
+            if let controller = controller as? AuthorizationSequencePhoneEntryController {
+                controller.applyPresentationTheme(presentationData)
+            } else if let controller = controller as? AuthorizationSequenceCodeEntryController {
+                controller.applyPresentationTheme(presentationData)
+            } else if let controller = controller as? AuthorizationSequenceSplashController {
+                controller.applyPresentationTheme(presentationData.theme)
+            }
         }
     }
     

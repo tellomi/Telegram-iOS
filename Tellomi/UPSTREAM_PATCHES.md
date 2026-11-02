@@ -442,6 +442,8 @@ The phone screen is the login home. Primary buttons stay black (white in dark mo
 
 Apple, Google, 其他登录方式, 找回账号, and 密码登录 have no working sign-in, so those controls are not on the phone or email screens. The phone page keeps the field, 验证并登录, the 或 divider, 邮箱登录, and the agreement at the bottom. The email page is the address field, 验证并登录, and the agreement under the button. Back returns to the phone page. The password screen and the other-methods sheet are not in the login controller.
 
+Phone and email open with no keyboard. A tap on the field opens it; a tap on blank space or the title, or a downward drag, dismisses it. The phone field uses the number pad. The screens follow the system appearance (black page and white button in dark mode). Switching language rewrites every label, including 或. The SMS code subtitle's accessibility label is the same Chinese line that is drawn.
+
 | File | Change |
 | --- | --- |
 | `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Carrier sentence removed. |

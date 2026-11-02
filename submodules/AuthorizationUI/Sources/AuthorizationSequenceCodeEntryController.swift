@@ -18,7 +18,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     
     private let sharedContext: SharedAccountContext
     private let strings: PresentationStrings
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
     
     public var loginWithCode: ((String) -> Void)?
     public var signInWithApple: (() -> Void)?
@@ -356,6 +356,12 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     }
     
     public func applyPresentationTheme(_ presentationData: PresentationData) {
+        self.theme = presentationData.theme
+        self.statusBar.statusBarStyle = presentationData.theme.intro.statusBarStyle.style
+        if self.isViewLoaded {
+            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        }
+        self.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), strings: NavigationBarStrings(presentationStrings: presentationData.strings)), transition: .immediate)
         if self.isNodeLoaded {
             self.controllerNode.applyPresentationTheme(presentationData.theme)
         }
