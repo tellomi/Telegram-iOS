@@ -231,7 +231,7 @@ private final class PhoneAndCountryNode: ASDisplayNode {
             }
         }
         
-        self.phoneInputNode.number = "+1"
+        self.phoneInputNode.number = "+\(AuthorizationSequenceCountrySelectionController.defaultCountryCode())"
         self.phoneInputNode.returnAction = { [weak self] in
             self?.checkPhone?()
         }
@@ -530,6 +530,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     /// Password, email, and email-password are pushed screens. The controller owns the transition.
     var tellomiRequestSurface: ((TellomiLoginSurface) -> Void)?
     private let proceedNode: SolidRoundedButtonNode
+    /// The email home column scrolls when the keyboard leaves less room than the rows, so the agreement and the primary button stay clear of them.
+    private let tellomiFormScrollNode: ASScrollNode?
     private(set) var tellomiSurface: TellomiLoginSurface = .phoneCode
     /// Apple / Google / phone switch. Only the email root sets this.
     private let tellomiShowsHomeRows: Bool
@@ -785,6 +787,17 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             passwordErrorNode.displaysAsynchronously = false
             passwordErrorNode.isHidden = true
             self.passwordErrorNode = passwordErrorNode
+            let formScroll = ASScrollNode()
+            formScroll.scrollableDirections = ASScrollDirectionVerticalDirections
+            formScroll.view.alwaysBounceVertical = false
+            formScroll.view.showsVerticalScrollIndicator = true
+            formScroll.view.delaysContentTouches = false
+            formScroll.view.keyboardDismissMode = .none
+            if #available(iOS 11.0, *) {
+                formScroll.view.contentInsetAdjustmentBehavior = .never
+            }
+            formScroll.view.accessibilityIdentifier = "Auth.Login.Form"
+            self.tellomiFormScrollNode = formScroll
         } else {
             self.emailFieldNode = nil
             self.emailSwitchNode = nil
@@ -802,6 +815,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             self.circleEmailNode = nil
             self.circleMoreNode = nil
             self.passwordErrorNode = nil
+            self.tellomiFormScrollNode = nil
         }
         
         let loginCopy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings))
@@ -828,6 +842,9 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         
         self.backgroundColor = theme.list.plainBackgroundColor
         
+        if let formScroll = self.tellomiFormScrollNode {
+            self.addSubnode(formScroll)
+        }
         self.addSubnode(self.titleNode)
         self.addSubnode(self.noticeNode)
         self.addSubnode(self.titleActivateAreaNode)
@@ -1231,6 +1248,43 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.noticeActivateAreaNode.frame = self.noticeNode.frame
     }
     
+    /// Stacks the email home in the band above the agreement. When the rows fit, they are centered the way `layoutAuthorizationItems` centers the stock phone screen. When they do not, the column scrolls and the agreement and primary button stay put.
+    private func placeTellomiForm(_ items: [AuthorizationLayoutItem], in bounds: CGRect, columnWidth: CGFloat, transition: ContainedViewLayoutTransition) {
+        guard let scroll = self.tellomiFormScrollNode else {
+            let _ = layoutAuthorizationItems(bounds: bounds, items: items, transition: transition, failIfDoesNotFit: false)
+            return
+        }
+        scroll.isHidden = false
+        transition.updateFrame(node: scroll, frame: bounds)
+        let gap: CGFloat = 12.0
+        var fixed: CGFloat = 0.0
+        for item in items {
+            fixed += item.size.height
+        }
+        let stack = fixed + gap * CGFloat(max(items.count - 1, 0))
+        let topPad: CGFloat
+        if stack + 16.0 <= bounds.height {
+            topPad = max(8.0, min(28.0, floor((bounds.height - stack) / 2.0)))
+        } else {
+            topPad = 8.0
+        }
+        var y = topPad
+        for item in items {
+            guard let node = item.node else {
+                continue
+            }
+            if node.supernode !== scroll {
+                node.removeFromSupernode()
+                scroll.addSubnode(node)
+            }
+            let x = floor((bounds.width - columnWidth) / 2.0) + floor((columnWidth - item.size.width) / 2.0)
+            transition.updateFrame(node: node, frame: CGRect(x: x, y: y, width: item.size.width, height: item.size.height))
+            y += item.size.height + gap
+        }
+        let contentHeight = max(bounds.height, y - gap + 8.0)
+        scroll.view.contentSize = CGSize(width: bounds.width, height: contentHeight)
+    }
+
     private func layoutTellomiHome(_ layout: ContainerViewLayout, insets: UIEdgeInsets, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
         let emailCopy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let loginCopy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
@@ -1269,7 +1323,9 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             phoneSwitchNode.accessibilityIdentifier = "Auth.Login.SwitchToPhone"
         }
         self.otherRowNode?.setTitle(loginCopy.otherLogin, dark: rowDark)
+        self.otherRowNode?.accessibilityIdentifier = "Auth.Login.OtherMethods"
         self.recoverNode?.setTitle(loginCopy.recoverAccount, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
+        self.recoverNode?.accessibilityIdentifier = "Auth.Login.RecoverAccount"
         self.recoverNode?.accessibilityLabel = loginCopy.recoverAccount
         self.circleAppleNode?.accessibilityLabel = loginCopy.appleLogin
         self.circleGoogleNode?.accessibilityLabel = loginCopy.googleLogin
@@ -1396,21 +1452,15 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let contentTop = max(navigationBarHeight, insets.top)
         let contentBottom = agreementFrame.minY - 8.0
         let contentBounds = CGRect(x: bandMinX, y: contentTop, width: bandWidth, height: max(0.0, contentBottom - contentTop))
-        let _ = layoutAuthorizationItems(bounds: contentBounds, items: items, transition: transition, failIfDoesNotFit: false)
-        let overflow = contentTop - self.titleNode.frame.minY
-        if overflow > 0.0 {
-            for item in items {
-                guard let node = item.node else {
-                    continue
-                }
-                var frame = node.frame
-                frame.origin.y += overflow
-                transition.updateFrame(node: node, frame: frame)
-            }
-        }
+        self.placeTellomiForm(items, in: contentBounds, columnWidth: columnWidth, transition: transition)
         if let emailSwitchNode = self.emailSwitchNode, let modeIconNode = self.modeIconNode {
             let iconSide: CGFloat = 16.0
-            transition.updateFrame(node: modeIconNode, frame: CGRect(x: contentX, y: emailSwitchNode.frame.minY + floor((emailSwitchNode.frame.height - iconSide) / 2.0), width: iconSide, height: iconSide))
+            let iconFrame = CGRect(x: emailSwitchNode.frame.minX + 24.0, y: emailSwitchNode.frame.minY + floor((emailSwitchNode.frame.height - iconSide) / 2.0), width: iconSide, height: iconSide)
+            if modeIconNode.supernode !== emailSwitchNode.supernode, let host = emailSwitchNode.supernode {
+                modeIconNode.removeFromSupernode()
+                host.addSubnode(modeIconNode)
+            }
+            transition.updateFrame(node: modeIconNode, frame: iconFrame)
         }
 
         if let agreementRow = self.agreementRow {

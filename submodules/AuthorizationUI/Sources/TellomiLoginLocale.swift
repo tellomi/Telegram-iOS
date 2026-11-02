@@ -2,6 +2,7 @@ import Foundation
 import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
+import CountrySelectionUI
 
 /// Set after zh-hans / zh-hant has been applied once. A later choice in Settings is left alone.
 /// Reinstalling the app clears this key together with the saved langpack.
@@ -131,6 +132,21 @@ public func tellomiInterfaceLanguageCode(_ strings: PresentationStrings) -> Stri
 /// codes other than English still come from the server langpack. Login chrome
 /// itself is bundled for zh-hans, zh-hant, and English; any other code falls
 /// back to English chrome until that pack is applied.
+/// Calling code for the phone login screen. A Chinese app language or a Chinese
+/// region (mainland, Hong Kong, Macao, Taiwan) is +86. Anything else follows the
+/// device region, so a US simulator stays on +1.
+public func tellomiPhoneLoginCountryCode(languageCode: String) -> Int32 {
+    let script = tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode))
+    if script == .hans || script == .hant {
+        return 86
+    }
+    let region = ((Locale.current as NSLocale).object(forKey: NSLocale.Key.countryCode) as? String)?.uppercased() ?? ""
+    if region == "CN" || region == "HK" || region == "MO" || region == "TW" {
+        return 86
+    }
+    return AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+}
+
 public func tellomiBuiltinInterfaceLanguages() -> [LocalizationInfo] {
     return tellomiClientInterfaceLanguages
 }

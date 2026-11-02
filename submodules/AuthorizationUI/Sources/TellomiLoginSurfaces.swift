@@ -95,6 +95,8 @@ final class TellomiAgreementRow: ASDisplayNode {
     init(textNode: ImmediateTextNode) {
         self.textNode = textNode
         super.init()
+        self.accessibilityIdentifier = "Auth.Login.Agreement"
+        textNode.accessibilityIdentifier = "Auth.Login.Agreement"
         self.checkbox.image = tellomiCheckboxImage(checked: false)
         self.checkbox.isUserInteractionEnabled = false
         self.checkboxButton.accessibilityTraits = [.button]

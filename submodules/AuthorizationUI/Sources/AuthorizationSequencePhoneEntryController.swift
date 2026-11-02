@@ -197,8 +197,15 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         step.loginWithNumber = self.loginWithNumber
         step.loginWithPasskey = self.loginWithPasskey
         step.accountUpdated = self.accountUpdated
-        if surface == .phonePassword, let data = self.currentData {
-            step.updateData(countryCode: data.0, countryName: data.1, number: data.2)
+        if surface == .phoneCode || surface == .phonePassword {
+            let code = tellomiPhoneLoginCountryCode(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
+            if surface == .phonePassword, let data = self.currentData, !data.2.isEmpty {
+                step.updateData(countryCode: data.0, countryName: data.1, number: data.2)
+            } else if let data = self.currentData, !data.2.isEmpty, !tellomiIsLoginEmail(data.2) {
+                step.updateData(countryCode: data.0 == 0 ? code : data.0, countryName: data.1, number: data.2)
+            } else {
+                step.updateData(countryCode: code, countryName: nil, number: "")
+            }
         } else if surface.isEmail {
             let carried = identifier ?? (self.isNodeLoaded ? self.controllerNode.emailAddress : nil)
             if let carried, !carried.isEmpty {

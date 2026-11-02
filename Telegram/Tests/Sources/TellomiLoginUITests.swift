@@ -73,6 +73,38 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertFalse(app.textFields["Auth.PhoneEntry.EmailField"].isHittable)
     }
 
+    func testEmailLoginRowsDoNotOverlap() throws {
+        self.openEmailLogin()
+        self.assertLoginRowsDoNotOverlap()
+        app.textFields["Auth.PhoneEntry.EmailField"].tap()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        self.assertLoginRowsDoNotOverlap()
+    }
+
+    func testChineseLanguageDefaultsCountryCodeTo86() throws {
+        self.openEmailLogin()
+        let globe = app.buttons["Auth.Login.Language"]
+        XCTAssertTrue(globe.waitForExistence(timeout: 5.0))
+        globe.tap()
+        let list = app.tables["Auth.Language.List"]
+        XCTAssertTrue(list.waitForExistence(timeout: 5.0))
+        var simplified = app.staticTexts["简体中文"]
+        if !simplified.waitForExistence(timeout: 2.0) {
+            list.swipeUp()
+            simplified = app.staticTexts["简体中文"]
+        }
+        XCTAssertTrue(simplified.waitForExistence(timeout: 5.0))
+        simplified.tap()
+
+        let switchToPhone = app.buttons["Auth.Login.SwitchToPhone"]
+        XCTAssertTrue(switchToPhone.waitForExistence(timeout: 5.0))
+        switchToPhone.tap()
+        let code = app.textFields["Auth.PhoneEntry.CountryCodeField"]
+        XCTAssertTrue(code.waitForExistence(timeout: 5.0))
+        let value = (code.value as? String) ?? ""
+        XCTAssertTrue(value.contains("86"), "country code was \(value)")
+    }
+
     func testLanguagePickerListsMoreThanThreeLanguages() throws {
         self.openEmailLogin()
 
@@ -129,6 +161,39 @@ final class TellomiLoginUITests: XCTestCase {
             return true
         }
         return false
+    }
+
+    private func assertLoginRowsDoNotOverlap() {
+        let other = app.buttons["Auth.Login.OtherMethods"]
+        let recover = app.buttons["Auth.Login.RecoverAccount"]
+        let agreement = self.element("Auth.Login.Agreement")
+        let verify = app.buttons["Auth.PhoneEntry.ContinueButton"]
+        XCTAssertTrue(other.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(recover.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(agreement.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(verify.waitForExistence(timeout: 5.0))
+        self.assertDisjoint(other, agreement, "other methods and agreement")
+        self.assertDisjoint(other, verify, "other methods and verify")
+        self.assertDisjoint(recover, agreement, "recover account and agreement")
+        self.assertDisjoint(recover, verify, "recover account and verify")
+        self.assertDisjoint(agreement, verify, "agreement and verify")
+    }
+
+    private func element(_ identifier: String) -> XCUIElement {
+        let other = app.otherElements[identifier]
+        if other.exists {
+            return other
+        }
+        let text = app.staticTexts[identifier]
+        if text.exists {
+            return text
+        }
+        return app.buttons[identifier]
+    }
+
+    private func assertDisjoint(_ a: XCUIElement, _ b: XCUIElement, _ name: String) {
+        let hit = a.frame.intersection(b.frame)
+        XCTAssertTrue(hit.isNull || hit.width < 1.0 || hit.height < 1.0, "\(name) overlap \(a.frame) and \(b.frame)")
     }
 
     private func spinnerIsRunning() -> Bool {
