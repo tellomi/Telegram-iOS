@@ -157,7 +157,7 @@ public enum StarsPurchasePurpose: Equatable {
 public struct PremiumConfiguration {
     public static var defaultValue: PremiumConfiguration {
         return PremiumConfiguration(
-            isPremiumDisabled: false,
+            isPremiumDisabled: true,
             areStarsDisabled: true,
             subscriptionManagementUrl: "",
             showPremiumGiftInAttachMenu: false,
@@ -275,19 +275,20 @@ public struct PremiumConfiguration {
     
     public static func with(appConfiguration: AppConfiguration) -> PremiumConfiguration {
         let defaultValue = self.defaultValue
+        let gate = TellomiFeatureGate.with(appConfiguration: appConfiguration)
         if let data = appConfiguration.data {
             func get(_ value: Any?) -> Int32? {
                 return (value as? Double).flatMap(Int32.init)
             }
             return PremiumConfiguration(
-                isPremiumDisabled: data["premium_purchase_blocked"] as? Bool ?? defaultValue.isPremiumDisabled,
-                areStarsDisabled: data["stars_purchase_blocked"] as? Bool ?? defaultValue.areStarsDisabled,
+                isPremiumDisabled: !gate.premiumEnabled,
+                areStarsDisabled: !gate.starsEnabled,
                 subscriptionManagementUrl: data["premium_manage_subscription_url"] as? String ?? "",
-                showPremiumGiftInAttachMenu: data["premium_gift_attach_menu_icon"] as? Bool ?? defaultValue.showPremiumGiftInAttachMenu,
-                showPremiumGiftInTextField: data["premium_gift_text_field_icon"] as? Bool ?? defaultValue.showPremiumGiftInTextField,
-                giveawayGiftsPurchaseAvailable: data["giveaway_gifts_purchase_available"] as? Bool ?? defaultValue.giveawayGiftsPurchaseAvailable,
-                starsGiftsPurchaseAvailable: data["stars_gifts_enabled"] as? Bool ?? defaultValue.starsGiftsPurchaseAvailable,
-                starGiftsPurchaseBlocked: data["stargifts_blocked"] as? Bool ?? defaultValue.starGiftsPurchaseBlocked,
+                showPremiumGiftInAttachMenu: gate.giftsEnabled && (data["premium_gift_attach_menu_icon"] as? Bool ?? defaultValue.showPremiumGiftInAttachMenu),
+                showPremiumGiftInTextField: gate.giftsEnabled && (data["premium_gift_text_field_icon"] as? Bool ?? defaultValue.showPremiumGiftInTextField),
+                giveawayGiftsPurchaseAvailable: gate.giftsEnabled && (data["giveaway_gifts_purchase_available"] as? Bool ?? defaultValue.giveawayGiftsPurchaseAvailable),
+                starsGiftsPurchaseAvailable: gate.giftsEnabled && (data["stars_gifts_enabled"] as? Bool ?? defaultValue.starsGiftsPurchaseAvailable),
+                starGiftsPurchaseBlocked: !gate.giftsEnabled || (data["stargifts_blocked"] as? Bool ?? defaultValue.starGiftsPurchaseBlocked),
                 boostsPerGiftCount: get(data["boosts_per_sent_gift"]) ?? defaultValue.boostsPerGiftCount,
                 audioTransciptionTrialMaxDuration: get(data["transcribe_audio_trial_duration_max"]) ?? defaultValue.audioTransciptionTrialMaxDuration,
                 audioTransciptionTrialCount: get(data["transcribe_audio_trial_weekly_number"]) ?? defaultValue.audioTransciptionTrialCount,

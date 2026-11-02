@@ -597,7 +597,8 @@ public struct WalletConfiguration: Equatable, Sendable {
     }
 
     public static func with(appConfiguration: AppConfiguration) -> WalletConfiguration {
-        let isAvailable = appConfiguration.data?["wallet_available"] as? Bool ?? self.defaultValue.isAvailable
+        let officialAvailable = appConfiguration.data?["wallet_available"] as? Bool ?? self.defaultValue.isAvailable
+        let isAvailable = officialAvailable && TellomiFeatureGate.with(appConfiguration: appConfiguration).walletEnabled
         var explorerUrl = self.defaultValue.explorerUrl
         if let value = appConfiguration.data?["ton_blockchain_explorer_url"] as? String {
             explorerUrl = value

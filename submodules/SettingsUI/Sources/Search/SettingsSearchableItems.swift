@@ -4445,7 +4445,8 @@ func settingsSearchableItems(
         allItems.append(contentsOf: storiesItems)
         
         if let hasTwoStepAuth = hasTwoStepAuth,
-           hasTwoStepAuth {
+           hasTwoStepAuth,
+           TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).passportEnabled {
             let passport = SettingsSearchableItem(
                 id: "passport",
                 title: strings.Settings_Passport,
@@ -4476,8 +4477,32 @@ func settingsSearchableItems(
             }
         )
         allItems.append(deleteAccount)
-    
-        return allItems
+
+        let featureGate = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
+        return allItems.filter { item in
+            guard let id = item.id.base as? String else {
+                return true
+            }
+            if id.hasPrefix("premium") {
+                return featureGate.premiumEnabled
+            }
+            if id.hasPrefix("business") {
+                return featureGate.businessEnabled
+            }
+            if id.hasPrefix("stars") {
+                return featureGate.starsEnabled
+            }
+            if id == "ton" || id.hasPrefix("ton/") {
+                return featureGate.walletEnabled
+            }
+            if id.hasPrefix("send-gift") || id.contains("/gifts") || id.hasSuffix("/use-gift") {
+                return featureGate.giftsEnabled
+            }
+            if id == "passport" {
+                return featureGate.passportEnabled
+            }
+            return true
+        }
     }
 }
 
