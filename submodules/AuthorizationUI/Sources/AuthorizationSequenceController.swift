@@ -47,6 +47,8 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     
     private var stateDisposable: Disposable?
     private let actionDisposable = MetaDisposable()
+    /// Push-token read that precedes `auth.sendCode`. That signal emits inline on the main queue, so it must not share `actionDisposable` with the send it starts.
+    private let pushConfigurationDisposable = MetaDisposable()
     private var applicationStateDisposable: Disposable?
     private let tellomiLanguageDisposable = MetaDisposable()
     private let tellomiLanguageStringsDisposable = MetaDisposable()
@@ -149,6 +151,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     deinit {
         self.stateDisposable?.dispose()
         self.actionDisposable.dispose()
+        self.pushConfigurationDisposable.dispose()
         self.applicationStateDisposable?.dispose()
         self.tellomiLanguageDisposable.dispose()
         self.tellomiLanguageStringsDisposable.dispose()
@@ -239,7 +242,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 let authorizationPushConfiguration = self.sharedContext.authorizationPushConfiguration
                 |> take(1)
                 |> timeout(2.0, queue: .mainQueue(), alternate: .single(nil))
-                self.actionDisposable.set((authorizationPushConfiguration
+                self.pushConfigurationDisposable.set((authorizationPushConfiguration
                 |> deliverOnMainQueue).startStandalone(next: { [weak self] authorizationPushConfiguration in
                     if let strongSelf = self {
                         strongSelf.actionDisposable.set((sendAuthorizationCode(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, phoneNumber: number, apiId: strongSelf.apiId, apiHash: strongSelf.apiHash, pushNotificationConfiguration: authorizationPushConfiguration, firebaseSecretStream: strongSelf.sharedContext.firebaseSecretStream, syncContacts: syncContacts, disableAuthTokens: disableAuthTokens, attempt: loginAttempt, forcedPasswordSetupNotice: { value in
@@ -777,6 +780,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         let _ = self.tellomiLoginAttemptToken.modify { $0 + 1 }
         self.tellomiPendingIdentifier = nil
         self.actionDisposable.set(nil)
+        self.pushConfigurationDisposable.set(nil)
     }
 
     private func tellomiCodeEntryBelongsToThisAttempt(_ number: String) -> Bool {
