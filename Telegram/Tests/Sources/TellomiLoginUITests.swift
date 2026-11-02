@@ -59,6 +59,20 @@ final class TellomiLoginUITests: XCTestCase {
         XCTFail("send code did not reach the code screen or an error alert within 30s")
     }
 
+    func testSwitchToPhoneOpensThePhoneScreen() throws {
+        self.openEmailLogin()
+
+        let switchToPhone = app.buttons["Auth.Login.SwitchToPhone"]
+        XCTAssertTrue(switchToPhone.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(switchToPhone.isHittable)
+        switchToPhone.tap()
+
+        let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
+        XCTAssertTrue(phone.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(phone.isHittable)
+        XCTAssertFalse(app.textFields["Auth.PhoneEntry.EmailField"].isHittable)
+    }
+
     func testLanguagePickerListsMoreThanThreeLanguages() throws {
         self.openEmailLogin()
 

@@ -22,7 +22,7 @@ func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
     case .hant:
         return TellomiEmailLoginCopy(
             switchToEmail: "郵箱登入",
-            switchToPhone: "使用手機號登入",
+            switchToPhone: "改用手機號登入",
             title: "請輸入郵箱地址",
             notice: "未註冊的郵箱驗證通過後將自動註冊",
             placeholder: "請輸入郵箱地址",
@@ -36,7 +36,7 @@ func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
     case .hans:
         return TellomiEmailLoginCopy(
             switchToEmail: "邮箱登录",
-            switchToPhone: "使用手机号登录",
+            switchToPhone: "改用手机号登录",
             title: "请输入邮箱地址",
             notice: "未注册的邮箱验证通过后将自动注册",
             placeholder: "请输入邮箱地址",
@@ -50,7 +50,7 @@ func tellomiEmailLoginCopy(languageCode: String) -> TellomiEmailLoginCopy {
     case .english:
         return TellomiEmailLoginCopy(
         switchToEmail: "Email",
-        switchToPhone: "Use phone number",
+        switchToPhone: "Use phone number instead",
         title: "Enter your email",
         notice: "An unregistered address is signed up after the code is verified.",
         placeholder: "Enter your email",
