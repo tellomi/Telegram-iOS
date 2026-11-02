@@ -139,16 +139,12 @@ public func tellomiInterfaceLanguageCode(_ strings: PresentationStrings) -> Stri
 /// codes other than English still come from the server langpack. Login chrome
 /// itself is bundled for zh-hans, zh-hant, and English; any other code falls
 /// back to English chrome until that pack is applied.
-/// Calling code for the phone login screen. A Chinese app language or a Chinese
-/// region (mainland, Hong Kong, Macao, Taiwan) is +86. Anything else follows the
-/// device region, so a US simulator stays on +1.
+/// Calling code for the phone login screen. Simplified Chinese UI is +86.
+/// Every other language, including Traditional Chinese, uses Telegram's device-region
+/// default (`defaultCountryCode`): a Taiwan region is +886, a US simulator is +1.
 public func tellomiPhoneLoginCountryCode(languageCode: String) -> Int32 {
     let script = tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode))
-    if script == .hans || script == .hant {
-        return 86
-    }
-    let region = ((Locale.current as NSLocale).object(forKey: NSLocale.Key.countryCode) as? String)?.uppercased() ?? ""
-    if region == "CN" || region == "HK" || region == "MO" || region == "TW" {
+    if script == .hans {
         return 86
     }
     return AuthorizationSequenceCountrySelectionController.defaultCountryCode()

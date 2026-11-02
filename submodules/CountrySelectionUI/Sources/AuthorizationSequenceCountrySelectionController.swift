@@ -295,9 +295,8 @@ public final class AuthorizationSequenceCountrySelectionController: ViewControll
     }
     
     public static func defaultCountryCode() -> Int32 {
-        // Upstream: the device region. A US simulator is +1. A Chinese region is +86.
-        // The login screen also forces +86 when the app language is Chinese; see
-        // `tellomiPhoneLoginCountryCode`.
+        // Upstream: the device region. A US simulator is +1. Taiwan is +886.
+        // Simplified Chinese login UI forces +86 in `tellomiPhoneLoginCountryCode`.
         let region = (Locale.current as NSLocale).object(forKey: NSLocale.Key.countryCode) as? String
         if let region, let country = lookupCountryById(region) {
             for code in country.countryCodes {

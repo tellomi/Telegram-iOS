@@ -19,11 +19,11 @@ The stock login default is the device region (`Locale.current` country code) wit
 
 | File | Change |
 | --- | --- |
-| `submodules/CountrySelectionUI/Sources/AuthorizationSequenceCountrySelectionController.swift` `defaultCountryCode()` | The device region, as upstream (a US simulator is +1). The phone login screen uses `tellomiPhoneLoginCountryCode`: a Chinese app language, or region CN/HK/MO/TW, is +86. |
+| `submodules/CountrySelectionUI/Sources/AuthorizationSequenceCountrySelectionController.swift` `defaultCountryCode()` | The device region, as upstream (a US simulator is +1, Taiwan is +886). |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | The duplicate helper forwards to `defaultCountryCode()`. A number the user already typed keeps its code. |
-| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` `tellomiPhoneLoginCountryCode` | Phone login: Chinese language or region CN/HK/MO/TW is +86. Otherwise the device region. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` `tellomiPhoneLoginCountryCode` | Phone login: Simplified Chinese UI is +86. Every other language uses `defaultCountryCode()` (Taiwan is +886). |
 
-New Contact and Change Phone Number use `defaultCountryCode()`, so they follow the device region. The phone login screen uses `tellomiPhoneLoginCountryCode`.
+New Contact and Change Phone Number use `defaultCountryCode()`, so they follow the device region. The phone login screen uses `tellomiPhoneLoginCountryCode`: only Simplified Chinese UI is +86.
 
 ## Chinese system language
 

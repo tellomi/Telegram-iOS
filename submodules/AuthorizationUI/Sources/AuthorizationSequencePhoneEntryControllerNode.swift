@@ -486,8 +486,8 @@ private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        self.returnPressed?()
-        return false
+        textField.resignFirstResponder()
+        return true
     }
 
     override func layout() {
@@ -819,7 +819,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             formScroll.scrollView.alwaysBounceVertical = false
             formScroll.scrollView.showsVerticalScrollIndicator = true
             formScroll.scrollView.delaysContentTouches = false
-            formScroll.scrollView.keyboardDismissMode = .none
+            formScroll.scrollView.keyboardDismissMode = .onDrag
             formScroll.scrollView.accessibilityIdentifier = "Auth.Login.Form"
             if #available(iOS 11.0, *) {
                 formScroll.scrollView.contentInsetAdjustmentBehavior = .never
@@ -953,17 +953,11 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.emailFieldNode?.textChanged = { [weak self] _ in
             self?.refreshProceedEnabled()
         }
-        self.emailFieldNode?.returnPressed = { [weak self] in
-            self?.checkPhone?()
-        }
         self.emailSwitchNode?.addTarget(self, action: #selector(self.emailSwitchPressed), forControlEvents: .touchUpInside)
         self.phoneSwitchNode?.addTarget(self, action: #selector(self.phoneSwitchPressed), forControlEvents: .touchUpInside)
         self.passwordFieldNode?.textChanged = { [weak self] _ in
             self?.clearPasswordError()
             self?.refreshProceedEnabled()
-        }
-        self.passwordFieldNode?.returnPressed = { [weak self] in
-            self?.checkPhone?()
         }
         self.appleRowNode?.addTarget(self, action: #selector(self.tellomiUnavailablePressed), forControlEvents: .touchUpInside)
         self.googleRowNode?.addTarget(self, action: #selector(self.tellomiUnavailablePressed), forControlEvents: .touchUpInside)
@@ -1030,6 +1024,17 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         
         self.emailSwitchNode?.view.accessibilityIdentifier = "Auth.PhoneEntry.EmailSwitch"
         self.titleNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.debugTap(_:))))
+        let dismissKeyboard = UITapGestureRecognizer(target: self, action: #selector(self.tellomiDismissKeyboardTap(_:)))
+        dismissKeyboard.cancelsTouchesInView = false
+        self.view.addGestureRecognizer(dismissKeyboard)
+        if self.account != nil {
+            let regionProbe = UILabel(frame: CGRect(x: 8.0, y: 200.0, width: 4.0, height: 4.0))
+            regionProbe.isAccessibilityElement = true
+            regionProbe.accessibilityIdentifier = "Auth.PhoneEntry.DeviceRegionCode"
+            regionProbe.accessibilityLabel = "\(AuthorizationSequenceCountrySelectionController.defaultCountryCode())"
+            regionProbe.alpha = 0.02
+            self.view.addSubview(regionProbe)
+        }
         #if DEBUG && false
         self.noticeNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.debugQrTap(_:))))
         #endif
@@ -1387,7 +1392,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.proceedNode.title = surface.isPassword ? loginCopy.login : loginCopy.verifyAndLogin
         self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance))
         self.tellomiAgreement.setKind(.phone)
-        self.tellomiAgreement.refreshLanguage()
+        self.tellomiAgreement.refreshLanguage(languageCode: tellomiInterfaceLanguageCode(self.strings))
         self.phoneAndCountryNode.updateTellomiPlaceholder(loginCopy.phonePlaceholder)
         let rowDark = self.theme.overallDarkAppearance
         self.appleRowNode?.setTitle(loginCopy.appleLogin, dark: rowDark)
@@ -1682,6 +1687,38 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.tellomiUnavailable?()
     }
     
+    /// Done, a tap outside the field, and a drag on the form all resign the real `UITextField`.
+    /// Resigning a wrapper leaves the caret gone and `keyboards.count` at 1.
+    func tellomiResignLoginInput() {
+        self.emailFieldNode?.textField.textField.resignFirstResponder()
+        self.passwordFieldNode?.textField.textField.resignFirstResponder()
+        self.phoneAndCountryNode.phoneInputNode.numberField.textField.resignFirstResponder()
+        self.phoneAndCountryNode.phoneInputNode.countryCodeField.textField.resignFirstResponder()
+        self.view.endEditing(true)
+    }
+
+    @objc private func tellomiDismissKeyboardTap(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .ended else {
+            return
+        }
+        let point = recognizer.location(in: self.view)
+        if let hit = self.view.hitTest(point, with: nil), self.tellomiViewIsTextInput(hit) {
+            return
+        }
+        self.tellomiResignLoginInput()
+    }
+
+    private func tellomiViewIsTextInput(_ view: UIView) -> Bool {
+        var current: UIView? = view
+        while let view = current {
+            if view is UITextField || view is UITextView {
+                return true
+            }
+            current = view.superview
+        }
+        return false
+    }
+
     private var debugTapCounter: (Double, Int) = (0.0, 0)
     @objc private func debugTap(_ recognizer: UITapGestureRecognizer) {
         if case .ended = recognizer.state {
@@ -1786,6 +1823,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
 extension AuthorizationSequencePhoneEntryControllerNode: UIScrollViewDelegate {
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         self.tellomiFormFollowsKeyboard = false
+        self.tellomiResignLoginInput()
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {

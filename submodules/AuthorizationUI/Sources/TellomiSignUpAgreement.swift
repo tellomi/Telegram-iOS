@@ -22,7 +22,8 @@ final class TellomiSignUpAgreement: NSObject {
     static let toggleAttribute = NSAttributedString.Key(rawValue: "TellomiSignUpAgreementToggle")
 
     private(set) var agreed = false
-    private var chinese = true
+    /// The code `refreshLanguage` last built the sentence from. Empty until the first refresh.
+    private var resolvedLanguageCode = ""
     private var appliedTheme: PresentationTheme?
     private weak var node: ImmediateTextNode?
     private var openUrl: ((String) -> Void)?
@@ -36,7 +37,7 @@ final class TellomiSignUpAgreement: NSObject {
     /// The stock text-node recognizer waits for a double tap and only hits glyph bounds.
     /// This installs a single-tap recognizer and expands the hit rect.
     func install(on node: ImmediateTextNode, theme: PresentationTheme, kind: Kind = .signUp, chinese: Bool = true, togglesOnText: Bool = true, centered: Bool = false, openUrl: @escaping (String) -> Void, changed: @escaping (Bool) -> Void) {
-        self.chinese = chinese
+        _ = chinese
         self.appliedTheme = theme
         self.node = node
         self.openUrl = openUrl
@@ -94,10 +95,14 @@ final class TellomiSignUpAgreement: NSObject {
             return
         }
         node.attributedText = self.text(theme: theme)
+        let sentence = node.attributedText?.string ?? ""
+        node.accessibilityLabel = sentence
+        node.supernode?.accessibilityLabel = sentence
         let width = node.constrainedSize?.width ?? node.bounds.width
         if width > 0.0 {
-            _ = node.updateLayout(CGSize(width: width, height: CGFloat.greatestFiniteMagnitude))
+            _ = node.updateLayout(CGSize(width: width, height: 240.0))
         }
+        node.setNeedsDisplay()
     }
 
     func setKind(_ kind: Kind) {
@@ -105,9 +110,10 @@ final class TellomiSignUpAgreement: NSObject {
         self.applyText()
     }
 
-    /// Rewrites the sentence after a pre-login language change. The tap recognizer stays.
-    func refreshLanguage() {
-        self.chinese = tellomiLoginPrefersChinese(languageCode: "")
+    /// Rewrites the sentence from the same language code the rest of the login chrome uses.
+    /// The tap recognizer stays. `languageCode` is already resolved (`tellomiInterfaceLanguageCode`).
+    func refreshLanguage(languageCode: String) {
+        self.resolvedLanguageCode = languageCode
         guard self.node != nil else {
             return
         }
@@ -132,12 +138,15 @@ final class TellomiSignUpAgreement: NSObject {
             result.append(NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: accent, NSAttributedString.Key(rawValue: TelegramTextAttributes.URL): url]))
         }
         // One sentence on every login and sign-up screen. The kind no longer changes the wording.
-        if self.chinese && tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: "")) == .hant {
+        // Use the code from the last refresh, not a second lookup with an empty saved language,
+        // which stayed English after the picker had already switched the rest of the screen.
+        let script = tellomiLoginScript(languageCode: self.resolvedLanguageCode.isEmpty ? tellomiChromeLanguageCode(savedLanguageCode: "") : self.resolvedLanguageCode)
+        if script == .hant {
             toggle("已閱讀並同意", color: body)
             link("用戶協議", TellomiSignUpAgreement.termsURL)
             toggle("和", color: body)
             link("隱私政策", TellomiSignUpAgreement.privacyURL)
-        } else if self.chinese {
+        } else if script == .hans {
             toggle("已阅读并同意", color: body)
             link("用户协议", TellomiSignUpAgreement.termsURL)
             toggle("和", color: body)

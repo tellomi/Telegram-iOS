@@ -373,8 +373,8 @@ final class TellomiPasswordFieldNode: ASDisplayNode, UITextFieldDelegate {
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        self.returnPressed?()
-        return false
+        textField.resignFirstResponder()
+        return true
     }
 
     override func layout() {

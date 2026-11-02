@@ -255,6 +255,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     }
     
     func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
+        self.tellomiAgreement.refreshLanguage(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let previousInputHeight = self.layoutArguments?.0.inputHeight ?? 0.0
         let newInputHeight = layout.inputHeight ?? 0.0
         

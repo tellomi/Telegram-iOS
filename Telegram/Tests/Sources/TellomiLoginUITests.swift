@@ -75,28 +75,26 @@ final class TellomiLoginUITests: XCTestCase {
 
     func testEmailLoginRowsDoNotOverlap() throws {
         self.openEmailLogin()
+        self.dismissLoginKeyboard()
+        XCTAssertEqual(app.keyboards.count, 0, "keyboard should be dismissed before the keyboard-down layout check")
+        self.assertLoginRowsDoNotOverlap(keyboardUp: false)
+
         let verify = app.buttons["Auth.PhoneEntry.ContinueButton"]
-        XCTAssertTrue(verify.waitForExistence(timeout: 5.0))
-        let screenHeight = app.frame.height
-        // The email field takes focus after Start, so the keyboard may already be up.
-        let keyboardAlreadyUp = verify.frame.height > 1.0 && verify.frame.maxY < screenHeight - 160.0
-        if !keyboardAlreadyUp {
-            self.assertLoginRowsDoNotOverlap(keyboardUp: false)
-            let email = app.textFields["Auth.PhoneEntry.EmailField"]
-            XCTAssertTrue(email.exists)
-            let restingMinY = verify.frame.minY
-            email.tap()
-            let deadline = Date().addingTimeInterval(5.0)
-            var raised = false
-            while Date() < deadline {
-                if verify.exists, verify.frame.minY < restingMinY - 80.0 {
-                    raised = true
-                    break
-                }
-                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        let restingMinY = verify.frame.minY
+        let email = app.textFields["Auth.PhoneEntry.EmailField"]
+        XCTAssertTrue(email.exists)
+        email.tap()
+        let deadline = Date().addingTimeInterval(5.0)
+        var raised = false
+        while Date() < deadline {
+            if verify.exists, verify.frame.minY < restingMinY - 80.0 {
+                raised = true
+                break
             }
-            XCTAssertTrue(raised, "verify button did not move up with the keyboard (was \(restingMinY), now \(verify.frame.minY))")
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
+        XCTAssertTrue(raised, "verify button did not move up with the keyboard (was \(restingMinY), now \(verify.frame.minY))")
+        XCTAssertGreaterThan(app.keyboards.count, 0)
         self.assertLoginRowsDoNotOverlap(keyboardUp: true)
     }
 
@@ -116,13 +114,38 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertTrue(simplified.waitForExistence(timeout: 5.0))
         simplified.tap()
 
+        let agreement = self.element("Auth.Login.Agreement")
+        XCTAssertTrue(agreement.waitForExistence(timeout: 5.0))
+        let agreementText = agreement.label
+        XCTAssertTrue(agreementText.contains("用户协议") || agreementText.contains("已阅读并同意"), "agreement stayed \(agreementText)")
+
         let switchToPhone = app.buttons["Auth.Login.SwitchToPhone"]
         XCTAssertTrue(switchToPhone.waitForExistence(timeout: 5.0))
         switchToPhone.tap()
         let code = app.textFields["Auth.PhoneEntry.CountryCodeField"]
         XCTAssertTrue(code.waitForExistence(timeout: 5.0))
         let value = (code.value as? String) ?? ""
-        XCTAssertTrue(value.contains("86"), "country code was \(value)")
+        XCTAssertEqual(self.callingCode(value), "86", "country code was \(value)")
+    }
+
+    func testEnglishLanguageUsesDeviceRegionCountryCode() throws {
+        self.openEmailLogin()
+        self.selectLanguage(subtitle: "English")
+        let agreement = self.element("Auth.Login.Agreement")
+        XCTAssertTrue(agreement.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(agreement.label.contains("Privacy Policy") || agreement.label.contains("I have read"), "agreement stayed \(agreement.label)")
+
+        let switchToPhone = app.buttons["Auth.Login.SwitchToPhone"]
+        XCTAssertTrue(switchToPhone.waitForExistence(timeout: 5.0))
+        switchToPhone.tap()
+        let code = app.textFields["Auth.PhoneEntry.CountryCodeField"]
+        XCTAssertTrue(code.waitForExistence(timeout: 5.0))
+        let regionElement = self.element("Auth.PhoneEntry.DeviceRegionCode")
+        XCTAssertTrue(regionElement.waitForExistence(timeout: 5.0))
+        let region = self.callingCode(regionElement.label)
+        let field = self.callingCode((code.value as? String) ?? "")
+        XCTAssertFalse(region.isEmpty, "device region code was not published")
+        XCTAssertEqual(field, region, "English UI used \(field), device region is \(region)")
     }
 
     func testLanguagePickerListsMoreThanThreeLanguages() throws {
@@ -158,6 +181,51 @@ final class TellomiLoginUITests: XCTestCase {
         let list = app.tables["Auth.Country.List"]
         XCTAssertTrue(list.waitForExistence(timeout: 5.0))
         XCTAssertGreaterThan(list.cells.count, 0)
+    }
+
+    private func dismissLoginKeyboard() {
+        if app.keyboards.count == 0 {
+            return
+        }
+        let form = app.scrollViews["Auth.Login.Form"]
+        if form.exists {
+            form.swipeDown()
+        }
+        if app.keyboards.count > 0 {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        }
+        if app.keyboards.count > 0 {
+            for name in ["Done", "完成", "Return", "return"] {
+                let button = app.keyboards.buttons[name]
+                if button.exists {
+                    button.tap()
+                    break
+                }
+            }
+        }
+        let deadline = Date().addingTimeInterval(4.0)
+        while Date() < deadline && app.keyboards.count > 0 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+    }
+
+    private func selectLanguage(subtitle: String) {
+        let globe = app.buttons["Auth.Login.Language"]
+        XCTAssertTrue(globe.waitForExistence(timeout: 5.0))
+        globe.tap()
+        let list = app.tables["Auth.Language.List"]
+        XCTAssertTrue(list.waitForExistence(timeout: 5.0))
+        var row = list.cells.containing(.staticText, identifier: subtitle).firstMatch
+        if !row.waitForExistence(timeout: 2.0) {
+            list.swipeUp()
+            row = list.cells.containing(.staticText, identifier: subtitle).firstMatch
+        }
+        XCTAssertTrue(row.waitForExistence(timeout: 5.0))
+        row.tap()
+    }
+
+    private func callingCode(_ value: String) -> String {
+        return value.filter { $0.isNumber }
     }
 
     private func openEmailLogin() {
