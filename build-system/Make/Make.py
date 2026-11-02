@@ -1054,11 +1054,10 @@ if __name__ == '__main__':
         action='store_true',
         default=False,
         help='''
-            Do not embed provisioning profiles. rules_apple ad-hoc signs the
-            product, which is how an unsigned or simulator build compiles
-            without a matching Apple profile. The checked-in
-            fake-codesigning profiles belong to another team and bundle id,
-            so a device build that still requires them exits before compile.
+            Do not embed provisioning profiles. A simulator build then
+            ad-hoc signs and does not need a certificate. A device build
+            still fails in rules_apple analysis: "Building for device, but
+            no provisioning_profile attribute was set."
             '''
     )
     buildParser.add_argument(

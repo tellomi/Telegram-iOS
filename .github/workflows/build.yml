@@ -9,10 +9,16 @@
 # Bazel is the 9.2.0 darwin-arm64 binary pinned by hash in versions.json,
 # the same file Make.py downloads into build-input/.
 #
+# The unsigned job is release_sim_arm64 with --disableProvisioningProfiles.
+# rules_apple refuses a device build that has no provisioning profile
+# ("Building for device, but no provisioning_profile attribute was set",
+# run 41370385064). Simulator builds ad-hoc sign and do not read
+# build-system/fake-codesigning. Those profiles expire 2026-10-30 and
+# TelegramMessenger/Telegram-iOS master still has the same git blobs.
+#
 # No pull_request job. The only supported app compile is the full Bazel
-# Telegram/Telegram target; Make.py has no smaller one. That is the same
-# build TestFlight already runs on this image, which took 32–84 minutes on
-# 2026-11-01 (v14.0.2-tf3, v14.0.3, v14.0.4) before the App Store upload.
+# Telegram/Telegram target; Make.py has no smaller one. TestFlight's device
+# release on this image took 32–84 minutes on 2026-11-01 before upload.
 # A pull_request compile would hold a free macOS runner for about an hour
 # on every source change and contend with those releases. Public
 # repositories are not billed for standard macOS minutes; the limit is
@@ -121,36 +127,42 @@ jobs:
           echo "BUILD_NUMBER=$(echo $BUILD_NUMBER)" >> $GITHUB_ENV
           echo "APP_VERSION=$(echo $APP_VERSION)" >> $GITHUB_ENV
 
-          # fake-codesigning profiles are the upstream Telegram App Store
-          # profiles (team C67CF9S4VU, bundle ph.telegra.Telegraph). This
-          # tree's configuration is team CB7KP6GBAR / app.tellomi.chat, so
-          # Make.py finds no aps-environment and exits before Bazel.
-          # --disableProvisioningProfiles keeps the fake certificate
-          # directory (no real Apple profile is read into the bundle) and
-          # ad-hoc signs, the same unsigned path as a simulator build.
-          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+          # Do not import build-system/fake-codesigning. Its profiles expired
+          # on 2026-10-30, they are the upstream Telegram bundle, and a
+          # device build cannot drop the profile (rules_apple fails
+          # analysis). release_sim_arm64 plus --disableProvisioningProfiles
+          # ad-hoc signs and never opens that certificate.
+          # --xcodeManagedCodesigning satisfies Make.py's required
+          # codesigning selector without reading a profile directory.
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
             --cacheDir /Users/runner/telegram-bazel-cache \
             build \
             --configurationPath="build-system/appstore-configuration.json" \
-            --codesigningInformationPath=build-system/fake-codesigning \
+            --xcodeManagedCodesigning \
             --disableProvisioningProfiles \
-            --configuration=release_arm64 \
+            --configuration=release_sim_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
           OUTPUT_PATH="build/artifacts"
           rm -rf "$OUTPUT_PATH"
           mkdir -p "$OUTPUT_PATH"
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
-            cp "$f" $OUTPUT_PATH/
-          done
+          shopt -s nullglob
+          ipas=(bazel-out/applebin_ios-ios_*arm*-opt-ST-*/bin/Telegram/Telegram.ipa)
+          if [ ${#ipas[@]} -eq 0 ]; then
+            echo "No Telegram.ipa under bazel-out"
+            exit 1
+          fi
+          cp "${ipas[@]}" "$OUTPUT_PATH/"
 
-          mkdir -p build/DSYMs
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/*.dSYM; do
-            cp -R "$f" build/DSYMs/
-          done
-          zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
+          dsyms=(bazel-out/applebin_ios-ios_*arm*-opt-ST-*/bin/Telegram/*.dSYM)
+          if [ ${#dsyms[@]} -gt 0 ]; then
+            mkdir -p build/DSYMs
+            for f in "${dsyms[@]}"; do
+              cp -R "$f" build/DSYMs/
+            done
+            zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
+          fi
 
       # actions/create-release@v1 and actions/upload-release-asset@v1 run on
       # Node 12, which current GitHub images reject. gh is on the image.
@@ -162,12 +174,15 @@ jobs:
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/build/artifacts"
+          assets=("Telegram.ipa#Telegram.ipa")
+          if [ -f Telegram.DSYMs.zip ]; then
+            assets+=("Telegram.DSYMs.zip#Telegram.DSYMs.zip")
+          fi
           gh release create "build-${BUILD_NUMBER}" \
             --title "Telegram ${APP_VERSION} (${BUILD_NUMBER})" \
-            --notes "An unsigned build of Telegram for iOS ${APP_VERSION} (${BUILD_NUMBER})" \
+            --notes "An unsigned simulator build of Telegram for iOS ${APP_VERSION} (${BUILD_NUMBER}). Ad-hoc signed, no provisioning profile." \
             --target "${GITHUB_SHA}" \
-            "Telegram.ipa#Telegram.ipa" \
-            "Telegram.DSYMs.zip#Telegram.DSYMs.zip"
+            "${assets[@]}"
 
       - name: Save Bazel cache
         if: always()
