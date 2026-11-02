@@ -34,6 +34,9 @@ BOX = (163.3, 100.4, 70.0, 89.6)
 STROKE = 13.3
 # Drop medial-axis spikes shorter than this many stroke-radii.
 SPUR = 1.6
+# These three come from the Android client's Noto centerlines. The others are
+# this repo's own skeletons, which read more clearly for those letters.
+ANDROID_CODES = {"ar", "he", "th"}
 OFFS = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
 
 GLYPHS = [
@@ -212,22 +215,70 @@ def skeleton_strokes(font_path, ch):
 
 
 def fit_box(strokes):
-    """Uniform-fit mask-space strokes into the A's centerline box. Returns canvas points."""
-    xs = [p[0] for s in strokes for p in s]
-    ys = [p[1] for s in strokes for p in s]
+    """Uniform-fit strokes into the A's centerline box.
+
+    Each stroke is ``{"v": [[x, y], ...], "i": [...], "o": [...]}`` or a bare
+    point list. Handles are offsets and scale with the points.
+    """
+    normalized = []
+    for stroke in strokes:
+        if isinstance(stroke, dict):
+            normalized.append(stroke)
+        else:
+            normalized.append({"v": [list(p) for p in stroke], "i": None, "o": None})
+    xs = [p[0] for s in normalized for p in s["v"]]
+    ys = [p[1] for s in normalized for p in s["v"]]
     minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
     bw, bh = max(maxx - minx, 1.0), max(maxy - miny, 1.0)
     x0, y0, tw, th = BOX
     scale = min(tw / bw, th / bh)
     ox = x0 + (tw - bw * scale) / 2.0
     oy = y0 + (th - bh * scale) / 2.0
+
+    def pt(x, y):
+        return [round(ox + (x - minx) * scale, 3), round(oy + (y - miny) * scale, 3)]
+
+    def handle(pair):
+        if not pair:
+            return [0, 0]
+        return [round(pair[0] * scale, 3), round(pair[1] * scale, 3)]
+
     fitted = []
-    for stroke in strokes:
-        fitted.append([
-            [round(ox + (x - minx) * scale, 3), round(oy + (y - miny) * scale, 3)]
-            for x, y in stroke
-        ])
+    for stroke in normalized:
+        n = len(stroke["v"])
+        inn = stroke.get("i") or [[0, 0]] * n
+        out = stroke.get("o") or [[0, 0]] * n
+        fitted.append({
+            "v": [pt(x, y) for x, y in stroke["v"]],
+            "i": [handle(h) for h in inn],
+            "o": [handle(h) for h in out],
+        })
     return fitted
+
+
+def android_letter(code):
+    """Group 3 plus Group 4 at frame 19, in Android layer space (y down)."""
+    path = ASSETS / "android-transcribe" / ("transcribe_in_" + code + ".json")
+    data = json.loads(path.read_text())
+    strokes = []
+    for group in data["layers"][0]["shapes"]:
+        if group.get("nm") not in ("Group 3", "Group 4"):
+            continue
+        origin = next(it for it in group["it"] if it["ty"] == "tr")["p"]["k"]
+        for item in group["it"]:
+            if item.get("ty") != "sh":
+                continue
+            raw = item["ks"]["k"]
+            if isinstance(raw, list):
+                body = raw[-1]["s"][0]
+            else:
+                body = raw
+            strokes.append({
+                "v": [[v[0] + origin[0], v[1] + origin[1]] for v in body["v"]],
+                "i": body.get("i"),
+                "o": body.get("o"),
+            })
+    return strokes
 
 
 def shape(points):
@@ -235,10 +286,17 @@ def shape(points):
     return {"i": zeros, "o": zeros, "v": points, "c": False}
 
 
-def path_item(points):
+def path_item(points, inn=None, out=None):
+    zeros = [[0, 0] for _ in points]
+    body = {
+        "i": inn or zeros,
+        "o": out or zeros,
+        "v": points,
+        "c": False,
+    }
     return {
         "ind": 0, "ty": "sh", "ix": 1,
-        "ks": {"a": 0, "k": shape(points), "ix": 2},
+        "ks": {"a": 0, "k": body, "ix": 2},
         "nm": "Path 1", "mn": "ADBE Vector Shape - Group", "hd": False,
     }
 
@@ -251,7 +309,7 @@ def replace_paths(group, strokes):
             it["lj"] = 2
         if it.get("ty") == "tr":
             it["p"] = {"a": 0, "k": [0, 0], "ix": 2}
-    group["it"] = [path_item(line) for line in strokes] + kept
+    group["it"] = [path_item(s["v"], s.get("i"), s.get("o")) for s in strokes] + kept
 
 
 def hide_group(group):
@@ -380,7 +438,7 @@ def pdf_strokes(strokes):
     x0, y0, tw, th = BOX
     for stroke in strokes:
         pts = []
-        for x, y in stroke:
+        for x, y in stroke["v"]:
             u = (x - x0) / tw
             v = (y - y0) / th
             pts.append((box[0] + u * bw, box[3] - v * bh))
@@ -728,23 +786,27 @@ def render_full(path, frame, ink, bg, px):
 
 
 def main():
-    missing = [name for _c, _ch, name in GLYPHS if not (FONT_DIR / name).exists()]
+    missing = [name for code, _ch, name in GLYPHS if code not in ANDROID_CODES and not (FONT_DIR / name).exists()]
     if missing:
         raise SystemExit("missing fonts in {}: {}".format(FONT_DIR, ", ".join(missing)))
     glyphs = {}
     cache = {}
     for code, ch, font_name in GLYPHS:
-        font_path = str(FONT_DIR / font_name)
-        if font_path not in cache:
-            cache[font_path] = {}
-        if ch not in cache[font_path]:
-            cache[font_path][ch] = fit_box(skeleton_strokes(font_path, ch))
-        strokes = cache[font_path][ch]
-        print(code, ch, "strokes", len(strokes))
+        if code in ANDROID_CODES:
+            strokes = fit_box(android_letter(code))
+            source = "android-pr-39 transcribe_in_" + code + ".json groups 3 and 4 (frame 19)"
+        else:
+            font_path = str(FONT_DIR / font_name)
+            cache.setdefault(font_path, {})
+            if ch not in cache[font_path]:
+                cache[font_path][ch] = fit_box(skeleton_strokes(font_path, ch))
+            strokes = cache[font_path][ch]
+            source = "ios Noto Sans Medium medial axis"
+        print(code, ch, source, "strokes", len(strokes))
         glyphs[code] = {
             "character": ch,
-            "font": "Noto Sans Medium",
-            "strokes": [{"points": line} for line in strokes],
+            "source": source,
+            "strokes": [{"points": line["v"], "in": line["i"], "out": line["o"]} for line in strokes],
         }
         for kind in ("voice", "text"):
             build_lottie(kind, "_" + code, strokes)
