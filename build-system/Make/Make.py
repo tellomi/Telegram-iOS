@@ -481,8 +481,19 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
         additional_codesigning_output_path=additional_codesigning_output_path
     )
     if codesigning_data.aps_environment is None:
-        print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
-        sys.exit(1)
+        # build-system/fake-codesigning is the upstream Telegram team
+        # (C67CF9S4VU / ph.telegra.Telegraph). A fork whose configuration
+        # names a different team and bundle finds no main profile, so the
+        # aps-environment lookup returns None. An unsigned build
+        # (--disableProvisioningProfiles) does not embed those profiles;
+        # rules_apple ad-hoc signs instead. Leave the entitlement empty,
+        # which is also what Xcode-managed codesigning stores.
+        if getattr(arguments, 'disableProvisioningProfiles', False):
+            print('Provisioning profiles are disabled; continuing without an aps-environment entitlement.')
+            codesigning_data.aps_environment = ''
+        else:
+            print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
+            sys.exit(1)
 
     if bazel_command_line is not None:
         build_configuration.write_to_variables_file(bazel_path=bazel_command_line.bazel, use_xcode_managed_codesigning=codesigning_data.use_xcode_managed_codesigning, aps_environment=codesigning_data.aps_environment, path=configuration_repository_path + '/variables.bzl')
@@ -631,6 +642,8 @@ def build(bazel, arguments):
     )
 
     bazel_command_line.set_configuration(arguments.configuration)
+    if getattr(arguments, 'disableProvisioningProfiles', False):
+        bazel_command_line.set_disable_provisioning_profiles()
     if arguments.embedWatchApp:
         if arguments.configuration in ('debug_arm64', 'release_arm64'):
             if arguments.watchApiId is None or arguments.watchApiHash is None:
@@ -1035,6 +1048,17 @@ if __name__ == '__main__':
         ],
         required=True,
         help='Build configuration'
+    )
+    buildParser.add_argument(
+        '--disableProvisioningProfiles',
+        action='store_true',
+        default=False,
+        help='''
+            Do not embed provisioning profiles. A simulator build then
+            ad-hoc signs and does not need a certificate. A device build
+            still fails in rules_apple analysis: "Building for device, but
+            no provisioning_profile attribute was set."
+            '''
     )
     buildParser.add_argument(
         '--enableParallelSwiftmoduleGeneration',
