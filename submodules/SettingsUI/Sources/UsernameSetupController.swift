@@ -476,6 +476,9 @@ public func usernameSetupController(context: AccountContext, mode: UsernameSetup
         |> take(1)
         |> deliverOnMainQueue).start(next: { peer in
             if case let .user(user) = peer, user.botInfo != nil {
+                guard TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).fragmentEnabled else {
+                    return
+                }
                 context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://fragment.com/", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
             } else {
                 var currentAddressName: String = peer.addressName ?? ""
@@ -535,6 +538,9 @@ public func usernameSetupController(context: AccountContext, mode: UsernameSetup
         })]), nil)
     }, openAuction: { username in
         dismissInputImpl?()
+        guard TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).fragmentEnabled else {
+            return
+        }
         
         context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://fragment.com/username/\(username)", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     })

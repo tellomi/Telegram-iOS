@@ -1833,6 +1833,9 @@ public func channelVisibilityController(context: AccountContext, updatedPresenta
         })
     }, openAuction: { username in
         dismissInputImpl?()
+        guard TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).fragmentEnabled else {
+            return
+        }
        
         context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://fragment.com/username/\(username)", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     })

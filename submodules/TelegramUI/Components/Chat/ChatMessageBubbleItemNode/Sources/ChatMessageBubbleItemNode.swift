@@ -2009,6 +2009,9 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         if isEphemeralMessage {
             needsShareButton = false
         }
+        if needsSummarizeButton, !TellomiFeatureGate.with(appConfiguration: item.context.currentAppConfiguration.with { $0 }).aiSummaryEnabled {
+            needsSummarizeButton = false
+        }
         
         /*if isInlinePage {
             needsShareButton = false

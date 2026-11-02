@@ -188,6 +188,9 @@ public class ChatMessagePaymentAlertController: AlertScreen {
                                     navigationController.pushViewController(controller)
                                 })
                             case .ton:
+                                guard TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).fragmentEnabled else {
+                                    break
+                                }
                                 var fragmentUrl = "https://fragment.com/ads/topup"
                                 if let data = context.currentAppConfiguration.with({ $0 }).data, let value = data["ton_topup_url"] as? String {
                                     fragmentUrl = value
