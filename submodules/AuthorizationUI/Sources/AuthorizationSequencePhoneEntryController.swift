@@ -184,7 +184,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private func presentTellomiAgreementPrompt() {
         let kind: TellomiSignUpAgreement.Kind = self.controllerNode.tellomiSurface.agreementPinnedToBottom ? .phone : .email
         let prompt = TellomiAgreementPromptController(kind: kind, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), dark: self.presentationData.theme.overallDarkAppearance, openUrl: { [weak self] url in
-            self?.openUrl(url)
+            self?.tellomiPresentLegalURL(url)
         })
         prompt.agreed = { [weak self] in
             guard let self else {
@@ -294,7 +294,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             self?.nextPressed()
         }
         self.controllerNode.tellomiOpenUrl = { [weak self] url in
-            self?.openUrl(url)
+            self?.tellomiPresentLegalURL(url)
         }
         self.controllerNode.tellomiSurfaceChanged = { [weak self] in
             self?.updateNavigationItems()

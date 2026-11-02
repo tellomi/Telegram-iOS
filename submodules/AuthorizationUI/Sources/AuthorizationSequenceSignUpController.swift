@@ -181,7 +181,7 @@ final class AuthorizationSequenceSignUpController: ViewController {
             self?.nextPressed()
         }
         self.controllerNode.tellomiOpenUrl = { [weak self] url in // Tellomi: agreement links
-            self?.openUrl?(url)
+            self?.tellomiPresentLegalURL(url)
         }
         self.controllerNode.openTermsOfService = { [weak self] in
             guard let strongSelf = self, let termsOfService = strongSelf.termsOfService else {

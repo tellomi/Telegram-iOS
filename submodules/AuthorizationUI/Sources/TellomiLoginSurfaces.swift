@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import SafariServices
 import AsyncDisplayKit
 import Display
 import SolidRoundedButtonNode
@@ -101,7 +102,10 @@ final class TellomiAgreementRow: ASDisplayNode {
         self.textNode.isAccessibilityElement = false
         let measured = self.measureText(rowWidth: width)
         self.measuredText = measured
-        self.applyLabelText()
+        // Apply here, not only from layout(). Switching language keeps the row frame the same
+        // when both sentences are one line, so layout() would not run and the label would
+        // stay at the previous string's width.
+        self.placeContents(rowWidth: width, measured: measured)
         return CGSize(width: width, height: self.rowHeight(for: measured))
     }
 
@@ -124,13 +128,10 @@ final class TellomiAgreementRow: ASDisplayNode {
         storage.addLayoutManager(manager)
         manager.ensureLayout(for: container)
         let used = manager.usedRect(for: container)
-        var lines = 0
-        manager.enumerateLineFragments(forGlyphRange: manager.glyphRange(for: container)) { _, _, _, _, _ in
-            lines += 1
-        }
         let height = ceil(max(used.height, 18.0))
-        let width = lines > 1 ? textWidth : min(textWidth, ceil(max(used.width, 1.0)))
-        return CGSize(width: width, height: height)
+        // Always the row's text column, never the previous string's intrinsic width.
+        // A Chinese one-line measure (about 205pt) must not stay in place after switching to English.
+        return CGSize(width: textWidth, height: height)
     }
 
     private func textWidth(in rowWidth: CGFloat) -> CGFloat {
@@ -223,29 +224,29 @@ final class TellomiAgreementRow: ASDisplayNode {
     override func layout() {
         super.layout()
         self.installLabelIfNeeded()
-        let box: CGFloat = 18.0
-        let gap: CGFloat = 8.0
-        let textY: CGFloat = 13.0
-        let rowWidth = self.bounds.width > 1.0 ? self.bounds.width : (self.measuredText.width + box + gap)
+        let rowWidth = self.bounds.width > 1.0 ? self.bounds.width : (self.measuredText.width + 18.0 + 8.0)
         let measured = self.measureText(rowWidth: rowWidth)
         self.measuredText = measured
-        self.applyLabelText()
         let needed = self.rowHeight(for: measured)
         if !self.reportingHeight, self.bounds.height > 1.0, needed > self.bounds.height + 1.0 {
             self.reportingHeight = true
             self.onPreferredHeight?(needed)
             self.reportingHeight = false
         }
-        let availableTextWidth = self.textWidth(in: rowWidth)
-        let textWidth = min(max(measured.width, 1.0), availableTextWidth)
+        self.placeContents(rowWidth: rowWidth, measured: measured)
+    }
+
+    private func placeContents(rowWidth: CGFloat, measured: CGSize) {
+        self.installLabelIfNeeded()
+        self.applyLabelText()
+        let box: CGFloat = 18.0
+        let gap: CGFloat = 8.0
+        let textY: CGFloat = 13.0
+        let textWidth = self.textWidth(in: rowWidth)
         self.label.preferredMaxLayoutWidth = textWidth
-        let groupWidth = box + gap + textWidth
-        let originX: CGFloat
-        if self.centered {
-            originX = max(0.0, floor((self.bounds.width - groupWidth) / 2.0))
-        } else {
-            originX = 0.0
-        }
+        self.label.numberOfLines = 0
+        self.label.lineBreakMode = .byWordWrapping
+        let originX: CGFloat = 0.0
         let boxY = textY + 1.0
         self.checkbox.frame = CGRect(x: originX, y: boxY, width: box, height: box)
         self.checkboxButton.frame = CGRect(x: max(0.0, originX - 13.0), y: 0.0, width: 44.0, height: 44.0)
@@ -256,6 +257,17 @@ final class TellomiAgreementRow: ASDisplayNode {
             self.view.bringSubviewToFront(self.checkbox.view)
             self.view.bringSubviewToFront(self.checkboxButton.view)
         }
+    }
+}
+
+extension ViewController {
+    /// Agreement links stay inside the login flow. `applicationBindings.openUrl` hands them to Safari.
+    func tellomiPresentLegalURL(_ urlString: String) {
+        guard let url = URL(string: urlString) else {
+            return
+        }
+        let safari = SFSafariViewController(url: url)
+        self.present(safari, animated: true)
     }
 }
 

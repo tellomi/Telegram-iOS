@@ -4,6 +4,8 @@ import XCTest
 /// Send-code stops at the code screen or an error alert.
 final class TellomiLoginUITests: XCTestCase {
     private var app: XCUIApplication!
+    /// Language name to put back in tearDown when a test switches it. The choice is stored on the app, so a later test would otherwise inherit it.
+    private var restoreLanguageTitle: String?
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -12,6 +14,10 @@ final class TellomiLoginUITests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        if let title = self.restoreLanguageTitle {
+            self.restoreLoginLanguage(title)
+        }
+        self.restoreLanguageTitle = nil
         app = nil
     }
 
@@ -111,18 +117,16 @@ final class TellomiLoginUITests: XCTestCase {
         self.openPhoneLogin()
         let language = app.buttons["Auth.Login.Language"]
         XCTAssertTrue(language.waitForExistence(timeout: 5.0))
-        if !language.label.contains("English") {
-            language.tap()
-            let english = app.buttons["English"]
-            XCTAssertTrue(english.waitForExistence(timeout: 5.0))
-            english.tap()
-        }
+        self.restoreLanguageTitle = self.languageName(language.label)
+        self.switchLoginLanguage(to: "简体中文")
+        self.switchLoginLanguage(to: "English")
         let agreement = app.descendants(matching: .any)["Auth.Login.Agreement"]
         XCTAssertTrue(agreement.waitForExistence(timeout: 5.0))
-        let englishSentence = NSPredicate(format: "label CONTAINS %@", "Privacy")
-        expectation(for: englishSentence, evaluatedWith: agreement)
-        waitForExpectations(timeout: 5.0)
-        XCTAssertGreaterThan(agreement.frame.height, 30.0, "English agreement is still one line: \(agreement.frame) \(agreement.label)")
+        let englishSentence = NSPredicate(format: "label CONTAINS %@", "Privacy Policy")
+        let sentence = expectation(for: englishSentence, evaluatedWith: agreement)
+        wait(for: [sentence], timeout: 5.0)
+        let available = self.agreementTextWidth()
+        XCTAssertEqual(agreement.frame.width, available, accuracy: 16.0, "agreement width stayed at the previous language: frame \(agreement.frame) available \(available) \(agreement.label)")
 
         let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
         let checkbox = app.buttons["Auth.Agreement.Checkbox"]
@@ -188,5 +192,50 @@ final class TellomiLoginUITests: XCTestCase {
 
     private func keyboardIsVisible() -> Bool {
         return app.keyboards.firstMatch.exists
+    }
+
+    private func languageName(_ label: String) -> String {
+        return label.replacingOccurrences(of: "\u{25BE}", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Column width the phone home uses, minus the checkbox and the gap beside it.
+    private func agreementTextWidth() -> CGFloat {
+        let window = app.windows.firstMatch
+        let screen = window.exists && window.frame.width > 1.0 ? window.frame.width : app.frame.width
+        return min(screen, 430.0) - 48.0 - 18.0 - 8.0
+    }
+
+    private func switchLoginLanguage(to name: String) {
+        let language = app.buttons["Auth.Login.Language"]
+        XCTAssertTrue(language.waitForExistence(timeout: 5.0))
+        if self.languageName(language.label) == name {
+            return
+        }
+        language.tap()
+        let row = app.buttons[name]
+        XCTAssertTrue(row.waitForExistence(timeout: 5.0))
+        row.tap()
+        let updated = NSPredicate(format: "label CONTAINS %@", name)
+        let exp = expectation(for: updated, evaluatedWith: language)
+        wait(for: [exp], timeout: 5.0)
+    }
+
+    private func restoreLoginLanguage(_ name: String) {
+        guard app != nil else {
+            return
+        }
+        let language = app.buttons["Auth.Login.Language"]
+        guard language.waitForExistence(timeout: 3.0) else {
+            return
+        }
+        if self.languageName(language.label) == name {
+            return
+        }
+        language.tap()
+        let row = app.buttons[name]
+        guard row.waitForExistence(timeout: 3.0) else {
+            return
+        }
+        row.tap()
     }
 }
