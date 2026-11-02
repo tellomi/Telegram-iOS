@@ -2,7 +2,7 @@
 
 "NSContactsUsageDescription" = "当你与朋友联系时，Tellomi 会把通讯录同步到加密的云端，以便在你的设备上找到他们。";
 "NSLocationWhenInUseUsageDescription" = "当你向朋友发送位置时，Tellomi 需要使用你的位置来显示地图。";
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "当你分享位置、发送实时位置，或查看附近的人时，Tellomi 需要使用你的位置。开启实时位置后，应用在后台也会继续使用位置信息。";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "When you share your location, send a live location, or see people nearby, Tellomi needs access to your location. While a live location is on, the app keeps using your location in the background.";
 "NSLocationAlwaysUsageDescription" = "当你在聊天中与朋友分享实时位置时，Tellomi 需要在后台使用位置，以便在分享期间持续更新。从 Apple Watch 发送位置也需要这项权限。";
 "NSCameraUsageDescription" = "需要相机权限，以便拍照、录像和进行视频通话。";
 "NSPhotoLibraryUsageDescription" = "需要照片权限，以便从相册分享照片和视频，并保存你拍摄的内容。";

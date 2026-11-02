@@ -89,13 +89,15 @@ The traced bubble fills the viewBox. `Tellomi/Brand/generate_icons.py` scales it
 
 ## Location purpose string
 
-`UIBackgroundModes` includes `location`, so the main Info.plist must contain `NSLocationAlwaysAndWhenInUseUsageDescription`. The key was already translated in `InfoPlist.strings` and missing from the plist, which is what App Store checks. The shipping string is the Bazel fragment in `Telegram/BUILD`. `en.lproj` is the development language, so that file carries the same Simplified Chinese sentence; otherwise it would replace the plist value. Other bundled languages still describe live location shared with friends.
+`UIBackgroundModes` includes `location`, so the main Info.plist must contain `NSLocationAlwaysAndWhenInUseUsageDescription`. The shipping string is the Bazel fragment in `Telegram/BUILD`. `en.lproj` is English for that key. `zh-Hans.lproj` and `zh-Hant.lproj` carry the Chinese sentences. `zh-Hant` is in `empty_languages`, same as `zh-Hans`, so the bundle has an empty `Localizable.strings` for it. `InfoPlistStringResources` globs every `*.lproj/InfoPlist.strings`.
 
 | File | Change |
 | --- | --- |
 | `Telegram/BUILD` `TelegramInfoPlist` | Adds the key. The app name is `{telegram_app_name}`. |
 | `Telegram/Telegram-iOS/Info.plist`, `InfoBazel.plist` | Same key, with Tellomi written out. These are not the plist the Bazel app links. |
-| `Telegram/Telegram-iOS/en.lproj/InfoPlist.strings` | The English-locale override is the same sentence. |
+| `Telegram/Telegram-iOS/en.lproj/InfoPlist.strings` | English for `NSLocationAlwaysAndWhenInUseUsageDescription`. |
+| `Telegram/Telegram-iOS/zh-Hant.lproj/InfoPlist.strings` | Traditional Chinese for every key in `zh-Hans`. |
+| `Telegram/BUILD` `empty_languages` | Includes `zh-Hant`. |
 
 ## SF Camera fonts
 
@@ -390,7 +392,7 @@ APNs `alert.loc-key` is resolved by the system from the main app bundle. The Not
 
 Stacked on the solid-wallpaper change. Day and dayClassic outgoing bubbles are white (`#FFFFFF`, pressed `#E9E9EB`) with black text. Night accent is white and outgoing bubbles are `#2C2C2E`. Links, checks, switches, and unread badges follow black in day and white at night. The accent picker, tinted night theme, and theme editor are not offered. The send control draws an up arrow in the button’s foreground color and does not use the paper-plane imageset.
 
-System permission strings in `zh-Hans`, the development `en` table, and the Bazel plist are the same natural Chinese sentences. The machine-translated location line lived in the server language pack, not in these files.
+`NSLocationAlwaysAndWhenInUseUsageDescription` in `en.lproj` is English. `zh-Hant.lproj/InfoPlist.strings` is Traditional Chinese for every `zh-Hans` key, and `zh-Hant` is in `empty_languages`.
 
 | File | Change |
 | --- | --- |
