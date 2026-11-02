@@ -483,7 +483,7 @@ final class ThemeGridControllerNode: ASDisplayNode {
                         return false
                     }
                 }) {
-                    sortedWallpapers[builtinIndex] = defaultBuiltinWallpaper(data: .legacy, colors: legacyBuiltinWallpaperGradientColors.map(\.rgb))
+                    sortedWallpapers[builtinIndex] = tellomiDefaultSolidWallpaper(dark: presentationData.theme.overallDarkAppearance)
                 }
                 
                 for wallpaper in sortedWallpapers {

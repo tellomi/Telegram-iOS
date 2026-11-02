@@ -936,7 +936,7 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
     )
 
     let chat = PresentationThemeChat(
-        defaultWallpaper: defaultBuiltinWallpaper(data: .default, colors: [0x1b2836, 0x121a22, 0x1b2836, 0x121a22]),
+        defaultWallpaper: tellomiDefaultSolidWallpaper(dark: true),
         animateMessageColors: false,
         message: message,
         serviceMessage: serviceMessage,

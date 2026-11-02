@@ -798,12 +798,8 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
                                 })))
                                 
                                 if isCurrent, let currentThemeIndex = themes.firstIndex(where: { $0.id == theme.theme.id }) {
-                                    if let settings = theme.theme.settings?.first {
-                                        if settings.baseTheme == .night {
-                                            selectAccentColorImpl?(PresentationThemeAccentColor(baseColor: .blue))
-                                        } else {
-                                            selectAccentColorImpl?(nil)
-                                        }
+                                    if theme.theme.settings?.first != nil {
+                                        selectAccentColorImpl?(nil)
                                     } else {
                                         let previousThemeIndex = themes.prefix(upTo: currentThemeIndex).reversed().firstIndex(where: { $0.file != nil })
                                         let newTheme: PresentationThemeReference
@@ -1048,7 +1044,7 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
                                              return updated
                                          })))
                                         
-                                        if isCurrent, let settings = cloudTheme.theme.settings?.first {
+                                        if isCurrent, cloudTheme.theme.settings?.first != nil {
                                             let colorThemes = themes.filter { theme in
                                                 if let _ = theme.settings {
                                                     return true
@@ -1063,11 +1059,7 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
                                                     let theme = themes[themes.index(before: previousThemeIndex.base)]
                                                     selectThemeImpl?(.cloud(PresentationCloudTheme(theme: theme, resolvedWallpaper: nil, creatorAccountId: theme.isCreator ? context.account.id : nil)))
                                                 } else {
-                                                    if settings.baseTheme == .night {
-                                                        selectAccentColorImpl?(PresentationThemeAccentColor(baseColor: .blue))
-                                                    } else {
-                                                        selectAccentColorImpl?(nil)
-                                                    }
+                                                    selectAccentColorImpl?(nil)
                                                 }
                                             }
                                         }

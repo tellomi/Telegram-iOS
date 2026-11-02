@@ -199,8 +199,9 @@ private enum ThemePickerControllerEntry: ItemListNodeEntry {
                             colorItems.append(.preset(preset))
                         }
                     } else if name == .day {
-                        colorItems.append(.color(.blue))
-                        colors = colors.filter { $0 != .blue }
+                        colorItems.append(.color(.black))
+                        colors = colors.filter { $0 != .black }
+                        defaultColor = PresentationThemeAccentColor(baseColor: .black)
             
                         for preset in dayColorPresets {
                             colorItems.append(.preset(preset))
@@ -208,6 +209,7 @@ private enum ThemePickerControllerEntry: ItemListNodeEntry {
                     } else if name == .night {
                         colorItems.append(.color(.blue))
                         colors = colors.filter { $0 != .blue }
+                        defaultColor = nil
             
                         for preset in nightColorPresets {
                             colorItems.append(.preset(preset))
@@ -646,12 +648,8 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
                                     })))
                                     
                                     if isCurrent, let currentThemeIndex = themes.firstIndex(where: { $0.id == theme.theme.id }) {
-                                        if let settings = theme.theme.settings?.first {
-                                            if settings.baseTheme == .night {
-                                                selectAccentColorImpl?(nil, PresentationThemeAccentColor(baseColor: .blue))
-                                            } else {
-                                                selectAccentColorImpl?(nil, nil)
-                                            }
+                                        if theme.theme.settings?.first != nil {
+                                            selectAccentColorImpl?(nil, nil)
                                         } else {
                                             let previousThemeIndex = themes.prefix(upTo: currentThemeIndex).reversed().firstIndex(where: { $0.file != nil })
                                             let newTheme: PresentationThemeReference
@@ -897,7 +895,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
                                              return updated
                                          })))
                                         
-                                        if isCurrent, let settings = cloudTheme.theme.settings?.first {
+                                        if isCurrent, cloudTheme.theme.settings?.first != nil {
                                             let colorThemes = themes.filter { theme in
                                                 if let _ = theme.settings {
                                                     return true
@@ -912,11 +910,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
                                                     let theme = themes[themes.index(before: previousThemeIndex.base)]
                                                     selectThemeImpl?(nil, .cloud(PresentationCloudTheme(theme: theme, resolvedWallpaper: nil, creatorAccountId: theme.isCreator ? context.account.id : nil)), false)
                                                 } else {
-                                                    if settings.baseTheme == .night {
-                                                        selectAccentColorImpl?(nil, PresentationThemeAccentColor(baseColor: .blue))
-                                                    } else {
-                                                        selectAccentColorImpl?(nil, nil)
-                                                    }
+                                                    selectAccentColorImpl?(nil, nil)
                                                 }
                                             }
                                         }
@@ -952,10 +946,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
             let preferredBaseTheme: TelegramBaseTheme = .night
             
             let automaticTheme = settings.automaticThemeSwitchSetting.theme
-            var effectiveColors = settings.themeSpecificAccentColors[automaticTheme.index]
-            if automaticTheme == .builtin(.night) && effectiveColors == nil {
-                effectiveColors = PresentationThemeAccentColor(baseColor: .blue)
-            }
+            let effectiveColors = settings.themeSpecificAccentColors[automaticTheme.index]
             let themeSpecificWallpaper = (settings.themeSpecificChatWallpapers[coloredThemeIndex(reference: automaticTheme, accentColor: effectiveColors)] ?? settings.themeSpecificChatWallpapers[automaticTheme.index])
             
             let darkTheme = makePresentationTheme(mediaBox: context.sharedContext.accountManager.mediaBox, themeReference: automaticTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.color, bubbleColors: effectiveColors?.customBubbleColors ?? [], wallpaper: effectiveColors?.wallpaper, baseColor: effectiveColors?.baseColor, serviceBackgroundColor: defaultServiceBackgroundColor) ?? defaultPresentationTheme

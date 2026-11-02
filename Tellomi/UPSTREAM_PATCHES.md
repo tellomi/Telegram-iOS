@@ -307,6 +307,25 @@ The code screen did not. It centered in a region that started at the status bar 
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | The Tellomi code stack is centered under the navigation bar. When that band is shorter than the stack, the stack stays top-aligned there instead of moving up under Help. |
 | `submodules/CodeInputView/Sources/CodeInputView.swift` | Expanded digit boxes shrink, spacing first down to 4pt, so six boxes stay inside the width they were given. |
 
+## Default wallpaper and accent
+
+New installs, and accounts that never stored a wallpaper, use a solid chat background. Light built-in themes (`.dayClassic`, the default, and `.day`) are `#F2F2F2`. Dark built-in themes (`.night` and `.nightAccent`) are `#000000`. A wallpaper written into `themeSpecificChatWallpapers` is an explicit choice and is left alone. The historical `.builtin` token used to expand to the legacy pattern; it now expands to the same solid color. Accent editing no longer suggests the green Telegram gradient as the fallback wallpaper.
+
+The light theme accent (`defaultDayAccentColor`) is black. System night mode no longer forces the blue accent onto `.night`, so that theme keeps the white controls it is built with. Someone who already picked a color, including blue, keeps it.
+
+Left as they are, because they are not the default chrome accent: message link blue (`0x004bad`), the night theme's outgoing bubble gradient (`0x61BCF9` / `0x0088ff`), the tinted theme's accent (`0x2ea6ff`) and the wallpapers bundled with its color presets, `defaultDarkColorPresentationTheme` (`0x3e88f7`, used by the camera, gallery, stories, and calls), the intro start button (`0x2ca5e0`), and the passcode gradient.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramPresentationData/Sources/DefaultDayPresentationTheme.swift` | Solid light wallpaper. Accent is black. Day-theme outgoing bubbles are solid black so the white text still has a fill. Suggested accent wallpaper is the solid color. |
+| `submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift` | Solid black wallpaper. |
+| `submodules/TelegramPresentationData/Sources/DefaultDarkTintedPresentationTheme.swift` | Solid black wallpaper. |
+| `submodules/TelegramPresentationData/Sources/PresentationData.swift` | `.builtin` resolves to the solid color. Auto night does not inject blue. |
+| `submodules/SettingsUI/Sources/ThemePickerController.swift` | Night preview matches that. The Day swatch defaults to black. Removing a theme does not fall back to blue. |
+| `submodules/SettingsUI/Sources/Themes/ThemeSettingsController.swift` | Removing a theme does not fall back to blue. |
+| `submodules/TelegramUI/Components/Settings/WallpaperGridScreen/Sources/ThemeGridControllerNode.swift` | The gallery's built-in slot is the solid color. |
+| `submodules/HashtagSearchUI/Sources/HashtagSearchControllerNode.swift` | The forced dark search background is solid black. |
+
 ## Login language, sent-code copy, duplicate session
 
 Mirrors Android `tellomi/Telegram` #31 on the phone and code screens. The top-right control is no longer Help. It is the current language plus ▾ (`简体中文 ▾`, `繁體中文 ▾`, `English ▾`). The card is the same centered login card as the agreement prompt, titled「选择语言 / Language」, with those three built-in rows, a check on the current one, and Cancel. There is no Other row and no `langpack.getStrings` call. Upstream language screens need a logged-in account.

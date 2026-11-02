@@ -410,7 +410,7 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
         
         var effectiveChatWallpaper: TelegramWallpaper = (themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: effectiveTheme, accentColor: effectiveColors)] ?? themeSettings.themeSpecificChatWallpapers[effectiveTheme.index]) ?? theme.chat.defaultWallpaper
         if case .builtin = effectiveChatWallpaper {
-            effectiveChatWallpaper = defaultBuiltinWallpaper(data: .legacy, colors: legacyBuiltinWallpaperGradientColors.map(\.rgb))
+            effectiveChatWallpaper = tellomiDefaultSolidWallpaper(dark: theme.overallDarkAppearance)
         }
         
         let dateTimeFormat = currentDateTimeFormat()
@@ -429,6 +429,26 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
         
         return InitialPresentationDataAndSettings(presentationData: PresentationData(strings: stringsValue, theme: theme, autoNightModeTriggered: autoNightModeTriggered, chatWallpaper: effectiveChatWallpaper, chatFontSize: chatFontSize, chatBubbleCorners: chatBubbleCorners, listsFontSize: listsFontSize, dateTimeFormat: dateTimeFormat, nameDisplayOrder: nameDisplayOrder, nameSortOrder: nameSortOrder, reduceMotion: themeSettings.reduceMotion, largeEmoji: themeSettings.largeEmoji), automaticMediaDownloadSettings: automaticMediaDownloadSettings, autodownloadSettings: autodownloadSettings, callListSettings: callListSettings, inAppNotificationSettings: inAppNotificationSettings, mediaInputSettings: mediaInputSettings, mediaDisplaySettings: mediaDisplaySettings, stickerSettings: stickerSettings, chatSettings: chatSettings, experimentalUISettings: experimentalUISettings)
     }
+}
+
+private func tellomiResolvedThemeIsDark(_ theme: PresentationThemeReference, preferredBaseTheme: TelegramBaseTheme?) -> Bool {
+    switch preferredBaseTheme {
+    case .night, .tinted:
+        return true
+    case .classic, .day:
+        return false
+    case nil:
+        break
+    }
+    if case let .builtin(builtin) = theme {
+        switch builtin {
+        case .night, .nightAccent:
+            return true
+        case .day, .dayClassic:
+            return false
+        }
+    }
+    return false
 }
 
 private var first = true
@@ -767,10 +787,6 @@ public func updatedPresentationData(accountManager: AccountManager<TelegramAccou
                             let automaticTheme = themeSettings.automaticThemeSwitchSetting.theme
                             effectiveColors = themeSettings.themeSpecificAccentColors[automaticTheme.index]
                             
-                            if automaticTheme == .builtin(.night) && effectiveColors == nil {
-                                effectiveColors = PresentationThemeAccentColor(baseColor: .blue)
-                            }
-                            
                             let themeSpecificWallpaper = (themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: automaticTheme, accentColor: effectiveColors)] ?? themeSettings.themeSpecificChatWallpapers[automaticTheme.index])
                             
                             if let themeSpecificWallpaper = themeSpecificWallpaper {
@@ -791,7 +807,7 @@ public func updatedPresentationData(accountManager: AccountManager<TelegramAccou
                         }
                         
                         if case .builtin = effectiveChatWallpaper {
-                            effectiveChatWallpaper = defaultBuiltinWallpaper(data: .legacy, colors: legacyBuiltinWallpaperGradientColors.map(\.rgb))
+                            effectiveChatWallpaper = tellomiDefaultSolidWallpaper(dark: tellomiResolvedThemeIsDark(effectiveTheme, preferredBaseTheme: preferredBaseTheme))
                         }
                         
                         if let colors = effectiveColors, colors.baseColor == .theme {
