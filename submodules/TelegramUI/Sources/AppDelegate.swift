@@ -351,6 +351,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     private var recaptchaClientsBySiteKey: [String: Promise<RecaptchaClient>] = [:]
         
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        if CommandLine.arguments.contains("--tellomi-reset-language") {
+            tellomiResetSavedInterfaceLanguage()
+        }
         precondition(!testIsLaunched)
         testIsLaunched = true
         CrashReportCollector.shared.start()

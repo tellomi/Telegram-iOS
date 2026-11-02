@@ -501,6 +501,29 @@ private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
     }
 }
 
+/// Plain `UIScrollView`, not `ASScrollNode`. `ASScrollView` publishes `accessibilityElements`
+/// as its subviews, and XCTest then reads those frames in the scroll view's coordinates
+/// (`y = 7` while the scroll view itself is at `y = 114`), so `isHittable` is false.
+private final class TellomiLoginFormScrollView: UIScrollView {
+    override func touchesShouldCancel(in view: UIView) -> Bool {
+        return true
+    }
+}
+
+private final class TellomiLoginFormScrollNode: ASDisplayNode {
+    var scrollView: UIScrollView {
+        return self.view as! UIScrollView
+    }
+
+    override init() {
+        super.init()
+        self.setViewBlock({
+            return TellomiLoginFormScrollView()
+        })
+        self.clipsToBounds = true
+    }
+}
+
 final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private let sharedContext: SharedAccountContext
     private var account: UnauthorizedAccount?
@@ -531,7 +554,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     var tellomiRequestSurface: ((TellomiLoginSurface) -> Void)?
     private let proceedNode: SolidRoundedButtonNode
     /// The email home column scrolls when the keyboard leaves less room than the rows, so the agreement and the primary button stay clear of them.
-    private let tellomiFormScrollNode: ASScrollNode?
+    private let tellomiFormScrollNode: TellomiLoginFormScrollNode?
     /// Last laid-out height of that column. A shrink is the keyboard (or any inset) taking space.
     private var tellomiFormViewportHeight: CGFloat = 0.0
     private var tellomiFormKeyboardVisible = false
@@ -792,18 +815,15 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             passwordErrorNode.displaysAsynchronously = false
             passwordErrorNode.isHidden = true
             self.passwordErrorNode = passwordErrorNode
-            let formScroll = ASScrollNode()
-            formScroll.scrollableDirections = ASScrollDirectionVerticalDirections
-            formScroll.view.alwaysBounceVertical = false
-            formScroll.view.showsVerticalScrollIndicator = true
-            formScroll.view.delaysContentTouches = false
-            formScroll.view.keyboardDismissMode = .none
-            formScroll.clipsToBounds = true
-            formScroll.canCancelAllTouchesInViews = true
+            let formScroll = TellomiLoginFormScrollNode()
+            formScroll.scrollView.alwaysBounceVertical = false
+            formScroll.scrollView.showsVerticalScrollIndicator = true
+            formScroll.scrollView.delaysContentTouches = false
+            formScroll.scrollView.keyboardDismissMode = .none
+            formScroll.scrollView.accessibilityIdentifier = "Auth.Login.Form"
             if #available(iOS 11.0, *) {
-                formScroll.view.contentInsetAdjustmentBehavior = .never
+                formScroll.scrollView.contentInsetAdjustmentBehavior = .never
             }
-            formScroll.view.accessibilityIdentifier = "Auth.Login.Form"
             self.tellomiFormScrollNode = formScroll
         } else {
             self.emailFieldNode = nil
@@ -835,6 +855,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
 
         self.agreementNode = ImmediateTextNode()
         self.agreementNode.maximumNumberOfLines = 0
+        self.agreementNode.textAlignment = .center
         self.agreementNode.displaysAsynchronously = false
         self.agreementNode.isUserInteractionEnabled = true
         self.agreementNode.linkHighlightColor = TellomiLoginChrome.link.withAlphaComponent(0.2)
@@ -850,7 +871,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.backgroundColor = theme.list.plainBackgroundColor
         
         if let formScroll = self.tellomiFormScrollNode {
-            formScroll.view.delegate = self
+            formScroll.scrollView.delegate = self
             self.addSubnode(formScroll)
         }
         self.addSubnode(self.titleNode)
@@ -1290,7 +1311,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             y += item.size.height + gap
         }
         let contentHeight = max(bounds.height, y - gap + 8.0)
-        scroll.view.contentSize = CGSize(width: bounds.width, height: contentHeight)
+        let scrollView = scroll.scrollView
+        scrollView.contentSize = CGSize(width: bounds.width, height: contentHeight)
         let maxOffset = max(0.0, contentHeight - bounds.height)
         let keyboardAppeared = keyboardVisible && !self.tellomiFormKeyboardVisible
         let viewportShrunk = self.tellomiFormViewportHeight > bounds.height + 0.5
@@ -1301,21 +1323,42 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         }
         self.tellomiFormKeyboardVisible = keyboardVisible
         self.tellomiFormViewportHeight = bounds.height
-        var offsetY = min(max(0.0, scroll.view.contentOffset.y), maxOffset)
+        var offsetY = min(max(0.0, scrollView.contentOffset.y), maxOffset)
         if self.tellomiFormFollowsKeyboard {
             offsetY = maxOffset
         } else if !keyboardVisible && maxOffset < 0.5 {
             offsetY = 0.0
         }
-        if abs(scroll.view.contentOffset.y - offsetY) > 0.5 {
-            scroll.view.contentOffset = CGPoint(x: 0.0, y: offsetY)
+        if abs(scrollView.contentOffset.y - offsetY) > 0.5 {
+            scrollView.contentOffset = CGPoint(x: 0.0, y: offsetY)
         }
         transition.updateFrame(node: scroll, frame: bounds)
         // The frame animation's bounds run includes contentOffset. Drop it so the inset above
         // sticks instead of holding the pre-keyboard origin for the whole keyboard animation.
         scroll.layer.removeAnimation(forKey: "bounds")
-        if abs(scroll.view.contentOffset.y - offsetY) > 0.5 {
-            scroll.view.contentOffset = CGPoint(x: 0.0, y: offsetY)
+        if abs(scrollView.contentOffset.y - offsetY) > 0.5 {
+            scrollView.contentOffset = CGPoint(x: 0.0, y: offsetY)
+        }
+        self.tellomiPublishFormAccessibilityFrames()
+    }
+
+    /// Screen coordinates. A child left at its content origin is what made XCTest report `y = 7`.
+    private func tellomiPublishFormAccessibilityFrames() {
+        guard let scroll = self.tellomiFormScrollNode, scroll.isNodeLoaded, scroll.view.window != nil else {
+            return
+        }
+        for subnode in scroll.subnodes ?? [] {
+            self.tellomiPublishAccessibilityFrame(subnode.view)
+        }
+    }
+
+    private func tellomiPublishAccessibilityFrame(_ view: UIView) {
+        let frame = UIAccessibility.convertToScreenCoordinates(view.bounds, in: view)
+        if frame.width > 1.0, frame.height > 1.0, frame.origin.x.isFinite, frame.origin.y.isFinite {
+            view.accessibilityFrame = frame
+        }
+        for subview in view.subviews {
+            self.tellomiPublishAccessibilityFrame(subview)
         }
     }
 
@@ -1356,6 +1399,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             phoneSwitchNode.accessibilityLabel = emailCopy.switchToPhone
             phoneSwitchNode.accessibilityIdentifier = "Auth.Login.SwitchToPhone"
         }
+        self.orDividerNode?.setTitle(loginCopy.orDivider)
         self.otherRowNode?.setTitle(loginCopy.otherLogin, dark: rowDark)
         self.otherRowNode?.accessibilityIdentifier = "Auth.Login.OtherMethods"
         self.recoverNode?.setTitle(loginCopy.recoverAccount, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
@@ -1745,13 +1789,16 @@ extension AuthorizationSequencePhoneEntryControllerNode: UIScrollViewDelegate {
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard self.tellomiFormFollowsKeyboard, let scroll = self.tellomiFormScrollNode, scrollView === scroll.view else {
+        guard let scroll = self.tellomiFormScrollNode, scrollView === scroll.scrollView else {
             return
         }
-        let maxOffset = max(0.0, scrollView.contentSize.height - scrollView.bounds.height)
-        if abs(scrollView.contentOffset.y - maxOffset) > 0.5 {
-            scrollView.contentOffset = CGPoint(x: 0.0, y: maxOffset)
+        if self.tellomiFormFollowsKeyboard {
+            let maxOffset = max(0.0, scrollView.contentSize.height - scrollView.bounds.height)
+            if abs(scrollView.contentOffset.y - maxOffset) > 0.5 {
+                scrollView.contentOffset = CGPoint(x: 0.0, y: maxOffset)
+            }
         }
+        self.tellomiPublishFormAccessibilityFrames()
     }
 }
 

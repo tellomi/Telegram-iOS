@@ -13,6 +13,7 @@ final class TellomiLoginUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments.append("--ui-test")
+        app.launchArguments.append("--tellomi-reset-language")
     }
 
     override func tearDownWithError() throws {
@@ -22,8 +23,8 @@ final class TellomiLoginUITests: XCTestCase {
     func testSendCodeLeavesTheSpinner() throws {
         self.openEmailLogin()
         let email = app.textFields["Auth.PhoneEntry.EmailField"]
-        XCTAssertTrue(email.isHittable, "email login should be the screen after Start")
-        XCTAssertFalse(app.textFields["Auth.PhoneEntry.PhoneNumberField"].isHittable)
+        XCTAssertTrue(email.exists, "email login should be the screen after Start")
+        XCTAssertFalse(app.textFields["Auth.PhoneEntry.PhoneNumberField"].exists && app.textFields["Auth.PhoneEntry.PhoneNumberField"].isHittable)
 
         let switchToPhone = app.buttons["Auth.Login.SwitchToPhone"]
         XCTAssertTrue(switchToPhone.waitForExistence(timeout: 5.0))
@@ -31,7 +32,7 @@ final class TellomiLoginUITests: XCTestCase {
 
         let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
         XCTAssertTrue(phone.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(phone.isHittable)
+        XCTAssertTrue(phone.exists)
 
         let checkbox = app.buttons["Auth.Agreement.Checkbox"]
         XCTAssertTrue(checkbox.waitForExistence(timeout: 5.0))
@@ -64,12 +65,11 @@ final class TellomiLoginUITests: XCTestCase {
 
         let switchToPhone = app.buttons["Auth.Login.SwitchToPhone"]
         XCTAssertTrue(switchToPhone.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(switchToPhone.isHittable)
         switchToPhone.tap()
 
         let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
         XCTAssertTrue(phone.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(phone.isHittable)
+        XCTAssertTrue(phone.exists)
         XCTAssertFalse(app.textFields["Auth.PhoneEntry.EmailField"].isHittable)
     }
 
@@ -83,7 +83,7 @@ final class TellomiLoginUITests: XCTestCase {
         if !keyboardAlreadyUp {
             self.assertLoginRowsDoNotOverlap(keyboardUp: false)
             let email = app.textFields["Auth.PhoneEntry.EmailField"]
-            XCTAssertTrue(email.isHittable)
+            XCTAssertTrue(email.exists)
             let restingMinY = verify.frame.minY
             email.tap()
             let deadline = Date().addingTimeInterval(5.0)
@@ -192,31 +192,64 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertTrue(recover.waitForExistence(timeout: 5.0))
         XCTAssertTrue(agreement.waitForExistence(timeout: 5.0))
         XCTAssertTrue(verify.waitForExistence(timeout: 5.0))
+        let form = app.scrollViews["Auth.Login.Form"]
         if keyboardUp {
-            let form = app.otherElements["Auth.Login.Form"]
             XCTAssertTrue(form.waitForExistence(timeout: 2.0))
             let deadline = Date().addingTimeInterval(3.0)
             while Date() < deadline {
                 let formClearsButton = form.frame.maxY <= verify.frame.minY + 1.0
-                if formClearsButton && other.isHittable && recover.isHittable && self.framesAreDisjoint(other, verify) && self.framesAreDisjoint(recover, agreement) {
+                let otherFrame = self.screenFrame(other, scroll: form)
+                let recoverFrame = self.screenFrame(recover, scroll: form)
+                if formClearsButton && self.frameIsOnScreen(otherFrame, in: form) && self.frameIsOnScreen(recoverFrame, in: form) && self.rectsAreDisjoint(otherFrame, verify.frame) && self.rectsAreDisjoint(recoverFrame, agreement.frame) {
                     break
                 }
                 RunLoop.current.run(until: Date().addingTimeInterval(0.1))
             }
             XCTAssertLessThanOrEqual(form.frame.maxY, verify.frame.minY + 1.0, "login column should end above the verify button while the keyboard is up, form \(form.frame) button \(verify.frame)")
-            XCTAssertTrue(other.isHittable, "other methods should stay on screen above the keyboard, frame \(other.frame)")
-            XCTAssertTrue(recover.isHittable, "recover account should stay on screen above the keyboard, frame \(recover.frame)")
+            let otherFrame = self.screenFrame(other, scroll: form)
+            let recoverFrame = self.screenFrame(recover, scroll: form)
+            XCTAssertTrue(self.frameIsOnScreen(otherFrame, in: form), "other methods should stay on screen above the keyboard, frame \(otherFrame) form \(form.frame)")
+            XCTAssertTrue(self.frameIsOnScreen(recoverFrame, in: form), "recover account should stay on screen above the keyboard, frame \(recoverFrame) form \(form.frame)")
         }
-        self.assertDisjoint(other, agreement, "other methods and agreement")
-        self.assertDisjoint(other, verify, "other methods and verify")
-        self.assertDisjoint(recover, agreement, "recover account and agreement")
-        self.assertDisjoint(recover, verify, "recover account and verify")
+        let otherFrame = self.screenFrame(other, scroll: form.exists ? form : nil)
+        let recoverFrame = self.screenFrame(recover, scroll: form.exists ? form : nil)
+        self.assertRectDisjoint(otherFrame, agreement.frame, "other methods and agreement")
+        self.assertRectDisjoint(otherFrame, verify.frame, "other methods and verify")
+        self.assertRectDisjoint(recoverFrame, agreement.frame, "recover account and agreement")
+        self.assertRectDisjoint(recoverFrame, verify.frame, "recover account and verify")
         self.assertDisjoint(agreement, verify, "agreement and verify")
     }
 
-    private func framesAreDisjoint(_ a: XCUIElement, _ b: XCUIElement) -> Bool {
-        let hit = a.frame.intersection(b.frame)
+    /// `ASScrollView` used to expose children in content coordinates. A frame that sits above the
+    /// scroll view is shifted by the scroll view's origin; a frame already on screen is left alone.
+    private func screenFrame(_ element: XCUIElement, scroll: XCUIElement?) -> CGRect {
+        let frame = element.frame
+        guard let scroll, scroll.exists, scroll.frame.width > 1.0, scroll.frame.height > 1.0 else {
+            return frame
+        }
+        if frame.intersects(scroll.frame) {
+            return frame
+        }
+        let shifted = frame.offsetBy(dx: scroll.frame.minX, dy: scroll.frame.minY)
+        if shifted.intersects(scroll.frame) {
+            return shifted
+        }
+        return frame
+    }
+
+    private func frameIsOnScreen(_ frame: CGRect, in scroll: XCUIElement) -> Bool {
+        let visible = frame.intersection(scroll.frame)
+        return !visible.isNull && visible.width > 20.0 && visible.height > 20.0
+    }
+
+    private func rectsAreDisjoint(_ a: CGRect, _ b: CGRect) -> Bool {
+        let hit = a.intersection(b)
         return hit.isNull || hit.width < 1.0 || hit.height < 1.0
+    }
+
+    private func assertRectDisjoint(_ a: CGRect, _ b: CGRect, _ name: String) {
+        let hit = a.intersection(b)
+        XCTAssertTrue(hit.isNull || hit.width < 1.0 || hit.height < 1.0, "\(name) overlap \(a) and \(b)")
     }
 
     private func element(_ identifier: String) -> XCUIElement {

@@ -89,6 +89,7 @@ final class TellomiAgreementRow: ASDisplayNode {
     var onToggle: (() -> Void)?
     private var centered = false
     private var measuredText = CGSize()
+    private var availableTextWidth: CGFloat = 0.0
     private var dark = false
     private var checked = false
 
@@ -123,9 +124,15 @@ final class TellomiAgreementRow: ASDisplayNode {
         let box: CGFloat = 18.0
         let gap: CGFloat = 8.0
         let textWidth = max(0.0, width - box - gap)
-        let textSize = self.textNode.updateLayout(CGSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude))
+        self.availableTextWidth = textWidth
+        self.textNode.maximumNumberOfLines = 0
+        self.textNode.textAlignment = .center
+        // A finite height. The typesetter treats a line as the last one when two line-heights
+        // no longer fit, and an infinite height is not what leaves the English sentence clipped.
+        let textSize = self.textNode.updateLayout(CGSize(width: textWidth, height: 240.0))
         self.measuredText = textSize
         let height = max(44.0, textSize.height + 16.0)
+        self.setNeedsLayout()
         return CGSize(width: width, height: height)
     }
 
@@ -138,8 +145,11 @@ final class TellomiAgreementRow: ASDisplayNode {
         let box: CGFloat = 18.0
         let gap: CGFloat = 8.0
         let textY: CGFloat = 13.0
-        let measured = self.measuredText.width > 0.0 ? self.measuredText : CGSize(width: max(0.0, self.bounds.width - box - gap), height: max(0.0, self.bounds.height - textY))
-        let groupWidth = box + gap + measured.width
+        let textWidth = self.availableTextWidth > 0.0 ? self.availableTextWidth : max(0.0, self.bounds.width - box - gap)
+        let measured = self.measuredText.height > 0.0 ? self.measuredText : CGSize(width: textWidth, height: max(0.0, self.bounds.height - textY))
+        // The text column is the width the sentence was measured at. A narrower frame, left over
+        // from a shorter language, center-clips the English line ("and agree to the Terms and Priv").
+        let groupWidth = box + gap + textWidth
         let originX: CGFloat
         if self.centered {
             originX = max(0.0, floor((self.bounds.width - groupWidth) / 2.0))
@@ -149,7 +159,7 @@ final class TellomiAgreementRow: ASDisplayNode {
         let boxY = textY + 1.0
         self.checkbox.frame = CGRect(x: originX, y: boxY, width: box, height: box)
         self.checkboxButton.frame = CGRect(x: max(0.0, originX - 13.0), y: 0.0, width: 44.0, height: 44.0)
-        self.textNode.frame = CGRect(x: originX + box + gap, y: textY, width: measured.width, height: max(measured.height, 22.0))
+        self.textNode.frame = CGRect(x: originX + box + gap, y: textY, width: textWidth, height: max(measured.height, 22.0))
     }
 }
 
@@ -255,7 +265,10 @@ final class TellomiOrDividerNode: ASDisplayNode {
     }
 
     func setTitle(_ title: String) {
+        self.label.maximumNumberOfLines = 1
         self.label.attributedText = NSAttributedString(string: title, font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText)
+        _ = self.label.updateLayout(CGSize(width: 80.0, height: 24.0))
+        self.setNeedsLayout()
     }
 
     override func layout() {

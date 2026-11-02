@@ -69,6 +69,13 @@ public func tellomiRememberInterfaceLanguage(_ languageCode: String) {
     tellomiMarkSystemLangPackApplied()
 }
 
+/// Drops the login language choice. UI tests pass `--tellomi-reset-language` so a
+/// previous launch's 简体中文 does not stick in `UserDefaults` after the data directory is wiped.
+public func tellomiResetSavedInterfaceLanguage() {
+    UserDefaults.standard.removeObject(forKey: tellomiPreferredInterfaceLanguageKey)
+    UserDefaults.standard.removeObject(forKey: tellomiSystemLangPackDefaultsKey)
+}
+
 /// Persists the built-in choice and marks it applied, so a later Settings pack is what wins
 /// only after that screen writes the same key.
 public func tellomiApplyInterfaceLanguage(accountManager: AccountManager<TelegramAccountManagerTypes>, languageCode: String) {

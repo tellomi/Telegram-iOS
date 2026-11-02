@@ -12,7 +12,7 @@ xcodebuild test \
 Pick any available simulator. List them with `xcrun simctl list devices available iPhone`.
 `xcodebuild test` boots that simulator itself. Simulator.app does not need to be open.
 
-Tellomi login checks (`TellomiLoginUITests`: after Start the email field is showing, phone login is a push, then the send-code spinner, language list, and country picker) are the same target. `testEmailLoginRowsDoNotOverlap` checks the email column with the keyboard down and again after the verify button has moved up with the keyboard. `testChineseLanguageDefaultsCountryCodeTo86` opens 简体中文 by the subtitle `Chinese (Simplified)`, because a Classic row shares the native title. Run only that class so the older `UITests.testSignUp` dump does not fail the run:
+Tellomi login checks (`TellomiLoginUITests`: after Start the email field is showing, phone login is a push, then the send-code spinner, language list, and country picker) are the same target. The suite passes `--tellomi-reset-language`, which clears the saved login language so a previous 简体中文 choice does not leak into the next launch. `testEmailLoginRowsDoNotOverlap` looks up `Auth.Login.Form` as a scroll view and checks the column with the keyboard down and again after the verify button has moved up. `testChineseLanguageDefaultsCountryCodeTo86` opens 简体中文 by the subtitle `Chinese (Simplified)`, because a Classic row shares the native title. Run only that class so the older `UITests.testSignUp` dump does not fail the run:
 
 ```bash
 xcodebuild test \
