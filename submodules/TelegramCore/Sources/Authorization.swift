@@ -404,8 +404,10 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
                             }
                         }
                         tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .confirmationCodeEntry(number: phoneNumber, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false))
-                    case .sentCodePaymentRequired:
-                        return .never()
+                    case let .sentCodePaymentRequired(sentCodePaymentRequiredData):
+                        let (storeProduct, codeHash, supportEmailAddress, supportEmailSubject, premiumDays) = (sentCodePaymentRequiredData.storeProduct, sentCodePaymentRequiredData.phoneCodeHash, sentCodePaymentRequiredData.supportEmailAddress, sentCodePaymentRequiredData.supportEmailSubject, sentCodePaymentRequiredData.premiumDays)
+                        tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .payment(number: phoneNumber, codeHash: codeHash, storeProduct: storeProduct, premiumDays: premiumDays, supportEmailAddress: supportEmailAddress, supportEmailSubject: supportEmailSubject, syncContacts: syncContacts))
+                        return .single(.sentCode(account))
                     case let .sentCodeSuccess(sentCodeSuccessData):
                         let authorization = sentCodeSuccessData.authorization
                         switch authorization {
@@ -432,8 +434,10 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
                                 return .loggedIn
                             }
                             |> castError(AuthorizationCodeRequestError.self)
-                        case .authorizationSignUpRequired:
-                            return .never()
+                        case let .authorizationSignUpRequired(authorizationSignUpRequiredData):
+                            let termsOfService = authorizationSignUpRequiredData.termsOfService
+                            tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .signUp(number: phoneNumber, codeHash: "", firstName: "", lastName: "", termsOfService: termsOfService.flatMap(UnauthorizedAccountTermsOfService.init(apiTermsOfService:)), syncContacts: syncContacts))
+                            return .single(.sentCode(account))
                         }
                     }
                     return .single(.sentCode(account))
@@ -460,6 +464,7 @@ private func internalResendAuthorizationCode(accountManager: AccountManager<Tele
     }
     
     return account.network.request(Api.functions.auth.resendCode(flags: flags, phoneNumber: number, phoneCodeHash: hash, reason: mappedReason), automaticFloodWait: false)
+    |> timeout(20.0, queue: Queue.concurrentDefaultQueue(), alternate: .fail(MTRpcError(errorCode: 500, errorDescription: "TIMEOUT")))
     |> mapError { error -> AuthorizationCodeRequestError in
         if error.errorDescription.hasPrefix("FLOOD_WAIT") {
             return .limitExceeded
@@ -471,6 +476,8 @@ private func internalResendAuthorizationCode(accountManager: AccountManager<Tele
             return .phoneBanned
         } else if error.errorDescription == "UPDATE_APP_TO_LOGIN" {
             return .appOutdated
+        } else if error.errorDescription == "TIMEOUT" {
+            return .timeout
         } else {
             return .generic(info: (Int(error.errorCode), error.errorDescription))
         }
@@ -591,6 +598,7 @@ public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccou
                 case let .confirmationCodeEntry(number, type, hash, _, _, syncContacts, previousCodeEntryValue, _):
                     do {
                         return account.network.request(Api.functions.auth.resendCode(flags: 0, phoneNumber: number, phoneCodeHash: hash, reason: nil), automaticFloodWait: false)
+                        |> timeout(20.0, queue: Queue.concurrentDefaultQueue(), alternate: .fail(MTRpcError(errorCode: 500, errorDescription: "TIMEOUT")))
                         |> mapError { error -> AuthorizationCodeRequestError in
                             if error.errorDescription.hasPrefix("FLOOD_WAIT") {
                                 return .limitExceeded
@@ -602,6 +610,8 @@ public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccou
                                 return .phoneBanned
                             } else if error.errorDescription == "UPDATE_APP_TO_LOGIN" {
                                 return .appOutdated
+                            } else if error.errorDescription == "TIMEOUT" {
+                                return .timeout
                             } else {
                                 return .generic(info: (Int(error.errorCode), error.errorDescription))
                             }

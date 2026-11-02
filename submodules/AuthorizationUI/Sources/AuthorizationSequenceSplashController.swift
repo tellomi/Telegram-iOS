@@ -266,7 +266,18 @@ public final class AuthorizationSequenceSplashController: ViewController {
             strongSelf.startButton.alpha = 0.6
             let accountManager = strongSelf.accountManager
             
-            strongSelf.activateLocalizationDisposable.set(TelegramEngineUnauthorized(account: strongSelf.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: resolvedCode).start(completed: {
+            let download = TelegramEngineUnauthorized(account: strongSelf.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: resolvedCode)
+            |> timeout(12.0, queue: .mainQueue(), alternate: .fail(.generic))
+            strongSelf.activateLocalizationDisposable.set(download.start(error: { [weak self] _ in
+                Queue.mainQueue().async {
+                    guard let self else {
+                        return
+                    }
+                    self.controller.isEnabled = true
+                    self.startButton.alpha = 1.0
+                    self.pressNext(strings: nil)
+                }
+            }, completed: {
                 if tellomiSystemLangPackCode() == resolvedCode {
                     tellomiMarkSystemLangPackApplied()
                 }

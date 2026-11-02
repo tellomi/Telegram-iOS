@@ -435,3 +435,27 @@ Empty chat, empty folder, no-results, calls placeholder, two-factor intro, and t
 | `animations.c`, `RMIntroViewController.m` | Draw the six marks and slide them with the page. |
 | `ChatListEmpty.tgs`, `ChatListFilterEmpty.tgs`, `ChatListNoResults.tgs`, `CallsPlaceholder.tgs`, `TwoFactorSetupIntro.tgs`, `IntroPhone.tgs` | Monochrome mark. |
 | `Telegram/Telegram-iOS/*.alticon` | Deleted. Not packaged. |
+
+## Login motion and the TestFlight 14.0.4 notes
+
+The login steps are the stock authorization controllers again. Tellomi only reskins the primary button (black / white) and the bundled sentences. Switching to password login, email code login, or email password login pushes another `AuthorizationSequencePhoneEntryController` with `NavigationController.filterController`, the same pop the country picker uses. The phone home lays its column out with `layoutAuthorizationItems`, and the primary button stays on the bottom edge and moves with the keyboard. The splash morph still uses `willAnimateIn` / `animateIn` / `forcedButtonFrame`. Content starts at alpha 0 when that morph is pending, so the country-code field cannot draw on the first frame.
+
+The three-language card was a hardcoded list in `tellomiBuiltinInterfaceLanguages`. It did not call `langpack.getLanguages`. The client catalog is the old `empty_languages` set plus English and Traditional Chinese. `zh-Hans` is no longer an empty lproj (it holds the push fallback strings); the other empty lprojs still have no UI strings. Full UI strings for those still have to come from the server langpack (`langpack.getLanguages` and `langpack.getLangPack`). Login chrome itself is bundled only for zh-hans, zh-hant, and English; any other choice falls back to English chrome until that pack is applied. The login list also merges a successful `langpack.getLanguages`. If the server returns only three languages, the client catalog is still shown.
+
+`auth.sendCode` used to return `.never()` for `sentCodePaymentRequired` and for `sentCodeSuccess` + `authorizationSignUpRequired`, so the button spinner never stopped. Those now write the payment or sign-up state and complete. Resend requests time out after 20s. The phone screen's send and resend subscriptions time out after 25s and show the existing network error. Start's langpack download times out after 12s and still opens the phone screen.
+
+Every login and sign-up screen uses one agreement sentence from `TellomiSignUpAgreement`: 已阅读并同意用户协议和隐私政策 (and the Traditional and English lines). The carrier clause is gone.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiLanguageSelectionController.swift` | New. Modal push, search field, native name, English name, checkmark. Same presentation as the country picker. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | Client language catalog and merge with the server list. |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | One sentence for phone, email, password, and sign-up. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Globe button. Pushed password and email steps. Language list. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | `layoutAuthorizationItems` for the login column. Splash content stays hidden until the morph. No bottom circle row. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift` | Globe button and the same language list. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Send and resend stop the spinner on timeout. Email restore is a pushed step under the code screen. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | Langpack download on Start times out and continues. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceEmailEntryControllerNode.swift` | Continue uses the black / white button. |
+| `submodules/TelegramCore/Sources/Authorization.swift` | Payment and sign-up responses complete. Resend times out. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Localization/TelegramEngineLocalization.swift`, `Localizations.swift` | `availableLocalizations()` reads `langpack.getLanguages` without Postbox. |

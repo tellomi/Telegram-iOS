@@ -42,6 +42,18 @@ func _internal_suggestedLocalizationInfo(network: Network, languageCode: String,
         }
 }
 
+/// Login language list. A failure is an empty list so the caller keeps the bundled catalog.
+/// This does not touch Postbox.
+func _internal_availableLanguageList(network: Network) -> Signal<[LocalizationInfo], NoError> {
+    return network.request(Api.functions.langpack.getLanguages(langPack: ""))
+    |> map { languages -> [LocalizationInfo] in
+        return languages.map(LocalizationInfo.init(apiLanguage:))
+    }
+    |> `catch` { _ -> Signal<[LocalizationInfo], NoError> in
+        return .single([])
+    }
+}
+
 func _internal_availableLocalizations(postbox: Postbox, network: Network, allowCached: Bool) -> Signal<[LocalizationInfo], NoError> {
     let cached: Signal<[LocalizationInfo], NoError>
     if allowCached {

@@ -66,6 +66,8 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     private let hapticFeedback = HapticFeedback()
     private var tellomiBindPhone = false
+    /// Set before the view loads. Password and email steps are their own controllers.
+    var tellomiInitialSurface: TellomiLoginSurface = .phoneCode
     
     public init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, countriesConfiguration: CountriesConfiguration? = nil, apiId: Int32, apiHash: String, isTestingEnvironment: Bool, otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), network: Network, presentationData: PresentationData, openUrl: @escaping (String) -> Void, back: @escaping () -> Void) {
         self.sharedContext = sharedContext
@@ -97,7 +99,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
         }
         if account != nil {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(presentationData.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+            self.navigationItem.rightBarButtonItem = tellomiLanguageBarItem(target: self, action: #selector(self.languagePressed))
         }
         
         if let countriesConfiguration {
@@ -122,23 +124,20 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     }
 
     private func presentTellomiLanguage() {
-        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
-        let current = tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode))
-        var rows: [TellomiChoiceRow] = []
-        for info in tellomiBuiltinInterfaceLanguages() {
-            let script = tellomiLoginScript(languageCode: info.languageCode)
-            let checked = script == current
-            let code = info.languageCode
-            rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
-                guard let self, !checked else {
-                    return
-                }
-                tellomiApplyInterfaceLanguage(accountManager: self.sharedContext.accountManager, languageCode: code)
-                self.refreshTellomiLanguage()
-            }))
+        let selected = tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode)
+        let controller = TellomiLanguageSelectionController(presentationData: self.presentationData, account: self.account, selectedCode: selected)
+        controller.completeWithLanguage = { [weak self] info in
+            guard let self else {
+                return
+            }
+            tellomiApplyInterfaceLanguage(accountManager: self.sharedContext.accountManager, info: info)
+            if let account = self.account {
+                let _ = TelegramEngineUnauthorized(account: account).localization.downloadAndApplyLocalization(accountManager: self.sharedContext.accountManager, languageCode: info.languageCode).start(error: { _ in
+                }, completed: {})
+            }
+            self.refreshTellomiLanguage()
         }
-        let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.presentationData.theme.overallDarkAppearance)
-        self.present(prompt, in: .window(.root))
+        self.push(controller)
     }
 
     private func refreshTellomiLanguage() {
@@ -164,9 +163,66 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
     }
 
-    @objc private func tellomiSurfaceBackPressed() {
-        if !self.controllerNode.popTellomiSurface() {
-            self.back()
+    /// Password and email steps use the navigation controller's pop, the same
+    /// transition as leaving the country picker.
+    func tellomiUseNavigationPop() {
+        self.attemptNavigation = { _ in
+            return true
+        }
+        self.navigationBar?.backPressed = { [weak self] in
+            guard let self else {
+                return
+            }
+            let pop = {
+                if let navigationController = self.navigationController as? NavigationController {
+                    navigationController.filterController(self, animated: true)
+                } else {
+                    self.navigationController?.popViewController(animated: true)
+                }
+            }
+            if self.attemptNavigation(pop) {
+                pop()
+            }
+        }
+        self.navigationItem.leftBarButtonItem = nil
+    }
+
+    func tellomiMakeStep(_ surface: TellomiLoginSurface, identifier: String? = nil) -> AuthorizationSequencePhoneEntryController {
+        let step = AuthorizationSequencePhoneEntryController(sharedContext: self.sharedContext, account: self.account, apiId: self.apiId, apiHash: self.apiHash, isTestingEnvironment: self.isTestingEnvironment, otherAccountPhoneNumbers: self.otherAccountPhoneNumbers, network: self.network, presentationData: self.presentationData, openUrl: self.openUrl, back: self.back)
+        step.tellomiInitialSurface = surface
+        step.tellomiUseNavigationPop()
+        step.loginWithNumber = self.loginWithNumber
+        step.loginWithPasskey = self.loginWithPasskey
+        step.accountUpdated = self.accountUpdated
+        if surface == .phonePassword, let data = self.currentData {
+            step.updateData(countryCode: data.0, countryName: data.1, number: data.2)
+        } else if surface.isEmail {
+            let carried = identifier ?? (self.isNodeLoaded ? self.controllerNode.emailAddress : nil)
+            if let carried, !carried.isEmpty {
+                step.updateData(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), countryName: nil, number: carried)
+            }
+        }
+        return step
+    }
+
+    private func tellomiOpenSurface(_ surface: TellomiLoginSurface) {
+        if self.tellomiInitialSurface == .phonePassword && surface == .phoneCode {
+            self.tellomiPopStep()
+            return
+        }
+        if self.tellomiInitialSurface == .emailPassword && surface == .emailCode {
+            self.tellomiPopStep()
+            return
+        }
+        let email = self.isNodeLoaded ? self.controllerNode.emailAddress : nil
+        self.push(self.tellomiMakeStep(surface, identifier: email))
+    }
+
+    private func tellomiPopStep() {
+        if let navigationController = self.navigationController as? NavigationController {
+            navigationController.filterController(self, animated: true)
+        } else {
+            self.navigationController?.popViewController(animated: true)
         }
     }
 
@@ -192,11 +248,8 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
 
     func updateNavigationItems() {
         if self.account != nil {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
-            if self.isNodeLoaded, self.controllerNode.tellomiSurface != .phoneCode {
-                let backTitle = tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)) ? "返回" : "Back"
-                self.navigationItem.leftBarButtonItem = UIBarButtonItem(backButtonAppearanceWithTitle: backTitle, target: self, action: #selector(self.tellomiSurfaceBackPressed))
-            } else {
+            self.navigationItem.rightBarButtonItem = tellomiLanguageBarItem(target: self, action: #selector(self.languagePressed))
+            if self.tellomiInitialSurface == .phoneCode {
                 self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
             }
             return
@@ -244,8 +297,11 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             }
             strongSelf.view.endEditing(true)
             self?.present(debugController(sharedContext: strongSelf.sharedContext, context: nil, modal: true), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
-        }, hasOtherAccounts: self.otherAccountPhoneNumbers.0 != nil)
+        }, hasOtherAccounts: self.otherAccountPhoneNumbers.0 != nil, surface: self.tellomiInitialSurface, splashTransition: self.shouldAnimateIn && self.tellomiInitialSurface == .phoneCode)
         self.controllerNode.setTellomiBindPhone(self.tellomiBindPhone)
+        self.controllerNode.tellomiRequestSurface = { [weak self] surface in
+            self?.tellomiOpenSurface(surface)
+        }
         self.controllerNode.accountUpdated = { [weak self] account in
             guard let strongSelf = self else {
                 return

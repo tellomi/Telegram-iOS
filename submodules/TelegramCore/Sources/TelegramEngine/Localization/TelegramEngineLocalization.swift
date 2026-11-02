@@ -65,5 +65,11 @@ public extension TelegramEngineUnauthorized {
         public func downloadAndApplyLocalization(accountManager: AccountManager<TelegramAccountManagerTypes>, languageCode: String) -> Signal<Void, DownloadAndApplyLocalizationError> {
             return _internal_downloadAndApplyLocalization(accountManager: accountManager, postbox: self.account.postbox, network: self.account.network, languageCode: languageCode)
         }
+
+        /// `langpack.getLanguages` for the login language list. Does not read Postbox.
+        /// An empty list means the request failed; the caller keeps the client catalog.
+        public func availableLocalizations() -> Signal<[LocalizationInfo], NoError> {
+            return _internal_availableLanguageList(network: self.account.network)
+        }
     }
 }

@@ -71,9 +71,13 @@ public func tellomiRememberInterfaceLanguage(_ languageCode: String) {
 /// Persists the built-in choice and marks it applied, so a later Settings pack is what wins
 /// only after that screen writes the same key.
 public func tellomiApplyInterfaceLanguage(accountManager: AccountManager<TelegramAccountManagerTypes>, languageCode: String) {
-    tellomiRememberInterfaceLanguage(languageCode)
-    let info = tellomiBuiltinInterfaceLanguages().first(where: { $0.languageCode == languageCode })
-    let _ = tellomiStoreInterfaceLanguage(accountManager: accountManager, languageCode: languageCode, localizedName: info?.localizedTitle ?? languageCode, pluralizationCode: info?.customPluralizationCode).start()
+    let info = tellomiBuiltinInterfaceLanguages().first(where: { $0.languageCode.lowercased() == languageCode.lowercased() })
+    tellomiApplyInterfaceLanguage(accountManager: accountManager, info: info ?? LocalizationInfo(languageCode: languageCode, baseLanguageCode: "en", customPluralizationCode: nil, title: languageCode, localizedTitle: languageCode, isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""))
+}
+
+public func tellomiApplyInterfaceLanguage(accountManager: AccountManager<TelegramAccountManagerTypes>, info: LocalizationInfo) {
+    tellomiRememberInterfaceLanguage(info.languageCode)
+    let _ = tellomiStoreInterfaceLanguage(accountManager: accountManager, languageCode: info.languageCode, localizedName: info.localizedTitle, pluralizationCode: info.customPluralizationCode).start()
 }
 
 /// Language the Tellomi welcome and login chrome should use.
@@ -119,12 +123,65 @@ public func tellomiInterfaceLanguageCode(_ strings: PresentationStrings) -> Stri
     return tellomiChromeLanguageCode(savedLanguageCode: strings.primaryComponent.languageCode)
 }
 
-/// Rows the language screen always offers, even before `langpack.getLanguages` returns.
-/// Selecting one still downloads that pack. A later server list keeps its own copy of the same code.
+/// Languages the client can offer before `langpack.getLanguages` returns.
+///
+/// The login card used to hardcode three rows. The app's `empty_languages` list
+/// (plus English and Traditional Chinese, which has bundled login copy) is the
+/// set of codes this binary is built to display. Translated UI strings for the
+/// codes other than English still come from the server langpack. Login chrome
+/// itself is bundled for zh-hans, zh-hant, and English; any other code falls
+/// back to English chrome until that pack is applied.
 public func tellomiBuiltinInterfaceLanguages() -> [LocalizationInfo] {
-    return [
-        LocalizationInfo(languageCode: "zh-hans", baseLanguageCode: "en", customPluralizationCode: "zh", title: "Chinese (Simplified)", localizedTitle: "简体中文", isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""),
-        LocalizationInfo(languageCode: "zh-hant", baseLanguageCode: "en", customPluralizationCode: "zh", title: "Chinese (Traditional)", localizedTitle: "繁體中文", isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""),
-        LocalizationInfo(languageCode: "en", baseLanguageCode: nil, customPluralizationCode: nil, title: "English", localizedTitle: "English", isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""),
-    ]
+    return tellomiClientInterfaceLanguages
 }
+
+/// Server rows replace a bundled row with the same code. Bundled rows the server
+/// did not return stay, so a langpack that only lists three languages does not
+/// hide the rest of the client catalog.
+public func tellomiMergedInterfaceLanguages(server: [LocalizationInfo]) -> [LocalizationInfo] {
+    var byCode: [String: LocalizationInfo] = [:]
+    for info in tellomiClientInterfaceLanguages {
+        byCode[info.languageCode.lowercased()] = info
+    }
+    for info in server {
+        let code = info.languageCode.lowercased()
+        if !code.isEmpty {
+            byCode[code] = info
+        }
+    }
+    return byCode.values.sorted { lhs, rhs in
+        if lhs.localizedTitle != rhs.localizedTitle {
+            return lhs.localizedTitle.localizedCompare(rhs.localizedTitle) == .orderedAscending
+        }
+        return lhs.languageCode < rhs.languageCode
+    }
+}
+
+private func tellomiLanguage(_ code: String, plural: String?, title: String, native: String) -> LocalizationInfo {
+    return LocalizationInfo(languageCode: code, baseLanguageCode: code == "en" ? nil : "en", customPluralizationCode: plural, title: title, localizedTitle: native, isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: "")
+}
+
+/// Codes match `Telegram/BUILD` `empty_languages`, plus `en` and `zh-hant`.
+private let tellomiClientInterfaceLanguages: [LocalizationInfo] = [
+    tellomiLanguage("ar", plural: "ar", title: "Arabic", native: "العربية"),
+    tellomiLanguage("be", plural: "be", title: "Belarusian", native: "Беларуская"),
+    tellomiLanguage("ca", plural: "ca", title: "Catalan", native: "Català"),
+    tellomiLanguage("de", plural: "de", title: "German", native: "Deutsch"),
+    tellomiLanguage("en", plural: nil, title: "English", native: "English"),
+    tellomiLanguage("es", plural: "es", title: "Spanish", native: "Español"),
+    tellomiLanguage("fa", plural: "fa", title: "Persian", native: "فارسی"),
+    tellomiLanguage("fr", plural: "fr", title: "French", native: "Français"),
+    tellomiLanguage("id", plural: "id", title: "Indonesian", native: "Bahasa Indonesia"),
+    tellomiLanguage("it", plural: "it", title: "Italian", native: "Italiano"),
+    tellomiLanguage("ko", plural: "ko", title: "Korean", native: "한국어"),
+    tellomiLanguage("ms", plural: "ms", title: "Malay", native: "Bahasa Melayu"),
+    tellomiLanguage("nl", plural: "nl", title: "Dutch", native: "Nederlands"),
+    tellomiLanguage("pl", plural: "pl", title: "Polish", native: "Polski"),
+    tellomiLanguage("pt", plural: "pt", title: "Portuguese", native: "Português"),
+    tellomiLanguage("ru", plural: "ru", title: "Russian", native: "Русский"),
+    tellomiLanguage("tr", plural: "tr", title: "Turkish", native: "Türkçe"),
+    tellomiLanguage("uk", plural: "uk", title: "Ukrainian", native: "Українська"),
+    tellomiLanguage("uz", plural: "uz", title: "Uzbek", native: "Oʻzbek"),
+    tellomiLanguage("zh-hans", plural: "zh", title: "Chinese (Simplified)", native: "简体中文"),
+    tellomiLanguage("zh-hant", plural: "zh", title: "Chinese (Traditional)", native: "繁體中文"),
+]

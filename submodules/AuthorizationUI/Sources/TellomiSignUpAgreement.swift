@@ -22,7 +22,6 @@ final class TellomiSignUpAgreement: NSObject {
     static let toggleAttribute = NSAttributedString.Key(rawValue: "TellomiSignUpAgreementToggle")
 
     private(set) var agreed = false
-    private var kind: Kind = .signUp
     private var chinese = true
     private var appliedTheme: PresentationTheme?
     private weak var node: ImmediateTextNode?
@@ -30,7 +29,6 @@ final class TellomiSignUpAgreement: NSObject {
     private var changed: ((Bool) -> Void)?
     private var tapRecognizer: UITapGestureRecognizer?
     private var togglesOnText = true
-    private var centeredBody = false
 
     /// `togglesOnText` is false on the agreement card, which has its own buttons.
     /// `centered` forces that card's body to center even for the phone-home wording.
@@ -38,14 +36,14 @@ final class TellomiSignUpAgreement: NSObject {
     /// The stock text-node recognizer waits for a double tap and only hits glyph bounds.
     /// This installs a single-tap recognizer and expands the hit rect.
     func install(on node: ImmediateTextNode, theme: PresentationTheme, kind: Kind = .signUp, chinese: Bool = true, togglesOnText: Bool = true, centered: Bool = false, openUrl: @escaping (String) -> Void, changed: @escaping (Bool) -> Void) {
-        self.kind = kind
         self.chinese = chinese
         self.appliedTheme = theme
         self.node = node
         self.openUrl = openUrl
         self.changed = changed
         self.togglesOnText = togglesOnText
-        self.centeredBody = centered
+        _ = kind
+        _ = centered
         node.accessibilityIdentifier = "Auth.SetName.AgreementCheckbox"
         node.isUserInteractionEnabled = true
         node.displaysAsynchronously = false
@@ -103,7 +101,7 @@ final class TellomiSignUpAgreement: NSObject {
     }
 
     func setKind(_ kind: Kind) {
-        self.kind = kind
+        _ = kind
         self.applyText()
     }
 
@@ -133,70 +131,25 @@ final class TellomiSignUpAgreement: NSObject {
         func link(_ s: String, _ url: String) {
             result.append(NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: accent, NSAttributedString.Key(rawValue: TelegramTextAttributes.URL): url]))
         }
+        // One sentence on every login and sign-up screen. The kind no longer changes the wording.
         if self.chinese && tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: "")) == .hant {
-            switch self.kind {
-            case .signUp:
-                toggle("我已閱讀並同意", color: body)
-                link("《用戶服務協議》", TellomiSignUpAgreement.termsURL)
-                toggle("和", color: body)
-                link("《隱私政策》", TellomiSignUpAgreement.privacyURL)
-            case .phone:
-                toggle("已閱讀並同意 ", color: body)
-                link("用戶協議", TellomiSignUpAgreement.termsURL)
-                toggle(" 和 ", color: body)
-                link("隱私政策", TellomiSignUpAgreement.privacyURL)
-                toggle(" 以及 ", color: body)
-                link("運營商服務協議", TellomiLoginChrome.legalURL)
-                toggle("，運營商將對你提供的手機號進行驗證", color: body)
-            case .email:
-                toggle("已閱讀並同意 ", color: body)
-                link("用戶協議", TellomiSignUpAgreement.termsURL)
-                toggle(" 和 ", color: body)
-                link("隱私政策", TellomiSignUpAgreement.privacyURL)
-            }
+            toggle("已閱讀並同意", color: body)
+            link("用戶協議", TellomiSignUpAgreement.termsURL)
+            toggle("和", color: body)
+            link("隱私政策", TellomiSignUpAgreement.privacyURL)
         } else if self.chinese {
-            switch self.kind {
-            case .signUp:
-                toggle("我已阅读并同意", color: body)
-                link("《用户服务协议》", TellomiSignUpAgreement.termsURL)
-                toggle("和", color: body)
-                link("《隐私政策》", TellomiSignUpAgreement.privacyURL)
-            case .phone:
-                toggle("已阅读并同意 ", color: body)
-                link("用户协议", TellomiSignUpAgreement.termsURL)
-                toggle(" 和 ", color: body)
-                link("隐私政策", TellomiSignUpAgreement.privacyURL)
-                toggle(" 以及 ", color: body)
-                link("运营商服务协议", TellomiLoginChrome.legalURL)
-                toggle("，运营商将对你提供的手机号进行验证", color: body)
-            case .email:
-                toggle("已阅读并同意 ", color: body)
-                link("用户协议", TellomiSignUpAgreement.termsURL)
-                toggle(" 和 ", color: body)
-                link("隐私政策", TellomiSignUpAgreement.privacyURL)
-            }
+            toggle("已阅读并同意", color: body)
+            link("用户协议", TellomiSignUpAgreement.termsURL)
+            toggle("和", color: body)
+            link("隐私政策", TellomiSignUpAgreement.privacyURL)
         } else {
-            switch self.kind {
-            case .signUp:
-                toggle("I have read and agree to the ", color: body)
-                link("Terms of Service", TellomiSignUpAgreement.termsURL)
-                toggle(" and ", color: body)
-                link("Privacy Policy", TellomiSignUpAgreement.privacyURL)
-            case .email:
-                toggle("I have read and agree to the ", color: body)
-                link("Terms", TellomiSignUpAgreement.termsURL)
-                toggle(" and ", color: body)
-                link("Privacy Policy", TellomiSignUpAgreement.privacyURL)
-            case .phone:
-                toggle("I have read and agree to the ", color: body)
-                link("Terms", TellomiSignUpAgreement.termsURL)
-                toggle(" and ", color: body)
-                link("Privacy Policy", TellomiSignUpAgreement.privacyURL)
-                toggle(", and the carrier will verify this phone number.", color: body)
-            }
+            toggle("I have read and agree to the ", color: body)
+            link("Terms", TellomiSignUpAgreement.termsURL)
+            toggle(" and ", color: body)
+            link("Privacy Policy", TellomiSignUpAgreement.privacyURL)
         }
         let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = (self.centeredBody || self.kind != .phone) ? .center : .left
+        paragraph.alignment = .center
         result.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: result.length))
         return result
     }

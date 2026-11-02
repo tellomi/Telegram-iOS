@@ -17,6 +17,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     private var validLayout: ContainerViewLayout?
     
     private let sharedContext: SharedAccountContext
+    private var presentationData: PresentationData
     private let strings: PresentationStrings
     private let theme: PresentationTheme
     
@@ -36,6 +37,8 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     
     private let hapticFeedback = HapticFeedback()
     private var tellomiPrimaryActionTitle: String?
+    /// Set by the authorization flow so the language list can ask `langpack.getLanguages`.
+    var tellomiUnauthorizedAccount: UnauthorizedAccount?
     
     public var inProgress: Bool = false {
         didSet {
@@ -50,6 +53,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     
     public init(sharedContext: SharedAccountContext, presentationData: PresentationData, back: @escaping () -> Void) {
         self.sharedContext = sharedContext
+        self.presentationData = presentationData
         self.strings = presentationData.strings
         self.theme = presentationData.theme
         
@@ -203,23 +207,20 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     }
 
     private func presentTellomiLanguage() {
-        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
-        let current = tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: self.strings.primaryComponent.languageCode))
-        var rows: [TellomiChoiceRow] = []
-        for info in tellomiBuiltinInterfaceLanguages() {
-            let script = tellomiLoginScript(languageCode: info.languageCode)
-            let checked = script == current
-            let code = info.languageCode
-            rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
-                guard let self, !checked else {
-                    return
-                }
-                tellomiApplyInterfaceLanguage(accountManager: self.sharedContext.accountManager, languageCode: code)
-                self.refreshTellomiLanguage()
-            }))
+        let selected = tellomiChromeLanguageCode(savedLanguageCode: self.strings.primaryComponent.languageCode)
+        let controller = TellomiLanguageSelectionController(presentationData: self.presentationData, account: self.tellomiUnauthorizedAccount, selectedCode: selected)
+        controller.completeWithLanguage = { [weak self] info in
+            guard let self else {
+                return
+            }
+            tellomiApplyInterfaceLanguage(accountManager: self.sharedContext.accountManager, info: info)
+            if let account = self.tellomiUnauthorizedAccount {
+                let _ = TelegramEngineUnauthorized(account: account).localization.downloadAndApplyLocalization(accountManager: self.sharedContext.accountManager, languageCode: info.languageCode).start(error: { _ in
+                }, completed: {})
+            }
+            self.refreshTellomiLanguage()
         }
-        let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.theme.overallDarkAppearance)
-        self.present(prompt, in: .window(.root))
+        self.push(controller)
     }
 
     private func presentTellomiCodeOptions() {
@@ -267,7 +268,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         if let (_, _, type, _, _, _, _) = self.data {
             switch type {
             case .sms, .email, .firebase, .call, .otherSession:
-                self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+                self.navigationItem.rightBarButtonItem = tellomiLanguageBarItem(target: self, action: #selector(self.languagePressed))
                 return
             default:
                 break
@@ -354,6 +355,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     }
     
     public func applyPresentationTheme(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
         if self.isNodeLoaded {
             self.controllerNode.applyPresentationTheme(presentationData.theme)
         }

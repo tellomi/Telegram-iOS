@@ -230,10 +230,11 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 strongSelf.account = updatedAccount
                 strongSelf.inAppPurchaseManager = InAppPurchaseManager(engine: .unauthorized(strongSelf.engine))
             }
-            controller.loginWithNumber = { [weak self, weak controller] number, syncContacts in
+            controller.loginWithNumber = { [weak self] number, syncContacts in
                 guard let self else {
                     return
                 }
+                let controller = self.tellomiVisiblePhoneEntry()
                 let loginAttempt = self.tellomiBeginLoginAttempt(identifier: number)
                 self.tellomiActiveLoginNumber = number
                 controller?.inProgress = true
@@ -250,7 +251,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 return nil
                             }
                             return (ApplicationSpecificNotice.forcedPasswordSetupKey(), entry)
-                        }) |> deliverOnMainQueue).startStrict(next: { [weak self] result in
+                        })
+                        |> timeout(25.0, queue: .mainQueue(), alternate: .fail(.timeout))
+                        |> deliverOnMainQueue).startStrict(next: { [weak self] result in
                             if let strongSelf = self {
                                 switch result {
                                 case let .sentCode(account):
@@ -258,7 +261,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                     strongSelf.account = account
                                     strongSelf.inAppPurchaseManager = InAppPurchaseManager(engine: .unauthorized(strongSelf.engine))
                                 case .loggedIn:
-                                    break
+                                    controller?.inProgress = false
                                 }
                             }
                         }, error: { error in
@@ -711,6 +714,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 strongSelf.sharedContext.applicationBindings.openUrl(url)
             }
         }
+        controller.tellomiUnauthorizedAccount = self.account
         let displayedNumber = tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : formatPhoneNumber(number)
         let displayedEmail = email ?? (tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : nil)
         controller.updateData(number: displayedNumber, email: displayedEmail, codeType: type, nextType: nextType, timeout: timeout, termsOfService: termsOfService, previousCodeType: previousCodeType, isPrevious: isPrevious)
@@ -720,6 +724,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     private func tellomiResendLoginCode(controller: AuthorizationSequenceCodeEntryController?) {
         controller?.inProgress = true
         self.actionDisposable.set((self.engine.auth.resendLoginCode(accountManager: self.sharedContext.accountManager, apiId: self.apiId, apiHash: self.apiHash, firebaseSecretStream: self.sharedContext.firebaseSecretStream, attempt: self.tellomiActiveLoginAttempt)
+        |> timeout(25.0, queue: .mainQueue(), alternate: .fail(.timeout))
         |> deliverOnMainQueue).startStrict(next: { _ in
             controller?.inProgress = false
         }, error: { [weak self] error in
@@ -776,9 +781,19 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     }
 
     /// Back, close, and a new number invalidate the in-flight `auth.sendCode`.
+    private func tellomiVisiblePhoneEntry() -> AuthorizationSequencePhoneEntryController? {
+        for controller in self.viewControllers.reversed() {
+            if let controller = controller as? AuthorizationSequencePhoneEntryController {
+                return controller
+            }
+        }
+        return nil
+    }
+
     private func tellomiAbandonPendingLogin() {
         let _ = self.tellomiLoginAttemptToken.modify { $0 + 1 }
         self.tellomiPendingIdentifier = nil
+        self.tellomiVisiblePhoneEntry()?.inProgress = false
         self.actionDisposable.set(nil)
         self.pushConfigurationDisposable.set(nil)
     }
@@ -1412,7 +1427,11 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         previousSplashController = nil
                     }
                 
-                    controllers.append(self.phoneEntryController(countryCode: countryCode, number: number, splashController: previousSplashController))
+                    let phoneController = self.phoneEntryController(countryCode: countryCode, number: number, splashController: previousSplashController)
+                    controllers.append(phoneController)
+                    if tellomiIsLoginEmail(number) {
+                        controllers.append(phoneController.tellomiMakeStep(.emailCode, identifier: tellomiNormalizedLoginEmail(number)))
+                    }
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty && (previousSplashController == nil || self.viewControllers.count > 2))
                 case let .confirmationCodeEntry(number, type, phoneCodeHash, timeout, nextType, _, previousCodeEntry, usePrevious):
                     // A previous launch, or a sendCode for a number the user already replaced, must not
@@ -1424,7 +1443,11 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     self.tellomiActiveLoginNumber = number
                     let loginEmail = tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : nil
                     var controllers: [ViewController] = []
-                    controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: loginEmail ?? "", splashController: nil))
+                    let phoneController = self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: loginEmail ?? "", splashController: nil)
+                    controllers.append(phoneController)
+                    if let loginEmail {
+                        controllers.append(phoneController.tellomiMakeStep(.emailCode, identifier: loginEmail))
+                    }
                 
                     var isGoingBack = false
                     if case let .emailSetupRequired(appleSignInAllowed) = type {

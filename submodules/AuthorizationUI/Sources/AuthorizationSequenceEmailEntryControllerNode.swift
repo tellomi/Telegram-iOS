@@ -114,7 +114,7 @@ final class AuthorizationSequenceEmailEntryControllerNode: ASDisplayNode, UIText
             (self.signInWithAppleButton as? ASAuthorizationAppleIDButton)?.cornerRadius = 11
         }
         
-        self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5)
+        self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5)
         self.proceedNode.progressType = .embedded
         
         self.codeSeparatorNode = ASDisplayNode()
