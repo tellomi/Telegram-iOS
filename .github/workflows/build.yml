@@ -121,6 +121,13 @@ jobs:
           echo "BUILD_NUMBER=$(echo $BUILD_NUMBER)" >> $GITHUB_ENV
           echo "APP_VERSION=$(echo $APP_VERSION)" >> $GITHUB_ENV
 
+          # fake-codesigning profiles are the upstream Telegram App Store
+          # profiles (team C67CF9S4VU, bundle ph.telegra.Telegraph). This
+          # tree's configuration is team CB7KP6GBAR / app.tellomi.chat, so
+          # Make.py finds no aps-environment and exits before Bazel.
+          # --disableProvisioningProfiles keeps the fake certificate
+          # directory (no real Apple profile is read into the bundle) and
+          # ad-hoc signs, the same unsigned path as a simulator build.
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
@@ -128,6 +135,7 @@ jobs:
             build \
             --configurationPath="build-system/appstore-configuration.json" \
             --codesigningInformationPath=build-system/fake-codesigning \
+            --disableProvisioningProfiles \
             --configuration=release_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
