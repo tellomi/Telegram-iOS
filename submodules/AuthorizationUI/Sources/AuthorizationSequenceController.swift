@@ -332,7 +332,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             controller.present(strongSelf.sharedContext.makeProxySettingsController(sharedContext: strongSelf.sharedContext, account: strongSelf.account), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
                                         }))
                                 }
-                                (controller.navigationController as? NavigationController)?.presentOverlay(controller: textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: actions), inGlobal: true, blockInteraction: true)
+                                let alertController = textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: actions)
+                                alertController.displayNode.view.accessibilityIdentifier = "Auth.Login.ErrorAlert"
+                                (controller.navigationController as? NavigationController)?.presentOverlay(controller: alertController, inGlobal: true, blockInteraction: true)
                                 
                                 controller.dismissConfirmation()
                             }

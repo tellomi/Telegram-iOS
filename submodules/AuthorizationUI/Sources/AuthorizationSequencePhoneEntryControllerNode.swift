@@ -91,6 +91,7 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         })?.stretchableImage(withLeftCapWidth: 95, topCapHeight: 2)
         
         self.countryButton = CountryButtonNode()
+        self.countryButton.accessibilityIdentifier = "Auth.PhoneEntry.CountryButton"
         self.countryButton.displaysAsynchronously = false
         self.countryButton.setBackgroundImage(countryButtonBackground, for: [])
         self.countryButton.titleNode.maximumNumberOfLines = 1
@@ -620,6 +621,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
                     self.proceedNode.transitionFromProgress()
                 }
             }
+            self.proceedNode.accessibilityValue = self.inProgress ? "progress" : nil
         }
     }
     

@@ -10,6 +10,20 @@ xcodebuild test \
 ```
 
 Pick any available simulator. List them with `xcrun simctl list devices available iPhone`.
+`xcodebuild test` boots that simulator itself. Simulator.app does not need to be open.
+
+Tellomi login checks (`TellomiLoginUITests`: send-code spinner, language list, country picker) are the same target. Run only that class so the older `UITests.testSignUp` dump does not fail the run:
+
+```bash
+xcodebuild test \
+  -project Telegram/Telegram.xcodeproj \
+  -scheme iOSAppUITestSuite \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -only-testing:iOSAppUITestSuite/TellomiLoginUITests \
+  -parallel-testing-enabled NO
+```
+
+`Telegram/Telegram.xcodeproj` is generated (`Make.py generateProject`) and is not in git. Generate it once if the path is missing. That command quits Xcode and opens the project. The destination name must be an installed simulator (`xcrun simctl list devices available`).
 
 ## Test Environment
 

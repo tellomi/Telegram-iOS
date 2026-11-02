@@ -53,6 +53,7 @@ final class TellomiLanguageSelectionController: ViewController, UITableViewDataS
         self.searchBar.autocapitalizationType = .none
         self.searchBar.autocorrectionType = .no
 
+        self.tableView.accessibilityIdentifier = "Auth.Language.List"
         self.tableView.dataSource = self
         self.tableView.delegate = self
         self.tableView.keyboardDismissMode = .onDrag
@@ -126,6 +127,7 @@ final class TellomiLanguageSelectionController: ViewController, UITableViewDataS
         cell.accessoryType = checked ? .checkmark : .none
         cell.tintColor = palette.rowText
         cell.selectionStyle = .default
+        cell.accessibilityIdentifier = "Auth.Language.Row"
         cell.accessibilityTraits = checked ? [.button, .selected] : [.button]
         return cell
     }
