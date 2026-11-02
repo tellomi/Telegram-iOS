@@ -1,3 +1,23 @@
+# Unsigned release build of the iOS app. Publishes a GitHub Release on master.
+#
+# Runner: xcode-27 (GitHub-hosted, macOS 27, arm64). macos-13 was removed in
+# December 2025, so this job queued forever and never received a machine.
+# versions.json requires Xcode 27.1. That toolchain is not installed on
+# macos-15 or macos-latest (macos-26 ships Xcode 26.x only). The xcode-27
+# image installs Xcode 27.1 at /Applications/Xcode_27.1.app and selects it
+# as the default; this workflow still selects that bundle explicitly.
+# Bazel is the 9.2.0 darwin-arm64 binary pinned by hash in versions.json,
+# the same file Make.py downloads into build-input/.
+#
+# No pull_request job. The only supported app compile is the full Bazel
+# Telegram/Telegram target; Make.py has no smaller one. That is the same
+# build TestFlight already runs on this image, which took 32–84 minutes on
+# 2026-11-01 (v14.0.2-tf3, v14.0.3, v14.0.4) before the App Store upload.
+# A pull_request compile would hold a free macOS runner for about an hour
+# on every source change and contend with those releases. Public
+# repositories are not billed for standard macOS minutes; the limit is
+# duration and runner contention, not the free-minute quota.
+
 name: CI
 
 on:
@@ -6,39 +26,91 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: xcode-27
+    timeout-minutes: 360
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
-          fetch-depth: '0'
+          # Full history: the build number is git rev-list --count plus the
+          # offset in build_number_offset. Submodules are fetched by the next
+          # step at the recorded commits. actions/checkout's recursive
+          # submodule update clones relative URLs (tgcalls, rlottie) that this
+          # org does not have, and with a shallow fetch it also ignores the pin.
+          fetch-depth: 0
+          submodules: false
 
-      - name: Set active Xcode path
-        run: |
-          XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
-          sudo xcode-select -s /Applications/Xcode_$XCODE_VERSION.app/Contents/Developer
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
 
-      - name: Create canonical source directory
+      - name: Select Xcode from versions.json
         run: |
-          set -x
-          sudo mkdir -p /Users/Shared
-          cp -R $GITHUB_WORKSPACE /Users/Shared/
-          mv /Users/Shared/$(basename $GITHUB_WORKSPACE) /Users/Shared/telegram-ios
+          set -euo pipefail
+          sw_vers
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [ ! -d "$CANDIDATE" ]; then
+            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
+            ls -1 /Applications | grep -E '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select -s "${CANDIDATE}/Contents/Developer"
+          xcodebuild -version
+          PLIST_VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "${CANDIDATE}/Contents/Info.plist")"
+          echo "CFBundleShortVersionString=${PLIST_VERSION}"
+          if [ "$PLIST_VERSION" != "$XCODE_VERSION" ]; then
+            echo "Selected Xcode reports ${PLIST_VERSION}, versions.json requires ${XCODE_VERSION}."
+            exit 1
+          fi
+
+      - name: Pin Bazel from versions.json
+        run: |
+          set -euo pipefail
+          spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
+          version="${spec%%:*}"
+          sha="${spec##*:}"
+          name="bazel-${version}-darwin-arm64"
+          url="https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
+          mkdir -p build-input
+          curl -fL --retry 3 --output "build-input/${name}" "$url"
+          echo "${sha}  build-input/${name}" | shasum -a 256 -c -
+          chmod +x "build-input/${name}"
+          reported="$("build-input/${name}" --version)"
+          echo "${reported}"
+          got="${reported#bazel }"
+          if [ "$got" != "$version" ]; then
+            echo "Bazel reports ${got}, versions.json requires ${version}."
+            exit 1
+          fi
+
+      - name: Restore Bazel cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /Users/runner/telegram-bazel-cache
+          key: tellomi-bazel-none
+          restore-keys: |
+            tellomi-bazel-
 
       - name: Build the App
         run: |
+          set -euo pipefail
           set -x
 
-          # source code paths are included in the final binary, so we need to make them stable across builds
-          SOURCE_DIR=/Users/Shared/telegram-ios
-
-          # use canonical bazel root
+          # Build in the workspace. TestFlight already completes a release
+          # build here on xcode-27. Copying the tree to /Users/Shared does
+          # not fit: the image disk is 14 GB and the Bazel output needs the
+          # rest. The workspace path is stable across GitHub-hosted runs
+          # (/Users/runner/work/Telegram-iOS/Telegram-iOS), which is what the
+          # old copy was for.
+          SOURCE_DIR="$GITHUB_WORKSPACE"
           BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
 
-          cd $SOURCE_DIR
+          cd "$SOURCE_DIR"
 
           BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
 
@@ -52,13 +124,13 @@ jobs:
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
+            --cacheDir /Users/runner/telegram-bazel-cache \
             build \
             --configurationPath="build-system/appstore-configuration.json" \
             --codesigningInformationPath=build-system/fake-codesigning \
             --configuration=release_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
-          # collect ipa
           OUTPUT_PATH="build/artifacts"
           rm -rf "$OUTPUT_PATH"
           mkdir -p "$OUTPUT_PATH"
@@ -66,44 +138,33 @@ jobs:
             cp "$f" $OUTPUT_PATH/
           done
 
-          # collect dsym
           mkdir -p build/DSYMs
           for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/*.dSYM; do
             cp -R "$f" build/DSYMs/
           done
           zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+      # actions/create-release@v1 and actions/upload-release-asset@v1 run on
+      # Node 12, which current GitHub images reject. gh is on the image.
+      # workflow_dispatch of a non-master ref (a proof run) must not publish.
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/master'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: build-${{ env.BUILD_NUMBER }}
-          release_name: Telegram ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
-          body: |
-            An unsigned build of Telegram for iOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
-          draft: false
-          prerelease: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/build/artifacts"
+          gh release create "build-${BUILD_NUMBER}" \
+            --title "Telegram ${APP_VERSION} (${BUILD_NUMBER})" \
+            --notes "An unsigned build of Telegram for iOS ${APP_VERSION} (${BUILD_NUMBER})" \
+            --target "${GITHUB_SHA}" \
+            "Telegram.ipa#Telegram.ipa" \
+            "Telegram.DSYMs.zip#Telegram.DSYMs.zip"
 
-      - name: Upload Release IPA
-        id: upload-release-ipa 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Save Bazel cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa
-          asset_name: Telegram.ipa
-          asset_content_type: application/zip
-
-      - name: Upload Release DSYM
-        id: upload-release-dsym 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.DSYMs.zip
-          asset_name: Telegram.DSYMs.zip
-          asset_content_type: application/zip
+          path: /Users/runner/telegram-bazel-cache
+          key: tellomi-bazel-${{ github.run_id }}-${{ github.run_attempt }}
