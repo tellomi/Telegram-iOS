@@ -385,8 +385,25 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 }))
             }
         }
+        if controller.account != nil {
+            controller.tellomiInitialSurface = .emailCode
+            controller.tellomiShowsHomeRows = true
+        }
         controller.updateData(countryCode: countryCode, countryName: nil, number: number)
         return controller
+    }
+
+    /// Email is the login root. A phone number already in the unauthorized state is a pushed step on top of it.
+    private func tellomiLoginStack(countryCode: Int32, number: String, splashController: AuthorizationSequenceSplashController?) -> [ViewController] {
+        let rootNumber = tellomiIsLoginEmail(number) ? number : ""
+        let root = self.phoneEntryController(countryCode: countryCode, number: rootNumber, splashController: splashController)
+        var controllers: [ViewController] = [root]
+        if !number.isEmpty && !tellomiIsLoginEmail(number) {
+            let step = root.tellomiMakeStep(.phoneCode)
+            step.updateData(countryCode: countryCode, countryName: nil, number: number)
+            controllers.append(step)
+        }
+        return controllers
     }
     
     private func codeEntryController(number: String, phoneCodeHash: String, email: String?, type: SentAuthorizationCodeType, nextType: AuthorizationCodeNextType?, timeout: Int32?, previousCodeType: SentAuthorizationCodeType?, isPrevious: Bool, termsOfService: (UnauthorizedAccountTermsOfService, Bool)?) -> AuthorizationSequenceCodeEntryController {
@@ -1429,11 +1446,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         previousSplashController = nil
                     }
                 
-                    let phoneController = self.phoneEntryController(countryCode: countryCode, number: number, splashController: previousSplashController)
-                    controllers.append(phoneController)
-                    if tellomiIsLoginEmail(number) {
-                        controllers.append(phoneController.tellomiMakeStep(.emailCode, identifier: tellomiNormalizedLoginEmail(number)))
-                    }
+                    controllers.append(contentsOf: self.tellomiLoginStack(countryCode: countryCode, number: number, splashController: previousSplashController))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty && (previousSplashController == nil || self.viewControllers.count > 2))
                 case let .confirmationCodeEntry(number, type, phoneCodeHash, timeout, nextType, _, previousCodeEntry, usePrevious):
                     // A previous launch, or a sendCode for a number the user already replaced, must not
@@ -1445,11 +1458,10 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     self.tellomiActiveLoginNumber = number
                     let loginEmail = tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : nil
                     var controllers: [ViewController] = []
-                    let phoneController = self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: loginEmail ?? "", splashController: nil)
-                    controllers.append(phoneController)
-                    if let loginEmail {
-                        controllers.append(phoneController.tellomiMakeStep(.emailCode, identifier: loginEmail))
-                    }
+                    let entryParts = self.tellomiPhoneEntryParts(identifier: number)
+                    let entryCountry = loginEmail == nil ? entryParts.countryCode : AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+                    let entryNumber = loginEmail ?? entryParts.number
+                    controllers.append(contentsOf: self.tellomiLoginStack(countryCode: entryCountry, number: loginEmail == nil ? entryNumber : (loginEmail ?? ""), splashController: nil))
                 
                     var isGoingBack = false
                     if case let .emailSetupRequired(appleSignInAllowed) = type {

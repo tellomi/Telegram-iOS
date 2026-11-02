@@ -529,6 +529,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     var tellomiRequestSurface: ((TellomiLoginSurface) -> Void)?
     private let proceedNode: SolidRoundedButtonNode
     private(set) var tellomiSurface: TellomiLoginSurface = .phoneCode
+    /// Apple / Google / phone switch. Only the email root sets this.
+    private let tellomiShowsHomeRows: Bool
     private var emailLogin: Bool {
         return self.tellomiSurface.isEmail
     }
@@ -672,10 +674,11 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         }
     }
     
-    init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, strings: PresentationStrings, theme: PresentationTheme, debugAction: @escaping () -> Void, hasOtherAccounts: Bool, surface: TellomiLoginSurface = .phoneCode, splashTransition: Bool = false) {
+    init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, strings: PresentationStrings, theme: PresentationTheme, debugAction: @escaping () -> Void, hasOtherAccounts: Bool, surface: TellomiLoginSurface = .phoneCode, showsHomeRows: Bool = false, splashTransition: Bool = false) {
         self.sharedContext = sharedContext
         self.account = account
         self.tellomiSurface = surface
+        self.tellomiShowsHomeRows = showsHomeRows
         
         self.strings = strings
         self.theme = theme
@@ -1241,7 +1244,14 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let rowDark = self.theme.overallDarkAppearance
         self.appleRowNode?.setTitle(loginCopy.appleLogin, dark: rowDark)
         self.googleRowNode?.setTitle(loginCopy.googleLogin, dark: rowDark)
-        self.emailRowNode?.setTitle(loginCopy.emailLogin, dark: rowDark)
+        if surface.isEmail {
+            self.emailRowNode?.setTitle(emailCopy.switchToPhone, dark: rowDark)
+            self.emailRowNode?.setIcon(tellomiSymbol("phone", pointSize: 16.0)?.withTintColor(rowDark ? UIColor.white : UIColor(rgb: 0x111111), renderingMode: .alwaysOriginal))
+            self.emailRowNode?.accessibilityIdentifier = "Auth.Login.SwitchToPhone"
+        } else {
+            self.emailRowNode?.setTitle(loginCopy.emailLogin, dark: rowDark)
+            self.emailRowNode?.accessibilityIdentifier = "Auth.Login.SwitchToEmail"
+        }
         self.otherRowNode?.setTitle(loginCopy.otherLogin, dark: rowDark)
         self.recoverNode?.setTitle(loginCopy.recoverAccount, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
         self.recoverNode?.accessibilityLabel = loginCopy.recoverAccount
@@ -1284,7 +1294,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let showPhone = !surface.isEmail
         let showEmail = surface.isEmail
         let showPassword = surface.isPassword
-        let showHomeRows = surface == .phoneCode
+        let showHomeRows = self.tellomiShowsHomeRows && surface == .emailCode
         self.phoneAndCountryNode.isHidden = !showPhone
         self.emailFieldNode?.isHidden = !showEmail
         self.passwordFieldNode?.isHidden = !showPassword
@@ -1505,7 +1515,11 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         if self.inProgress {
             return
         }
-        self.tellomiRequestSurface?(.emailCode)
+        if self.tellomiSurface.isEmail {
+            self.tellomiRequestSurface?(.phoneCode)
+        } else {
+            self.tellomiRequestSurface?(.emailCode)
+        }
     }
 
     @objc private func tellomiUnavailablePressed() {

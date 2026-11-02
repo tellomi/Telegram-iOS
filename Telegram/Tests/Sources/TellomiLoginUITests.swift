@@ -20,13 +20,23 @@ final class TellomiLoginUITests: XCTestCase {
     }
 
     func testSendCodeLeavesTheSpinner() throws {
-        self.openPhoneLogin()
+        self.openEmailLogin()
+        let email = app.textFields["Auth.PhoneEntry.EmailField"]
+        XCTAssertTrue(email.isHittable, "email login should be the screen after Start")
+        XCTAssertFalse(app.textFields["Auth.PhoneEntry.PhoneNumberField"].isHittable)
+
+        let switchToPhone = app.buttons["Auth.Login.SwitchToPhone"]
+        XCTAssertTrue(switchToPhone.waitForExistence(timeout: 5.0))
+        switchToPhone.tap()
+
+        let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
+        XCTAssertTrue(phone.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(phone.isHittable)
 
         let checkbox = app.buttons["Auth.Agreement.Checkbox"]
         XCTAssertTrue(checkbox.waitForExistence(timeout: 5.0))
         checkbox.tap()
 
-        let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
         phone.tap()
         phone.typeText("13800000000")
 
@@ -50,7 +60,7 @@ final class TellomiLoginUITests: XCTestCase {
     }
 
     func testLanguagePickerListsMoreThanThreeLanguages() throws {
-        self.openPhoneLogin()
+        self.openEmailLogin()
 
         let globe = app.buttons["Auth.Login.Language"]
         XCTAssertTrue(globe.waitForExistence(timeout: 5.0))
@@ -70,7 +80,10 @@ final class TellomiLoginUITests: XCTestCase {
     }
 
     func testCountryPickerOpens() throws {
-        self.openPhoneLogin()
+        self.openEmailLogin()
+        let switchToPhone = app.buttons["Auth.Login.SwitchToPhone"]
+        XCTAssertTrue(switchToPhone.waitForExistence(timeout: 5.0))
+        switchToPhone.tap()
 
         let country = app.buttons["Auth.PhoneEntry.CountryButton"]
         XCTAssertTrue(country.waitForExistence(timeout: 5.0))
@@ -81,14 +94,14 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertGreaterThan(list.cells.count, 0)
     }
 
-    private func openPhoneLogin() {
+    private func openEmailLogin() {
         app.launch()
         let start = app.buttons["Auth.Welcome.StartButton"]
         if start.waitForExistence(timeout: 20.0) {
             start.tap()
         }
-        let phone = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
-        XCTAssertTrue(phone.waitForExistence(timeout: 25.0), "phone login did not appear after Start")
+        let email = app.textFields["Auth.PhoneEntry.EmailField"]
+        XCTAssertTrue(email.waitForExistence(timeout: 25.0), "email login did not appear after Start")
     }
 
     private func sendCodeSettled() -> Bool {

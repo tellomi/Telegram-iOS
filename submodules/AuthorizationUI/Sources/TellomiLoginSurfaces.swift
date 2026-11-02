@@ -182,6 +182,11 @@ final class TellomiSocialRowNode: HighlightableButtonNode {
         self.setNeedsLayout()
     }
 
+    func setIcon(_ image: UIImage?) {
+        self.iconNode.image = image
+        self.setNeedsLayout()
+    }
+
     func applyPalette(dark: Bool) {
         let palette = TellomiLoginChrome.palette(dark: dark)
         self.backgroundColor = palette.rowBackground

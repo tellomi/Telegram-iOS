@@ -12,7 +12,7 @@ xcodebuild test \
 Pick any available simulator. List them with `xcrun simctl list devices available iPhone`.
 `xcodebuild test` boots that simulator itself. Simulator.app does not need to be open.
 
-Tellomi login checks (`TellomiLoginUITests`: send-code spinner, language list, country picker) are the same target. Run only that class so the older `UITests.testSignUp` dump does not fail the run:
+Tellomi login checks (`TellomiLoginUITests`: after Start the email field is showing, phone login is a push, then the send-code spinner, language list, and country picker) are the same target. Run only that class so the older `UITests.testSignUp` dump does not fail the run:
 
 ```bash
 xcodebuild test \

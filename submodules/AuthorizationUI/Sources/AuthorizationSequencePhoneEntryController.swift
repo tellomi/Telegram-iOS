@@ -66,8 +66,11 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     private let hapticFeedback = HapticFeedback()
     private var tellomiBindPhone = false
-    /// Set before the view loads. Password and email steps are their own controllers.
+    /// Set before the view loads. Password, phone, and email steps are their own controllers.
+    /// Login starts on `.emailCode`. Phone number login is a pushed step.
     var tellomiInitialSurface: TellomiLoginSurface = .phoneCode
+    /// Alternate sign-in rows (Apple, Google, phone) belong on the email root only.
+    var tellomiShowsHomeRows = false
     
     public init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, countriesConfiguration: CountriesConfiguration? = nil, apiId: Int32, apiHash: String, isTestingEnvironment: Bool, otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), network: Network, presentationData: PresentationData, openUrl: @escaping (String) -> Void, back: @escaping () -> Void) {
         self.sharedContext = sharedContext
@@ -249,7 +252,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     func updateNavigationItems() {
         if self.account != nil {
             self.navigationItem.rightBarButtonItem = tellomiLanguageBarItem(target: self, action: #selector(self.languagePressed))
-            if self.tellomiInitialSurface == .phoneCode {
+            if self.tellomiInitialSurface == .emailCode && self.tellomiShowsHomeRows {
                 self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
             }
             return
@@ -297,7 +300,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             }
             strongSelf.view.endEditing(true)
             self?.present(debugController(sharedContext: strongSelf.sharedContext, context: nil, modal: true), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
-        }, hasOtherAccounts: self.otherAccountPhoneNumbers.0 != nil, surface: self.tellomiInitialSurface, splashTransition: self.shouldAnimateIn && self.tellomiInitialSurface == .phoneCode)
+        }, hasOtherAccounts: self.otherAccountPhoneNumbers.0 != nil, surface: self.tellomiInitialSurface, showsHomeRows: self.tellomiShowsHomeRows, splashTransition: self.shouldAnimateIn && self.tellomiInitialSurface == .emailCode)
         self.controllerNode.setTellomiBindPhone(self.tellomiBindPhone)
         self.controllerNode.tellomiRequestSurface = { [weak self] surface in
             self?.tellomiOpenSurface(surface)
