@@ -96,26 +96,21 @@ jobs:
           restore-keys: |
             tellomi-bazel-
 
-      - name: Create canonical source directory
-        run: |
-          set -euo pipefail
-          # Source paths are baked into the binary. Move the checkout to a
-          # stable path instead of copying it: this image has a 14 GB disk,
-          # and a second copy of the tree does not fit beside the Bazel output.
-          cd /tmp
-          mkdir -p /Users/Shared
-          mv "$GITHUB_WORKSPACE" /Users/Shared/telegram-ios
-          ln -s /Users/Shared/telegram-ios "$GITHUB_WORKSPACE"
-
       - name: Build the App
         run: |
           set -euo pipefail
           set -x
 
-          SOURCE_DIR=/Users/Shared/telegram-ios
+          # Build in the workspace. TestFlight already completes a release
+          # build here on xcode-27. Copying the tree to /Users/Shared does
+          # not fit: the image disk is 14 GB and the Bazel output needs the
+          # rest. The workspace path is stable across GitHub-hosted runs
+          # (/Users/runner/work/Telegram-iOS/Telegram-iOS), which is what the
+          # old copy was for.
+          SOURCE_DIR="$GITHUB_WORKSPACE"
           BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
 
-          cd $SOURCE_DIR
+          cd "$SOURCE_DIR"
 
           BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
 
@@ -158,7 +153,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          cd /Users/Shared/telegram-ios/build/artifacts
+          cd "${GITHUB_WORKSPACE}/build/artifacts"
           gh release create "build-${BUILD_NUMBER}" \
             --title "Telegram ${APP_VERSION} (${BUILD_NUMBER})" \
             --notes "An unsigned build of Telegram for iOS ${APP_VERSION} (${BUILD_NUMBER})" \
