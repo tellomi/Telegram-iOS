@@ -67,6 +67,17 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
             guard let self else {
                 return
             }
+            // SMS, email, and the other Tellomi code screens go straight back to the number.
+            // The confirmation dialog left the pending hash in place, so a relaunch opened the code screen again.
+            if let (_, _, type, _, _, _, _) = self.data {
+                switch type {
+                case .sms, .email, .firebase, .call, .otherSession:
+                    back()
+                    return
+                default:
+                    break
+                }
+            }
             let text: String
             let proceed: String
             let stop: String

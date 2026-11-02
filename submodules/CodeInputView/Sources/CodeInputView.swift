@@ -5,6 +5,30 @@ import Display
 import SwiftSignalKit
 import PhoneNumberFormat
 
+/// Width of one digit box when the row should span `width`.
+/// The preferred box is kept when it fits, and grows when the row is wider.
+/// On a 320pt phone, six boxes at that preferred size run past the row; spacing
+/// then drops to 4pt and the boxes shrink so the last one stays inside `width`.
+private func tellomiExpandedCodeMetrics(width: CGFloat, count: Int, prefixWidth: CGFloat, prefixSpacing: CGFloat, preferredSpacing: CGFloat, preferredItemWidth: CGFloat) -> (itemWidth: CGFloat, spacing: CGFloat) {
+    guard count > 0, width > 0.0 else {
+        return (max(1.0, preferredItemWidth), preferredSpacing)
+    }
+    let gaps = CGFloat(max(count - 1, 0))
+    func fitted(spacing: CGFloat) -> CGFloat {
+        let available = width - prefixWidth - prefixSpacing - spacing * gaps
+        return floor(available / CGFloat(count))
+    }
+    var spacing = preferredSpacing
+    var itemWidth = fitted(spacing: spacing)
+    if itemWidth < preferredItemWidth, gaps > 0.0 {
+        let minItem = min(preferredItemWidth, 32.0)
+        let room = width - prefixWidth - prefixSpacing - minItem * CGFloat(count)
+        spacing = min(preferredSpacing, max(4.0, floor(room / gaps)))
+        itemWidth = fitted(spacing: spacing)
+    }
+    return (max(1.0, itemWidth), spacing)
+}
+
 public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
     public struct Theme: Equatable {
         public var inactiveBorder: UInt32
@@ -345,10 +369,11 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
         let prefixSpacing: CGFloat = prefix.isEmpty ? 0.0 : 8.0
         
         var itemSize = CGSize(width: floor(24.0 * height / 28.0), height: height)
-        let itemSpacing: CGFloat = expandItems ? 12.0 : (prefix.isEmpty ? 15.0 : 5.0)
+        var itemSpacing: CGFloat = expandItems ? 12.0 : (prefix.isEmpty ? 15.0 : 5.0)
         if expandItems, count > 0 {
-            let available = width - itemSpacing * CGFloat(max(count - 1, 0))
-            itemSize.width = max(itemSize.width, floor(available / CGFloat(count)))
+            let fitted = tellomiExpandedCodeMetrics(width: width, count: count, prefixWidth: prefixSize.width, prefixSpacing: prefixSpacing, preferredSpacing: itemSpacing, preferredItemWidth: itemSize.width)
+            itemSize.width = fitted.itemWidth
+            itemSpacing = fitted.spacing
         }
         let itemsWidth: CGFloat = itemSize.width * CGFloat(count) + itemSpacing * CGFloat(max(count - 1, 0))
         

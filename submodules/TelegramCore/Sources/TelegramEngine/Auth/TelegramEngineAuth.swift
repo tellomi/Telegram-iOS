@@ -79,6 +79,19 @@ public extension TelegramEngineUnauthorized {
             }
             |> ignoreValues
         }
+
+        /// Replaces a stored `.confirmationCodeEntry` with phone entry, in one transaction.
+        /// Password, payment, empty, and phone entry already stored stay as they are.
+        public func replaceConfirmationCodeEntryWithPhoneEntry(countryCode: Int32, number: String) -> Signal<Never, NoError> {
+            let account = self.account
+            return account.postbox.transaction { transaction -> Void in
+                guard let state = transaction.getState() as? UnauthorizedAccountState, case .confirmationCodeEntry = state.contents else {
+                    return
+                }
+                transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: number)))
+            }
+            |> ignoreValues
+        }
     }
 }
 

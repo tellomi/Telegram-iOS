@@ -894,7 +894,20 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             items.append(AuthorizationLayoutItem(node: self.nextOptionButtonNode, size: nextOptionSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 50.0, maxValue: 120.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         }
         
-        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
+        var stackTop = insets.top
+        var stackHeight = layout.size.height - insets.top - insets.bottom - additionalBottomInset
+        if tellomiCode {
+            // Center in the band under the navigation bar. Starting at the status bar let a
+            // keyboard-sized inset pull the title up under Help on a short phone.
+            let pinnedTop = max(insets.top, navigationBarHeight)
+            let visible = max(0.0, layout.size.height - pinnedTop - insets.bottom - additionalBottomInset)
+            let slack = items.reduce(CGFloat(0.0)) { partial, item in
+                partial + item.size.height + item.spacingBefore.maxValue + item.spacingAfter.maxValue
+            }
+            stackTop = pinnedTop
+            stackHeight = max(visible, slack)
+        }
+        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: stackTop), size: CGSize(width: bandWidth, height: stackHeight)), items: items, transition: transition, failIfDoesNotFit: false)
         
         if let codeType = self.codeType {
             let yOffset: CGFloat = layout.size.width > 320.0 ? 18.0 : 5.0
