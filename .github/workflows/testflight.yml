@@ -18,7 +18,9 @@
 # minting is not the default.
 #
 # A push to master does not upload. Later v2 work can land on master
-# without going to TestFlight. To release, push the commit to release/ios.
+# without going to TestFlight. To release, push the commit to release/ios
+# (`git push origin master:release/ios`). Pointing the branch at a commit
+# already on it does not start a run; the push has to add a commit.
 # workflow_dispatch remains, but the integration account cannot call it
 # (403). Docs-only pushes are ignored. A newer release/ios push cancels
 # an older in-progress upload.
