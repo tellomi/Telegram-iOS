@@ -203,7 +203,7 @@ public final class LocationPickerController: ViewController, AttachmentContainab
                         guard let self else {
                             return
                         }
-                        self.completion(TelegramMediaMap(coordinate: coordinate, liveBroadcastingTimeout: period, accuracyRadius: self.interaction.currentUserAccuracy), nil, nil, nil, nil)
+                        self.completion(TelegramMediaMap(coordinate: coordinate, liveBroadcastingTimeout: period, accuracyRadius: self.interaction?.currentUserAccuracy), nil, nil, nil, nil)
                         self.dismiss()
                     }
                 )
