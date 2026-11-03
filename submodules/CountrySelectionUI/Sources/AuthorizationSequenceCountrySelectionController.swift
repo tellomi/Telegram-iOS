@@ -77,25 +77,34 @@ private func loadCountryCodes() -> [Country] {
 private var countryCodes: [Country] = loadCountryCodes()
 private var countryCodesByPrefix: [String: (Country, Country.CountryCode)] = [:]
 
+/// `help.getCountriesList` has come back empty (and a failed parse is the same shape).
+/// Replacing the bundled `PhoneCountries` list with that empties the picker and the
+/// prefix lookup. Keep the list already loaded.
+private func replaceCountryCodesIfPresent(_ countries: [Country]) {
+    guard !countries.isEmpty else {
+        return
+    }
+    countryCodes = countries
+
+    var countriesByPrefix: [String: (Country, Country.CountryCode)] = [:]
+    for country in countries {
+        for code in country.countryCodes {
+            if !code.prefixes.isEmpty {
+                for prefix in code.prefixes {
+                    countriesByPrefix["\(code.code)\(prefix)"] = (country, code)
+                }
+            } else {
+                countriesByPrefix[code.code] = (country, code)
+            }
+        }
+    }
+    countryCodesByPrefix = countriesByPrefix
+}
+
 public func loadServerCountryCodes(accountManager: AccountManager<TelegramAccountManagerTypes>, engine: TelegramEngineUnauthorized, completion: @escaping () -> Void) {
     let _ = (engine.localization.getCountriesList(accountManager: accountManager, langCode: nil)
     |> deliverOnMainQueue).start(next: { countries in
-        countryCodes = countries
-        
-        var countriesByPrefix: [String: (Country, Country.CountryCode)] = [:]
-        for country in countries {
-            for code in country.countryCodes {
-                if !code.prefixes.isEmpty {
-                    for prefix in code.prefixes {
-                        countriesByPrefix["\(code.code)\(prefix)"] = (country, code)
-                    }
-                } else {
-                    countriesByPrefix[code.code] = (country, code)
-                }
-            }
-        }
-        countryCodesByPrefix = countriesByPrefix
-                
+        replaceCountryCodesIfPresent(countries)
         Queue.mainQueue().async {
             completion()
         }
@@ -105,21 +114,7 @@ public func loadServerCountryCodes(accountManager: AccountManager<TelegramAccoun
 public func loadServerCountryCodes(accountManager: AccountManager<TelegramAccountManagerTypes>, engine: TelegramEngine, completion: @escaping () -> Void) {
     let _ = (engine.localization.getCountriesList(accountManager: accountManager, langCode: nil)
     |> deliverOnMainQueue).start(next: { countries in
-        countryCodes = countries
-
-        var countriesByPrefix: [String: (Country, Country.CountryCode)] = [:]
-        for country in countries {
-            for code in country.countryCodes {
-                if !code.prefixes.isEmpty {
-                    for prefix in code.prefixes {
-                        countriesByPrefix["\(code.code)\(prefix)"] = (country, code)
-                    }
-                } else {
-                    countriesByPrefix[code.code] = (country, code)
-                }
-            }
-        }
-        countryCodesByPrefix = countriesByPrefix
+        replaceCountryCodesIfPresent(countries)
         Queue.mainQueue().async {
             completion()
         }
@@ -217,6 +212,9 @@ public final class AuthorizationSequenceCountrySelectionController: ViewControll
     }
     
     public static func setupCountryCodes(countries: [Country], codesByPrefix: [String: (Country, Country.CountryCode)]) {
+        guard !countries.isEmpty else {
+            return
+        }
         countryCodes = countries
         countryCodesByPrefix = codesByPrefix
     }

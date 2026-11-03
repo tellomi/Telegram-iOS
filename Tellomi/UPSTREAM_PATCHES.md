@@ -491,3 +491,13 @@ The language card keeps its centered shape. On a notch or Dynamic Island the top
 The login country list takes `AuthorizationCountryListLocalization`: names from `Locale(identifier:).localizedString(forRegionCode:)`, sort and section index in that locale, title and search placeholder from the login language. The section index uses the primary text color. The search field is not focused until it is tapped. Other country lists keep the previous strings, accent index, and automatic focus.
 
 Agreement links are semibold and underlined. The confirm card uses the dark theme when the page is dark, so the links are white on the dark card and black on a light card. The email agreement sentence is left-aligned against the checkbox, and the email title and notice are centered like the phone page.
+
+## Empty country list, notification language, private-chat titles
+
+`help.getCountriesList` has returned zero countries. `loadServerCountryCodes` and `setupCountryCodes` used that array in place of the bundled `PhoneCountries` list, so the picker and the prefix lookup were empty. An empty result (including a parse that yields nothing) is ignored. `AccountContext` does not publish an empty configuration over the bundled one either. A later non-empty response still replaces the list.
+
+Chinese country names are grouped by pinyin initial (A–Z), the same shape as the system Contacts index. Other languages still use the first character of the localized name.
+
+The notification extension's `standaloneStateManager` read the shared account manager and then passed `nil` for the language pack, so `initializedNetwork` sent `lang_code` `"en"` and the server stored that over the account's language (teamgram-server#122 is the server half). It now passes `SharedDataKeys.localizationSettings`, the same record the app writes from Settings and from the login language button. `Network.swift` is unchanged: a missing pack still falls back to `"en"`.
+
+A private or secret chat notification no longer appends `→ <this account>`. Official Telegram does not. Groups and channels still do when more than one account is signed in. A one-to-one call does not; a group call still does.

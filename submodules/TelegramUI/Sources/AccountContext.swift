@@ -472,6 +472,11 @@ public final class AccountContextImpl: AccountContext {
             let currentCountriesConfiguration = self.currentCountriesConfiguration
             self.countriesConfigurationDisposable = (self.engine.localization.getCountriesList(accountManager: sharedContext.accountManager, langCode: langCode)
             |> deliverOnMainQueue).start(next: { [weak self] value in
+                // An empty server list must not replace the bundled countries. Prefix
+                // lookup and the picker both read this configuration.
+                guard !value.isEmpty else {
+                    return
+                }
                 let configuration = CountriesConfiguration(countries: value)
                 let _ = currentCountriesConfiguration.swap(configuration)
                 self?._countriesConfiguration.set(.single(configuration))

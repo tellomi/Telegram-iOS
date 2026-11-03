@@ -1848,7 +1848,11 @@ public func standaloneStateManager(
             Logger.shared.log("StandaloneStateManager", "Received postbox: valid")
             
             return accountManager.transaction { transaction -> (LocalizationSettings?, ProxySettings?, NetworkEngineInputs) in
-                return (nil, transaction.getSharedData(SharedDataKeys.proxySettings)?.get(ProxySettings.self), networkEngineInputs(transaction: transaction))
+                // The extension shares this account manager with the app. A nil pack
+                // made the connection send lang_code "en" and overwrite the account's
+                // language on the server. Read the language the app stored.
+                let localizationSettings = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self)
+                return (localizationSettings, transaction.getSharedData(SharedDataKeys.proxySettings)?.get(ProxySettings.self), networkEngineInputs(transaction: transaction))
             }
             |> mapToSignal { localizationSettings, proxySettings, networkEngine -> Signal<AccountStateManager?, NoError> in
                 Logger.shared.log("StandaloneStateManager", "Received settings")

@@ -1222,7 +1222,7 @@ private final class NotificationServiceHandler {
                     } else {
                         if let aps = payloadJson["aps"] as? [String: Any], var peerId = peerId {
                             var content: NotificationContent = NotificationContent(isLockedMessage: isLockedMessage)
-                            content.recipientAccountName = recipientAccountName
+                            content.recipientAccountName = notificationRecipientAccountNameForTitle(peerId: peerId, recipientAccountName: recipientAccountName)
                             if let alert = aps["alert"] as? [String: Any] {
                                 if let topicTitleValue = payloadJson["topic_title"] as? String {
                                     topicTitle = topicTitleValue
@@ -1385,7 +1385,6 @@ private final class NotificationServiceHandler {
                             updateCurrentContent(content)
                         } else if let aps = payloadJson["aps"] as? [String: Any], let url = payloadJson["url"] as? String {
                             var content: NotificationContent = NotificationContent(isLockedMessage: nil)
-                            content.recipientAccountName = recipientAccountName
                             content.userInfo["url"] = url
                             content.userInfo["peerId"] = "777000"
                             content.userInfo["accountId"] = "\(recordId.int64)"
@@ -1453,7 +1452,6 @@ private final class NotificationServiceHandler {
                                         })
                                     } else {
                                         var content = NotificationContent(isLockedMessage: nil)
-                                        content.recipientAccountName = recipientAccountName
                                         if let peer = callData.peer {
                                             content.title = peer.debugDisplayTitle
                                             content.body = incomingCallMessage

@@ -63,6 +63,43 @@ private func loadCountryCodes() -> [(String, Int)] {
 
 private let countryCodes: [(String, Int)] = loadCountryCodes()
 
+/// Chinese names indexed by their first character fill the rail with dots. The
+/// system Contacts app groups them by pinyin initial instead.
+private func countryLatinName(_ name: String) -> String {
+    let mutable = NSMutableString(string: name)
+    CFStringTransform(mutable, nil, kCFStringTransformToLatin, false)
+    CFStringTransform(mutable, nil, kCFStringTransformStripDiacritics, false)
+    return (mutable as String).trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+private func countryUsesPinyinIndex(_ locale: Locale?) -> Bool {
+    let identifier = locale?.identifier.lowercased() ?? ""
+    return identifier == "zh" || identifier.hasPrefix("zh-") || identifier.hasPrefix("zh_")
+}
+
+private func countrySectionTitle(name: String, locale: Locale?) -> String {
+    if countryUsesPinyinIndex(locale) {
+        let latin = countryLatinName(name)
+        if let first = latin.first, first.isASCII, first.isLetter {
+            return String(first).uppercased()
+        }
+    }
+    guard let first = name.first else {
+        return "#"
+    }
+    return String(first).uppercased(with: locale ?? .current)
+}
+
+private func countrySortKey(name: String, locale: Locale?) -> String {
+    if countryUsesPinyinIndex(locale) {
+        let latin = countryLatinName(name)
+        if !latin.isEmpty {
+            return latin
+        }
+    }
+    return name
+}
+
 public func localizedCountryNamesAndCodes(strings: PresentationStrings, regionLocale: Locale? = nil) -> [((String, String), String, [Int])] {
     let locale = regionLocale ?? localeWithStrings(strings)
     var result: [((String, String), String, [Int])] = []
@@ -254,15 +291,15 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
         var sections: [(String, [((String, String), String, Int)])] = []
         let sortLocale = regionLocale
         for (names, id, codes) in countryNamesAndCodes.sorted(by: { lhs, rhs in
+            if countryUsesPinyinIndex(sortLocale) {
+                return countrySortKey(name: lhs.0.1, locale: sortLocale).localizedStandardCompare(countrySortKey(name: rhs.0.1, locale: sortLocale)) == .orderedAscending
+            }
             if let sortLocale = sortLocale {
                 return lhs.0.1.compare(rhs.0.1, locale: sortLocale) == .orderedAscending
             }
             return lhs.0.1 < rhs.0.1
         }) {
-            guard let first = names.1.first else {
-                continue
-            }
-            let title = String(first).uppercased(with: sortLocale ?? Locale.current)
+            let title = countrySectionTitle(name: names.1, locale: sortLocale)
             if sections.isEmpty || sections[sections.count - 1].0 != title {
                 sections.append((title, []))
             }
