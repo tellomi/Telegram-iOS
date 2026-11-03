@@ -119,6 +119,19 @@ public func tellomiInterfaceLanguageCode(_ strings: PresentationStrings) -> Stri
     return tellomiChromeLanguageCode(savedLanguageCode: strings.primaryComponent.languageCode)
 }
 
+/// Region names for the login country button. `localeWithStrings` uses the pack's
+/// English base language, so 简体中文 still announced "China mainland".
+public func tellomiRegionLocale(languageCode: String) -> Locale {
+    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
+    case .hans:
+        return Locale(identifier: "zh-Hans")
+    case .hant:
+        return Locale(identifier: "zh-Hant")
+    case .english:
+        return Locale(identifier: "en_US")
+    }
+}
+
 /// Rows the language screen always offers, even before `langpack.getLanguages` returns.
 /// Selecting one still downloads that pack. A later server list keeps its own copy of the same code.
 public func tellomiBuiltinInterfaceLanguages() -> [LocalizationInfo] {

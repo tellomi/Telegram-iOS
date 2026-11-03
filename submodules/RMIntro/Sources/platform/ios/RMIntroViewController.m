@@ -343,6 +343,27 @@ typedef enum {
     _isOpenGLLoaded = false;
 }
 
+- (void)updateAppearanceBackgroundColor:(UIColor *)backgroundColor primaryColor:(UIColor *)primaryColor buttonColor:(UIColor *)buttonColor accentColor:(UIColor *)accentColor regularDotColor:(UIColor *)regularDotColor highlightedDotColor:(UIColor *)highlightedDotColor
+{
+    _backgroundColor = backgroundColor;
+    _primaryColor = primaryColor;
+    _buttonColor = buttonColor;
+    _accentColor = accentColor;
+    _regularDotColor = regularDotColor;
+    _highlightedDotColor = highlightedDotColor;
+    if (!self.isViewLoaded) {
+        return;
+    }
+    self.view.backgroundColor = backgroundColor;
+    _glkView.backgroundColor = backgroundColor;
+    if (_isOpenGLLoaded) {
+        [self setupGL];
+    }
+    if (_headlines != nil && _descriptions != nil) {
+        [self setIntroHeadlines:_headlines descriptions:_descriptions];
+    }
+}
+
 - (void)setIntroHeadlines:(NSArray<NSString *> *)headlines descriptions:(NSArray<NSString *> *)descriptions
 {
     if (headlines.count == 0 || headlines.count != descriptions.count) {

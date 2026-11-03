@@ -18,7 +18,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     
     private let sharedContext: SharedAccountContext
     private let strings: PresentationStrings
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
     
     public var loginWithCode: ((String) -> Void)?
     public var signInWithApple: (() -> Void)?
@@ -267,7 +267,9 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         if let (_, _, type, _, _, _, _) = self.data {
             switch type {
             case .sms, .email, .firebase, .call, .otherSession:
-                self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+                let item = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+                item.accessibilityIdentifier = "Auth.Login.Language"
+                self.navigationItem.rightBarButtonItem = item
                 return
             default:
                 break
@@ -354,6 +356,12 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     }
     
     public func applyPresentationTheme(_ presentationData: PresentationData) {
+        self.theme = presentationData.theme
+        self.statusBar.statusBarStyle = presentationData.theme.intro.statusBarStyle.style
+        if self.isViewLoaded {
+            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        }
+        self.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), strings: NavigationBarStrings(presentationStrings: presentationData.strings)), transition: .immediate)
         if self.isNodeLoaded {
             self.controllerNode.applyPresentationTheme(presentationData.theme)
         }

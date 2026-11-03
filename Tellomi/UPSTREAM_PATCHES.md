@@ -435,3 +435,21 @@ Empty chat, empty folder, no-results, calls placeholder, two-factor intro, and t
 | `animations.c`, `RMIntroViewController.m` | Draw the six marks and slide them with the page. |
 | `ChatListEmpty.tgs`, `ChatListFilterEmpty.tgs`, `ChatListNoResults.tgs`, `CallsPlaceholder.tgs`, `TwoFactorSetupIntro.tgs`, `IntroPhone.tgs` | Monochrome mark. |
 | `Telegram/Telegram-iOS/*.alticon` | Deleted. Not packaged. |
+
+## Login screens matched to the 2026-11-03 spec
+
+The phone screen is the login home. Primary buttons stay black (white in dark mode), disabled gray. The agreement sentence is only 已阅读并同意 用户协议 和 隐私政策. The carrier sentence is gone. SMS boxes use the length in `sentCode`. The top-right control is still the language name plus ▾ and the three-language card. It is not 帮助.
+
+Apple, Google, 其他登录方式, 找回账号, and 密码登录 have no working sign-in, so those controls are not on the phone or email screens. The phone page keeps the field, 验证并登录, the 或 divider, 邮箱登录, and the agreement at the bottom. The email page is the address field, 验证并登录, and the agreement under the button. Back returns to the phone page. The password screen and the other-methods sheet are not in the login controller.
+
+Phone and email open with no keyboard. A tap on the field opens it; a tap on blank space or the title, or a downward drag, dismisses it. The phone field uses the number pad. The intro fade still runs: Telegram used to release it when the keyboard's input height arrived, and login releases that same fade on the turn after `activateInput` because that call does not focus a field. The screens follow the system appearance (`UIScreen` style, black page and white button in dark mode), including the welcome OpenGL clear color. Switching language rewrites every label, including 或. The SMS code subtitle's accessibility label is the same Chinese line that is drawn. The agreement sentence is a wrapping label measured at the row width minus the checkbox on every layout, including a language change, with that full sentence as its accessibility label, and it sits above the keyboard. A tap on the checkbox or the sentence does not dismiss the keyboard. Agreement links open in an in-app Safari view. 验证并登录 stays under the field through the intro. The country button's accessibility name follows the login language. Server error alerts use the `Login_*` mapping and, when that pack is still English, the bundled Chinese sentence; the alert is `Auth.Login.ErrorAlert`. The 或 divider is an accessibility element.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Carrier sentence removed. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | SMS error copy. Phone home still pins the agreement. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginSurfaces.swift` | Clear button and dark agreement card. Password field and round social buttons removed. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Language button identifier. No unavailable alert and no other-methods sheet. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Phone home is field, verify, divider, email, agreement. Email is field, verify, agreement. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | SMS error stays until the code changes. Email code has no 收不到验证码? row. |
+| `Telegram/Tests/Sources/TellomiLoginUITests.swift` | Phone-default checks. |
