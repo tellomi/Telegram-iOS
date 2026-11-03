@@ -17,14 +17,21 @@
 # workflow with mint_distribution_cert. Caches do not cross tag refs, so
 # minting is not the default.
 #
-# Automatic upload is paused (2026-11-04). Pushes to master, including
-# later v2 work, must not upload to TestFlight by themselves. Run this
-# workflow with workflow_dispatch when a build should be uploaded.
-# A newer dispatch cancels an older in-progress upload.
+# A push to master does not upload. Later v2 work can land on master
+# without going to TestFlight. To release, push the commit to release/ios.
+# workflow_dispatch remains, but the integration account cannot call it
+# (403). Docs-only pushes are ignored. A newer release/ios push cancels
+# an older in-progress upload.
 
 name: TestFlight
 
 on:
+  push:
+    branches:
+      - release/ios
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   workflow_dispatch:
     inputs:
       mint_distribution_cert:
