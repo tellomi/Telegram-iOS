@@ -30,7 +30,7 @@ func tellomiCachedCountryList(locale: Locale?) -> TellomiCountryListSnapshot? {
 /// Builds the picker off the main thread and keeps it. The phone screen calls this
 /// when it appears, so the tap reads the cache. `CFStringTransform` to pinyin for a
 /// Chinese index, done while the controller is being pushed, was the multi-second stall.
-func tellomiWarmCountryList(strings: PresentationStrings, locale: Locale?) {
+public func tellomiWarmCountryList(strings: PresentationStrings, locale: Locale?) {
     let countries = AuthorizationSequenceCountrySelectionController.countries()
     let key = tellomiCountryListKey(locale: locale, countries: countries)
     if tellomiCountryListCache.with({ $0[key] != nil }) {
