@@ -436,6 +436,16 @@ Empty chat, empty folder, no-results, calls placeholder, two-factor intro, and t
 | `ChatListEmpty.tgs`, `ChatListFilterEmpty.tgs`, `ChatListNoResults.tgs`, `CallsPlaceholder.tgs`, `TwoFactorSetupIntro.tgs`, `IntroPhone.tgs` | Monochrome mark. |
 | `Telegram/Telegram-iOS/*.alticon` | Deleted. Not packaged. |
 
+## Transcription letter
+
+The voice-transcription button draws a stroked A that trims into the collapse chevron. When the app language (`primaryComponent.languageCode`, not `baseLanguageCode`) is zh, ja, ko, ar, fa, he, hi, or th, that letter is 文, あ, 가, ع, ا, א, अ, or ก. Latin, Cyrillic, and Greek stay A. The button is forced left-to-right so an RTL layout does not mirror the glyph. The same centerlines are in `Tellomi/assets/transcribe-glyph-paths.json` (文 is also `transcribe-wen-paths.json`).
+
+| File | Change |
+| --- | --- |
+| `AudioTranscriptionButtonComponent.swift` | Picks `voiceToText_<lang>` / `textToVoice_<lang>` and `TranscriptionLocked_<lang>`. |
+| `voiceToText_*.json`, `textToVoice_*.json` | Same layer and group names and the same trim. The A centerlines are the character. |
+| `TranscriptionLocked_*.imageset` | The locked icon's A is the same character. The arrow and the lock stay. |
+
 ## Login screens matched to the 2026-11-03 spec
 
 The phone screen is the login home. Primary buttons stay black (white in dark mode), disabled gray. The agreement sentence is only 已阅读并同意 用户协议 和 隐私政策. The carrier sentence is gone. SMS boxes use the length in `sentCode`. The top-right control is still the language name plus ▾ and the three-language card. It is not 帮助.

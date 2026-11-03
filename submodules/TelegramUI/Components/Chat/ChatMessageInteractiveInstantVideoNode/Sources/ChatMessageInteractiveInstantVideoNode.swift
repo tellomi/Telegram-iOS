@@ -859,6 +859,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                             component: AnyComponent(AudioTranscriptionButtonComponent(
                                 theme: .freeform(durationBlurColor, durationTextColor),
                                 transcriptionState: effectiveAudioTranscriptionState,
+                                languageCode: item.presentationData.strings.primaryComponent.languageCode,
                                 pressed: {
                                     guard let strongSelf = self else {
                                         return

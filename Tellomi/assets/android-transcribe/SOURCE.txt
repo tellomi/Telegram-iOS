@@ -1,0 +1,2 @@
+Taken from tellomi/Telegram PR #39, branch cursor/transcribe-script-glyphs-2fb7, head a2f014bba1a2d31efdf5ec2d55246750292e5ffd.
+Letter geometry is Group 3 plus Group 4 at frame 19.
