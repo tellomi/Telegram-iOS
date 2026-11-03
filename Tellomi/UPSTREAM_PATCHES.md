@@ -544,6 +544,18 @@ The same one-frame shape style (gzip Lottie, or plain JSON where the file was al
 
 The two-step monkey player still asks for frames up to 41, and the round-video atlas still asks `PlaneLogoPlain` for 53 frames. A one-frame file has no later frames. The atlas path is already switched off (`RoundVideoDecorationProvider.isEnabled` is false) and returns nil when the frame count is short, so it does not draw the old plane. The other intro `.tgs` files are unchanged.
 
+## Auth layout back to upstream, precise location, leftover planes
+
+The nickname screen and the two-step screen again use Telegram's authorization layout: `layout.inputHeight` is the keyboard, the continue button is pinned to `height - inputHeight - button - 24`, and the column is measured in the band above that inset (`additionalBottomInset` 90 / 110). The custom form scroll and the slack test that moved the button under the keyboard are gone. Copy, the black button, the agreement checkbox, and email nickname-only stay. The two-step monkey sticker stays hidden; it is not part of the inset math. The signup avatar tap is the same `presentLegacyAvatarPicker(signup: true)` as upstream (`TGMediaAvatarMenuMixin`: camera tile, recent photos, 打开相册, crop). It was not a separate picker.
+
+Phone, email, and code screens still differ from upstream. Those differences are listed in the pull request. A cleared unauthorized state no longer replaces the code screen with the welcome carousel while that login attempt is still current.
+
+Gallery and Location in the attach tray are the same 30×30 MingCute line icons as File and Poll. They had been fitted into the old ink box and drew smaller.
+
+`DeviceLocationManager` asks for `kCLLocationAccuracyBest` and `requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocation")`. `Info.plist` / `InfoBazel.plist` carry `NSLocationTemporaryUsageDescriptionDictionary`. The current-location row sends `accuracy_radius` from `CLLocation.horizontalAccuracy`. Apple Maps is still given WGS-84; MapKit applies the China offset. 高德 uses `dev=1`, 百度 `coord_type=wgs84`, 腾讯 is converted to GCJ-02 in `TellomiMapOpenIn`.
+
+Paper-plane artwork replaced with `Avatar/TellomiMark`: the unsupported-message badge, Call title, CallKit, the context-menu Telegram icon, the Shortcuts icon, and Wallet InfoSend. QR marks were already the Tellomi mark. `PlaneLogo.tgs` is already an arrow. The welcome intro mesh (`RMIntro`, `telegram_plane1.png`) is still a paper-plane model.
+
 ## Location picker locale and nearby places
 
 Tellomi langpacks set `base_lang_code` to `en`, so `PresentationStrings.baseLanguageCode` is the English fallback even when the UI language is Chinese. `localeWithStrings` used that code for `CLGeocoder` and `MKDistanceFormatter`, which produced pinyin addresses and `miles` / `feet`. Nearby places and venue search call the inline venue bot (`venue_search_username`, default `foursquare`). This server does not have that bot, so the list was empty (`Map_NoPlacesNearby`) and search showed only the geocoded address.
@@ -551,5 +563,5 @@ Tellomi langpacks set `base_lang_code` to `en`, so `PresentationStrings.baseLang
 | File | Change |
 | --- | --- |
 | `submodules/TelegramStringFormatting/Sources/Locale.swift` `localeIdentifierLanguageCode` | When the base code is English and the primary (UI) code is not, the locale uses the primary code. An English UI keeps the base code. A pack whose base is already not English keeps that base, which is what upstream official packs do. The device region suffix is unchanged, so a US region still measures in miles and feet, with Chinese unit names. |
-| `submodules/LocationUI/Sources/LocationUtils.swift` `nearbyVenues` | The bot result is still used when it contains venues. Otherwise the same signal is filled from MapKit. |
+| `submodules/LocationUI/Sources/LocationUtils.swift` `nearbyVenues` | The bot result is still used when it contains venues. Otherwise the same signal is filled from MapKit. The `accuracyRadius` argument on `TelegramMediaMap.init(coordinate:)` stays; that is the precise-location row, not the venue fallback. |
 | `submodules/LocationUI/Sources/AppleMapVenueSearch.swift` | Nearby: `MKLocalPointsOfInterestRequest` (2.5 km). If that is empty, one `MKLocalSearch` whose query follows the UI language (`餐饮` / `餐飲` / `restaurant`). Text search: `MKLocalSearch` within 100 km of the coordinate. Each hit is a `TelegramMediaMap` venue (`provider` `apple`, foursquare-style `type` so the existing category color and icon path run). No attribution row, no API key. Sending still posts that media; `queryId` is not a bot result. |

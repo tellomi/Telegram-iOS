@@ -26,11 +26,11 @@ Chat/Attach Menu/Camera,camera-2,line,
 Chat/Attach Menu/OpenCamera,camera-2,line,
 Chat/Attach Menu/Emoji,emoji,line,
 Chat/Attach Menu/Sticker,sticker,line,
-Chat/Attach Menu/Image,photo-album,line,
+Chat/Attach Menu/Image,photo-album,line,30x30
 Chat/Attach Menu/ImageFilled,photo-album,fill,match:Chat/Attach Menu/Image
 Chat/Attach Menu/File,file,line,30x30
 Chat/Attach Menu/FileFilled,file,fill,match:Chat/Attach Menu/File
-Chat/Attach Menu/Location,location,line,
+Chat/Attach Menu/Location,location,line,30x30
 Chat/Attach Menu/LocationFilled,location,fill,match:Chat/Attach Menu/Location
 Chat/Attach Menu/Gift,gift,line,30x30
 Chat/Attach Menu/GiftFilled,gift,fill,match:Chat/Attach Menu/Gift
