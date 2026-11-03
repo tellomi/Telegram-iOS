@@ -36,7 +36,7 @@ private let appleVenueLimit = 20
 private func appleNearbyMapItems(coordinate: CLLocationCoordinate2D, languageCode: String) -> Signal<[MKMapItem], NoError> {
     let pointsOfInterest = appleMapItems {
         let radius = min(appleNearbyRadius, MKLocalPointsOfInterestRequest.maxRadius)
-        let request = MKLocalPointsOfInterestRequest(centerCoordinate: coordinate, radius: radius)
+        let request = MKLocalPointsOfInterestRequest(center: coordinate, radius: radius)
         request.pointOfInterestFilter = .includingAll
         return MKLocalSearch(request: request)
     }
