@@ -12,7 +12,7 @@ enum TellomiLoginChrome {
     static let buttonForeground = UIColor.white
     static let buttonDisabledBackground = UIColor(rgb: 0xE5E5E5)
     static let buttonDisabledForeground = UIColor(rgb: 0x8E8E93)
-    static let link = UIColor(rgb: 0x3478F6)
+    static let link = UIColor(rgb: 0x111111)
     static let error = UIColor(rgb: 0xFF3B30)
     /// Caret and focused field. Same black as the primary button.
     static let accent = UIColor(rgb: 0x111111)
@@ -25,6 +25,38 @@ enum TellomiLoginChrome {
     static let legalURL = "https://tellomi.cn/legal"
     static let helpURL = "https://tellomi.cn/help/"
     static let fieldCornerRadius: CGFloat = 12.0
+
+    /// Body text that grows with the system text size, capped so a login column
+    /// still fits a 4-inch phone. `Font.regular` is a fixed point size.
+    static func scaledFont(size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+        let font = UIFont.systemFont(ofSize: size, weight: weight)
+        return UIFontMetrics(forTextStyle: .body).scaledFont(for: font, maximumPointSize: size * 1.35)
+    }
+
+    /// Login column. Frames stay in screen coordinates: the scroll view fills the
+    /// controller, and `contentInset.bottom` is the keyboard or the home indicator.
+    static func makeFormScroll() -> ASScrollNode {
+        let scroll = ASScrollNode()
+        scroll.scrollableDirections = [.up, .down]
+        scroll.view.alwaysBounceVertical = false
+        scroll.view.showsVerticalScrollIndicator = true
+        scroll.view.contentInsetAdjustmentBehavior = .never
+        scroll.view.keyboardDismissMode = .interactive
+        scroll.backgroundColor = .clear
+        return scroll
+    }
+
+    static func applyFormScroll(_ scroll: ASScrollNode, layoutSize: CGSize, bottomInset: CGFloat, contentBottom: CGFloat) {
+        scroll.frame = CGRect(origin: CGPoint(), size: layoutSize)
+        let inset = UIEdgeInsets(top: 0.0, left: 0.0, bottom: bottomInset, right: 0.0)
+        scroll.view.contentInset = inset
+        scroll.view.verticalScrollIndicatorInsets = inset
+        let visibleHeight = max(0.0, layoutSize.height - bottomInset)
+        scroll.view.contentSize = CGSize(width: layoutSize.width, height: max(contentBottom, visibleHeight))
+        if contentBottom <= visibleHeight + 1.0 {
+            scroll.view.contentOffset = CGPoint()
+        }
+    }
 
     struct Palette {
         let buttonBackground: UIColor
@@ -53,7 +85,7 @@ enum TellomiLoginChrome {
                 buttonForeground: UIColor(rgb: 0x111111),
                 buttonDisabledBackground: UIColor(rgb: 0x3A3A3C),
                 buttonDisabledForeground: UIColor(rgb: 0x8E8E93),
-                link: UIColor(rgb: 0x3478F6),
+                link: UIColor.white,
                 error: UIColor(rgb: 0xFF453A),
                 accent: UIColor.white,
                 checkbox: UIColor.white,
@@ -105,30 +137,14 @@ enum TellomiLoginChrome {
 /// Which login-home screen is showing. Change Phone Number does not use this.
 enum TellomiLoginSurface: Equatable {
     case phoneCode
-    case phonePassword
     case emailCode
-    case emailPassword
 
     var isEmail: Bool {
-        switch self {
-        case .emailCode, .emailPassword:
-            return true
-        case .phoneCode, .phonePassword:
-            return false
-        }
+        return self == .emailCode
     }
 
-    var isPassword: Bool {
-        switch self {
-        case .phonePassword, .emailPassword:
-            return true
-        case .phoneCode, .emailCode:
-            return false
-        }
-    }
-
-    /// Phone OTP home is the only screen whose agreement mentions the carrier.
-    var showsCarrierAgreement: Bool {
+    /// Phone home pins the agreement to the bottom of the screen. Email centers it under the button.
+    var agreementPinnedToBottom: Bool {
         return self == .phoneCode
     }
 }
@@ -166,7 +182,9 @@ struct TellomiLoginCopy: Equatable {
     let unavailableTitle: String
     let unavailableBody: String
     let codeNotReceived: String
+    /// Email code. SMS uses `wrongSmsCode`.
     let wrongCode: String
+    let wrongSmsCode: String
     let startMessaging: String
     let ok: String
     let bindPhoneTitle: String
@@ -250,6 +268,7 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
             unavailableBody: "该登录方式即将开放，请先使用手机号或邮箱。",
             codeNotReceived: "收不到验证码？",
             wrongCode: "请输入正确的验证码",
+            wrongSmsCode: "验证码错误，请重新输入",
             startMessaging: "开始聊天",
             ok: "好",
             bindPhoneTitle: "绑定手机号",
@@ -307,6 +326,7 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
         unavailableBody: "This sign-in method isn't open yet. Use a phone number or email.",
         codeNotReceived: "Didn't get the code?",
         wrongCode: "Enter the correct code",
+        wrongSmsCode: "Wrong code. Please enter it again.",
         startMessaging: "Start Messaging",
         ok: "OK",
         bindPhoneTitle: "Link a phone number",
@@ -367,6 +387,7 @@ private func tellomiLoginCopyHant() -> TellomiLoginCopy {
         unavailableBody: "該登入方式即將開放，請先使用手機號或郵箱。",
         codeNotReceived: "收不到驗證碼？",
         wrongCode: "請輸入正確的驗證碼",
+        wrongSmsCode: "驗證碼錯誤，請重新輸入",
         startMessaging: "開始聊天",
         ok: "好",
         bindPhoneTitle: "綁定手機號",
@@ -391,6 +412,17 @@ private func tellomiLoginCopyHant() -> TellomiLoginCopy {
     )
 }
 
+func tellomiCloudPasswordCopy(languageCode: String) -> (title: String, notice: String, forgot: String) {
+    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
+    case .hans:
+        return ("两步验证", "请输入两步验证密码", "忘记密码？")
+    case .hant:
+        return ("兩步驟驗證", "請輸入兩步驟驗證密碼", "忘記密碼？")
+    case .english:
+        return ("Two-step verification", "Enter your two-step verification password.", "Forgot password?")
+    }
+}
+
 func tellomiLoginLanguageIsChinese(_ languageCode: String) -> Bool {
     let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode).lowercased()
     return code == "zh" || code.hasPrefix("zh-")
@@ -411,4 +443,53 @@ func tellomiBundledChineseLoginCopy(_ strings: PresentationStrings) -> TellomiLo
         return tellomiLoginCopy(languageCode: code)
     }
     return nil
+}
+
+/// Login server alerts use `presentationData.strings.Login_*`, the same mapping Telegram
+/// already has. Before a Chinese langpack is applied that pack is English, so a Chinese
+/// login screen showed the English sentence. When the chrome language is Chinese and the
+/// text is still that English sentence, use the bundled translation. A pack that is already
+/// Chinese is left as it is.
+func tellomiLocalizedServerAlert(_ text: String, strings: PresentationStrings) -> String {
+    let script = tellomiLoginScript(languageCode: tellomiInterfaceLanguageCode(strings))
+    guard script != .english else {
+        return text
+    }
+    let simplified = script == .hans
+    var table: [String: String] = [:]
+    func bind(_ english: String, _ hans: String, _ hant: String) {
+        if !english.isEmpty {
+            table[english] = simplified ? hans : hant
+        }
+    }
+    let english = defaultPresentationStrings
+    let packIsEnglish = tellomiLoginScript(languageCode: strings.primaryComponent.languageCode) == .english
+    func row(_ englishText: String, _ live: String, _ hans: String, _ hant: String) {
+        bind(englishText, hans, hant)
+        if packIsEnglish {
+            bind(live, hans, hant)
+        }
+    }
+    row(english.Login_CodeFloodError, strings.Login_CodeFloodError, "尝试次数过多，请稍后再试。", "嘗試次數過多，請稍後再試。")
+    row(english.Login_InvalidPhoneError, strings.Login_InvalidPhoneError, "手机号码无效，请重试。", "手機號碼無效，請重試。")
+    row(english.Login_PhoneFloodError, strings.Login_PhoneFloodError, "抱歉，你最近删除并重建账号的次数过多。请等待几天后再重新注册。", "抱歉，你最近刪除並重建帳號的次數過多。請等待幾天後再重新註冊。")
+    row(english.Login_ErrorAppOutdated, strings.Login_ErrorAppOutdated, "请将 Tellomi 更新到最新版本后再登录。", "請將 Tellomi 更新到最新版本後再登入。")
+    row(english.Login_PhoneBannedError, strings.Login_PhoneBannedError, "此手机号码已被封禁。", "此手機號碼已被封鎖。")
+    row(english.Login_UnknownError, strings.Login_UnknownError, "发生错误，请稍后再试。", "發生錯誤，請稍後再試。")
+    row(english.Login_NetworkError, strings.Login_NetworkError, "请检查网络连接后重试。", "請檢查網路連線後重試。")
+    row(english.Login_PhoneNumberHelp, strings.Login_PhoneNumberHelp, "帮助", "幫助")
+    row(english.Login_InvalidCodeError, strings.Login_InvalidCodeError, "验证码无效，请重试。", "驗證碼無效，請重試。")
+    row(english.Login_CodeExpired, strings.Login_CodeExpired, "验证码已过期，请重新登录。", "驗證碼已過期，請重新登入。")
+    row(english.Login_InvalidEmailTokenError, strings.Login_InvalidEmailTokenError, "发生错误，请重试。", "發生錯誤，請重試。")
+    row(english.Login_InvalidEmailAddressError, strings.Login_InvalidEmailAddressError, "发生错误，请重试。", "發生錯誤，請重試。")
+    row(english.Login_EmailNotConfiguredError, strings.Login_EmailNotConfiguredError, "需要一个邮箱账号，以便把错误详情发给我们。\n\n请到系统设置 > 密码与账户 > 添加账户，设置一个邮箱账号。", "需要一個郵箱帳號，以便把錯誤詳情發給我們。\n\n請到系統設定 > 密碼與帳戶 > 加入帳戶，設定一個郵箱帳號。")
+    row(english.Login_ResetAccountProtected_LimitExceeded, strings.Login_ResetAccountProtected_LimitExceeded, "该账号的当前用户取消了你最近的重置请求。请在 7 天后再试。", "該帳號的目前使用者取消了你最近的重設請求。請在 7 天後再試。")
+    row(english.Login_ResetAccountProtected_Reset, strings.Login_ResetAccountProtected_Reset, "重置", "重設")
+    row(english.TwoStepAuth_RecoveryUnavailable, strings.TwoStepAuth_RecoveryUnavailable, "你在设置密码时没有提供恢复邮箱，现在只能回忆密码或重置账号。", "你在設定密碼時沒有提供恢復郵箱，現在只能回憶密碼或重設帳號。")
+    row(english.TwoStepAuth_RecoveryFailed, strings.TwoStepAuth_RecoveryFailed, "你现在只能回忆密码或重置账号。", "你現在只能回憶密碼或重設帳號。")
+    row(english.TwoStepAuth_ResetAccountConfirmation, strings.TwoStepAuth_ResetAccountConfirmation, "如果继续重置账号，你将丢失所有聊天、消息以及分享过的媒体和文件。", "如果繼續重設帳號，你將丟失所有聊天、訊息以及分享過的媒體和檔案。")
+    row(english.Common_OK, strings.Common_OK, "好", "好")
+    row(english.Common_Cancel, strings.Common_Cancel, "取消", "取消")
+    row(english.ChatSettings_ConnectionType_UseProxy, strings.ChatSettings_ConnectionType_UseProxy, "使用代理", "使用代理")
+    return table[text] ?? text
 }

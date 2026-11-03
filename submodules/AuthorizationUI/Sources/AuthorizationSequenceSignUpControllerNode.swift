@@ -43,6 +43,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     private let proceedNode: SolidRoundedButtonNode
     
     private var layoutArguments: (ContainerViewLayout, CGFloat)?
+    private var tellomiFormScroll: ASScrollNode?
     
     private let appearanceTimestamp = CACurrentMediaTime()
     
@@ -105,12 +106,14 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.titleNode = ASTextNode()
         self.titleNode.isUserInteractionEnabled = false
         self.titleNode.displaysAsynchronously = false
+        self.titleNode.maximumNumberOfLines = 0
         self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_InfoTitle, font: Font.semibold(28.0), textColor: theme.list.itemPrimaryTextColor)
         self.titleNode.accessibilityIdentifier = "Auth.SetName.Title"
 
         self.currentOptionNode = ASTextNode()
         self.currentOptionNode.isUserInteractionEnabled = false
         self.currentOptionNode.displaysAsynchronously = false
+        self.currentOptionNode.maximumNumberOfLines = 0
         self.currentOptionNode.attributedText = NSAttributedString(string: self.strings.Login_InfoHelp, font: Font.regular(16.0), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         
         self.termsNode = ImmediateTextNode()
@@ -204,6 +207,26 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.agreementRow.isHidden = true
         self.addSubnode(self.addPhotoButton)
         self.addSubnode(self.proceedNode)
+
+        let scroll = TellomiLoginChrome.makeFormScroll()
+        self.tellomiFormScroll = scroll
+        self.addSubnode(scroll)
+        for node in [
+            self.tellomiFirstBackground,
+            self.tellomiLastBackground,
+            self.firstSeparatorNode,
+            self.lastSeparatorNode,
+            self.firstNameField,
+            self.lastNameField,
+            self.titleNode,
+            self.currentOptionNode,
+            self.agreementRow,
+            self.addPhotoButton,
+            self.proceedNode
+        ] {
+            node.removeFromSupernode()
+            scroll.addSubnode(node)
+        }
         
         self.addPhotoButton.addTarget(self, action: #selector(self.addPhotoPressed), forControlEvents: .touchUpInside)
         
@@ -230,7 +253,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         // Tellomi: replace the terms label with the agreement checkbox; Continue waits for it.
         self.proceedNode.isEnabled = false
         self.firstNameField.textField.addTarget(self, action: #selector(self.tellomiNameChanged), for: .editingChanged)
-        self.tellomiAgreement.install(on: self.termsNode, theme: theme, kind: .signUp, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(strings)), openUrl: { [weak self] url in
+        self.tellomiAgreement.install(on: self.termsNode, theme: theme, kind: .signUp, languageCode: tellomiInterfaceLanguageCode(strings), openUrl: { [weak self] url in
             self?.tellomiOpenUrl?(url)
         }, changed: { [weak self] agreed in
             self?.agreementRow.setChecked(agreed)
@@ -284,14 +307,12 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             insets.bottom = max(inputHeight, layout.standardInputHeight)
         }
         
-        let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 90.0 : 10.0
-                
         let nicknameCopy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let bundled = tellomiBundledChineseLoginCopy(self.strings)
         let title = self.tellomiNicknameOnly ? nicknameCopy.nicknameTitle : (bundled?.signUpTitle ?? self.strings.Login_InfoTitle)
         let help = self.tellomiNicknameOnly ? nicknameCopy.nicknameHelp : (bundled?.signUpHelp ?? self.strings.Login_InfoHelp)
-        self.titleNode.attributedText = NSAttributedString(string: title, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
-        self.currentOptionNode.attributedText = NSAttributedString(string: help, font: Font.regular(16.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+        self.titleNode.attributedText = NSAttributedString(string: title, font: TellomiLoginChrome.scaledFont(size: 28.0, weight: .semibold), textColor: self.theme.list.itemPrimaryTextColor)
+        self.currentOptionNode.attributedText = NSAttributedString(string: help, font: TellomiLoginChrome.scaledFont(size: 16.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.applyTellomiNicknameChrome()
         let titleSize = self.titleNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
         
@@ -322,24 +343,52 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         items.append(AuthorizationLayoutItem(node: self.agreementRow, size: termsSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 48.0, maxValue: 100.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
-        if layout.size.width > 320.0 {
-            self.proceedNode.isHidden = false
-            
-            let inset: CGFloat = 24.0
-            let proceedHeight = self.proceedNode.updateLayout(width: bottomMaximumWidth - 48.0, transition: transition)
-            let proceedSize = CGSize(width: bottomMaximumWidth - 48.0, height: proceedHeight)
-            transition.updateFrame(node: self.proceedNode, frame: CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize))
-        } else {
-            insets.top = navigationBarHeight
-            self.proceedNode.isHidden = true
+        self.proceedNode.isHidden = false
+        let inset: CGFloat = 24.0
+        let proceedHeight = self.proceedNode.updateLayout(width: bottomMaximumWidth - 48.0, transition: transition)
+        let proceedSize = CGSize(width: bottomMaximumWidth - 48.0, height: proceedHeight)
+
+        // Same rule as the password screen: pin the title under the bar, keep the
+        // button at the bottom when it fits, and let the column scroll when the
+        // avatar, the agreement, and the keyboard do not.
+        let pinnedTop = max(insets.top, navigationBarHeight)
+        let floatingButtonY = layout.size.height - insets.bottom - proceedSize.height - inset
+        let available = floatingButtonY - 16.0 - pinnedTop
+        let slack = items.reduce(CGFloat(0.0)) { partial, item in
+            partial + item.size.height + item.spacingBefore.maxValue + item.spacingAfter.maxValue
         }
-        
-        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
+        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: pinnedTop), size: CGSize(width: bandWidth, height: max(available, slack))), items: items, transition: transition, failIfDoesNotFit: false)
+        var buttonY = floatingButtonY
+        if slack > available + 1.0 {
+            var lowest = pinnedTop
+            for item in items {
+                if let node = item.node, !node.isHidden {
+                    lowest = max(lowest, node.frame.maxY)
+                }
+            }
+            buttonY = lowest + 16.0
+        }
+        transition.updateFrame(node: self.proceedNode, frame: CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: buttonY), size: proceedSize))
         // The continue button is a later sibling. Keep the agreement above it so the checkbox receives the tap.
-        self.view.bringSubviewToFront(self.agreementRow.view)
+        self.agreementRow.view.superview?.bringSubviewToFront(self.agreementRow.view)
         self.placeTellomiField(self.tellomiFirstBackground, field: self.firstNameField, bandMinX: bandMinX, bandWidth: bandWidth)
         self.placeTellomiField(self.tellomiLastBackground, field: self.lastNameField, bandMinX: bandMinX, bandWidth: bandWidth)
         self.proceedNode.title = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).continueAction
+        self.tellomiUpdateFormScroll(layout: layout, bottomInset: insets.bottom)
+    }
+
+    private func tellomiUpdateFormScroll(layout: ContainerViewLayout, bottomInset: CGFloat) {
+        guard let scroll = self.tellomiFormScroll else {
+            return
+        }
+        var contentBottom: CGFloat = 0.0
+        for node in scroll.subnodes ?? [] {
+            if node.isHidden {
+                continue
+            }
+            contentBottom = max(contentBottom, node.frame.maxY)
+        }
+        TellomiLoginChrome.applyFormScroll(scroll, layoutSize: layout.size, bottomInset: bottomInset, contentBottom: contentBottom + 16.0)
     }
 
     private func placeTellomiField(_ background: ASDisplayNode, field: ASDisplayNode, bandMinX: CGFloat, bandWidth: CGFloat) {

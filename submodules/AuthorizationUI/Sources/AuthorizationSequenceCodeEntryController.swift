@@ -18,7 +18,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     
     private let sharedContext: SharedAccountContext
     private let strings: PresentationStrings
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
     
     public var loginWithCode: ((String) -> Void)?
     public var signInWithApple: (() -> Void)?
@@ -204,11 +204,10 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
 
     private func presentTellomiLanguage() {
         let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
-        let current = tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: self.strings.primaryComponent.languageCode))
+        let current = tellomiChromeLanguageCode(savedLanguageCode: self.strings.primaryComponent.languageCode)
         var rows: [TellomiChoiceRow] = []
         for info in tellomiBuiltinInterfaceLanguages() {
-            let script = tellomiLoginScript(languageCode: info.languageCode)
-            let checked = script == current
+            let checked = tellomiLanguageCodesMatch(info.languageCode, current)
             let code = info.languageCode
             rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
                 guard let self, !checked else {
@@ -267,7 +266,17 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         if let (_, _, type, _, _, _, _) = self.data {
             switch type {
             case .sms, .email, .firebase, .call, .otherSession:
-                self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+                let code = tellomiInterfaceLanguageCode(self.strings)
+                let image = UIImage(systemName: "globe")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 17.0, weight: .regular)).withRenderingMode(.alwaysTemplate)
+                let item: UIBarButtonItem
+                if let image {
+                    item = UIBarButtonItem(image: image, style: .plain, target: self, action: #selector(self.languagePressed))
+                } else {
+                    item = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: code), style: .plain, target: self, action: #selector(self.languagePressed))
+                }
+                item.accessibilityLabel = tellomiLanguageButtonAccessibilityLabel(languageCode: code)
+                item.accessibilityIdentifier = "Auth.Login.Language"
+                self.navigationItem.rightBarButtonItem = item
                 return
             default:
                 break
@@ -354,6 +363,12 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     }
     
     public func applyPresentationTheme(_ presentationData: PresentationData) {
+        self.theme = presentationData.theme
+        self.statusBar.statusBarStyle = presentationData.theme.intro.statusBarStyle.style
+        if self.isViewLoaded {
+            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        }
+        self.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), strings: NavigationBarStrings(presentationStrings: presentationData.strings)), transition: .immediate)
         if self.isNodeLoaded {
             self.controllerNode.applyPresentationTheme(presentationData.theme)
         }

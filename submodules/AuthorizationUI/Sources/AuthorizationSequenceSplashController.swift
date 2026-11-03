@@ -17,7 +17,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
     
     private let accountManager: AccountManager<TelegramAccountManagerTypes>
     private let account: UnauthorizedAccount
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
     
     private let controller: RMIntroViewController
     
@@ -118,7 +118,13 @@ public final class AuthorizationSequenceSplashController: ViewController {
     }
     
     func applyPresentationTheme(_ theme: PresentationTheme) {
+        self.theme = theme
+        self.statusBar.statusBarStyle = theme.intro.statusBarStyle.style
         self.startButton.updateTheme(TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance))
+        self.controller.updateAppearanceBackgroundColor(theme.list.plainBackgroundColor, primaryColor: theme.list.itemPrimaryTextColor, buttonColor: theme.intro.startButtonColor, accentColor: theme.list.itemAccentColor, regularDotColor: theme.intro.dotColor, highlightedDotColor: theme.list.itemAccentColor)
+        if self.isNodeLoaded {
+            self.controllerNode.backgroundColor = theme.list.plainBackgroundColor
+        }
         if self.isViewLoaded {
             self.view.backgroundColor = theme.list.plainBackgroundColor
         }
@@ -147,6 +153,10 @@ public final class AuthorizationSequenceSplashController: ViewController {
         return snapshot
     }
     
+    func suppressLiveIntroPages() {
+        self.controller.tellomiSuppressLivePages()
+    }
+
     var textSnaphot: UIView? {
         let snapshotView: UIView? = self.controller.createTextSnapshot()
         guard let snapshot = snapshotView else {

@@ -97,7 +97,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
         }
         if account != nil {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(presentationData.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+            self.navigationItem.rightBarButtonItem = self.tellomiLanguageItem()
         }
         
         if let countriesConfiguration {
@@ -117,17 +117,30 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         self.back()
     }
     
+    private func tellomiLanguageItem() -> UIBarButtonItem {
+        let code = tellomiInterfaceLanguageCode(self.presentationData.strings)
+        let image = UIImage(systemName: "globe")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 17.0, weight: .regular)).withRenderingMode(.alwaysTemplate)
+        let item: UIBarButtonItem
+        if let image {
+            item = UIBarButtonItem(image: image, style: .plain, target: self, action: #selector(self.languagePressed))
+        } else {
+            item = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: code), style: .plain, target: self, action: #selector(self.languagePressed))
+        }
+        item.accessibilityLabel = tellomiLanguageButtonAccessibilityLabel(languageCode: code)
+        item.accessibilityIdentifier = "Auth.Login.Language"
+        return item
+    }
+
     @objc private func languagePressed() {
         self.presentTellomiLanguage()
     }
 
     private func presentTellomiLanguage() {
         let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
-        let current = tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode))
+        let current = tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode)
         var rows: [TellomiChoiceRow] = []
         for info in tellomiBuiltinInterfaceLanguages() {
-            let script = tellomiLoginScript(languageCode: info.languageCode)
-            let checked = script == current
+            let checked = tellomiLanguageCodesMatch(info.languageCode, current)
             let code = info.languageCode
             rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
                 guard let self, !checked else {
@@ -159,6 +172,11 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
 
     public func applyPresentationTheme(_ presentationData: PresentationData) {
         self.presentationData = presentationData
+        self.statusBar.statusBarStyle = presentationData.theme.intro.statusBarStyle.style
+        if self.isViewLoaded {
+            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        }
+        self.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), strings: NavigationBarStrings(presentationStrings: presentationData.strings)), transition: .immediate)
         if self.isNodeLoaded {
             self.controllerNode.applyPresentationTheme(presentationData.theme)
         }
@@ -170,15 +188,10 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
     }
 
-    private func presentTellomiUnavailable() {
-        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
-        self.present(textAlertController(sharedContext: self.sharedContext, title: copy.unavailableTitle, text: copy.unavailableBody, actions: [TextAlertAction(type: .defaultAction, title: copy.ok, action: {})]), in: .window(.root))
-    }
-
     private func presentTellomiAgreementPrompt() {
-        let kind: TellomiSignUpAgreement.Kind = self.controllerNode.tellomiSurface.showsCarrierAgreement ? .phone : .email
-        let prompt = TellomiAgreementPromptController(kind: kind, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), openUrl: { [weak self] url in
-            self?.openUrl(url)
+        let kind: TellomiSignUpAgreement.Kind = self.controllerNode.tellomiSurface.agreementPinnedToBottom ? .phone : .email
+        let prompt = TellomiAgreementPromptController(kind: kind, languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings), dark: self.presentationData.theme.overallDarkAppearance, openUrl: { [weak self] url in
+            self?.tellomiPresentLegalURL(url)
         })
         prompt.agreed = { [weak self] in
             guard let self else {
@@ -192,7 +205,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
 
     func updateNavigationItems() {
         if self.account != nil {
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+            self.navigationItem.rightBarButtonItem = self.tellomiLanguageItem()
             if self.isNodeLoaded, self.controllerNode.tellomiSurface != .phoneCode {
                 let backTitle = tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)) ? "返回" : "Back"
                 self.navigationItem.leftBarButtonItem = UIBarButtonItem(backButtonAppearanceWithTitle: backTitle, target: self, action: #selector(self.tellomiSurfaceBackPressed))
@@ -234,6 +247,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         
         if let animationSnapshot = controller.animationSnapshot, let textSnapshot = controller.textSnaphot {
             self.transitionInArguments = (controller.buttonFrame, controller.buttonTitle, animationSnapshot, textSnapshot)
+            controller.suppressLiveIntroPages()
         }
     }
     
@@ -271,7 +285,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         
         self.controllerNode.selectCountryCode = { [weak self] in
             if let strongSelf = self {
-                let controller = AuthorizationSequenceCountrySelectionController(strings: strongSelf.presentationData.strings, theme: strongSelf.presentationData.theme, glass: true)
+                let languageCode = tellomiInterfaceLanguageCode(strongSelf.presentationData.strings)
+                let countryChrome = tellomiCountryListChrome(languageCode: languageCode)
+                let controller = AuthorizationSequenceCountrySelectionController(strings: strongSelf.presentationData.strings, theme: strongSelf.presentationData.theme, glass: true, localization: AuthorizationCountryListLocalization(locale: tellomiCountryLocale(languageCode: languageCode), title: countryChrome.title, searchPlaceholder: countryChrome.search), focusSearchOnAppear: false)
                 controller.completeWithCountryCode = { code, name in
                     if let strongSelf = self, let currentData = strongSelf.currentData {
                         strongSelf.updateData(countryCode: Int32(code), countryName: name, number: currentData.2)
@@ -288,10 +304,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             self?.nextPressed()
         }
         self.controllerNode.tellomiOpenUrl = { [weak self] url in
-            self?.openUrl(url)
-        }
-        self.controllerNode.tellomiUnavailable = { [weak self] in
-            self?.presentTellomiUnavailable()
+            self?.tellomiPresentLegalURL(url)
         }
         self.controllerNode.tellomiSurfaceChanged = { [weak self] in
             self?.updateNavigationItems()
@@ -444,8 +457,15 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             if let (buttonFrame, buttonTitle, animationSnapshot, textSnapshot) = self.transitionInArguments {
                 self.controllerNode.willAnimateIn(buttonFrame: buttonFrame, buttonTitle: buttonTitle, animationSnapshot: animationSnapshot, textSnapshot: textSnapshot)
             }
-            Queue.mainQueue().justDispatch {
+            // Telegram finishes this fade from containerLayoutUpdated once the keyboard's
+            // inputHeight arrives. Login calls activateInput here the same way, but that
+            // call does not focus a field, so the fade is released on this turn instead.
+            Queue.mainQueue().justDispatch { [weak self] in
+                guard let self else {
+                    return
+                }
                 self.controllerNode.activateInput()
+                self.completeIntroTransitionWithoutKeyboard()
             }
         } else {
             self.controllerNode.activateInput()
@@ -458,6 +478,16 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         if !self.animatingIn {
             self.controllerNode.activateInput()
         }
+    }
+
+    /// Login never raises a keyboard on open, so the intro fade cannot wait for inputHeight.
+    /// The keyboard path in containerLayoutUpdated is unchanged for a screen that does focus.
+    private func completeIntroTransitionWithoutKeyboard() {
+        guard self.account != nil, self.shouldAnimateIn, let (buttonFrame, buttonTitle, animationSnapshot, textSnapshot) = self.transitionInArguments else {
+            return
+        }
+        self.shouldAnimateIn = false
+        self.controllerNode.animateIn(buttonFrame: buttonFrame, buttonTitle: buttonTitle, animationSnapshot: animationSnapshot, textSnapshot: textSnapshot)
     }
     
     override public func viewWillDisappear(_ animated: Bool) {
@@ -501,11 +531,6 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             self.hapticFeedback.error()
             self.controllerNode.animateAgreementError()
             self.presentTellomiAgreementPrompt()
-            return
-        }
-        if self.account != nil && self.controllerNode.isPasswordLogin {
-            // There is no password sign-in RPC. Same notice as Apple, Google, and 找回账号.
-            self.presentTellomiUnavailable()
             return
         }
         if self.controllerNode.isEmailLogin {

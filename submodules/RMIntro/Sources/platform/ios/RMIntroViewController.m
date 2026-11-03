@@ -266,7 +266,9 @@ typedef enum {
     
     _glkView.transform = CGAffineTransformMakeScale(0.66, 0.66);
         
-    [UIView animateWithDuration:0.65 delay:0.15 usingSpringWithDamping:1.2f initialSpringVelocity:0.0 options:kNilOptions animations:^{
+    // Damping must stay in 0...1. 1.2 dropped the spring, then a later layout
+    // played the headline a second time over the login form.
+    [UIView animateWithDuration:0.65 delay:0.15 usingSpringWithDamping:0.9f initialSpringVelocity:0.0 options:kNilOptions animations:^{
         _glkView.center = logoTargetPosition;
         firstPage.headerLabel.center = headerTargetPosition;
         firstPage.descriptionLabel.center = descriptionTargetPosition;
@@ -341,6 +343,27 @@ typedef enum {
     [_glkView removeFromSuperview];
     _glkView = nil;
     _isOpenGLLoaded = false;
+}
+
+- (void)updateAppearanceBackgroundColor:(UIColor *)backgroundColor primaryColor:(UIColor *)primaryColor buttonColor:(UIColor *)buttonColor accentColor:(UIColor *)accentColor regularDotColor:(UIColor *)regularDotColor highlightedDotColor:(UIColor *)highlightedDotColor
+{
+    _backgroundColor = backgroundColor;
+    _primaryColor = primaryColor;
+    _buttonColor = buttonColor;
+    _accentColor = accentColor;
+    _regularDotColor = regularDotColor;
+    _highlightedDotColor = highlightedDotColor;
+    if (!self.isViewLoaded) {
+        return;
+    }
+    self.view.backgroundColor = backgroundColor;
+    _glkView.backgroundColor = backgroundColor;
+    if (_isOpenGLLoaded) {
+        [self setupGL];
+    }
+    if (_headlines != nil && _descriptions != nil) {
+        [self setIntroHeadlines:_headlines descriptions:_descriptions];
+    }
 }
 
 - (void)setIntroHeadlines:(NSArray<NSString *> *)headlines descriptions:(NSArray<NSString *> *)descriptions
@@ -437,6 +460,16 @@ typedef enum {
     return snapshotView;
 }
 
+- (void)tellomiSuppressLivePages {
+    // The transition keeps the snapshots. The live headline must not draw again
+    // on top of them for the frame the splash view is still in the window.
+    // The simulator build never creates the GL view.
+    _pageScrollView.alpha = 0.0;
+    _pageControl.alpha = 0.0;
+    _glkView.alpha = 0.0;
+    _startButton.alpha = 0.0;
+}
+
 - (BOOL)shouldAutorotate
 {
     if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)
@@ -490,7 +523,9 @@ typedef enum {
                 deviceScreen = Inch65;
                 break;
             default:
-                deviceScreen = Inch55;
+                // iPhone X and later are taller than the Plus sizes this switch lists.
+                // Falling through to Inch55 parked the headline on top of the login form.
+                deviceScreen = Inch65;
                 break;
         }
     }

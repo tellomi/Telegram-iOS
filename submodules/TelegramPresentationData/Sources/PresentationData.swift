@@ -152,6 +152,59 @@ public func dictFromLocalization(_ value: Localization) -> [String: String] {
     return tellomiRewriteBrandDictionary(dict)
 }
 
+func tellomiPrimaryStringsDictionary(languageCode: String, localization: Localization) -> [String: String] {
+    var dict = dictFromLocalization(localization)
+    for (key, value) in tellomiChineseGapDictionary(languageCode: languageCode) where dict[key] == nil {
+        dict[key] = value
+    }
+    return dict
+}
+
+/// Keys the Chinese pack often still lacks. Only filled when that language is active
+/// and the pack did not already supply the key.
+func tellomiChineseGapDictionary(languageCode: String) -> [String: String] {
+    let code = languageCode.lowercased()
+    let hant = code.hasPrefix("zh-hant") || code == "zh-tw" || code.hasPrefix("zh-tw") || code == "zh-hk" || code.hasPrefix("zh-hk")
+    let hans = !hant && (code == "zh" || code == "zh-cn" || code.hasPrefix("zh-hans") || code.hasPrefix("zh-"))
+    guard hans || hant else {
+        return [:]
+    }
+    if hant {
+        return [
+            "ChatListFolder.NameUnread": "未讀",
+            "ChatListFolder.NameGroups": "群組",
+            "ChatListFolder.NameChannels": "頻道",
+            "ChatListFolder.NameBots": "機器人",
+            "ChatListFolder.NameContacts": "聯絡人",
+            "ChatListFolder.NameNonContacts": "非聯絡人",
+            "PeopleNearby.Title": "附近的人",
+            "PeopleNearby.Users": "附近的人",
+            "PeopleNearby.Groups": "附近的群組",
+            "PeopleNearby.CreateGroup": "在這裡建立群組",
+            "PeopleNearby.MakeVisible": "讓別人看到我",
+            "PeopleNearby.MakeInvisible": "停止顯示",
+            "PeopleNearby.Description": "請附近的朋友打開此頁面以交換電話號碼。",
+            "Contacts.AddPeopleNearby": "新增附近的人"
+        ]
+    }
+    return [
+        "ChatListFolder.NameUnread": "未读",
+        "ChatListFolder.NameGroups": "群组",
+        "ChatListFolder.NameChannels": "频道",
+        "ChatListFolder.NameBots": "机器人",
+        "ChatListFolder.NameContacts": "联系人",
+        "ChatListFolder.NameNonContacts": "非联系人",
+        "PeopleNearby.Title": "附近的人",
+        "PeopleNearby.Users": "附近的人",
+        "PeopleNearby.Groups": "附近的群组",
+        "PeopleNearby.CreateGroup": "在这里创建群组",
+        "PeopleNearby.MakeVisible": "让别人看到我",
+        "PeopleNearby.MakeInvisible": "停止显示",
+        "PeopleNearby.Description": "请附近的朋友打开此页面以交换电话号码。",
+        "Contacts.AddPeopleNearby": "添加附近的人"
+    ]
+}
+
 private func currentDateTimeFormat() -> PresentationDateTimeFormat {
     let locale = Locale.current
     let dateFormatter = DateFormatter()
@@ -416,7 +469,7 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
         let dateTimeFormat = currentDateTimeFormat()
         let stringsValue: PresentationStrings
         if let localizationSettings = localizationSettings {
-            stringsValue = PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: dictFromLocalization(localizationSettings.primaryComponent.localization)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: dateTimeFormat.groupingSeparator)
+            stringsValue = PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: tellomiPrimaryStringsDictionary(languageCode: localizationSettings.primaryComponent.languageCode, localization: localizationSettings.primaryComponent.localization)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: dateTimeFormat.groupingSeparator)
         } else {
             stringsValue = defaultPresentationStrings
         }
@@ -839,7 +892,7 @@ public func updatedPresentationData(accountManager: AccountManager<TelegramAccou
                         let dateTimeFormat = currentDateTimeFormat()
                         let stringsValue: PresentationStrings
                         if let localizationSettings = localizationSettings {
-                            stringsValue = PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: dictFromLocalization(localizationSettings.primaryComponent.localization)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: dateTimeFormat.groupingSeparator)
+                            stringsValue = PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: tellomiPrimaryStringsDictionary(languageCode: localizationSettings.primaryComponent.languageCode, localization: localizationSettings.primaryComponent.localization)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: dateTimeFormat.groupingSeparator)
                         } else {
                             stringsValue = defaultPresentationStrings
                         }

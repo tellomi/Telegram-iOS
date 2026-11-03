@@ -106,15 +106,17 @@ public func renderAttachAppIcon(iconImage: UIImage?) -> UIImage? {
     })
 }
 
-let colorRed = UIColor(rgb: 0xFF453A)
-let colorGreen = UIColor(rgb: 0x34C759)
-let colorBlue = UIColor(rgb: 0x0a84ff)
-let colorLightBlue = UIColor(rgb: 0x32ADE6)
-let colorTeal = UIColor(rgb: 0x00c7be)
-let colorOrange = UIColor(rgb: 0xFF9F0A)
-let colorPurple = UIColor(rgb: 0xAF52DE)
+// Settings row badges stay black, white, and gray. The old values were Telegram's
+// colored circles (blue, green, orange, purple).
+let colorRed = UIColor(rgb: 0x1C1C1E)
+let colorGreen = UIColor(rgb: 0x111111)
+let colorBlue = UIColor(rgb: 0x111111)
+let colorLightBlue = UIColor(rgb: 0x3A3A3C)
+let colorTeal = UIColor(rgb: 0x3A3A3C)
+let colorOrange = UIColor(rgb: 0x636366)
+let colorPurple = UIColor(rgb: 0x1C1C1E)
 let colorGray = UIColor(rgb: 0x8E8E93)
-let colorViolet = UIColor(rgb: 0x5E5CE6)
+let colorViolet = UIColor(rgb: 0x636366)
 
 public struct PresentationResourcesSettings {
     public static let proxy = renderSettingsIcon(name: "Item List/Icons/Proxy", backgroundColors: [colorGreen])

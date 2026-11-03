@@ -43,15 +43,34 @@ final class TellomiChoicePromptController: ViewController {
         })
         self.displayNodeDidLoad()
     }
+
+    override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
+        super.containerLayoutUpdated(layout, transition: transition)
+        let top = max(layout.statusBarHeight ?? 0.0, layout.safeInsets.top, self.view.safeAreaInsets.top)
+        let bottom = max(layout.intrinsicInsets.bottom, layout.safeInsets.bottom, self.view.safeAreaInsets.bottom)
+        (self.displayNode as? TellomiChoicePromptNode)?.updateChromeInsets(top: top, bottom: bottom)
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        guard self.isNodeLoaded else {
+            return
+        }
+        let insets = self.view.safeAreaInsets
+        (self.displayNode as? TellomiChoicePromptNode)?.updateChromeInsets(top: insets.top, bottom: insets.bottom)
+    }
 }
 
 private final class TellomiChoicePromptNode: ASDisplayNode {
     private let dimNode = ASDisplayNode()
     private let cardNode = ASDisplayNode()
     private let titleNode = ImmediateTextNode()
+    private let scrollNode = ASScrollNode()
     private let rowNodes: [TellomiChoiceRowNode]
     private let cancelNode = HighlightableButtonNode()
     private let dismissPrompt: () -> Void
+    private var chromeTop: CGFloat = 0.0
+    private var chromeBottom: CGFloat = 0.0
 
     init(title: String, rows: [TellomiChoiceRow], cancelTitle: String, dark: Bool, dismiss: @escaping () -> Void) {
         self.dismissPrompt = dismiss
@@ -73,13 +92,27 @@ private final class TellomiChoicePromptNode: ASDisplayNode {
         self.cancelNode.accessibilityTraits = [.button]
         self.cancelNode.addTarget(self, action: #selector(self.cancelPressed), forControlEvents: .touchUpInside)
 
+        self.scrollNode.view.showsVerticalScrollIndicator = true
+        self.scrollNode.view.alwaysBounceVertical = false
         self.addSubnode(self.dimNode)
         self.addSubnode(self.cardNode)
         self.cardNode.addSubnode(self.titleNode)
+        self.cardNode.addSubnode(self.scrollNode)
         for row in self.rowNodes {
-            self.cardNode.addSubnode(row)
+            self.scrollNode.addSubnode(row)
         }
         self.cardNode.addSubnode(self.cancelNode)
+    }
+
+    func updateChromeInsets(top: CGFloat, bottom: CGFloat) {
+        let resolvedTop = max(self.chromeTop, top)
+        let resolvedBottom = max(self.chromeBottom, bottom)
+        guard resolvedTop != self.chromeTop || resolvedBottom != self.chromeBottom else {
+            return
+        }
+        self.chromeTop = resolvedTop
+        self.chromeBottom = resolvedBottom
+        self.setNeedsLayout()
     }
 
     @objc private func cancelPressed() {
@@ -98,18 +131,30 @@ private final class TellomiChoicePromptNode: ASDisplayNode {
         let inner = cardWidth - 8.0
         let titleSize = self.titleNode.updateLayout(CGSize(width: cardWidth - 40.0, height: 80.0))
         let rowHeight: CGFloat = 48.0
-        let cardHeight = 18.0 + titleSize.height + 8.0 + rowHeight * CGFloat(self.rowNodes.count) + 4.0 + rowHeight + 8.0
-        let cardFrame = CGRect(x: floor((self.bounds.width - cardWidth) / 2.0), y: floor((self.bounds.height - cardHeight) / 2.0), width: cardWidth, height: cardHeight)
+        let rowsHeight = rowHeight * CGFloat(self.rowNodes.count)
+        let chrome = 18.0 + titleSize.height + 8.0 + 4.0 + rowHeight + 8.0
+        // The old card used a 24pt margin. Notch and Dynamic Island need more, so the
+        // title stays under the status bar. SE and iPad already clear 24pt and stay put.
+        let minY = max(24.0, self.chromeTop + 8.0)
+        let maxBottom = self.bounds.height - max(24.0, self.chromeBottom + 8.0)
+        let maxCard = max(160.0, maxBottom - minY)
+        let cardHeight = min(maxCard, chrome + rowsHeight)
+        var cardY = floor((self.bounds.height - cardHeight) / 2.0)
+        cardY = min(max(cardY, minY), max(minY, maxBottom - cardHeight))
+        let cardFrame = CGRect(x: floor((self.bounds.width - cardWidth) / 2.0), y: cardY, width: cardWidth, height: cardHeight)
         self.cardNode.frame = cardFrame
         var y: CGFloat = 18.0
         self.titleNode.frame = CGRect(x: 20.0, y: y, width: cardWidth - 40.0, height: titleSize.height)
         y += titleSize.height + 8.0
+        let scrollHeight = max(0.0, cardHeight - chrome)
+        self.scrollNode.frame = CGRect(x: 0.0, y: y, width: cardWidth, height: scrollHeight)
+        self.scrollNode.view.contentSize = CGSize(width: cardWidth, height: rowsHeight)
+        var rowY: CGFloat = 0.0
         for row in self.rowNodes {
-            row.frame = CGRect(x: 4.0, y: y, width: inner, height: rowHeight)
-            y += rowHeight
+            row.frame = CGRect(x: 4.0, y: rowY, width: inner, height: rowHeight)
+            rowY += rowHeight
         }
-        y += 4.0
-        self.cancelNode.frame = CGRect(x: 4.0, y: y, width: inner, height: rowHeight)
+        self.cancelNode.frame = CGRect(x: 4.0, y: cardHeight - 8.0 - rowHeight, width: inner, height: rowHeight)
     }
 }
 
@@ -136,7 +181,7 @@ private final class TellomiChoiceRowNode: HighlightableButtonNode {
             alignment = .left
         case .link:
             checked = false
-            color = TellomiLoginChrome.link
+            color = TellomiLoginChrome.palette(dark: dark).link
             font = Font.regular(16.0)
             alignment = .center
         }

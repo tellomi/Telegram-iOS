@@ -110,25 +110,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         
         self.presentationDataDisposable.set((self.sharedContext.presentationData
         |> deliverOnMainQueue).start(next: { [weak self] presentationData in
-            guard let self else {
-                return
-            }
-            guard presentationData.theme !== self.presentationData.theme else {
-                return
-            }
-            self.presentationData = self.presentationData.withTheme(presentationData.theme)
-            if self.isViewLoaded {
-                self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
-            }
-            for controller in self.viewControllers {
-                if let controller = controller as? AuthorizationSequencePhoneEntryController {
-                    controller.applyPresentationTheme(self.presentationData)
-                } else if let controller = controller as? AuthorizationSequenceCodeEntryController {
-                    controller.applyPresentationTheme(self.presentationData)
-                } else if let controller = controller as? AuthorizationSequenceSplashController {
-                    controller.applyPresentationTheme(presentationData.theme)
-                }
-            }
+            self?.tellomiApplyAppearance(presentationData)
         }))
 
         self.applicationStateDisposable = (self.sharedContext.applicationBindings.applicationIsActive
@@ -329,7 +311,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             controller.present(strongSelf.sharedContext.makeProxySettingsController(sharedContext: strongSelf.sharedContext, account: strongSelf.account), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
                                         }))
                                 }
-                                (controller.navigationController as? NavigationController)?.presentOverlay(controller: textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: actions), inGlobal: true, blockInteraction: true)
+                                (controller.navigationController as? NavigationController)?.presentOverlay(controller: tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: actions), inGlobal: true, blockInteraction: true)
                                 
                                 controller.dismissConfirmation()
                             }
@@ -374,7 +356,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 text = strongSelf.presentationData.strings.Login_UnknownError
                             }
                             
-                            controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                            controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                         }
                     }
                 }))
@@ -471,7 +453,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                                  let _ = self.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .empty)).startStandalone()
                                              }
                                              
-                                             controller.presentInGlobalOverlay(textAlertController(sharedContext: self.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]))
+                                             controller.presentInGlobalOverlay(tellomiServerErrorAlert(sharedContext: self.sharedContext, strings: self.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]))
                                          }
                                      })
                                 )
@@ -530,7 +512,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             controller.resetCode()
                                         }
                                         
-                                        controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                        controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                                     }
                                 }
                             }
@@ -643,7 +625,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             controller.resetCode()
                                         }
                                         
-                                        controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                        controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                                     }
                                 }
                             }
@@ -750,7 +732,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             case .timeout:
                 text = self.presentationData.strings.Login_NetworkError
             }
-            controller.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: text, actions: actions), in: .window(.root))
+            controller.present(tellomiServerErrorAlert(sharedContext: self.sharedContext, strings: self.presentationData.strings, text: text, actions: actions), in: .window(.root))
         }))
     }
 
@@ -868,7 +850,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             text = strongSelf.presentationData.strings.Login_EmailNotAllowedError
                     }
                     
-                    controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                    controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                 }
             }, completed: {
                 controller?.inProgress = false
@@ -914,7 +896,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         switch authorization.credential {
             case let appleIdCredential as ASAuthorizationAppleIDCredential:
                 guard let tokenData = appleIdCredential.identityToken, let token = String(data: tokenData, encoding: .utf8) else {
-                    lastController?.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: self.presentationData.strings.Login_UnknownError, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                    lastController?.present(tellomiServerErrorAlert(sharedContext: self.sharedContext, strings: self.presentationData.strings, text: self.presentationData.strings.Login_UnknownError, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                     return
                 }
             
@@ -937,7 +919,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             case .emailNotAllowed:
                                 text = strongSelf.presentationData.strings.Login_EmailNotAllowedError
                         }
-                        lastController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                        lastController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                     }
                 }))
             } else {
@@ -978,7 +960,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         text = strongSelf.presentationData.strings.Login_InvalidEmailAddressError
                                 }
                                 
-                                lastController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                lastController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                             }
                         }
                     })
@@ -994,7 +976,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         guard let lastController = self.viewControllers.last as? ViewController else {
             return
         }
-        lastController.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: error.localizedDescription, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+        lastController.present(tellomiServerErrorAlert(sharedContext: self.sharedContext, strings: self.presentationData.strings, text: error.localizedDescription, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
     }
     
     @available(iOS 13.0, *)
@@ -1039,7 +1021,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         text = strongSelf.presentationData.strings.Login_UnknownError
                                 }
                                 
-                                controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                                 controller.passwordIsInvalid()
                             }
                         }
@@ -1073,14 +1055,14 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
 
                     strongController.inProgress = false
 
-                    strongController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: strongSelf.presentationData.strings.TwoStepAuth_RecoveryUnavailable, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                    strongController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: strongSelf.presentationData.strings.TwoStepAuth_RecoveryUnavailable, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                     strongController.didForgotWithNoRecovery = true
                 }))
             }
         }
         controller.reset = { [weak self, weak controller] in
             if let strongSelf = self, let strongController = controller {
-                strongController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: suggestReset ? strongSelf.presentationData.strings.TwoStepAuth_RecoveryFailed : strongSelf.presentationData.strings.TwoStepAuth_RecoveryUnavailable, actions: [
+                strongController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: suggestReset ? strongSelf.presentationData.strings.TwoStepAuth_RecoveryFailed : strongSelf.presentationData.strings.TwoStepAuth_RecoveryUnavailable, actions: [
                     TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_Cancel, action: {}),
                     TextAlertAction(type: .destructiveAction, title: strongSelf.presentationData.strings.Login_ResetAccountProtected_Reset, action: {
                         if let strongSelf = self, let strongController = controller {
@@ -1100,7 +1082,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         case .limitExceeded:
                                             text = strongSelf.presentationData.strings.Login_ResetAccountProtected_LimitExceeded
                                     }
-                                    strongController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                    strongController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                                 }
                             }))
                         }
@@ -1165,7 +1147,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             })
             controller.reset = { [weak self, weak controller] in
                 if let strongSelf = self, let strongController = controller {
-                    strongController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: strongSelf.presentationData.strings.TwoStepAuth_ResetAccountConfirmation, actions: [
+                    strongController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: strongSelf.presentationData.strings.TwoStepAuth_ResetAccountConfirmation, actions: [
                         TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_Cancel, action: {}),
                         TextAlertAction(type: .destructiveAction, title: strongSelf.presentationData.strings.Login_ResetAccountProtected_Reset, action: {
                             if let strongSelf = self, let strongController = controller {
@@ -1185,7 +1167,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                                 case .limitExceeded:
                                                     text = strongSelf.presentationData.strings.Login_ResetAccountProtected_LimitExceeded
                                             }
-                                            strongController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                            strongController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                                         }
                                     }))
                             }
@@ -1312,7 +1294,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         text = strongSelf.presentationData.strings.Login_UnknownError
                                 }
                                 
-                                controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                             }
                         }
                     }))
@@ -1527,7 +1509,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             
             controller.view.window?.rootViewController?.present(composeController, animated: true, completion: nil)
         } else {
-            controller.present(textAlertController(sharedContext: sharedContext, title: nil, text: presentationData.strings.Login_EmailNotConfiguredError, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+            controller.present(tellomiServerErrorAlert(sharedContext: sharedContext, strings: presentationData.strings, text: presentationData.strings.Login_EmailNotConfiguredError, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), in: .window(.root))
         }
     }
     
@@ -1550,9 +1532,68 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
+        self.tellomiApplyAppearance(self.sharedContext.currentPresentationData.with { $0 })
         if !self.didPlayPresentationAnimation {
             self.didPlayPresentationAnimation = true
             self.animateIn()
+        }
+    }
+
+    override public func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if #available(iOS 13.0, *) {
+            if previousTraitCollection?.userInterfaceStyle != self.traitCollection.userInterfaceStyle {
+                self.tellomiApplyAppearance(self.sharedContext.currentPresentationData.with { $0 })
+            }
+        }
+    }
+
+    /// The auth flow is given whatever theme was current when it was built. That theme does not
+    /// follow the system appearance on its own (a light trait on this controller used to lock it
+    /// to the day theme). The screen's style is the source.
+    private func tellomiSystemIsDark() -> Bool {
+        if #available(iOS 13.0, *) {
+            let screenStyle = UIScreen.main.traitCollection.userInterfaceStyle
+            if screenStyle != .unspecified {
+                return screenStyle == .dark
+            }
+            if let windowStyle = self.view.window?.windowScene?.traitCollection.userInterfaceStyle, windowStyle != .unspecified {
+                return windowStyle == .dark
+            }
+        }
+        return self.presentationData.theme.overallDarkAppearance
+    }
+
+    private func tellomiApplyAppearance(_ presentationData: PresentationData) {
+        var presentationData = presentationData
+        let wantsDark = self.tellomiSystemIsDark()
+        if presentationData.theme.overallDarkAppearance != wantsDark {
+            presentationData = presentationData.withTheme(wantsDark ? defaultDarkPresentationTheme : defaultPresentationTheme)
+        }
+        let themeChanged = presentationData.theme !== self.presentationData.theme || presentationData.theme.overallDarkAppearance != self.presentationData.theme.overallDarkAppearance
+        self.presentationData = presentationData
+        guard themeChanged else {
+            return
+        }
+        if self.isViewLoaded {
+            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        }
+        let navigationStatusBar: NavigationStatusBarStyle
+        switch presentationData.theme.rootController.statusBarStyle {
+        case .black:
+            navigationStatusBar = .black
+        case .white:
+            navigationStatusBar = .white
+        }
+        self.updateTheme(NavigationControllerTheme(statusBar: navigationStatusBar, navigationBar: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), emptyAreaColor: presentationData.theme.list.plainBackgroundColor, separatorColor: .clear, opaqueBackgroundColor: presentationData.theme.list.plainBackgroundColor))
+        for controller in self.viewControllers {
+            if let controller = controller as? AuthorizationSequencePhoneEntryController {
+                controller.applyPresentationTheme(presentationData)
+            } else if let controller = controller as? AuthorizationSequenceCodeEntryController {
+                controller.applyPresentationTheme(presentationData)
+            } else if let controller = controller as? AuthorizationSequenceSplashController {
+                controller.applyPresentationTheme(presentationData.theme)
+            }
         }
     }
     
@@ -1578,4 +1619,15 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
     }
+}
+
+/// Server-error alerts from the login state machine. The text goes through Telegram's
+/// `Login_*` mapping, then the bundled Chinese sentence when that mapping is still English.
+/// `Auth.Login.ErrorAlert` is how the UI test reads the custom alert (it is not `app.alerts`).
+private func tellomiServerErrorAlert(sharedContext: SharedAccountContext, strings: PresentationStrings, text: String, actions: [TextAlertAction]) -> ViewController {
+    let localizedText = tellomiLocalizedServerAlert(text, strings: strings)
+    let localizedActions = actions.map { action in
+        return TextAlertAction(type: action.type, title: tellomiLocalizedServerAlert(action.title, strings: strings), action: action.action)
+    }
+    return textAlertController(sharedContext: sharedContext, title: nil, text: localizedText, actions: localizedActions, accessibilityIdentifier: "Auth.Login.ErrorAlert")
 }

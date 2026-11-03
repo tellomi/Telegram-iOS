@@ -445,3 +445,101 @@ The voice-transcription button draws a stroked A that trims into the collapse ch
 | `AudioTranscriptionButtonComponent.swift` | Picks `voiceToText_<lang>` / `textToVoice_<lang>` and `TranscriptionLocked_<lang>`. |
 | `voiceToText_*.json`, `textToVoice_*.json` | Same layer and group names and the same trim. The A centerlines are the character. |
 | `TranscriptionLocked_*.imageset` | The locked icon's A is the same character. The arrow and the lock stay. |
+
+## Login screens matched to the 2026-11-03 spec
+
+The phone screen is the login home. Primary buttons stay black (white in dark mode), disabled gray. The agreement sentence is only 已阅读并同意 用户协议 和 隐私政策. The carrier sentence is gone. SMS boxes use the length in `sentCode`. The top-right control is still the language name plus ▾ and the three-language card. It is not 帮助.
+
+Apple, Google, 其他登录方式, 找回账号, and 密码登录 have no working sign-in, so those controls are not on the phone or email screens. The phone page keeps the field, 验证并登录, the 或 divider, 邮箱登录, and the agreement at the bottom. The email page is the address field, 验证并登录, and the agreement under the button. Back returns to the phone page. The password screen and the other-methods sheet are not in the login controller.
+
+Phone and email open with no keyboard. A tap on the field opens it; a tap on blank space or the title, or a downward drag, dismisses it. The phone field uses the number pad. The intro fade still runs: Telegram used to release it when the keyboard's input height arrived, and login releases that same fade on the turn after `activateInput` because that call does not focus a field. The screens follow the system appearance (`UIScreen` style, black page and white button in dark mode), including the welcome OpenGL clear color. Switching language rewrites every label, including 或. The SMS code subtitle's accessibility label is the same Chinese line that is drawn. The agreement sentence is a wrapping label measured at the row width minus the checkbox on every layout, including a language change, with that full sentence as its accessibility label, and it sits above the keyboard. A tap on the checkbox or the sentence does not dismiss the keyboard. Agreement links open in an in-app Safari view. 验证并登录 stays under the field through the intro. The country button's accessibility name follows the login language. Server error alerts use the `Login_*` mapping and, when that pack is still English, the bundled Chinese sentence; the alert is `Auth.Login.ErrorAlert`. The 或 divider is an accessibility element.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Carrier sentence removed. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | SMS error copy. Phone home still pins the agreement. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginSurfaces.swift` | Clear button and dark agreement card. Password field and round social buttons removed. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Language button identifier. No unavailable alert and no other-methods sheet. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Phone home is field, verify, divider, email, agreement. Email is field, verify, agreement. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | SMS error stays until the code changes. Email code has no 收不到验证码? row. |
+| `Telegram/Tests/Sources/TellomiLoginUITests.swift` | Phone-default checks. |
+
+## Login transitions, languages, short screens, settings badges
+
+Phone + SMS + two-step verification failing on a first login was not an iOS window race. The server treated an unbound temporary auth key as key 0, so `account.getPassword` returned no `current_algo` and no `srp_B` (tellomi/teamgram-server#119). This client does not invent those fields or skip the check. `verifyPassword` still fails with `INTERNAL_NO_PASSWORD` when the derivation or the SRP session is missing. The only added tolerance is the one Android uses: `srp_id` is single-use, so `SRP_ID_INVALID` fetches `account.getPassword` once more and retries `auth.checkPassword` a single time. A second `SRP_ID_INVALID` is returned to the caller.
+
+Welcome → login keeps Telegram's snapshot fade. The login form (verify, divider, email, agreement) was left at alpha 1, so the headline drew on top of it. Those nodes now fade in with the rest, the snapshots sit above the form, and the live intro pages are hidden once the snapshots exist. The intro spring damping was 1.2, which UIKit drops; it is 0.9. Phones taller than the Plus sizes no longer use the Inch55 headline position.
+
+Phone ↔ email slides horizontally (0.35s ease-in-out), the same direction as a navigation push. Code, password, and sign-up still use `AuthorizationSequenceController.setViewControllers`, which already asks the navigation container for a slide.
+
+The language control is a template globe with the current language as its accessibility label. The card lists every bundled `*.lproj` (zh-hans, zh-hant, en, plus the empty stubs ar, be, ca, de, es, fa, fr, id, it, ko, ms, nl, pl, pt, ru, tr, uk, uz) and scrolls when the list is taller than the screen. The agreement sentence follows that code, including Simplified and Traditional. Links stay `https://tellomi.cn/legal/terms/` and `https://tellomi.cn/legal/privacy/`. Link color is black on a light page and white on a dark page, not blue.
+
+The “code sent” toast sits above the title, under the status bar. If that gap is shorter than the toast, it is not shown; the subtitle already names the address. The two-step screen title, notice, and forgot label come from the login copy (两步验证 / 兩步驟驗證 / Two-step verification), not the English pack.
+
+The phone home, the code page, the password page, and sign-up each put the column in a scroll view whose bottom inset is the keyboard (or the home indicator). Text uses `UIFontMetrics` capped at 1.35× so a wrapped agreement or title can scroll clear on a 4-inch phone. Titles and help lines are not limited to one line. The password and sign-up buttons stay at the bottom when the column fits, and follow the fields when it does not. iPhone login stays portrait-locked, the same as Telegram (`compactSize: .portrait`). Code digit boxes stay a fixed size.
+
+The home-screen icon and the alternate icons are unchanged. Settings row badges that use the shared circle colors in `PresentationResourcesSettings` are black, white, and gray. Rows that pass their own colors (business, reactions, tips, and the Premium, Stars, and gift artwork) are unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Account/Account.swift` | One `SRP_ID_INVALID` refetch. Missing `current_algo` still fails. |
+| `submodules/RMIntro/Sources/platform/ios/RMIntroViewController.m` | Damping, tall-phone layout, hide live pages. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Intro fade covers the whole form. Phone ↔ email slide. Form scroll. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | All bundled languages. |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Agreement copy for each bundled language. Scaled body. |
+| `submodules/AuthorizationUI/Sources/TellomiChoicePrompt.swift` | Scroll when the card is taller than the screen. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | Toast above the title. Column scrolls above the keyboard. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePasswordEntryControllerNode.swift` | Wrapping copy. Button stays above the keyboard or scrolls with the column. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Same short-screen rule. Continue stays on a 320-pt width. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Capped Dynamic Type font. Shared form scroll. |
+| `submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesSettings.swift` | Gray settings badges. |
+
+## Login language card, country list, agreement contrast
+
+The language card keeps its centered shape. On a notch or Dynamic Island the top stays below the status bar (`statusBarHeight` / safe area, at least the old 24pt margin). SE and iPad, where 24pt already clears the status bar, stay centered.
+
+The login country list takes `AuthorizationCountryListLocalization`: names from `Locale(identifier:).localizedString(forRegionCode:)`, sort and section index in that locale, title and search placeholder from the login language. The section index uses the primary text color. The search field is not focused until it is tapped. Other country lists keep the previous strings, accent index, and automatic focus.
+
+Agreement links are semibold and underlined. The confirm card uses the dark theme when the page is dark, so the links are white on the dark card and black on a light card. The email agreement sentence is left-aligned against the checkbox, and the email title and notice are centered like the phone page.
+
+## Empty country list, notification language, private-chat titles
+
+`help.getCountriesList` has returned zero countries. `loadServerCountryCodes` and `setupCountryCodes` used that array in place of the bundled `PhoneCountries` list, so the picker and the prefix lookup were empty. An empty result (including a parse that yields nothing) is ignored. `AccountContext` does not publish an empty configuration over the bundled one either. A later non-empty response still replaces the list.
+
+Chinese country names are grouped by pinyin initial (A–Z), the same shape as the system Contacts index. Other languages still use the first character of the localized name.
+
+The notification extension's `standaloneStateManager` read the shared account manager and then passed `nil` for the language pack, so `initializedNetwork` sent `lang_code` `"en"` and the server stored that over the account's language (teamgram-server#122 is the server half). It now passes `SharedDataKeys.localizationSettings`, the same record the app writes from Settings and from the login language button. `Network.swift` is unchanged: a missing pack still falls back to `"en"`.
+
+A private or secret chat notification no longer appends `→ <this account>`. Official Telegram does not. Groups and channels still do when more than one account is signed in. A one-to-one call does not; a group call still does. The peer id on that helper is `EnginePeer.Id` (a `PeerId` typealias). The file does not import Postbox.
+
+The bundled list has both `1;US` and `1;CA`. The prefix map kept the last writer, so a pasted +1 number resolved to Canada. A calling code with no longer prefix keeps the United States when that row is present. Other shared codes (7, 599) stay last-writer.
+
+## Send mark, folder names, icon size
+
+The media-preview send control used `Media Editor/Send` (`attachlogo.pdf`), the Telegram paper plane, on a `#0088ff` disc. That file, `Chat/Input/Text/SendIcon`, and `IconForwardSend` are now an up arrow. The send disc is `#111111` with a white arrow. The chat composer's generated arrow is unchanged. Launcher icons and the QR mark are unchanged.
+
+The media-preview back control used `Navigation/Back`, whose glyph is about 8pt inside a 30pt box, so it looked lost in the 44pt circle. It now uses `Media Editor/Back` (a chevron that fills a 28pt box) at 1.35×. Attachment-tray tab icons in the glass bar are 36pt instead of 30pt. Media-editor tool icons cap at 32pt instead of 28pt.
+
+Suggested folders arrive from `messages.getSuggestedDialogFilters` with English titles. On a Chinese interface, Unread / Personal / Groups / Channels / Bots and their descriptions are shown in Chinese. A few folder and People Nearby keys that the Chinese pack omits are filled locally and do not replace a translation the pack already has.
+
+## Channel intro placeholder
+
+`Telegram/Telegram-iOS/Resources/Channel.tgs` is the 「频道是什么？」illustration (`PermissionController` icon `.animation("Channel")`). The original is a gzip Lottie with the duck sticker and the blue “Channel / 55k members” bubble. It is now a one-frame black-and-white phone and three bars. No duck, no blue.
+
+The same one-frame shape style (gzip Lottie, or plain JSON where the file was already `.json`) replaces these, without a code change. Each drawing is only rectangles and ellipses in black, white, and gray:
+
+| File | Mark |
+| --- | --- |
+| `Telegram/Telegram-iOS/Resources/BroadcastGroup.tgs` | Megaphone. |
+| `submodules/TelegramUI/Resources/Animations/DiscussionGroupSetup.tgs` | Two speech bubbles. |
+| `submodules/TelegramUI/Resources/Animations/ChannelMessages.tgs` | Three text bars. |
+| `…/ChatListFolders.tgs` | Folder. |
+| `…/ChatListNewFolder.tgs` | Folder with a plus. |
+| `…/ChatListCloudFolderLink.tgs` | Folder with two rings. |
+| `…/ChatListFoldersTooltip.json` | Folder. Left as JSON; the tooltip loader asks for that extension. |
+| `Telegram/Telegram-iOS/Resources/PlaneLogo.tgs`, `PlaneLogoPlain.tgs` | Up arrow. |
+| `submodules/PasswordSetupUI/Resources/TwoFactorSetupMonkeyIdle.tgs`, `…Idle1.tgs` | Closed lock, and a lock with the shackle raised. |
+| `…MonkeyIdle2.tgs`, `…MonkeyCloseAndPeek.tgs` | Key. |
+| `…MonkeyTracking.tgs`, `…MonkeyClose.tgs` | Closed lock. |
+
+The two-step monkey player still asks for frames up to 41, and the round-video atlas still asks `PlaneLogoPlain` for 53 frames. A one-frame file has no later frames. The atlas path is already switched off (`RoundVideoDecorationProvider.isEnabled` is false) and returns nil when the frame count is short, so it does not draw the old plane. The other intro `.tgs` files are unchanged.
