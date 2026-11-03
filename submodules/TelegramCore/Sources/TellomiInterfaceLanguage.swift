@@ -2,10 +2,10 @@ import Foundation
 import Postbox
 import SwiftSignalKit
 
-/// Stores the pre-login language on the account manager, the same record Settings writes.
-/// An existing pack for that code is kept. A different code is stored with an empty pack at
-/// version 0 so the logged-in langpack sync can fill it. Missing keys fall back to the
-/// bundled English strings until then. No network.
+/// Stores a language code with an empty pack. Do not use this to switch language.
+/// An empty version-0 pack makes every missing key fall back to bundled English, and
+/// `langpack.getDifference` is what fills it only after login. The login picker downloads
+/// the pack with `downloadAndApplyLocalization` instead (`langpack.getLangPack`).
 public func tellomiStoreInterfaceLanguage(accountManager: AccountManager<TelegramAccountManagerTypes>, languageCode: String, localizedName: String, pluralizationCode: String?) -> Signal<Void, NoError> {
     let normalized = languageCode.lowercased()
     return accountManager.transaction { transaction in

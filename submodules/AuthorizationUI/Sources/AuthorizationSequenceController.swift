@@ -386,6 +386,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 }
                 strongSelf.returnToPhoneOrEmailEntry()
             })
+            controller.tellomiUnauthorizedAccount = self.account
             controller.retryResetEmail = { [weak self] in
                 if let self {
                     self.actionDisposable.set(
@@ -1578,7 +1579,18 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             presentationData = presentationData.withTheme(wantsDark ? defaultDarkPresentationTheme : defaultPresentationTheme)
         }
         let themeChanged = presentationData.theme !== self.presentationData.theme || presentationData.theme.overallDarkAppearance != self.presentationData.theme.overallDarkAppearance
+        let stringsChanged = presentationData.strings !== self.presentationData.strings
         self.presentationData = presentationData
+        if stringsChanged {
+            tellomiNoteAppliedPack(presentationData.strings)
+            for controller in self.viewControllers {
+                if let controller = controller as? AuthorizationSequencePhoneEntryController {
+                    controller.applyTellomiPresentationData(presentationData)
+                } else if let controller = controller as? AuthorizationSequenceCodeEntryController {
+                    controller.applyTellomiStrings(presentationData.strings)
+                }
+            }
+        }
         guard themeChanged else {
             return
         }

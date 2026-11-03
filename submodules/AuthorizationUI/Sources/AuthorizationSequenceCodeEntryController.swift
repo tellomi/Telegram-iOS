@@ -17,7 +17,9 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     private var validLayout: ContainerViewLayout?
     
     private let sharedContext: SharedAccountContext
-    private let strings: PresentationStrings
+    private var strings: PresentationStrings
+    var tellomiUnauthorizedAccount: UnauthorizedAccount?
+    private let tellomiLanguageDownloadDisposable = MetaDisposable()
     private var theme: PresentationTheme
     
     public var loginWithCode: ((String) -> Void)?
@@ -51,6 +53,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     public init(sharedContext: SharedAccountContext, presentationData: PresentationData, back: @escaping () -> Void) {
         self.sharedContext = sharedContext
         self.strings = presentationData.strings
+        tellomiNoteAppliedPack(presentationData.strings)
         self.theme = presentationData.theme
         
         super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(theme), strings: NavigationBarStrings(presentationStrings: strings)))
@@ -213,8 +216,14 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
                 guard let self, !checked else {
                     return
                 }
-                tellomiApplyInterfaceLanguage(accountManager: self.sharedContext.accountManager, languageCode: code)
-                self.refreshTellomiLanguage()
+                guard let account = self.tellomiUnauthorizedAccount else {
+                    tellomiRememberInterfaceLanguage(code)
+                    self.refreshTellomiLanguage()
+                    return
+                }
+                tellomiStartInterfaceLanguageDownload(account: account, accountManager: self.sharedContext.accountManager, languageCode: code, disposable: self.tellomiLanguageDownloadDisposable, applied: { [weak self] strings in
+                    self?.applyTellomiStrings(strings)
+                })
             }))
         }
         let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.theme.overallDarkAppearance)
@@ -362,6 +371,22 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         self.loginWithCode?(code)
     }
     
+    func applyTellomiStrings(_ strings: PresentationStrings) {
+        self.strings = strings
+        tellomiNoteAppliedPack(strings)
+        if self.isNodeLoaded {
+            self.controllerNode.updateStrings(strings)
+        }
+        self.updateNavigationItems()
+        if self.isViewLoaded {
+            self.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(self.theme), strings: NavigationBarStrings(presentationStrings: strings)), transition: .immediate)
+        }
+    }
+
+    deinit {
+        self.tellomiLanguageDownloadDisposable.dispose()
+    }
+
     public func applyPresentationTheme(_ presentationData: PresentationData) {
         self.theme = presentationData.theme
         self.statusBar.statusBarStyle = presentationData.theme.intro.statusBarStyle.style

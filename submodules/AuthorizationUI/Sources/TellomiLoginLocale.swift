@@ -86,12 +86,90 @@ public func tellomiRememberInterfaceLanguage(_ languageCode: String) {
     tellomiMarkSystemLangPackApplied()
 }
 
-/// Persists the built-in choice and marks it applied, so a later Settings pack is what wins
-/// only after that screen writes the same key.
+/// Remembers the choice. Does not write an empty pack: that used to replace
+/// `localizationSettings` with version 0 and no strings, so the UI kept `en.lproj`
+/// except for the locally written agreement sentence.
 public func tellomiApplyInterfaceLanguage(accountManager: AccountManager<TelegramAccountManagerTypes>, languageCode: String) {
+    let _ = accountManager
     tellomiRememberInterfaceLanguage(languageCode)
-    let info = tellomiBuiltinInterfaceLanguages().first(where: { $0.languageCode == languageCode })
-    let _ = tellomiStoreInterfaceLanguage(accountManager: accountManager, languageCode: languageCode, localizedName: info?.localizedTitle ?? languageCode, pluralizationCode: info?.customPluralizationCode).start()
+}
+
+/// Languages whose login chrome is the bundled Tellomi copy (简体, 繁體, English).
+/// Every other code follows the downloaded `ios` pack, with that English copy as the
+/// fallback for keys the pack does not have.
+public func tellomiLoginCopyFollowsPack(_ languageCode: String) -> Bool {
+    let code = languageCode.lowercased().replacingOccurrences(of: "_", with: "-")
+    if code == "en" || code.hasPrefix("en-") {
+        return false
+    }
+    return tellomiLoginScript(languageCode: code) == .english
+}
+
+private let tellomiAppliedPack = Atomic<(code: String, strings: PresentationStrings)?>(value: nil)
+
+public func tellomiNoteAppliedPack(_ strings: PresentationStrings) {
+    let _ = tellomiAppliedPack.swap((strings.primaryComponent.languageCode, strings))
+}
+
+func tellomiAppliedPackStrings(matching languageCode: String) -> PresentationStrings? {
+    return tellomiAppliedPack.with { noted in
+        guard let noted, tellomiLanguageCodesMatch(noted.code, languageCode) else {
+            return nil
+        }
+        return noted.strings
+    }
+}
+
+func tellomiPresentationStrings(_ settings: LocalizationSettings) -> PresentationStrings {
+    let primary = settings.primaryComponent
+    return PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: primary.languageCode, localizedName: primary.localizedName, pluralizationRulesCode: primary.customPluralizationCode, dict: dictFromLocalization(primary.localization)), secondaryComponent: settings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: "")
+}
+
+/// Upstream language switch: `langpack.getLanguage` plus `langpack.getLangPack` for the
+/// language and its base (`downloadAndApplyLocalization`). The `lang_pack` argument stays
+/// `""`, which the session fills from `initConnection` (`"ios"`).
+public func tellomiDownloadAndApplyInterfaceLanguage(account: UnauthorizedAccount, accountManager: AccountManager<TelegramAccountManagerTypes>, languageCode: String) -> Signal<PresentationStrings, DownloadAndApplyLocalizationError> {
+    return TelegramEngineUnauthorized(account: account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: languageCode)
+    |> mapToSignal { _ -> Signal<PresentationStrings, DownloadAndApplyLocalizationError> in
+        return accountManager.transaction { transaction -> PresentationStrings? in
+            guard let settings = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self) else {
+                return nil
+            }
+            return tellomiPresentationStrings(settings)
+        }
+        |> castError(DownloadAndApplyLocalizationError.self)
+        |> mapToSignal { strings -> Signal<PresentationStrings, DownloadAndApplyLocalizationError> in
+            if let strings {
+                return .single(strings)
+            }
+            return .fail(.generic)
+        }
+    }
+}
+
+/// A language stored by the old login button: version 0 and no strings, so every
+/// key falls back to `en.lproj`. Returns that code so the caller can download the pack.
+public func tellomiEmptyStoredLanguageCode(_ settings: LocalizationSettings?) -> String? {
+    guard let primary = settings?.primaryComponent else {
+        return nil
+    }
+    let code = primary.languageCode.lowercased()
+    if code.isEmpty || code == "en" {
+        return nil
+    }
+    if primary.localization.entries.isEmpty {
+        return primary.languageCode
+    }
+    return nil
+}
+
+public func tellomiStartInterfaceLanguageDownload(account: UnauthorizedAccount, accountManager: AccountManager<TelegramAccountManagerTypes>, languageCode: String, disposable: MetaDisposable, applied: @escaping (PresentationStrings) -> Void) {
+    disposable.set((tellomiDownloadAndApplyInterfaceLanguage(account: account, accountManager: accountManager, languageCode: languageCode)
+    |> deliverOnMainQueue).start(next: { strings in
+        tellomiRememberInterfaceLanguage(languageCode)
+        tellomiNoteAppliedPack(strings)
+        applied(strings)
+    }))
 }
 
 /// Language the Tellomi welcome and login chrome should use.
