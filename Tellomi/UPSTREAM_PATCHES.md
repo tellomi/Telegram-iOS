@@ -555,3 +555,13 @@ Gallery and Location in the attach tray are the same 30×30 MingCute line icons 
 `DeviceLocationManager` asks for `kCLLocationAccuracyBest` and `requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocation")`. `Info.plist` / `InfoBazel.plist` carry `NSLocationTemporaryUsageDescriptionDictionary`. The current-location row sends `accuracy_radius` from `CLLocation.horizontalAccuracy`. Apple Maps is still given WGS-84; MapKit applies the China offset. 高德 uses `dev=1`, 百度 `coord_type=wgs84`, 腾讯 is converted to GCJ-02 in `TellomiMapOpenIn`.
 
 Paper-plane artwork replaced with `Avatar/TellomiMark`: the unsupported-message badge, Call title, CallKit, the context-menu Telegram icon, the Shortcuts icon, and Wallet InfoSend. QR marks were already the Tellomi mark. `PlaneLogo.tgs` is already an arrow. The welcome intro mesh (`RMIntro`, `telegram_plane1.png`) is still a paper-plane model.
+
+## Location picker locale and nearby places
+
+Tellomi langpacks set `base_lang_code` to `en`, so `PresentationStrings.baseLanguageCode` is the English fallback even when the UI language is Chinese. `localeWithStrings` used that code for `CLGeocoder` and `MKDistanceFormatter`, which produced pinyin addresses and `miles` / `feet`. Nearby places and venue search call the inline venue bot (`venue_search_username`, default `foursquare`). This server does not have that bot, so the list was empty (`Map_NoPlacesNearby`) and search showed only the geocoded address.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramStringFormatting/Sources/Locale.swift` `localeIdentifierLanguageCode` | When the base code is English and the primary (UI) code is not, the locale uses the primary code. An English UI keeps the base code. A pack whose base is already not English keeps that base, which is what upstream official packs do. The device region suffix is unchanged, so a US region still measures in miles and feet, with Chinese unit names. |
+| `submodules/LocationUI/Sources/LocationUtils.swift` `nearbyVenues` | The bot result is still used when it contains venues. Otherwise the same signal is filled from MapKit. The `accuracyRadius` argument on `TelegramMediaMap.init(coordinate:)` stays; that is the precise-location row, not the venue fallback. |
+| `submodules/LocationUI/Sources/AppleMapVenueSearch.swift` | Nearby: `MKLocalPointsOfInterestRequest` (2.5 km). If that is empty, one `MKLocalSearch` whose query follows the UI language (`餐饮` / `餐飲` / `restaurant`). Text search: `MKLocalSearch` within 100 km of the coordinate. Each hit is a `TelegramMediaMap` venue (`provider` `apple`, foursquare-style `type` so the existing category color and icon path run). No attribution row, no API key. Sending still posts that media; `queryId` is not a bot result. |
