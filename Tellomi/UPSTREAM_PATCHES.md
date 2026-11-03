@@ -552,7 +552,7 @@ Phone, email, and code screens still differ from upstream. Those differences are
 
 Gallery and Location in the attach tray are the same 30×30 MingCute line icons as File and Poll. They had been fitted into the old ink box and drew smaller.
 
-`DeviceLocationManager` asks for `kCLLocationAccuracyBest` and `requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocation")`. `Info.plist` / `InfoBazel.plist` carry `NSLocationTemporaryUsageDescriptionDictionary`. The current-location row sends `accuracy_radius` from `CLLocation.horizontalAccuracy`. Apple Maps is still given WGS-84; MapKit applies the China offset. 高德 uses `dev=1`, 百度 `coord_type=wgs84`, 腾讯 is converted to GCJ-02 in `TellomiMapOpenIn`.
+`DeviceLocationManager` asks for `kCLLocationAccuracyBest` and `requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocation")`. `DeviceAccess.authorizeAccess` asks through `LocationManager.requestPreciseLocationIfReduced()` (the helper is on that wrapper, not on `CLLocationManager`). `Info.plist` / `InfoBazel.plist` carry `NSLocationTemporaryUsageDescriptionDictionary`. The current-location row sends `accuracy_radius` from `CLLocation.horizontalAccuracy`. Apple Maps is still given WGS-84; MapKit applies the China offset. 高德 uses `dev=1`, 百度 `coord_type=wgs84`, 腾讯 is converted to GCJ-02 in `TellomiMapOpenIn`.
 
 Paper-plane artwork replaced with `Avatar/TellomiMark`: the unsupported-message badge, Call title, CallKit, the context-menu Telegram icon, the Shortcuts icon, and Wallet InfoSend. QR marks were already the Tellomi mark. `PlaneLogo.tgs` is already an arrow. The welcome intro mesh (`RMIntro`, `telegram_plane1.png`) is still a paper-plane model.
 
