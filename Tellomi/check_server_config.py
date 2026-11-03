@@ -152,6 +152,66 @@ def check_json_and_header() -> dict:
     return config
 
 
+# The 2026-11 key must be present. Teamgram's development key may remain
+# only in the last slot while the server still announces it.
+NEW_KEY_LITTLE_ENDIAN = 4381149949997195609
+OLD_KEY_LITTLE_ENDIAN = 12240908862933197005
+# Prefix of Telegram's production handshake key. check_wiring rejects the
+# same bytes in the handshake source.
+TELEGRAM_PRODUCTION_KEY_PREFIX = "MIIBCgKCAQEA6LszBcC1"
+
+
+def check_public_key_list(environment: str, pems, config: dict) -> None:
+    if not isinstance(pems, list) or not 1 <= len(pems) <= 2:
+        fail(f"{environment} must ship one or two public keys")
+    declared = config.get("rsa_fingerprints")
+    if not isinstance(declared, list) or len(declared) != len(pems):
+        fail(f"{environment} rsa_fingerprints must list each public key")
+    littles = []
+    for index, pem in enumerate(pems):
+        if not isinstance(pem, str):
+            fail(f"{environment} public key {index} is not a string")
+        if TELEGRAM_PRODUCTION_KEY_PREFIX in pem:
+            fail("official Telegram public key must not be configured")
+        if not pem.endswith("\n"):
+            fail(f"{environment} public key {index} must end with a newline")
+        big, little = fingerprints(pem)
+        entry = declared[index]
+        if not isinstance(entry, dict):
+            fail(f"rsa_fingerprints[{index}] is not an object")
+        little_text = entry.get("little_endian")
+        big_text = entry.get("big_endian")
+        if little_text != str(little):
+            fail(
+                f"{environment} key {index} little-endian fingerprint is {little}, "
+                f"JSON says {little_text}"
+            )
+        if big_text != str(big):
+            fail(
+                f"{environment} key {index} big-endian fingerprint is {big}, "
+                f"JSON says {big_text}"
+            )
+        # The handshake accepts either orientation. They are byte swaps of each other.
+        swapped = int.from_bytes(big.to_bytes(8, "big"), "little")
+        if swapped != little:
+            fail("fingerprint byte swap is not the inverse of the two readings")
+        littles.append(little)
+        with open("/tmp/tellomi-check-pub.pem", "w", encoding="utf-8") as handle:
+            handle.write(pem)
+        result = subprocess.run(
+            ["openssl", "rsa", "-RSAPublicKey_in", "-in", "/tmp/tellomi-check-pub.pem", "-pubin", "-noout"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            fail("openssl rejected the public key: " + result.stderr)
+    if NEW_KEY_LITTLE_ENDIAN not in littles:
+        fail(f"{environment} is missing the 2026-11 public key")
+    for index, little in enumerate(littles):
+        if little == OLD_KEY_LITTLE_ENDIAN and index != len(littles) - 1:
+            fail("Teamgram's development key is allowed only as the last key during the transition")
+
+
 def check_keys(config: dict) -> None:
     if config["default_datacenter_id"] != 1:
         fail("default datacenter is not 1")
@@ -171,30 +231,7 @@ def check_keys(config: dict) -> None:
         if hosts != ["api.tellomi.cn"]:
             fail(f"{environment} seeds are not api.tellomi.cn")
         pems = config["public_keys"][environment]
-        if len(pems) != 1:
-            fail(f"{environment} must ship one public key")
-        big, little = fingerprints(pems[0])
-        if str(big) != config["rsa_fingerprint_sha1_tail_big_endian"]:
-            fail(f"big-endian fingerprint is {big}, JSON says {config['rsa_fingerprint_sha1_tail_big_endian']}")
-        if str(little) != config["rsa_fingerprint_sha1_tail_little_endian"]:
-            fail(f"little-endian fingerprint is {little}, JSON says {config['rsa_fingerprint_sha1_tail_little_endian']}")
-        if little != 12240908862933197005:
-            fail("key is not Teamgram's development public key")
-        if big != 14798846482072068265:
-            fail("client fingerprint of the Teamgram key changed")
-        # The handshake accepts either orientation. They are byte swaps of each other.
-        swapped = int.from_bytes(big.to_bytes(8, "big"), "little")
-        if swapped != little:
-            fail("fingerprint byte swap is not the inverse of the two readings")
-        with open("/tmp/tellomi-check-pub.pem", "w", encoding="utf-8") as handle:
-            handle.write(pems[0] if pems[0].endswith("\n") else pems[0] + "\n")
-        result = subprocess.run(
-            ["openssl", "rsa", "-RSAPublicKey_in", "-in", "/tmp/tellomi-check-pub.pem", "-pubin", "-noout"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            fail("openssl rejected the public key: " + result.stderr)
+        check_public_key_list(environment, pems, config)
 
 
 def check_build_configuration() -> None:

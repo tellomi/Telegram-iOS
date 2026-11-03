@@ -24,20 +24,21 @@ python3 Tellomi/check_server_config.py
 | `local_docker_seed` | `127.0.0.1` | Not dialed. For Teamgram docker on the same machine, put this host in `seeds` instead and regenerate the header. The iOS Simulator reaches the host at `127.0.0.1`. |
 | `seed_port` | `10443` | gnetway's published TCP port (`docker-compose.yaml` maps `10443:10443`). Not 443. |
 | `default_datacenter_id` | `1` | The first connection, including release builds. Upstream opened datacenter 2 in release; Teamgram does not have that datacenter. |
-| `public_keys` | one PKCS#1 PEM, production and testing | The public half of the development key Teamgram ships as `teamgramd/bin/server_pkcs1.key`. |
+| `public_keys` | one or two PKCS#1 PEMs, production and testing | The 2026-11 key first, then the public half of Teamgram's development key (`teamgramd/bin/server_pkcs1.key`). The server sends `[new, old]`. The old key will be retired on the server once clients update. |
+| `rsa_fingerprints` | one entry per PEM, same order | Checks, not configuration. Each entry is that key's little-endian and big-endian fingerprint. |
 | `disable_telegram_backup_discovery` | `true` | See below. |
 
-Replace the hosts before pointing the app at a deployed server. Replace the PEM when the deployment is not using Teamgram's development key. The JSON takes several keys; list every PEM the server might announce.
-
-The two fingerprint fields are checks, not configuration. `python3 Tellomi/check_server_config.py` recomputes them from the PEM and fails if they disagree. After a new key, put the numbers the script prints into those fields.
+Replace the hosts before pointing the app at a deployed server. List every PEM the server might announce, in the order it sends them. `python3 Tellomi/check_server_config.py` recomputes each key's fingerprints and fails if they disagree with `rsa_fingerprints`, if the two readings are not byte-reverses of each other, or if Telegram's production key is present. The 2026-11 little-endian fingerprint `4381149949997195609` must be present. Teamgram's `12240908862933197005` is allowed only in the last position during the transition.
 
 ### Why there are two fingerprints
 
-Telegram iOS (`MTRsaFingerprint`) reads the last eight bytes of SHA1(TL(n) + TL(e)) as a **big-endian** integer. For Teamgram's development key that is `14798846482072068265`.
+Telegram iOS (`MTRsaFingerprint`) reads the last eight bytes of SHA1(TL(n) + TL(e)) as a **big-endian** integer. For the 2026-11 key that is `6458528886358068284`. For Teamgram's development key it is `14798846482072068265`.
 
-Teamgram does not compute the fingerprint. `app/interface/gnetway/internal/server/gnet/handshake.go` parses `KeyFingerprint` from `gnetway.yaml` and sends that decimal in `resPQ`. The value shipped with the development key is `12240908862933197005`, which is the **same eight bytes read little-endian** (`binary.LittleEndian.Uint64` in Teamgram's fingerprint tool). The server then looks up `req_DH_params.public_key_fingerprint` against that same decimal.
+Teamgram does not compute the fingerprint. `app/interface/gnetway/internal/server/gnet/handshake.go` parses `KeyFingerprint` from `gnetway.yaml` and sends that decimal in `resPQ`. The server sends the 2026-11 key first and the development key second. Those decimals are the **same eight bytes read little-endian** (`binary.LittleEndian.Uint64` in Teamgram's fingerprint tool): `4381149949997195609`, then `12240908862933197005`. The server then looks up `req_DH_params.public_key_fingerprint` against that same decimal.
 
-The handshake therefore accepts either byte order, and it sends back the value the server announced rather than the big-endian value this client computes. An exact (Telegram) match still wins over a byte-swap of a different key. Encrypting still uses the PEM; the fingerprint only selects it.
+The handshake therefore accepts either byte order, and it sends back the value the server announced rather than the big-endian value this client computes. `TellomiServerPublicKeys` returns both PEMs. `selectPublicKey` walks the server's fingerprint list and tries both byte orders, so a server that still announces only the old key still matches the fallback. An exact match still wins over a byte-swap of a different key. Encrypting still uses the PEM; the fingerprint only selects it. The old key will be retired on the server once clients update.
+
+The server private keys live outside this repo. On the Chengdu host they are in `/opt/tellomi/secrets/mtproto/`. The team key vault holds the 2026-11 key under `成都服务器-运行时/mtproto-rsa-2026-11/`.
 
 ### What the client no longer asks Telegram for
 
@@ -190,12 +191,12 @@ Not in the TestFlight IPA. Create it only when embedding the watch app (`--embed
 `python3 Tellomi/check_server_config.py` (no Xcode):
 
 - The JSON and the generated header are the same document.
-- OpenSSL accepts the PEM as an RSA public key.
-- Its fingerprint is `14798846482072068265` big-endian and `12240908862933197005` little-endian, and those are byte swaps of each other. The little-endian value is the decimal in Teamgram's `gnetway.yaml`.
+- OpenSSL accepts each PEM as an RSA public key.
+- The 2026-11 key's fingerprint is `6458528886358068284` big-endian and `4381149949997195609` little-endian. Teamgram's development key, last in the list, is `14798846482072068265` big-endian and `12240908862933197005` little-endian. Each pair is a byte swap of the other. The little-endian values are the decimals the server sends, new key first.
 - The three configuration JSON files load through `BuildConfiguration` as `app.tellomi.chat` / `Tellomi` / team `CB7KP6GBAR` / the placeholder api id, with Siri and iCloud off.
 - `Network.swift` installs `TellomiSeedAddresses` and no longer contains Telegram's production seed `149.154.175.50`.
 - The first connection uses `TellomiDefaultDatacenterId`.
-- The handshake reads `TellomiServerPublicKeys` and applies the fingerprint byte swap. Telegram's production modulus prefix is not the default key.
+- The handshake reads `TellomiServerPublicKeys` and applies the fingerprint byte swap. The check rejects Telegram's production modulus prefix.
 - The Bazel app icon is `//:TellomiAppIcon`, and `Tellomi/Brand/logo.svg` still has the traced path data.
 
 A full Xcode or Bazel compile was not run. This machine has no Xcode, no iOS SDK and no simulator.
