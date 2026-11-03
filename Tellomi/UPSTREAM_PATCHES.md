@@ -511,3 +511,7 @@ The media-preview send control used `Media Editor/Send` (`attachlogo.pdf`), the 
 The media-preview back control used `Navigation/Back`, whose glyph is about 8pt inside a 30pt box, so it looked lost in the 44pt circle. It now uses `Media Editor/Back` (a chevron that fills a 28pt box) at 1.35×. Attachment-tray tab icons in the glass bar are 36pt instead of 30pt. Media-editor tool icons cap at 32pt instead of 28pt.
 
 Suggested folders arrive from `messages.getSuggestedDialogFilters` with English titles. On a Chinese interface, Unread / Personal / Groups / Channels / Bots and their descriptions are shown in Chinese. A few folder and People Nearby keys that the Chinese pack omits are filled locally and do not replace a translation the pack already has.
+
+## Channel intro placeholder
+
+`Telegram/Telegram-iOS/Resources/Channel.tgs` is the 「频道是什么？」illustration (`PermissionController` icon `.animation("Channel")`). The original is a gzip Lottie with the duck sticker and the blue “Channel / 55k members” bubble. It is now a one-frame black-and-white phone and three bars. No duck, no blue. The other intro `.tgs` files are unchanged.
