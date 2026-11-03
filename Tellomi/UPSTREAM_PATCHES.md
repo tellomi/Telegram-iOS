@@ -453,3 +453,33 @@ Phone and email open with no keyboard. A tap on the field opens it; a tap on bla
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Phone home is field, verify, divider, email, agreement. Email is field, verify, agreement. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | SMS error stays until the code changes. Email code has no 收不到验证码? row. |
 | `Telegram/Tests/Sources/TellomiLoginUITests.swift` | Phone-default checks. |
+
+## Login handoff, transitions, languages, monochrome icons
+
+Cold start after a correct SMS code and a correct two-step password used to miss the signed-in window. `authorizeWithPassword` writes `AuthorizedAccountState` and then `switchToAuthorizedAccount` (`setCurrentId` + `removeAuth`). The login controller sets `authorizationCompleted` only when its state signal reaches the main queue. That signal can land after the auth session has already been removed. On a cold start the login screen is the only UI, so dismissing it first leaves a blank window (the comment in `AppDelegate` describes that). Adding an account already has a signed-in root, so the same race still looks like a successful phone login. Email sign-in often wins the race because nothing else is queued on the main thread. `switchToAuthorizedAccount` now sets `UnauthorizedAccount.didCompleteAuthorization` before `removeAuth` publishes, and the window handoff treats that flag as the controller flag.
+
+Upstream Teamgram `auth.signIn` binds the auth key and then returns `SESSION_PASSWORD_NEEDED_<userId>`. The session service strips the suffix before the client sees it and keeps an in-memory NeedPassword state. `auth.checkPassword` in the public tree does not call `AuthsessionBindAuthKeyUser` (it logs that the password check is an enterprise feature and still returns `auth.authorization` when `UserId` is set). A new connection reconstructs state from the database (`ToAuthState`: no bind means Unauthorized). This client does not paper over that. The handoff fix is only the race above.
+
+Welcome → login keeps Telegram's snapshot fade. The login form (verify, divider, email, agreement) was left at alpha 1, so the headline drew on top of it. Those nodes now fade in with the rest, the snapshots sit above the form, and the live intro pages are hidden once the snapshots exist. The intro spring damping was 1.2, which UIKit drops; it is 0.9. Phones taller than the Plus sizes no longer use the Inch55 headline position.
+
+Phone ↔ email slides horizontally (0.35s ease-in-out), the same direction as a navigation push. Code, password, and sign-up still use `AuthorizationSequenceController.setViewControllers`, which already asks the navigation container for a slide.
+
+The language control is a template globe with the current language as its accessibility label. The card lists every bundled `*.lproj` (zh-hans, zh-hant, en, plus the empty stubs ar, be, ca, de, es, fa, fr, id, it, ko, ms, nl, pl, pt, ru, tr, uk, uz) and scrolls when the list is taller than the screen. The agreement sentence follows that code, including Simplified and Traditional. Links stay `https://tellomi.cn/legal/terms/` and `https://tellomi.cn/legal/privacy/`. Link color is black on a light page and white on a dark page, not blue.
+
+The “code sent” toast sits above the title, under the status bar. If that gap is shorter than the toast, it is not shown; the subtitle already names the address. The two-step screen title, notice, and forgot label come from the login copy (两步验证 / 兩步驟驗證 / Two-step verification), not the English pack.
+
+Home icon artwork was already black on white. Alternate icons in `Tellomi/Brand/Alternates` are grayscale, and `generate_icons.py` no longer paints blue, sunset, water, or gold. Settings row badges in `PresentationResourcesSettings` use black, white, and gray instead of the colored circles.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Account/Account.swift` | `didCompleteAuthorization` on the auth account. |
+| `submodules/TelegramCore/Sources/Authorization.swift` | Set that flag inside `switchToAuthorizedAccount`. |
+| `submodules/TelegramUI/Sources/AppDelegate.swift` | Window handoff reads the flag. |
+| `submodules/RMIntro/Sources/platform/ios/RMIntroViewController.m` | Damping, tall-phone layout, hide live pages. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift` | Intro fade covers the whole form. Phone ↔ email slide. Agreement language. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | All bundled languages. |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Agreement copy for each bundled language. |
+| `submodules/AuthorizationUI/Sources/TellomiChoicePrompt.swift` | Scroll when the card is taller than the screen. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | Toast above the title. |
+| `submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesSettings.swift` | Monochrome settings badges. |
+| `Tellomi/Brand/generate_icons.py`, `Tellomi/Brand/Alternates/` | Monochrome alternate icons. |

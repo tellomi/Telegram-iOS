@@ -1504,6 +1504,12 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             
             if let authContextValue = self.authContextValue {
                 authContextValue.account.shouldBeServiceTaskMaster.set(.single(.never))
+                // Password sign-in commits the account before the login controller's
+                // state signal reaches the main queue. The flag on the account is
+                // already set; the controller flag may still be false.
+                if authContextValue.account.didCompleteAuthorization {
+                    authContextValue.authorizationCompleted = true
+                }
                 if authContextValue.authorizationCompleted {
                     let accountId = authContextValue.account.id
                     let didDismiss = Atomic<Bool>(value: false)

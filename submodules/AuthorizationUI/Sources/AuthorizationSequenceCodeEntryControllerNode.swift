@@ -773,7 +773,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                 if tellomiCode, case .otherSession = codeType {
                     let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
                     self.tellomiUseSmsNode.isHidden = false
-                    self.tellomiUseSmsNode.setTitle(copy.useSms, with: Font.regular(16.0), with: TellomiLoginChrome.link, for: [])
+                    self.tellomiUseSmsNode.setTitle(copy.useSms, with: Font.regular(16.0), with: TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).link, for: [])
                     self.tellomiUseSmsNode.accessibilityLabel = copy.useSms
                     let smsSize = self.tellomiUseSmsNode.measure(CGSize(width: maximumWidth - 48.0, height: 36.0))
                     items.append(AuthorizationLayoutItem(node: self.tellomiUseSmsNode, size: CGSize(width: maximumWidth - 48.0, height: max(28.0, smsSize.height)), spacingBefore: AuthorizationLayoutItemSpacing(weight: 8.0, maxValue: 8.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
@@ -1055,7 +1055,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         let y = self.proceedNode.frame.maxY + 14.0
         let rowHeight: CGFloat = 22.0
         if showsMissing {
-            self.missingCodeNode.setTitle(copy.codeNotReceived, with: Font.regular(14.0), with: TellomiLoginChrome.link, for: [])
+            self.missingCodeNode.setTitle(copy.codeNotReceived, with: Font.regular(14.0), with: TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).link, for: [])
             self.missingCodeNode.accessibilityLabel = copy.codeNotReceived
             let missingSize = self.missingCodeNode.measure(CGSize(width: bandWidth / 2.0, height: rowHeight))
             transition.updateFrame(node: self.missingCodeNode, frame: CGRect(x: bandMinX + 24.0, y: y, width: max(missingSize.width, 120.0), height: rowHeight))
@@ -1112,7 +1112,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         let timeout = self.currentTimeoutTime ?? 0
         let active = timeout <= 0
         let label = active ? copy.resend : copy.resendCountdown(Int(timeout))
-        let color = active ? TellomiLoginChrome.link : TellomiLoginChrome.secondaryText
+        let color = active ? TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).link : TellomiLoginChrome.secondaryText
         self.nextOptionTitleNode.attributedText = NSAttributedString(string: label, font: Font.regular(14.0), textColor: color, paragraphAlignment: .center)
         self.nextOptionButtonNode.isUserInteractionEnabled = active
         self.nextOptionButtonNode.accessibilityLabel = label
@@ -1130,7 +1130,14 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.sentToastText.attributedText = NSAttributedString(string: copy.codeSentToast, font: Font.regular(14.0), textColor: .white)
         let textSize = self.sentToastText.updateLayout(CGSize(width: layout.size.width - 80.0, height: 40.0))
         let size = CGSize(width: textSize.width + 28.0, height: 36.0)
-        self.sentToastBackground.frame = CGRect(x: floor((layout.size.width - size.width) / 2.0), y: floor(layout.size.height * 0.42), width: size.width, height: size.height)
+        // Above the title, under the status bar. Mid-screen sat on the field and the
+        // Log in button once the keyboard was up. The subtitle already names the address.
+        let topLimit = (layout.statusBarHeight ?? 20.0) + 4.0
+        let aboveTitle = self.titleNode.frame.minY - size.height - 8.0
+        guard aboveTitle >= topLimit else {
+            return
+        }
+        self.sentToastBackground.frame = CGRect(x: floor((layout.size.width - size.width) / 2.0), y: aboveTitle, width: size.width, height: size.height)
         self.sentToastText.frame = CGRect(x: 14.0, y: floor((size.height - textSize.height) / 2.0), width: textSize.width, height: textSize.height)
         self.sentToastBackground.alpha = 1.0
         Queue.mainQueue().after(1.8) { [weak self] in

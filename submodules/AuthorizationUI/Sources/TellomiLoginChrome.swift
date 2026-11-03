@@ -12,7 +12,7 @@ enum TellomiLoginChrome {
     static let buttonForeground = UIColor.white
     static let buttonDisabledBackground = UIColor(rgb: 0xE5E5E5)
     static let buttonDisabledForeground = UIColor(rgb: 0x8E8E93)
-    static let link = UIColor(rgb: 0x3478F6)
+    static let link = UIColor(rgb: 0x111111)
     static let error = UIColor(rgb: 0xFF3B30)
     /// Caret and focused field. Same black as the primary button.
     static let accent = UIColor(rgb: 0x111111)
@@ -53,7 +53,7 @@ enum TellomiLoginChrome {
                 buttonForeground: UIColor(rgb: 0x111111),
                 buttonDisabledBackground: UIColor(rgb: 0x3A3A3C),
                 buttonDisabledForeground: UIColor(rgb: 0x8E8E93),
-                link: UIColor(rgb: 0x3478F6),
+                link: UIColor.white,
                 error: UIColor(rgb: 0xFF453A),
                 accent: UIColor.white,
                 checkbox: UIColor.white,
@@ -378,6 +378,17 @@ private func tellomiLoginCopyHant() -> TellomiLoginCopy {
         useSms: "改用簡訊接收",
         cancel: "取消"
     )
+}
+
+func tellomiCloudPasswordCopy(languageCode: String) -> (title: String, notice: String, forgot: String) {
+    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
+    case .hans:
+        return ("两步验证", "请输入两步验证密码", "忘记密码？")
+    case .hant:
+        return ("兩步驟驗證", "請輸入兩步驟驗證密碼", "忘記密碼？")
+    case .english:
+        return ("Two-step verification", "Enter your two-step verification password.", "Forgot password?")
+    }
 }
 
 func tellomiLoginLanguageIsChinese(_ languageCode: String) -> Bool {

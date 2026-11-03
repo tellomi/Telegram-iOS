@@ -951,7 +951,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         }
 
         if account != nil {
-            self.tellomiAgreement.install(on: self.agreementNode, theme: theme, kind: .phone, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(strings)), openUrl: { [weak self] url in
+            self.tellomiAgreement.install(on: self.agreementNode, theme: theme, kind: .phone, languageCode: tellomiInterfaceLanguageCode(strings), openUrl: { [weak self] url in
                 self?.tellomiOpenUrl?(url)
             }, changed: { [weak self] agreed in
                 self?.agreementRow?.setChecked(agreed)
@@ -1056,25 +1056,40 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         }
         
         self.animationSnapshotView = animationSnapshot
-        self.view.insertSubview(animationSnapshot, at: 0)
-        
         self.textSnapshotView = textSnapshot
-        self.view.insertSubview(textSnapshot, at: 0)
+        // Above the form. Inserting at 0 left the login controls painted on top of
+        // the welcome headline for the whole fade.
+        self.view.addSubview(animationSnapshot)
+        self.view.addSubview(textSnapshot)
         
+        for node in self.tellomiIntroTransitionNodes() {
+            node.alpha = 0.0
+        }
+    }
+
+    private func tellomiIntroTransitionNodes() -> [ASDisplayNode] {
         var nodes: [ASDisplayNode] = [
             self.animationNode,
             self.titleNode,
             self.noticeNode,
             self.phoneAndCountryNode,
-            self.contactSyncNode
+            self.contactSyncNode,
+            self.proceedNode,
+            self.agreementNode
         ]
         if let emailFieldNode = self.emailFieldNode {
             nodes.append(emailFieldNode)
         }
-
-        for node in nodes {
-            node.alpha = 0.0
+        if let emailRowNode = self.emailRowNode {
+            nodes.append(emailRowNode)
         }
+        if let orDividerNode = self.orDividerNode {
+            nodes.append(orDividerNode)
+        }
+        if let agreementRow = self.agreementRow {
+            nodes.append(agreementRow)
+        }
+        return nodes
     }
     
     func animateIn(buttonFrame: CGRect, buttonTitle: String, animationSnapshot: UIView, textSnapshot: UIView) {
@@ -1094,20 +1109,9 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         })
         self.textSnapshotView?.layer.animatePosition(from: CGPoint(), to: CGPoint(x: 0.0, y: -140.0), duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, additive: true)
     
-        var nodes: [ASDisplayNode] = [
-            self.animationNode,
-            self.titleNode,
-            self.noticeNode,
-            self.phoneAndCountryNode,
-            self.contactSyncNode
-        ]
-        if let emailFieldNode = self.emailFieldNode {
-            nodes.append(emailFieldNode)
-        }
-        
         self.animationNode.layer.animateScale(from: 0.3, to: 1.0, duration: 0.3)
 
-        for node in nodes {
+        for node in self.tellomiIntroTransitionNodes() {
             node.alpha = 1.0
             node.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.3)
         }
@@ -1288,7 +1292,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance))
         let agreementKind: TellomiSignUpAgreement.Kind = surface.agreementPinnedToBottom ? .phone : .email
         self.tellomiAgreement.setKind(agreementKind)
-        self.tellomiAgreement.refreshLanguage()
+        self.tellomiAgreement.refreshLanguage(languageCode: tellomiInterfaceLanguageCode(self.strings))
         self.phoneAndCountryNode.updateTellomiPlaceholder(loginCopy.phonePlaceholder)
         let rowDark = self.theme.overallDarkAppearance
         self.emailRowNode?.setTitle(loginCopy.emailLogin, dark: rowDark)
@@ -1432,10 +1436,20 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.proceedNode.isEnabled = self.phoneAndCountryNode.hasCountry && tellomiPhoneNumberIsComplete(number)
     }
 
+    private var tellomiSurfaceAnimating = false
+
     func setTellomiSurface(_ surface: TellomiLoginSurface, address: String? = nil) {
         guard self.account != nil else {
             return
         }
+        let previous = self.tellomiSurface
+        let snapshot: UIView?
+        if previous != surface, !self.tellomiSurfaceAnimating, self.bounds.width > 1.0 {
+            snapshot = self.view.snapshotView(afterScreenUpdates: false)
+        } else {
+            snapshot = nil
+        }
+        self.tellomiSurfaceAnimating = true
         self.tellomiSurface = surface
         if let address, let emailFieldNode = self.emailFieldNode {
             emailFieldNode.setText(address)
@@ -1446,7 +1460,36 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         if let (layout, navigationBarHeight) = self.layoutArguments {
             self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
         }
+        self.tellomiSurfaceAnimating = false
+        if let snapshot, previous != surface {
+            self.tellomiSlideSurface(snapshot: snapshot, forward: surface.isEmail)
+        }
         self.tellomiSurfaceChanged?()
+    }
+
+    /// Phone home ↔ email uses the same horizontal slide as AuthorizationSequence's push.
+    private func tellomiSlideSurface(snapshot: UIView, forward: Bool) {
+        let width = self.bounds.width
+        guard width > 1.0 else {
+            snapshot.removeFromSuperview()
+            return
+        }
+        snapshot.frame = self.bounds
+        self.view.addSubview(snapshot)
+        let travel: CGFloat = forward ? -width : width
+        let nodes = self.tellomiIntroTransitionNodes()
+        let resting = nodes.map { $0.frame }
+        for (node, frame) in zip(nodes, resting) {
+            node.frame = frame.offsetBy(dx: -travel, dy: 0.0)
+        }
+        UIView.animate(withDuration: 0.35, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: {
+            snapshot.frame = snapshot.frame.offsetBy(dx: travel, dy: 0.0)
+            for (node, frame) in zip(nodes, resting) {
+                node.frame = frame
+            }
+        }, completion: { _ in
+            snapshot.removeFromSuperview()
+        })
     }
 
     func popTellomiSurface() -> Bool {

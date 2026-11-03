@@ -153,6 +153,10 @@ public final class AuthorizationSequenceSplashController: ViewController {
         return snapshot
     }
     
+    func suppressLiveIntroPages() {
+        self.controller.tellomiSuppressLivePages()
+    }
+
     var textSnaphot: UIView? {
         let snapshotView: UIView? = self.controller.createTextSnapshot()
         guard let snapshot = snapshotView else {

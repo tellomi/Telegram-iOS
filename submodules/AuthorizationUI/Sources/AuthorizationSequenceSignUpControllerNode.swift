@@ -230,7 +230,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         // Tellomi: replace the terms label with the agreement checkbox; Continue waits for it.
         self.proceedNode.isEnabled = false
         self.firstNameField.textField.addTarget(self, action: #selector(self.tellomiNameChanged), for: .editingChanged)
-        self.tellomiAgreement.install(on: self.termsNode, theme: theme, kind: .signUp, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(strings)), openUrl: { [weak self] url in
+        self.tellomiAgreement.install(on: self.termsNode, theme: theme, kind: .signUp, languageCode: tellomiInterfaceLanguageCode(strings), openUrl: { [weak self] url in
             self?.tellomiOpenUrl?(url)
         }, changed: { [weak self] agreed in
             self?.agreementRow.setChecked(agreed)

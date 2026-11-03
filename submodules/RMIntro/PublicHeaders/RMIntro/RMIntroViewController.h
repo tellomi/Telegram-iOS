@@ -78,6 +78,7 @@
 
 - (UIView *)createAnimationSnapshot;
 - (UIView *)createTextSnapshot;
+- (void)tellomiSuppressLivePages;
 
 - (void)animateIn;
 

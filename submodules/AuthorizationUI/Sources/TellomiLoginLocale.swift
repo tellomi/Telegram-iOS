@@ -49,7 +49,25 @@ public func tellomiLoginScript(languageCode: String) -> TellomiLoginScript {
     return .english
 }
 
-/// `简体中文 ▾` / `繁體中文 ▾` / `English ▾`.
+/// Native name of a bundled login language. Unknown codes fall back to the code itself.
+public func tellomiBuiltinLanguageTitle(_ languageCode: String) -> String {
+    let code = languageCode.lowercased().replacingOccurrences(of: "_", with: "-")
+    return tellomiBundledLanguageNames[code] ?? tellomiBundledLanguageNames[code.split(separator: "-").first.map(String.init) ?? code] ?? languageCode
+}
+
+public func tellomiLanguageCodesMatch(_ lhs: String, _ rhs: String) -> Bool {
+    let left = lhs.lowercased().replacingOccurrences(of: "_", with: "-")
+    let right = rhs.lowercased().replacingOccurrences(of: "_", with: "-")
+    return left == right
+}
+
+/// Accessibility name for the globe button: the language it will switch, not a word on the control.
+public func tellomiLanguageButtonAccessibilityLabel(languageCode: String) -> String {
+    let resolved = tellomiChromeLanguageCode(savedLanguageCode: languageCode)
+    return tellomiBuiltinLanguageTitle(resolved)
+}
+
+/// `简体中文 ▾` / `繁體中文 ▾` / `English ▾`. The control itself is a globe; this remains for accessibility.
 public func tellomiLanguageButtonTitle(languageCode: String) -> String {
     let name: String
     switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
@@ -132,12 +150,61 @@ public func tellomiRegionLocale(languageCode: String) -> Locale {
     }
 }
 
+private let tellomiBundledLanguageNames: [String: String] = [
+    "zh-hans": "简体中文",
+    "zh-hant": "繁體中文",
+    "en": "English",
+    "ar": "العربية",
+    "be": "Беларуская",
+    "ca": "Català",
+    "de": "Deutsch",
+    "es": "Español",
+    "fa": "فارسی",
+    "fr": "Français",
+    "id": "Bahasa Indonesia",
+    "it": "Italiano",
+    "ko": "한국어",
+    "ms": "Bahasa Melayu",
+    "nl": "Nederlands",
+    "pl": "Polski",
+    "pt": "Português",
+    "ru": "Русский",
+    "tr": "Türkçe",
+    "uk": "Українська",
+    "uz": "Oʻzbek"
+]
+
+/// `*.lproj` folders shipped in the app, including the empty string stubs.
+/// The login picker used to offer only zh-hans, zh-hant, and en.
+private let tellomiBundledLanguageOrder: [(code: String, english: String, plural: String?)] = [
+    ("zh-hans", "Chinese (Simplified)", "zh"),
+    ("zh-hant", "Chinese (Traditional)", "zh"),
+    ("en", "English", nil),
+    ("ar", "Arabic", nil),
+    ("be", "Belarusian", nil),
+    ("ca", "Catalan", nil),
+    ("de", "German", nil),
+    ("es", "Spanish", nil),
+    ("fa", "Persian", nil),
+    ("fr", "French", nil),
+    ("id", "Indonesian", nil),
+    ("it", "Italian", nil),
+    ("ko", "Korean", nil),
+    ("ms", "Malay", nil),
+    ("nl", "Dutch", nil),
+    ("pl", "Polish", nil),
+    ("pt", "Portuguese", nil),
+    ("ru", "Russian", nil),
+    ("tr", "Turkish", nil),
+    ("uk", "Ukrainian", nil),
+    ("uz", "Uzbek", nil)
+]
+
 /// Rows the language screen always offers, even before `langpack.getLanguages` returns.
 /// Selecting one still downloads that pack. A later server list keeps its own copy of the same code.
 public func tellomiBuiltinInterfaceLanguages() -> [LocalizationInfo] {
-    return [
-        LocalizationInfo(languageCode: "zh-hans", baseLanguageCode: "en", customPluralizationCode: "zh", title: "Chinese (Simplified)", localizedTitle: "简体中文", isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""),
-        LocalizationInfo(languageCode: "zh-hant", baseLanguageCode: "en", customPluralizationCode: "zh", title: "Chinese (Traditional)", localizedTitle: "繁體中文", isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""),
-        LocalizationInfo(languageCode: "en", baseLanguageCode: nil, customPluralizationCode: nil, title: "English", localizedTitle: "English", isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""),
-    ]
+    return tellomiBundledLanguageOrder.map { item in
+        let native = tellomiBundledLanguageNames[item.code] ?? item.english
+        return LocalizationInfo(languageCode: item.code, baseLanguageCode: item.code == "en" ? nil : "en", customPluralizationCode: item.plural, title: item.english, localizedTitle: native, isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: "")
+    }
 }

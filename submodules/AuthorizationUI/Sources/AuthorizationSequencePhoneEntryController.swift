@@ -118,7 +118,15 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     }
     
     private func tellomiLanguageItem() -> UIBarButtonItem {
-        let item = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), style: .plain, target: self, action: #selector(self.languagePressed))
+        let code = tellomiInterfaceLanguageCode(self.presentationData.strings)
+        let image = UIImage(systemName: "globe")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 17.0, weight: .regular)).withRenderingMode(.alwaysTemplate)
+        let item: UIBarButtonItem
+        if let image {
+            item = UIBarButtonItem(image: image, style: .plain, target: self, action: #selector(self.languagePressed))
+        } else {
+            item = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: code), style: .plain, target: self, action: #selector(self.languagePressed))
+        }
+        item.accessibilityLabel = tellomiLanguageButtonAccessibilityLabel(languageCode: code)
         item.accessibilityIdentifier = "Auth.Login.Language"
         return item
     }
@@ -129,11 +137,10 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
 
     private func presentTellomiLanguage() {
         let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
-        let current = tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode))
+        let current = tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode)
         var rows: [TellomiChoiceRow] = []
         for info in tellomiBuiltinInterfaceLanguages() {
-            let script = tellomiLoginScript(languageCode: info.languageCode)
-            let checked = script == current
+            let checked = tellomiLanguageCodesMatch(info.languageCode, current)
             let code = info.languageCode
             rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
                 guard let self, !checked else {
@@ -183,7 +190,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
 
     private func presentTellomiAgreementPrompt() {
         let kind: TellomiSignUpAgreement.Kind = self.controllerNode.tellomiSurface.agreementPinnedToBottom ? .phone : .email
-        let prompt = TellomiAgreementPromptController(kind: kind, chinese: tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)), dark: self.presentationData.theme.overallDarkAppearance, openUrl: { [weak self] url in
+        let prompt = TellomiAgreementPromptController(kind: kind, languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings), dark: self.presentationData.theme.overallDarkAppearance, openUrl: { [weak self] url in
             self?.tellomiPresentLegalURL(url)
         })
         prompt.agreed = { [weak self] in
@@ -240,6 +247,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         
         if let animationSnapshot = controller.animationSnapshot, let textSnapshot = controller.textSnaphot {
             self.transitionInArguments = (controller.buttonFrame, controller.buttonTitle, animationSnapshot, textSnapshot)
+            controller.suppressLiveIntroPages()
         }
     }
     

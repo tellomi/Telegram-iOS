@@ -92,6 +92,13 @@ public class UnauthorizedAccount {
     }
     
     public let shouldBeServiceTaskMaster = Promise<AccountServiceTaskMasterMode>()
+
+    /// Set on the auth account before its record becomes the current account.
+    /// The login window reads this when the auth session disappears. The state
+    /// observer can still be queued behind that update, and on a cold start the
+    /// login screen is the only UI: dismissing it first leaves a blank window.
+    /// Adding an account already has a signed-in root, so the same race is hidden.
+    public var didCompleteAuthorization = false
     
     init(accountManager: AccountManager<TelegramAccountManagerTypes>, networkArguments: NetworkInitializationArguments, id: AccountRecordId, rootPath: String, basePath: String, testingEnvironment: Bool, postbox: Postbox, network: Network, shouldKeepAutoConnection: Bool = true) {
         self.networkArguments = networkArguments

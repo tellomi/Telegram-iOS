@@ -200,7 +200,11 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         let titleInset: CGFloat = layout.size.width > 320.0 ? 18.0 : 0.0
         let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 110.0 : 20.0
         
-        self.titleNode.attributedText = NSAttributedString(string: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).cloudPasswordTitle, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor)
+        let passwordCopy = tellomiCloudPasswordCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        self.titleNode.attributedText = NSAttributedString(string: passwordCopy.title, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor)
+        self.noticeNode.attributedText = NSAttributedString(string: passwordCopy.notice, font: Font.regular(16.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .center)
+        self.forgotNode.setAttributedTitle(NSAttributedString(string: passwordCopy.forgot, font: Font.regular(16.0), textColor: TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).link, paragraphAlignment: .center), for: [])
+        self.forgotNode.accessibilityLabel = passwordCopy.forgot
         
         let animationSize = CGSize(width: 100.0, height: 100.0)
         let titleSize = self.titleNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
