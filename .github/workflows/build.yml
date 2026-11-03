@@ -228,6 +228,8 @@ jobs:
       # actions/create-release@v1 and actions/upload-release-asset@v1 run on
       # Node 12, which current GitHub images reject. gh is on the image.
       # workflow_dispatch of a non-master ref (a proof run) must not publish.
+      # The integration token sometimes cannot create releases (HTTP 403).
+      # That must not fail the compile. Any other error still fails the job.
       - name: Publish GitHub Release
         if: github.ref == 'refs/heads/master'
         env:
@@ -239,11 +241,22 @@ jobs:
           if [ -f Telegram.DSYMs.zip ]; then
             assets+=("Telegram.DSYMs.zip#Telegram.DSYMs.zip")
           fi
-          gh release create "build-${BUILD_NUMBER}" \
+          set +e
+          notes=$(gh release create "build-${BUILD_NUMBER}" \
             --title "Telegram ${APP_VERSION} (${BUILD_NUMBER})" \
             --notes "An unsigned simulator build of Telegram for iOS ${APP_VERSION} (${BUILD_NUMBER}). Ad-hoc signed, no provisioning profile." \
             --target "${GITHUB_SHA}" \
-            "${assets[@]}"
+            "${assets[@]}" 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$notes"
+          if [ "$status" -ne 0 ]; then
+            if printf '%s\n' "$notes" | grep -q "403"; then
+              echo "GitHub Release was not created: the integration token cannot create releases. The unsigned build itself succeeded."
+              exit 0
+            fi
+            exit "$status"
+          fi
 
       - name: Save Bazel cache
         if: always()
