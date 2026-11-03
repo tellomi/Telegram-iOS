@@ -311,6 +311,8 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         
         self.controllerNode.view.disableAutomaticKeyboardHandling = [.forward, .backward]
         
+        tellomiWarmCountryList(strings: self.presentationData.strings, locale: tellomiCountryLocale(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)))
+
         self.controllerNode.selectCountryCode = { [weak self] in
             if let strongSelf = self {
                 let languageCode = tellomiInterfaceLanguageCode(strongSelf.presentationData.strings)
@@ -342,6 +344,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             loadServerCountryCodes(accountManager: sharedContext.accountManager, engine: TelegramEngineUnauthorized(account: account), completion: { [weak self] in
                 if let strongSelf = self {
                     strongSelf.controllerNode.updateCountryCode()
+                    tellomiWarmCountryList(strings: strongSelf.presentationData.strings, locale: tellomiCountryLocale(languageCode: tellomiInterfaceLanguageCode(strongSelf.presentationData.strings)))
                 }
             })
             let accountManager = self.sharedContext.accountManager

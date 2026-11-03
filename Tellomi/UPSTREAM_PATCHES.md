@@ -587,3 +587,15 @@ The `ios` packs on the server are full for the languages this picker lists (on t
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift`, `AuthorizationSequenceCodeEntryControllerNode.swift` | Replace the strings and lay out again. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Passes the unauthorized account. A strings-only presentation update reaches the phone and code screens. |
 | `submodules/TelegramCore/Sources/TellomiInterfaceLanguage.swift` | The empty-pack helper is not how a language is applied. |
+
+## Country picker open
+
+Tapping the country code on the phone login screen built the whole list on the main thread before the controller could appear. For a Chinese locale that includes a `CFStringTransform` to pinyin on every name, so the section index is A–Z instead of one dot per character. Upstream sorts with `localizedString` only and opens immediately. The tap does not call `help.getCountriesList`; that request already runs when the phone screen loads.
+
+The list is built on a background queue and cached. The phone screen starts that build when it appears, and again when the server country list replaces the bundled one. The tap reads the cache. If the cache is not ready yet, the controller still pushes immediately and fills the table when the build finishes.
+
+| File | Change |
+| --- | --- |
+| `submodules/CountrySelectionUI/Sources/TellomiCountryListPreparation.swift` | New. Background build and cache. Same pinyin index and the same sort as the controller had. |
+| `submodules/CountrySelectionUI/Sources/AuthorizationSequenceCountrySelectionControllerNode.swift` | Init uses the cache. A miss does not sort on the main thread. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Starts the build when the phone screen loads, and again after `help.getCountriesList`. |

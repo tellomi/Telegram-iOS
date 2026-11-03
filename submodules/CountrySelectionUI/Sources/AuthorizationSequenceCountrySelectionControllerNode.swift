@@ -63,61 +63,9 @@ private func loadCountryCodes() -> [(String, Int)] {
 
 private let countryCodes: [(String, Int)] = loadCountryCodes()
 
-/// Chinese names indexed by their first character fill the rail with dots. The
-/// system Contacts app groups them by pinyin initial instead.
-private func countryLatinName(_ name: String) -> String {
-    let mutable = NSMutableString(string: name)
-    CFStringTransform(mutable, nil, kCFStringTransformToLatin, false)
-    CFStringTransform(mutable, nil, kCFStringTransformStripDiacritics, false)
-    return (mutable as String).trimmingCharacters(in: .whitespacesAndNewlines)
-}
-
-private func countryUsesPinyinIndex(_ locale: Locale?) -> Bool {
-    let identifier = locale?.identifier.lowercased() ?? ""
-    return identifier == "zh" || identifier.hasPrefix("zh-") || identifier.hasPrefix("zh_")
-}
-
-private func countrySectionTitle(name: String, locale: Locale?) -> String {
-    if countryUsesPinyinIndex(locale) {
-        let latin = countryLatinName(name)
-        if let first = latin.first, first.isASCII, first.isLetter {
-            return String(first).uppercased()
-        }
-    }
-    guard let first = name.first else {
-        return "#"
-    }
-    return String(first).uppercased(with: locale ?? .current)
-}
-
-private func countrySortKey(name: String, locale: Locale?) -> String {
-    if countryUsesPinyinIndex(locale) {
-        let latin = countryLatinName(name)
-        if !latin.isEmpty {
-            return latin
-        }
-    }
-    return name
-}
-
 public func localizedCountryNamesAndCodes(strings: PresentationStrings, regionLocale: Locale? = nil) -> [((String, String), String, [Int])] {
     let locale = regionLocale ?? localeWithStrings(strings)
-    var result: [((String, String), String, [Int])] = []
-    for country in AuthorizationSequenceCountrySelectionController.countries() {
-        if country.hidden || country.id == "FT" {
-            continue
-        }
-        if let englishCountryName = usEnglishLocale.localizedString(forRegionCode: country.id), let countryName = locale.localizedString(forRegionCode: country.id) {
-            var codes: [Int] = []
-            for codeValue in country.countryCodes {
-                if let code = Int(codeValue.code) {
-                    codes.append(code)
-                }
-            }
-            result.append(((englishCountryName, countryName), country.id, codes))
-        }
-    }
-    return result
+    return tellomiCountryNamesAndCodes(countries: AuthorizationSequenceCountrySelectionController.countries(), locale: locale)
 }
 
 private func stringTokens(_ string: String) -> [Data] {
@@ -237,11 +185,11 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
     private let tableView: UITableView
     private let searchTableView: UITableView
     
-    private let sections: [(String, [((String, String), String, Int)])]
-    private let sectionTitles: [String]
+    private var sections: [(String, [((String, String), String, Int)])]
+    private var sectionTitles: [String]
     
     private var searchResults: [((String, String), String, Int)] = []
-    private let countryNamesAndCodes: [((String, String), String, [Int])]
+    private var countryNamesAndCodes: [((String, String), String, [Int])]
     
     private let topEdgeEffectView: EdgeEffectView
     
@@ -285,30 +233,10 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
             self.searchTableView.contentInsetAdjustmentBehavior = .never
         }
         
-        let countryNamesAndCodes = localizedCountryNamesAndCodes(strings: strings, regionLocale: regionLocale)
-        self.countryNamesAndCodes = countryNamesAndCodes
-        
-        var sections: [(String, [((String, String), String, Int)])] = []
-        let sortLocale = regionLocale
-        for (names, id, codes) in countryNamesAndCodes.sorted(by: { lhs, rhs in
-            if countryUsesPinyinIndex(sortLocale) {
-                return countrySortKey(name: lhs.0.1, locale: sortLocale).localizedStandardCompare(countrySortKey(name: rhs.0.1, locale: sortLocale)) == .orderedAscending
-            }
-            if let sortLocale = sortLocale {
-                return lhs.0.1.compare(rhs.0.1, locale: sortLocale) == .orderedAscending
-            }
-            return lhs.0.1 < rhs.0.1
-        }) {
-            let title = countrySectionTitle(name: names.1, locale: sortLocale)
-            if sections.isEmpty || sections[sections.count - 1].0 != title {
-                sections.append((title, []))
-            }
-            for code in codes {
-                sections[sections.count - 1].1.append((names, id, code))
-            }
-        }
-        self.sections = sections
-        self.sectionTitles = sections.map { $0.0 }
+        let cachedCountryList = tellomiCachedCountryList(locale: regionLocale)
+        self.countryNamesAndCodes = cachedCountryList?.namesAndCodes ?? []
+        self.sections = cachedCountryList?.sections ?? []
+        self.sectionTitles = cachedCountryList?.sectionTitles ?? []
         
         self.topEdgeEffectView = EdgeEffectView()
         
@@ -349,12 +277,25 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
         
         self.view.addSubview(self.tableView)
         self.view.addSubview(self.searchTableView)
+
+        if cachedCountryList == nil {
+            tellomiLoadCountryList(strings: strings, locale: regionLocale) { [weak self] snapshot in
+                self?.applyCountryList(snapshot)
+            }
+        }
         
         if glass {
             self.view.addSubview(self.topEdgeEffectView)
         }
     }
         
+    private func applyCountryList(_ snapshot: TellomiCountryListSnapshot) {
+        self.countryNamesAndCodes = snapshot.namesAndCodes
+        self.sections = snapshot.sections
+        self.sectionTitles = snapshot.sectionTitles
+        self.tableView.reloadData()
+    }
+
     func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
         self.validLayout = layout
         self.tableView.contentInset = UIEdgeInsets(top: navigationBarHeight, left: 0.0, bottom: layout.intrinsicInsets.bottom, right: 0.0)
