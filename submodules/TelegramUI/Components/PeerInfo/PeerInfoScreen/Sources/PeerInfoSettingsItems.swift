@@ -276,6 +276,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 4, label: .text(languageName.isEmpty ? presentationData.strings.Localization_LanguageName : languageName), text: presentationData.strings.Settings_AppLanguage, icon: PresentationResourcesSettings.language, action: {
         interaction.openSettings(.language)
     }))
+    tellomiAppendNavigationSettingsEntry(items: &items, context: context, presentationData: presentationData, interaction: interaction)
     
     let featureGate = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
     if featureGate.premiumEnabled {

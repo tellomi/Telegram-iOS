@@ -611,3 +611,15 @@ The Calls tab already hides from a long-press on its icon (`CallListController.t
 | `submodules/TelegramUIPreferences/Sources/CallListSettings.swift` | `showTab` is false when `_showTab` is nil (one line). An explicit true or false is unchanged. |
 | `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | `ApplicationSpecificSharedDataKeyValues.tellomiTabSettings = 100`, stored with `applicationSpecificSharedDataKey` (the stored id is 1100). Upstream's highest shared-data id here is 22. |
 | `submodules/TelegramUIPreferences/Sources/TellomiTabSettings.swift` | New. `showFeedTab` defaults true, `showContactsTab` defaults false. Tab order, the `tell.cc/m#` post id, and the kill switch. |
+| `submodules/TelegramUI/Sources/AppDelegate.swift` | The existing calls-settings transaction also calls `tellomiCaptureLaunchTabs` (one line) so the first tab bar matches the saved record. |
+| `submodules/TelegramUI/Sources/ApplicationContext.swift` | `tellomiStartTabObservation` / `tellomiStopTabObservation`, same shape as the calls-tab subscription at the lines above it. |
+| `submodules/TelegramUI/Sources/TelegramRootController.swift` | `addRootControllers` and `updateRootControllers` call `tellomiAppendRootTabs`. When that returns false the original appends run. `getContactsController` pushes a contacts page when the tab is hidden. `openContacts` does the same. |
+| `submodules/TelegramUI/Sources/OpenUrl.swift` | `continueHandling` returns early on `tell.cc/m#<id>` (`tellomiHandleFeedPostLink`). A `/m/<slug>` path is still a message link. |
+| `submodules/TelegramUI/Sources/TellomiBottomNavigation.swift` | New. Order, observation, hidden-contacts push, and re-enabling Discover for a post link (D-57). |
+| `submodules/ContactListUI/Sources/ContactsController.swift` | One call, `tellomiAppendHideContactsTabItem`, on the existing tab-icon long-press. |
+| `submodules/ContactListUI/Sources/TellomiContactsTabMenu.swift` | New. Hide Contacts, same menu as Hide Calls. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | One call, `tellomiAppendNavigationSettingsEntry`, after Language. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/TellomiNavigationSettingsEntry.swift` | New. Settings row that pushes the navigation page. |
+| `submodules/SettingsUI/Sources/TellomiNavigationSettingsController.swift` | New. Discover, Calls, and Contacts switches. Chats and Settings are on and disabled (D-7). Calls uses `CallListSettings`, so the old Show Calls Tab switch still works. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | New module `TellomiFeedScreen`. Empty Discover tab (D-37). Not `NewsScreen`. Long-press hides it (D-38). |
+| `submodules/TelegramUI/BUILD` | Depends on that module. |
