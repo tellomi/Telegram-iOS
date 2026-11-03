@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Check Tellomi's marketing version against the v* tag, when there is one.
+"""Check Tellomi's marketing version against a v* tag, when the run is one.
 
 v0.1.0-tf9 and v0.1.0 both mean marketing version 0.1.0. The same string is
 CFBundleShortVersionString on the app and every extension, via Tellomi/version.
+
+A push to master, a workflow_dispatch from a branch, and a local run are not
+tags. Those ship Tellomi/version as-is. The TestFlight build number is chosen
+later, one above the latest App Store Connect build.
 """
 
 import os
@@ -29,13 +33,35 @@ def version_from_tag(tag):
     return match.group(1)
 
 
+def tagged_marketing_version(ref_type, ref_name):
+    """Marketing version implied by a tag ref, or None when this run is not a tag.
+
+    Branch refs are never tags, even if the branch name looks like v1.2.3.
+    """
+    if ref_type == "branch":
+        return None
+    return version_from_tag(ref_name)
+
+
+def _self_check():
+    assert tagged_marketing_version("branch", "master") is None
+    assert tagged_marketing_version("branch", "v14.0.4") is None
+    assert tagged_marketing_version("tag", "v14.0.4") == "14.0.4"
+    assert tagged_marketing_version("tag", "v14.0.4-tf2") == "14.0.4"
+    assert tagged_marketing_version("tag", "v0.1.0-tf9") == "0.1.0"
+    assert tagged_marketing_version("", "") is None
+    assert tagged_marketing_version("tag", "vnot-a-version") is None
+
+
 def main():
+    _self_check()
     version = read_version()
-    tag = os.environ.get("GITHUB_REF_NAME", "")
-    tagged = version_from_tag(tag)
+    ref_type = os.environ.get("GITHUB_REF_TYPE", "")
+    ref_name = os.environ.get("GITHUB_REF_NAME", "")
+    tagged = tagged_marketing_version(ref_type, ref_name)
     if tagged is not None and tagged != version:
         raise SystemExit(
-            "tag {} is marketing version {}, but Tellomi/version is {}".format(tag, tagged, version)
+            "tag {} is marketing version {}, but Tellomi/version is {}".format(ref_name, tagged, version)
         )
     print(version)
 
