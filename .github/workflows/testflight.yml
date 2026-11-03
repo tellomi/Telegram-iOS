@@ -17,24 +17,14 @@
 # workflow with mint_distribution_cert. Caches do not cross tag refs, so
 # minting is not the default.
 #
-# A push to master uploads to TestFlight. A push that only changes
-# **/*.md or docs/** does not. v* tags, published releases, and manual
-# dispatch still upload. One concurrency group covers every trigger; a
-# newer run cancels the older one so two signed uploads are not in flight.
+# Automatic upload is paused (2026-11-04). Pushes to master, including
+# later v2 work, must not upload to TestFlight by themselves. Run this
+# workflow with workflow_dispatch when a build should be uploaded.
+# A newer dispatch cancels an older in-progress upload.
 
 name: TestFlight
 
 on:
-  push:
-    tags:
-      - "v*"
-    branches:
-      - master
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       mint_distribution_cert:
