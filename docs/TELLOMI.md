@@ -126,7 +126,9 @@ The main app's associated-domains entitlement is `applinks:tell.cc` and `webcred
 
 ## TestFlight
 
-`.github/workflows/testflight.yml` runs on the `xcode-27` GitHub-hosted image (Xcode 27.1, the version in `versions.json`). It runs when a `v*` tag is pushed, when a GitHub Release is published, and on manual dispatch. It does not run on every pull request.
+`.github/workflows/testflight.yml` runs on the `xcode-27` GitHub-hosted image (Xcode 27.1, the version in `versions.json`). It uploads when commits are pushed to the `release/ios` branch. A push to `master` does not upload, so later v2 work can merge there without a TestFlight build. `workflow_dispatch` is still in the file; the integration account gets 403 if it tries to start that event, so do not rely on it. Docs-only pushes (`**/*.md`, `docs/**`) are ignored. It does not run on every pull request.
+
+To ship the current master: `git push origin master:release/ios`. That push is the release. A newer push to `release/ios` cancels an in-progress upload.
 
 `CFBundleShortVersionString` for the app and every extension is `Tellomi/version` (also `versions.json` key `app`). A tag `v0.1.0-tf9` is marketing version `0.1.0`; the workflow refuses to build when that does not match `Tellomi/version`. `CFBundleVersion` stays the auto-incremented build number.
 
