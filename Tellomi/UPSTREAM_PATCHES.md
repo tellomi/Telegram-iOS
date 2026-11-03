@@ -599,3 +599,15 @@ The list is built on a background queue and cached. The phone screen starts that
 | `submodules/CountrySelectionUI/Sources/TellomiCountryListPreparation.swift` | New. Background build and cache. Same pinyin index and the same sort as the controller had. |
 | `submodules/CountrySelectionUI/Sources/AuthorizationSequenceCountrySelectionControllerNode.swift` | Init uses the cache. A miss does not sort on the main thread. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Starts the build when the phone screen loads, and again after `help.getCountriesList`. `tellomiWarmCountryList` is public so that module can call it. |
+
+## Bottom navigation (M2)
+
+Fresh install shows Discover, Chats, and Settings (D-5). Calls and Contacts start hidden. Chats and Settings cannot be hidden (D-7). The app opens on Chats (D-8). There is no migration. `ios_killswitch_disable_tellomi_tabs` = `1` puts the upstream tab order back. The Calls nil-default below is not behind that switch: a missing `CallListSettings` hides Calls either way.
+
+The Calls tab already hides from a long-press on its icon (`CallListController.tabBarItemContextAction`, `Calls_HideCallsTab`). The calls list opened from Settings still has the Show Calls Tab switch (`showSettings` on `.navigation`). Both write `CallListSettings`. New Message uses `ContactSelectionController`, not the Contacts tab, so hiding Contacts leaves that list in place.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUIPreferences/Sources/CallListSettings.swift` | `showTab` is false when `_showTab` is nil (one line). An explicit true or false is unchanged. |
+| `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | `ApplicationSpecificSharedDataKeyValues.tellomiTabSettings = 100`, stored with `applicationSpecificSharedDataKey` (the stored id is 1100). Upstream's highest shared-data id here is 22. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabSettings.swift` | New. `showFeedTab` defaults true, `showContactsTab` defaults false. Tab order, the `tell.cc/m#` post id, and the kill switch. |

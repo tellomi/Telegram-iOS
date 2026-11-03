@@ -14,7 +14,8 @@ public struct CallListSettings: Codable, Equatable {
             if let value = self._showTab {
                 return value
             } else {
-                return true
+                // Tellomi M2 / D-5: a missing value hides Calls. See Tellomi/UPSTREAM_PATCHES.md.
+                return false
             }
         } set {
             self._showTab = newValue
