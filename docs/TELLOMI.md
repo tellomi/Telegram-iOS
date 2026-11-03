@@ -46,6 +46,8 @@ With `disable_telegram_backup_discovery` true, `initializedNetwork` does not ins
 
 `decrypt_TL_data` in `MTEncryption.m` still contains Telegram's key for decoding those DNS records. Nothing calls it while discovery is off.
 
+The seed is the first connection only. A logged-in client replaces it with the non-empty `dc_options` from `help.getConfig` and stores that list in the keychain. The next launch uses the stored list. Nothing writes the seed back over it. See [`docs/dc-addresses.md`](dc-addresses.md) (M7 / D-33). Production `teamgramd/bin/config.json` currently ships `"dc_options": []`, so installed clients stay on the seed until that list is filled and `bff` is restarted.
+
 ## App name, bundle id, API credentials
 
 `build-system/appstore-configuration.json` is what `Make.py` reads. The same values are in `build-system/appcenter-configuration.json`, `build-system/template_minimal_development_configuration.json` and `build-system/example-configuration/variables.bzl`. `BuildConfiguration.py` writes `telegram_app_name` into the generated Bazel `variables.bzl`.
