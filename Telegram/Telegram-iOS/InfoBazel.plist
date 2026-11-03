@@ -120,6 +120,11 @@
 	<string>当你分享位置、发送实时位置，或查看附近的人时，Tellomi 需要使用你的位置。开启实时位置后，应用在后台也会继续使用位置信息。</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>当你在聊天中与朋友分享实时位置时，Tellomi 需要在后台使用位置，以便在分享期间持续更新。从 Apple Watch 发送位置也需要这项权限。</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>PreciseLocation</key>
+		<string>Tellomi 需要你的精确位置，以便发送当前位置，而不是大约的区域。</string>
+	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>当你向朋友发送位置时，Tellomi 需要使用你的位置来显示地图。</string>
 	<key>NSMicrophoneUsageDescription</key>
