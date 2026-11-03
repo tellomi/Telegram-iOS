@@ -59,7 +59,12 @@ private func loadCountryCodes() -> [Country] {
             let code = Country.CountryCode(code: countryCode, prefixes: [], patterns: !pattern.isEmpty ? [pattern] : [])
             let country = Country(id: countryId, name: countryName, localizedName: nil, countryCodes: [code], hidden: false)
             result.append(country)
-            countriesByPrefix["\(code.code)"] = (country, code)
+            // Several countries share a calling code. The last one used to win, so a
+            // pasted +1 number resolved to Canada. The bare code 1 stays the United States.
+            let key = "\(code.code)"
+            if country.id == "US" || countriesByPrefix[key] == nil {
+                countriesByPrefix[key] = (country, code)
+            }
         }
         
         if let maybeNameRange = maybeNameRange {
@@ -93,7 +98,7 @@ private func replaceCountryCodesIfPresent(_ countries: [Country]) {
                 for prefix in code.prefixes {
                     countriesByPrefix["\(code.code)\(prefix)"] = (country, code)
                 }
-            } else {
+            } else if country.id == "US" || countriesByPrefix[code.code] == nil {
                 countriesByPrefix[code.code] = (country, code)
             }
         }

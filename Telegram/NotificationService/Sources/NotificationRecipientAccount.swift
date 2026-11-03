@@ -24,7 +24,7 @@ func notificationsNameRecipientAccount(records: [AccountRecord<TelegramAccountMa
 /// Private chats and secret chats match official Telegram: the title is the other
 /// person, not "name → this account". Groups and channels still name the account
 /// when more than one is signed in.
-func notificationRecipientAccountNameForTitle(peerId: PeerId, recipientAccountName: String?) -> String? {
+func notificationRecipientAccountNameForTitle(peerId: EnginePeer.Id, recipientAccountName: String?) -> String? {
     if peerId.isGroupOrChannel {
         return recipientAccountName
     }

@@ -500,4 +500,6 @@ Chinese country names are grouped by pinyin initial (A–Z), the same shape as t
 
 The notification extension's `standaloneStateManager` read the shared account manager and then passed `nil` for the language pack, so `initializedNetwork` sent `lang_code` `"en"` and the server stored that over the account's language (teamgram-server#122 is the server half). It now passes `SharedDataKeys.localizationSettings`, the same record the app writes from Settings and from the login language button. `Network.swift` is unchanged: a missing pack still falls back to `"en"`.
 
-A private or secret chat notification no longer appends `→ <this account>`. Official Telegram does not. Groups and channels still do when more than one account is signed in. A one-to-one call does not; a group call still does.
+A private or secret chat notification no longer appends `→ <this account>`. Official Telegram does not. Groups and channels still do when more than one account is signed in. A one-to-one call does not; a group call still does. The peer id on that helper is `EnginePeer.Id` (a `PeerId` typealias). The file does not import Postbox.
+
+The bundled list has both `1;US` and `1;CA`. The prefix map kept the last writer, so a pasted +1 number resolved to Canada. A calling code with no longer prefix keeps the United States when that row is present. Other shared codes (7, 599) stay last-writer.
