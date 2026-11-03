@@ -92,13 +92,6 @@ public class UnauthorizedAccount {
     }
     
     public let shouldBeServiceTaskMaster = Promise<AccountServiceTaskMasterMode>()
-
-    /// Set on the auth account before its record becomes the current account.
-    /// The login window reads this when the auth session disappears. The state
-    /// observer can still be queued behind that update, and on a cold start the
-    /// login screen is the only UI: dismissing it first leaves a blank window.
-    /// Adding an account already has a signed-in root, so the same race is hidden.
-    public var didCompleteAuthorization = false
     
     init(accountManager: AccountManager<TelegramAccountManagerTypes>, networkArguments: NetworkInitializationArguments, id: AccountRecordId, rootPath: String, basePath: String, testingEnvironment: Bool, postbox: Postbox, network: Network, shouldKeepAutoConnection: Bool = true) {
         self.networkArguments = networkArguments
@@ -954,6 +947,13 @@ func securePasswordKDF(password: String, derivation: TwoStepSecurePasswordDeriva
 }
 
 func verifyPassword(_ account: UnauthorizedAccount, password: String) -> Signal<Api.auth.Authorization, MTRpcError> {
+    return verifyPassword(account, password: password, allowSrpRefresh: true)
+}
+
+/// `allowSrpRefresh` retries once after `SRP_ID_INVALID`. `account.getPassword`'s
+/// `srp_id` is single-use; a stale one is not a wrong password. The same refresh
+/// is what Android does. It does not substitute for a missing `current_algo`.
+private func verifyPassword(_ account: UnauthorizedAccount, password: String, allowSrpRefresh: Bool) -> Signal<Api.auth.Authorization, MTRpcError> {
     return _internal_twoStepAuthData(account.network)
     |> mapToSignal { authData -> Signal<Api.auth.Authorization, MTRpcError> in
         guard let currentPasswordDerivation = authData.currentPasswordDerivation, let srpSessionData = authData.srpSessionData else {
@@ -964,6 +964,12 @@ func verifyPassword(_ account: UnauthorizedAccount, password: String) -> Signal<
         
         if let kdfResult = kdfResult {
             return account.network.request(Api.functions.auth.checkPassword(password: .inputCheckPasswordSRP(.init(srpId: kdfResult.id, A: Buffer(data: kdfResult.A), M1: Buffer(data: kdfResult.M1)))), automaticFloodWait: false)
+            |> `catch` { error -> Signal<Api.auth.Authorization, MTRpcError> in
+                if allowSrpRefresh && error.errorDescription == "SRP_ID_INVALID" {
+                    return verifyPassword(account, password: password, allowSrpRefresh: false)
+                }
+                return .fail(error)
+            }
         } else {
             return .fail(MTRpcError(errorCode: 400, errorDescription: "KDF_ERROR"))
         }

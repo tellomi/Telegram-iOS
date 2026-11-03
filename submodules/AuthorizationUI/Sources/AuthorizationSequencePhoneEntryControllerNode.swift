@@ -746,6 +746,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         return self.account != nil
     }
 
+    /// Login home only. Short phones and iPad landscape scroll instead of drawing
+    /// the agreement through the button when the keyboard is up.
+    private var tellomiFormScroll: ASScrollNode?
+
     func setTellomiBindPhone(_ bind: Bool) {
         self.tellomiBindPhone = bind
     }
@@ -884,6 +888,34 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.addSubnode(self.animationNode)
         self.addSubnode(self.managedAnimationNode)
         self.contactSyncNode.isHidden = true
+        if account != nil {
+            self.titleNode.maximumNumberOfLines = 3
+            let scroll = ASScrollNode()
+            scroll.scrollableDirections = [.up, .down]
+            scroll.view.alwaysBounceVertical = false
+            scroll.view.showsVerticalScrollIndicator = true
+            scroll.view.contentInsetAdjustmentBehavior = .never
+            scroll.view.keyboardDismissMode = .interactive
+            scroll.backgroundColor = .clear
+            self.tellomiFormScroll = scroll
+            self.addSubnode(scroll)
+            let form: [ASDisplayNode] = [
+                self.titleNode,
+                self.noticeNode,
+                self.titleActivateAreaNode,
+                self.noticeActivateAreaNode,
+                self.phoneAndCountryNode,
+                self.emailFieldNode,
+                self.agreementRow,
+                self.orDividerNode,
+                self.emailRowNode,
+                self.proceedNode
+            ].compactMap { $0 }
+            for node in form {
+                node.removeFromSupernode()
+                scroll.addSubnode(node)
+            }
+        }
         
         self.noticeNode.highlightAttributeAction = { attributes in
             if let _ = attributes[NSAttributedString.Key(rawValue: "URL")] {
@@ -1286,7 +1318,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
             title = emailCopy.title
             titleAlignment = .left
         }
-        let titleFont = surface == .phoneCode ? Font.bold(20.0) : Font.semibold(22.0)
+        let titleFont = surface == .phoneCode ? TellomiLoginChrome.scaledFont(size: 20.0, weight: .bold) : TellomiLoginChrome.scaledFont(size: 22.0, weight: .semibold)
         self.titleNode.attributedText = NSAttributedString(string: title, font: titleFont, textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: titleAlignment)
         self.proceedNode.title = loginCopy.verifyAndLogin
         self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: self.theme.overallDarkAppearance))
@@ -1301,7 +1333,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.orDividerNode?.setNeedsLayout()
         self.phoneAndCountryNode.tellomiRefreshCountryAccessibility()
         if surface.isEmail {
-            self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
+            self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: TellomiLoginChrome.scaledFont(size: 13.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
             self.emailFieldNode?.setPlaceholder(emailCopy.placeholder, theme: self.theme)
             self.noticeNode.isHidden = false
         } else {
@@ -1337,8 +1369,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let proceedHeight = self.proceedNode.updateLayout(width: contentWidth, transition: transition)
         let agreementCentered = !surface.agreementPinnedToBottom
         let agreementSize = self.agreementRow?.updateLayout(width: contentWidth, centered: agreementCentered) ?? self.agreementNode.updateLayout(CGSize(width: contentWidth, height: 80.0))
-        let titleSize = self.titleNode.measure(CGSize(width: contentWidth, height: 80.0))
-        let noticeSize = self.noticeNode.isHidden ? CGSize() : self.noticeNode.updateLayout(CGSize(width: contentWidth, height: 60.0))
+        let titleSize = self.titleNode.updateLayout(CGSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude))
+        let noticeSize = self.noticeNode.isHidden ? CGSize() : self.noticeNode.updateLayout(CGSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude))
 
         var y = max(navigationBarHeight, insets.top) + (surface == .phoneCode ? 28.0 : 16.0)
         transition.updateFrame(node: self.titleNode, frame: CGRect(x: contentX, y: y, width: contentWidth, height: titleSize.height))
@@ -1364,6 +1396,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let keyboardHeight = layout.inputHeight ?? 0.0
         let bottomInset = keyboardHeight > 0.0 ? keyboardHeight : max(layout.safeInsets.bottom, layout.intrinsicInsets.bottom)
         let aboveBottom = layout.size.height - bottomInset - agreementSize.height - 8.0
+        // Prefer the bottom of the screen (or just above the keyboard). If that
+        // would cover the email row or the button, keep the sentence in the
+        // column and let the form scroll.
+        let agreementY = max(y + 8.0, aboveBottom)
         if showHomeRows {
             if let orDividerNode = self.orDividerNode {
                 transition.updateFrame(node: orDividerNode, frame: CGRect(x: contentX, y: y, width: contentWidth, height: 24.0))
@@ -1373,26 +1409,30 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
                 transition.updateFrame(node: emailRowNode, frame: CGRect(x: contentX, y: y, width: contentWidth, height: 48.0))
                 y += 48.0
             }
-            // Keyboard up: pin the agreement just above it so the checkbox stays tappable.
-            // Keyboard down: pin it to the safe-area bottom, under the email row.
-            let agreementY = keyboardHeight > 0.0 ? aboveBottom : max(y + 12.0, aboveBottom)
-            if let agreementRow = self.agreementRow {
-                transition.updateFrame(node: agreementRow, frame: CGRect(x: contentX, y: agreementY, width: contentWidth, height: agreementSize.height))
-            }
-        } else if let agreementRow = self.agreementRow {
-            var agreementY = y
-            if keyboardHeight > 0.0, agreementY + agreementSize.height > layout.size.height - keyboardHeight - 8.0 {
-                agreementY = aboveBottom
-            }
-            transition.updateFrame(node: agreementRow, frame: CGRect(x: contentX, y: agreementY, width: contentWidth, height: agreementSize.height))
         }
+        if let agreementRow = self.agreementRow {
+            let resolvedY = showHomeRows ? max(y + 8.0, aboveBottom) : agreementY
+            transition.updateFrame(node: agreementRow, frame: CGRect(x: contentX, y: resolvedY, width: contentWidth, height: agreementSize.height))
+            y = resolvedY + agreementSize.height
+        }
+        self.tellomiUpdateFormScroll(layout: layout, bottomInset: bottomInset, contentBottom: y + 16.0)
 
         if let agreementRow = self.agreementRow {
-            self.view.bringSubviewToFront(agreementRow.view)
+            agreementRow.view.superview?.bringSubviewToFront(agreementRow.view)
         }
         self.titleActivateAreaNode.frame = self.titleNode.frame
         self.noticeActivateAreaNode.accessibilityLabel = self.noticeNode.attributedText?.string ?? ""
         self.noticeActivateAreaNode.frame = self.noticeNode.frame
+    }
+
+    /// The form lives in a scroll view whose coordinates match the screen, so the
+    /// frames above stay valid. `contentInset.bottom` is the keyboard or the home
+    /// indicator, which is what lets a wrapped agreement scroll clear of both.
+    private func tellomiUpdateFormScroll(layout: ContainerViewLayout, bottomInset: CGFloat, contentBottom: CGFloat) {
+        guard let scroll = self.tellomiFormScroll else {
+            return
+        }
+        TellomiLoginChrome.applyFormScroll(scroll, layoutSize: layout.size, bottomInset: bottomInset, contentBottom: contentBottom)
     }
 
     func activateInput() {

@@ -206,7 +206,7 @@ final class TellomiSignUpAgreement: NSObject {
     }
 
     func text(theme _: PresentationTheme) -> NSAttributedString {
-        let font = Font.regular(13.0)
+        let font = TellomiLoginChrome.scaledFont(size: 13.0)
         let body = TellomiLoginChrome.secondaryText
         let accent = TellomiLoginChrome.palette(dark: self.appliedTheme?.overallDarkAppearance ?? false).link
         let result = NSMutableAttributedString()

@@ -21,7 +21,9 @@ func tellomiCheckboxImage(checked: Bool, dark: Bool = false) -> UIImage? {
         if checked {
             context.setFillColor(palette.checkbox.cgColor)
             context.fillEllipse(in: rect)
-            context.setStrokeColor(UIColor.white.cgColor)
+            // Dark mode draws a white disc. A white tick on it disappears.
+            let tick = dark ? UIColor(rgb: 0x111111) : UIColor.white
+            context.setStrokeColor(tick.cgColor)
             context.setLineWidth(1.6)
             context.setLineCap(.round)
             context.setLineJoin(.round)

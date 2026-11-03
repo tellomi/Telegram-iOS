@@ -29,7 +29,7 @@ SUBJECT_OF_FRAME = 0.78
 # the squircle, on a color that runs to the edge of the square.
 CLASSIC_OF_FRAME = 0.76
 FILLED_OF_FRAME = 0.795
-CLASSIC_GRAY = "#3A3A3C"
+CLASSIC_BLUE = "#2F80ED"
 
 SIZES = [
     ("iphone", "20x20", "2x", 40),
@@ -259,11 +259,19 @@ def slot_svg(name, mark_scale):
     if name == "BlackIcon":
         return icon_svg(DARK, daily, plate=solid_plate(DARK_BG))
     if name == "New2":
-        return icon_svg(DARK, daily, plate=solid_plate("#636366"))
+        defs, plate = gradient_plate(
+            "water",
+            (("0%", "#0F766E"), ("46%", "#14B8A6"), ("100%", "#67E8F9")),
+        )
+        return icon_svg(DARK, daily, plate=plate, defs=defs)
     if name == "New1":
-        return icon_svg(LIGHT, daily, plate=solid_plate("#E5E5EA"))
+        defs, plate = gradient_plate(
+            "sunset",
+            (("0%", "#F9A8D4"), ("40%", "#E879F9"), ("100%", "#6D28D9")),
+        )
+        return icon_svg(DARK, daily, plate=plate, defs=defs)
     if name == "BlueClassicIcon":
-        return icon_svg(DARK, classic, plate=round_base("#F4F4F5", CLASSIC_GRAY))
+        return icon_svg(DARK, classic, plate=round_base("#F4F4F5", CLASSIC_BLUE))
     if name == "BlackClassicIcon":
         return icon_svg(
             DARK,
@@ -272,17 +280,26 @@ def slot_svg(name, mark_scale):
             + '<circle cx="512" cy="512" r="468" fill="none" stroke="#FFFFFF" stroke-width="22"/>',
         )
     if name == "BlueFilledIcon":
-        return icon_svg(DARK, filled, plate=solid_plate("#111113"))
+        return icon_svg(DARK, filled, plate=solid_plate(CLASSIC_BLUE))
     if name == "BlackFilledIcon":
         return icon_svg(DARK, filled, plate=solid_plate(DARK_BG))
     if name == "WhiteFilledIcon":
         return icon_svg(LIGHT, filled, plate=solid_plate(LIGHT_BG))
     if name == "Premium":
-        return icon_svg(DARK, daily, plate=solid_plate("#1C1C1E"))
+        defs, plate = starry_background()
+        return icon_svg(DARK, daily, plate=plate, defs=defs)
     if name == "PremiumTurbo":
-        return icon_svg(LIGHT, daily, plate=solid_plate("#8E8E93"))
+        defs, plate = gradient_plate(
+            "metal",
+            (("0%", "#FDE68A"), ("48%", "#F59E0B"), ("100%", "#B45309")),
+            x2="0",
+            y2="1",
+        )
+        plate += '<polygon points="{}" fill="#7C2D12"/>'.format(star_points(214, 196, 78, 32))
+        return icon_svg(LIGHT, daily, plate=plate, defs=defs)
     if name == "PremiumBlack":
-        return icon_svg(DARK, daily, plate=solid_plate(DARK_BG))
+        plate = solid_plate(DARK_BG) + '<polygon points="{}" fill="#F5C451"/>'.format(star_points(214, 196, 78, 32))
+        return icon_svg(DARK, daily, plate=plate)
     raise SystemExit("no artwork for alternate icon " + name)
 
 

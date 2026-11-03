@@ -26,6 +26,38 @@ enum TellomiLoginChrome {
     static let helpURL = "https://tellomi.cn/help/"
     static let fieldCornerRadius: CGFloat = 12.0
 
+    /// Body text that grows with the system text size, capped so a login column
+    /// still fits a 4-inch phone. `Font.regular` is a fixed point size.
+    static func scaledFont(size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+        let font = UIFont.systemFont(ofSize: size, weight: weight)
+        return UIFontMetrics(forTextStyle: .body).scaledFont(for: font, maximumPointSize: size * 1.35)
+    }
+
+    /// Login column. Frames stay in screen coordinates: the scroll view fills the
+    /// controller, and `contentInset.bottom` is the keyboard or the home indicator.
+    static func makeFormScroll() -> ASScrollNode {
+        let scroll = ASScrollNode()
+        scroll.scrollableDirections = [.up, .down]
+        scroll.view.alwaysBounceVertical = false
+        scroll.view.showsVerticalScrollIndicator = true
+        scroll.view.contentInsetAdjustmentBehavior = .never
+        scroll.view.keyboardDismissMode = .interactive
+        scroll.backgroundColor = .clear
+        return scroll
+    }
+
+    static func applyFormScroll(_ scroll: ASScrollNode, layoutSize: CGSize, bottomInset: CGFloat, contentBottom: CGFloat) {
+        scroll.frame = CGRect(origin: CGPoint(), size: layoutSize)
+        let inset = UIEdgeInsets(top: 0.0, left: 0.0, bottom: bottomInset, right: 0.0)
+        scroll.view.contentInset = inset
+        scroll.view.verticalScrollIndicatorInsets = inset
+        let visibleHeight = max(0.0, layoutSize.height - bottomInset)
+        scroll.view.contentSize = CGSize(width: layoutSize.width, height: max(contentBottom, visibleHeight))
+        if contentBottom <= visibleHeight + 1.0 {
+            scroll.view.contentOffset = CGPoint()
+        }
+    }
+
     struct Palette {
         let buttonBackground: UIColor
         let buttonForeground: UIColor

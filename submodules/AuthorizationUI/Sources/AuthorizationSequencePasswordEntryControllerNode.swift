@@ -28,6 +28,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
     private let tellomiFieldBackground = ASDisplayNode()
     
     private var layoutArguments: (ContainerViewLayout, CGFloat)?
+    private var tellomiFormScroll: ASScrollNode?
     
     var currentPassword: String {
         return self.codeField.textField.text ?? ""
@@ -70,6 +71,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.titleNode = ASTextNode()
         self.titleNode.isUserInteractionEnabled = false
         self.titleNode.displaysAsynchronously = false
+        self.titleNode.maximumNumberOfLines = 0
         self.titleNode.attributedText = NSAttributedString(string: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings)).cloudPasswordTitle, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor)
         
         self.titleActivateAreaNode = AccessibilityAreaNode()
@@ -78,6 +80,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.noticeNode = ASTextNode()
         self.noticeNode.isUserInteractionEnabled = false
         self.noticeNode.displaysAsynchronously = false
+        self.noticeNode.maximumNumberOfLines = 0
         self.noticeNode.lineSpacing = 0.1
         self.noticeNode.attributedText = NSAttributedString(string: strings.TwoStepAuth_EnterPasswordHelp, font: Font.regular(17.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         
@@ -136,6 +139,26 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.addSubnode(self.noticeActivateAreaNode)
         self.addSubnode(self.animationNode)
         self.addSubnode(self.proceedNode)
+
+        let scroll = TellomiLoginChrome.makeFormScroll()
+        self.tellomiFormScroll = scroll
+        self.addSubnode(scroll)
+        for node in [
+            self.tellomiFieldBackground,
+            self.codeSeparatorNode,
+            self.codeField,
+            self.titleNode,
+            self.titleActivateAreaNode,
+            self.forgotNode,
+            self.resetNode,
+            self.noticeNode,
+            self.noticeActivateAreaNode,
+            self.animationNode,
+            self.proceedNode
+        ] {
+            node.removeFromSupernode()
+            scroll.addSubnode(node)
+        }
         
         self.forgotNode.addTarget(self, action: #selector(self.forgotPressed), forControlEvents: .touchUpInside)
         self.resetNode.addTarget(self, action: #selector(self.resetPressed), forControlEvents: .touchUpInside)
@@ -198,11 +221,10 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         }
         
         let titleInset: CGFloat = layout.size.width > 320.0 ? 18.0 : 0.0
-        let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 110.0 : 20.0
         
         let passwordCopy = tellomiCloudPasswordCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
-        self.titleNode.attributedText = NSAttributedString(string: passwordCopy.title, font: Font.semibold(22.0), textColor: self.theme.list.itemPrimaryTextColor)
-        self.noticeNode.attributedText = NSAttributedString(string: passwordCopy.notice, font: Font.regular(16.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .center)
+        self.titleNode.attributedText = NSAttributedString(string: passwordCopy.title, font: TellomiLoginChrome.scaledFont(size: 22.0, weight: .semibold), textColor: self.theme.list.itemPrimaryTextColor)
+        self.noticeNode.attributedText = NSAttributedString(string: passwordCopy.notice, font: TellomiLoginChrome.scaledFont(size: 16.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .center)
         self.forgotNode.setAttributedTitle(NSAttributedString(string: passwordCopy.forgot, font: Font.regular(16.0), textColor: TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).link, paragraphAlignment: .center), for: [])
         self.forgotNode.accessibilityLabel = passwordCopy.forgot
         
@@ -232,19 +254,30 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         
         self.animationNode.isHidden = true
         self.animationNode.visibility = false
-        if layout.size.width > 320.0 {
-            self.proceedNode.isHidden = false
-        } else {
-            insets.top = navigationBarHeight
-            self.proceedNode.isHidden = true
-            self.animationNode.isHidden = true
-        }
-        
-        transition.updateFrame(node: self.proceedNode, frame: CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize))
-        
+        self.proceedNode.isHidden = false
         self.animationNode.updateLayout(size: animationSize)
-        
-        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
+
+        // Keep the title under the navigation bar. The button stays at the bottom
+        // when the column fits above the keyboard; otherwise it follows the fields
+        // and the scroll view brings it back into view.
+        let pinnedTop = max(insets.top, navigationBarHeight)
+        let floatingButtonY = layout.size.height - insets.bottom - proceedSize.height - inset
+        let available = floatingButtonY - 16.0 - pinnedTop
+        let slack = items.reduce(CGFloat(0.0)) { partial, item in
+            partial + item.size.height + item.spacingBefore.maxValue + item.spacingAfter.maxValue
+        }
+        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: pinnedTop), size: CGSize(width: bandWidth, height: max(available, slack))), items: items, transition: transition, failIfDoesNotFit: false)
+        var buttonY = floatingButtonY
+        if slack > available + 1.0 {
+            var lowest = pinnedTop
+            for item in items {
+                if let node = item.node, !node.isHidden {
+                    lowest = max(lowest, node.frame.maxY)
+                }
+            }
+            buttonY = lowest + 16.0
+        }
+        transition.updateFrame(node: self.proceedNode, frame: CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: buttonY), size: proceedSize))
         
         self.titleActivateAreaNode.accessibilityLabel = self.titleNode.attributedText?.string ?? ""
         self.noticeActivateAreaNode.accessibilityLabel = self.noticeNode.attributedText?.string ?? ""
@@ -255,6 +288,21 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.tellomiFieldBackground.frame = fieldFrame
         self.codeField.frame = fieldFrame.insetBy(dx: 16.0, dy: 0.0)
         self.proceedNode.title = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).login
+        self.tellomiUpdateFormScroll(layout: layout, bottomInset: insets.bottom)
+    }
+
+    private func tellomiUpdateFormScroll(layout: ContainerViewLayout, bottomInset: CGFloat) {
+        guard let scroll = self.tellomiFormScroll else {
+            return
+        }
+        var contentBottom: CGFloat = 0.0
+        for node in scroll.subnodes ?? [] {
+            if node.isHidden {
+                continue
+            }
+            contentBottom = max(contentBottom, node.frame.maxY)
+        }
+        TellomiLoginChrome.applyFormScroll(scroll, layoutSize: layout.size, bottomInset: bottomInset, contentBottom: contentBottom + 16.0)
     }
     
     func activateInput() {

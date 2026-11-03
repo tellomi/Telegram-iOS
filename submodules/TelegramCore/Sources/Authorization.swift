@@ -25,8 +25,6 @@ func tellomiStoreAuthorizedUser(transaction: Transaction, user: TelegramUser) {
 }
 
 func switchToAuthorizedAccount(transaction: AccountManagerModifier<TelegramAccountManagerTypes>, account: UnauthorizedAccount, isSupportUser: Bool) {
-    // Before removeAuth publishes. See UnauthorizedAccount.didCompleteAuthorization.
-    account.didCompleteAuthorization = true
     let nextSortOrder = (transaction.getRecords().map({ record -> Int32 in
         for attribute in record.attributes {
             if case let .sortOrder(sortOrder) = attribute {
