@@ -198,6 +198,19 @@ private func removePlus(_ text: String?) -> String {
     return result
 }
 
+/// Login-selected language for the country list. Other callers keep the pack's strings.
+public struct AuthorizationCountryListLocalization {
+    public let locale: Locale
+    public let title: String
+    public let searchPlaceholder: String
+
+    public init(locale: Locale, title: String, searchPlaceholder: String) {
+        self.locale = locale
+        self.title = title
+        self.searchPlaceholder = searchPlaceholder
+    }
+}
+
 public final class AuthorizationSequenceCountrySelectionController: ViewController {
     static func countries() -> [Country] {
         return countryCodes
@@ -305,6 +318,8 @@ public final class AuthorizationSequenceCountrySelectionController: ViewControll
     private let strings: PresentationStrings
     private let displayCodes: Bool
     private let glass: Bool
+    private let localization: AuthorizationCountryListLocalization?
+    private let focusSearchOnAppear: Bool
     
     
     private var closeButtonNode: BarComponentHostNode?
@@ -318,11 +333,13 @@ public final class AuthorizationSequenceCountrySelectionController: ViewControll
     public var completeWithCountryCode: ((Int, String) -> Void)?
     public var dismissed: (() -> Void)?
     
-    public init(strings: PresentationStrings, theme: PresentationTheme, displayCodes: Bool = true, glass: Bool = false) {
+    public init(strings: PresentationStrings, theme: PresentationTheme, displayCodes: Bool = true, glass: Bool = false, localization: AuthorizationCountryListLocalization? = nil, focusSearchOnAppear: Bool = true) {
         self.theme = theme
         self.strings = strings
         self.displayCodes = displayCodes
         self.glass = glass
+        self.localization = localization
+        self.focusSearchOnAppear = focusSearchOnAppear
         
         super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: NavigationBarTheme(rootControllerTheme: theme), strings: NavigationBarStrings(presentationStrings: strings)))
         
@@ -332,7 +349,9 @@ public final class AuthorizationSequenceCountrySelectionController: ViewControll
         
         self.statusBar.statusBarStyle = theme.rootController.statusBarStyle.style
         
-        if glass {
+        if let localization = localization {
+            self.title = localization.title
+        } else if glass {
             self.title = strings.Login_SelectCountry
         } else {
             let navigationContentNode = AuthorizationSequenceCountrySelectionNavigationContentNode(theme: theme, strings: strings, cancel: { [weak self] in
@@ -355,7 +374,7 @@ public final class AuthorizationSequenceCountrySelectionController: ViewControll
     }
     
     override public func loadDisplayNode() {
-        self.displayNode = AuthorizationSequenceCountrySelectionControllerNode(theme: self.theme, strings: self.strings, displayCodes: self.displayCodes, glass: self.glass, itemSelected: { [weak self] args in
+        self.displayNode = AuthorizationSequenceCountrySelectionControllerNode(theme: self.theme, strings: self.strings, displayCodes: self.displayCodes, glass: self.glass, regionLocale: self.localization?.locale, searchPlaceholder: self.localization?.searchPlaceholder, focusSearchOnAppear: self.focusSearchOnAppear, monochromeSectionIndex: self.localization != nil, itemSelected: { [weak self] args in
             let (_, countryId, code) = args
             self?.completeWithCountryCode?(code, countryId)
             self?.dismiss()

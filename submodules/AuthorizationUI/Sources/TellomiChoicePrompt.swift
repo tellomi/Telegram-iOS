@@ -43,6 +43,22 @@ final class TellomiChoicePromptController: ViewController {
         })
         self.displayNodeDidLoad()
     }
+
+    override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
+        super.containerLayoutUpdated(layout, transition: transition)
+        let top = max(layout.statusBarHeight ?? 0.0, layout.safeInsets.top, self.view.safeAreaInsets.top)
+        let bottom = max(layout.intrinsicInsets.bottom, layout.safeInsets.bottom, self.view.safeAreaInsets.bottom)
+        (self.displayNode as? TellomiChoicePromptNode)?.updateChromeInsets(top: top, bottom: bottom)
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        guard self.isNodeLoaded else {
+            return
+        }
+        let insets = self.view.safeAreaInsets
+        (self.displayNode as? TellomiChoicePromptNode)?.updateChromeInsets(top: insets.top, bottom: insets.bottom)
+    }
 }
 
 private final class TellomiChoicePromptNode: ASDisplayNode {
@@ -53,6 +69,8 @@ private final class TellomiChoicePromptNode: ASDisplayNode {
     private let rowNodes: [TellomiChoiceRowNode]
     private let cancelNode = HighlightableButtonNode()
     private let dismissPrompt: () -> Void
+    private var chromeTop: CGFloat = 0.0
+    private var chromeBottom: CGFloat = 0.0
 
     init(title: String, rows: [TellomiChoiceRow], cancelTitle: String, dark: Bool, dismiss: @escaping () -> Void) {
         self.dismissPrompt = dismiss
@@ -86,6 +104,17 @@ private final class TellomiChoicePromptNode: ASDisplayNode {
         self.cardNode.addSubnode(self.cancelNode)
     }
 
+    func updateChromeInsets(top: CGFloat, bottom: CGFloat) {
+        let resolvedTop = max(self.chromeTop, top)
+        let resolvedBottom = max(self.chromeBottom, bottom)
+        guard resolvedTop != self.chromeTop || resolvedBottom != self.chromeBottom else {
+            return
+        }
+        self.chromeTop = resolvedTop
+        self.chromeBottom = resolvedBottom
+        self.setNeedsLayout()
+    }
+
     @objc private func cancelPressed() {
         self.dismissPrompt()
     }
@@ -104,9 +133,15 @@ private final class TellomiChoicePromptNode: ASDisplayNode {
         let rowHeight: CGFloat = 48.0
         let rowsHeight = rowHeight * CGFloat(self.rowNodes.count)
         let chrome = 18.0 + titleSize.height + 8.0 + 4.0 + rowHeight + 8.0
-        let maxCard = max(160.0, self.bounds.height - 48.0)
+        // The old card used a 24pt margin. Notch and Dynamic Island need more, so the
+        // title stays under the status bar. SE and iPad already clear 24pt and stay put.
+        let minY = max(24.0, self.chromeTop + 8.0)
+        let maxBottom = self.bounds.height - max(24.0, self.chromeBottom + 8.0)
+        let maxCard = max(160.0, maxBottom - minY)
         let cardHeight = min(maxCard, chrome + rowsHeight)
-        let cardFrame = CGRect(x: floor((self.bounds.width - cardWidth) / 2.0), y: floor((self.bounds.height - cardHeight) / 2.0), width: cardWidth, height: cardHeight)
+        var cardY = floor((self.bounds.height - cardHeight) / 2.0)
+        cardY = min(max(cardY, minY), max(minY, maxBottom - cardHeight))
+        let cardFrame = CGRect(x: floor((self.bounds.width - cardWidth) / 2.0), y: cardY, width: cardWidth, height: cardHeight)
         self.cardNode.frame = cardFrame
         var y: CGFloat = 18.0
         self.titleNode.frame = CGRect(x: 20.0, y: y, width: cardWidth - 40.0, height: titleSize.height)

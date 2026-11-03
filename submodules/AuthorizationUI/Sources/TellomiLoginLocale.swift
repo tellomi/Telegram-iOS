@@ -137,17 +137,62 @@ public func tellomiInterfaceLanguageCode(_ strings: PresentationStrings) -> Stri
     return tellomiChromeLanguageCode(savedLanguageCode: strings.primaryComponent.languageCode)
 }
 
-/// Region names for the login country button. `localeWithStrings` uses the pack's
-/// English base language, so 简体中文 still announced "China mainland".
-public func tellomiRegionLocale(languageCode: String) -> Locale {
-    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
-    case .hans:
+/// Region names for the login country list. `localeWithStrings` uses the pack's
+/// English base language, so a 简体中文 login still showed "China".
+public func tellomiCountryLocale(languageCode: String) -> Locale {
+    let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode).lowercased().replacingOccurrences(of: "_", with: "-")
+    if code == "zh" || code == "zh-hans" || code == "zh-cn" || code.hasPrefix("zh-hans") {
         return Locale(identifier: "zh-Hans")
-    case .hant:
+    }
+    if code == "zh-hant" || code.hasPrefix("zh-hant") || code == "zh-tw" || code.hasPrefix("zh-tw") || code == "zh-hk" || code.hasPrefix("zh-hk") || code == "zh-mo" || code.hasPrefix("zh-mo") {
         return Locale(identifier: "zh-Hant")
-    case .english:
+    }
+    if code == "en" || code.hasPrefix("en-") {
         return Locale(identifier: "en_US")
     }
+    return Locale(identifier: code)
+}
+
+public func tellomiRegionLocale(languageCode: String) -> Locale {
+    return tellomiCountryLocale(languageCode: languageCode)
+}
+
+/// Title and search field for the login country list. The loaded Telegram pack can
+/// still be English while the login button has selected another language.
+public func tellomiCountryListChrome(languageCode: String) -> (title: String, search: String) {
+    let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode).lowercased().replacingOccurrences(of: "_", with: "-")
+    if code == "zh-hant" || code.hasPrefix("zh-hant") || code == "zh-tw" || code.hasPrefix("zh-tw") || code == "zh-hk" || code.hasPrefix("zh-hk") || code == "zh-mo" || code.hasPrefix("zh-mo") {
+        return (title: "國家/地區", search: "搜尋")
+    }
+    if code == "zh" || code.hasPrefix("zh-") {
+        return (title: "国家/地区", search: "搜索")
+    }
+    let key = code.split(separator: "-").first.map(String.init) ?? code
+    let table: [String: (String, String)] = [
+        "en": ("Country", "Search"),
+        "ar": ("البلد", "بحث"),
+        "be": ("Краіна", "Пошук"),
+        "ca": ("País", "Cerca"),
+        "de": ("Land", "Suchen"),
+        "es": ("País", "Buscar"),
+        "fa": ("کشور", "جستجو"),
+        "fr": ("Pays", "Rechercher"),
+        "id": ("Negara", "Cari"),
+        "it": ("Paese", "Cerca"),
+        "ko": ("국가", "검색"),
+        "ms": ("Negara", "Cari"),
+        "nl": ("Land", "Zoeken"),
+        "pl": ("Kraj", "Szukaj"),
+        "pt": ("País", "Buscar"),
+        "ru": ("Страна", "Поиск"),
+        "tr": ("Ülke", "Ara"),
+        "uk": ("Країна", "Пошук"),
+        "uz": ("Mamlakat", "Qidirish")
+    ]
+    if let pair = table[key] {
+        return (title: pair.0, search: pair.1)
+    }
+    return (title: "Country", search: "Search")
 }
 
 private let tellomiBundledLanguageNames: [String: String] = [

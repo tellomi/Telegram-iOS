@@ -483,3 +483,11 @@ The home-screen icon and the alternate icons are unchanged. Settings row badges 
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpControllerNode.swift` | Same short-screen rule. Continue stays on a 320-pt width. |
 | `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Capped Dynamic Type font. Shared form scroll. |
 | `submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesSettings.swift` | Gray settings badges. |
+
+## Login language card, country list, agreement contrast
+
+The language card keeps its centered shape. On a notch or Dynamic Island the top stays below the status bar (`statusBarHeight` / safe area, at least the old 24pt margin). SE and iPad, where 24pt already clears the status bar, stay centered.
+
+The login country list takes `AuthorizationCountryListLocalization`: names from `Locale(identifier:).localizedString(forRegionCode:)`, sort and section index in that locale, title and search placeholder from the login language. The section index uses the primary text color. The search field is not focused until it is tapped. Other country lists keep the previous strings, accent index, and automatic focus.
+
+Agreement links are semibold and underlined. The confirm card uses the dark theme when the page is dark, so the links are white on the dark card and black on a light card. The email agreement sentence is left-aligned against the checkbox, and the email title and notice are centered like the phone page.

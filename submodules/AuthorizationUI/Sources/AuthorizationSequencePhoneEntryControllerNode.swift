@@ -1309,15 +1309,13 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let loginCopy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let surface = self.tellomiSurface
         let title: String
-        let titleAlignment: NSTextAlignment
         switch surface {
         case .phoneCode:
             title = loginCopy.phoneTitle
-            titleAlignment = .center
         case .emailCode:
             title = emailCopy.title
-            titleAlignment = .left
         }
+        let titleAlignment: NSTextAlignment = .center
         let titleFont = surface == .phoneCode ? TellomiLoginChrome.scaledFont(size: 20.0, weight: .bold) : TellomiLoginChrome.scaledFont(size: 22.0, weight: .semibold)
         self.titleNode.attributedText = NSAttributedString(string: title, font: titleFont, textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: titleAlignment)
         self.proceedNode.title = loginCopy.verifyAndLogin
@@ -1333,7 +1331,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.orDividerNode?.setNeedsLayout()
         self.phoneAndCountryNode.tellomiRefreshCountryAccessibility()
         if surface.isEmail {
-            self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: TellomiLoginChrome.scaledFont(size: 13.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .left)
+            self.noticeNode.attributedText = NSAttributedString(string: emailCopy.notice, font: TellomiLoginChrome.scaledFont(size: 13.0), textColor: TellomiLoginChrome.secondaryText, paragraphAlignment: .center)
             self.emailFieldNode?.setPlaceholder(emailCopy.placeholder, theme: self.theme)
             self.noticeNode.isHidden = false
         } else {
@@ -1367,7 +1365,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.emailRowNode?.isHidden = !showHomeRows
 
         let proceedHeight = self.proceedNode.updateLayout(width: contentWidth, transition: transition)
-        let agreementCentered = !surface.agreementPinnedToBottom
+        let agreementCentered = false
         let agreementSize = self.agreementRow?.updateLayout(width: contentWidth, centered: agreementCentered) ?? self.agreementNode.updateLayout(CGSize(width: contentWidth, height: 80.0))
         let titleSize = self.titleNode.updateLayout(CGSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude))
         let noticeSize = self.noticeNode.isHidden ? CGSize() : self.noticeNode.updateLayout(CGSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude))

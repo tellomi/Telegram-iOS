@@ -285,7 +285,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         
         self.controllerNode.selectCountryCode = { [weak self] in
             if let strongSelf = self {
-                let controller = AuthorizationSequenceCountrySelectionController(strings: strongSelf.presentationData.strings, theme: strongSelf.presentationData.theme, glass: true)
+                let languageCode = tellomiInterfaceLanguageCode(strongSelf.presentationData.strings)
+                let countryChrome = tellomiCountryListChrome(languageCode: languageCode)
+                let controller = AuthorizationSequenceCountrySelectionController(strings: strongSelf.presentationData.strings, theme: strongSelf.presentationData.theme, glass: true, localization: AuthorizationCountryListLocalization(locale: tellomiCountryLocale(languageCode: languageCode), title: countryChrome.title, searchPlaceholder: countryChrome.search), focusSearchOnAppear: false)
                 controller.completeWithCountryCode = { code, name in
                     if let strongSelf = self, let currentData = strongSelf.currentData {
                         strongSelf.updateData(countryCode: Int32(code), countryName: name, number: currentData.2)

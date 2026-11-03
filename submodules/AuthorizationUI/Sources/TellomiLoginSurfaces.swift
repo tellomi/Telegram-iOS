@@ -430,8 +430,9 @@ private final class TellomiAgreementPromptNode: ASDisplayNode {
         self.bodyNode.maximumNumberOfLines = 0
         self.bodyNode.displaysAsynchronously = false
         self.bodyNode.isUserInteractionEnabled = true
-        self.bodyNode.linkHighlightColor = TellomiLoginChrome.link.withAlphaComponent(0.15)
-        self.agreement.install(on: self.bodyNode, theme: defaultPresentationTheme, kind: kind, languageCode: languageCode, togglesOnText: false, centered: true, openUrl: openUrl, changed: { _ in })
+        self.bodyNode.linkHighlightColor = TellomiLoginChrome.palette(dark: dark).link.withAlphaComponent(0.2)
+        let agreementTheme = dark ? defaultDarkPresentationTheme : defaultPresentationTheme
+        self.agreement.install(on: self.bodyNode, theme: agreementTheme, kind: kind, languageCode: languageCode, togglesOnText: false, centered: true, openUrl: openUrl, changed: { _ in })
 
         self.declineNode.setTitle(copy.disagree, with: Font.regular(15.0), with: palette.secondaryText, for: .normal)
         self.declineNode.accessibilityTraits = [.button]

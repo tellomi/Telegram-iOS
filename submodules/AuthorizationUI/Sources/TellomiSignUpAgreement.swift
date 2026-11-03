@@ -214,7 +214,14 @@ final class TellomiSignUpAgreement: NSObject {
             result.append(NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: color, TellomiSignUpAgreement.toggleAttribute: true]))
         }
         func link(_ s: String, _ url: String) {
-            result.append(NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: accent, NSAttributedString.Key(rawValue: TelegramTextAttributes.URL): url]))
+            let linkFont = UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+            result.append(NSAttributedString(string: s, attributes: [
+                .font: linkFont,
+                .foregroundColor: accent,
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .underlineColor: accent,
+                NSAttributedString.Key(rawValue: TelegramTextAttributes.URL): url
+            ]))
         }
         let parts = tellomiAgreementParts(languageCode: self.languageCode, kind: self.kind)
         toggle(parts.lead, color: body)
@@ -225,7 +232,8 @@ final class TellomiSignUpAgreement: NSObject {
             toggle(parts.tail, color: body)
         }
         let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = (self.centeredBody || self.kind != .phone) ? .center : .left
+        // The prompt centers its sentence. Phone and email keep the words against the checkbox.
+        paragraph.alignment = (self.centeredBody || self.kind == .signUp) ? .center : .left
         paragraph.lineBreakMode = .byWordWrapping
         result.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: result.length))
         return result
