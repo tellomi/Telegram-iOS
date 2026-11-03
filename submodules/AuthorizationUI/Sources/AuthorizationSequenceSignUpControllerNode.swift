@@ -43,7 +43,6 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     private let proceedNode: SolidRoundedButtonNode
     
     private var layoutArguments: (ContainerViewLayout, CGFloat)?
-    private var tellomiFormScroll: ASScrollNode?
     
     private let appearanceTimestamp = CACurrentMediaTime()
     
@@ -207,26 +206,6 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.agreementRow.isHidden = true
         self.addSubnode(self.addPhotoButton)
         self.addSubnode(self.proceedNode)
-
-        let scroll = TellomiLoginChrome.makeFormScroll()
-        self.tellomiFormScroll = scroll
-        self.addSubnode(scroll)
-        for node in [
-            self.tellomiFirstBackground,
-            self.tellomiLastBackground,
-            self.firstSeparatorNode,
-            self.lastSeparatorNode,
-            self.firstNameField,
-            self.lastNameField,
-            self.titleNode,
-            self.currentOptionNode,
-            self.agreementRow,
-            self.addPhotoButton,
-            self.proceedNode
-        ] {
-            node.removeFromSupernode()
-            scroll.addSubnode(node)
-        }
         
         self.addPhotoButton.addTarget(self, action: #selector(self.addPhotoPressed), forControlEvents: .touchUpInside)
         
@@ -307,12 +286,16 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             insets.bottom = max(inputHeight, layout.standardInputHeight)
         }
         
+        // Upstream reserves the button (or a small gap on a 320-pt phone) so the
+        // column compresses above the keyboard instead of sliding under it.
+        let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 90.0 : 10.0
+        
         let nicknameCopy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let bundled = tellomiBundledChineseLoginCopy(self.strings)
         let title = self.tellomiNicknameOnly ? nicknameCopy.nicknameTitle : (bundled?.signUpTitle ?? self.strings.Login_InfoTitle)
         let help = self.tellomiNicknameOnly ? nicknameCopy.nicknameHelp : (bundled?.signUpHelp ?? self.strings.Login_InfoHelp)
-        self.titleNode.attributedText = NSAttributedString(string: title, font: TellomiLoginChrome.scaledFont(size: 28.0, weight: .semibold), textColor: self.theme.list.itemPrimaryTextColor)
-        self.currentOptionNode.attributedText = NSAttributedString(string: help, font: TellomiLoginChrome.scaledFont(size: 16.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+        self.titleNode.attributedText = NSAttributedString(string: title, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+        self.currentOptionNode.attributedText = NSAttributedString(string: help, font: Font.regular(16.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.applyTellomiNicknameChrome()
         let titleSize = self.titleNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
         
@@ -333,72 +316,44 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         items.append(AuthorizationLayoutItem(node: self.currentOptionNode, size: noticeSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 20.0, maxValue: 20.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
         items.append(AuthorizationLayoutItem(node: self.firstNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 32.0, maxValue: 60.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        items.append(AuthorizationLayoutItem(node: self.firstSeparatorNode, size: CGSize(width: bandWidth - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
 
         self.lastNameField.isHidden = self.tellomiNicknameOnly
         self.lastSeparatorNode.isHidden = true
         self.firstSeparatorNode.isHidden = true
         if !self.tellomiNicknameOnly {
-            items.append(AuthorizationLayoutItem(node: self.lastNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 12.0, maxValue: 12.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+            items.append(AuthorizationLayoutItem(node: self.lastNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+            items.append(AuthorizationLayoutItem(node: self.lastSeparatorNode, size: CGSize(width: bandWidth - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         }
         
         items.append(AuthorizationLayoutItem(node: self.agreementRow, size: termsSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 48.0, maxValue: 100.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
-        self.proceedNode.isHidden = false
-        let inset: CGFloat = 24.0
-        let proceedHeight = self.proceedNode.updateLayout(width: bottomMaximumWidth - 48.0, transition: transition)
-        let proceedSize = CGSize(width: bottomMaximumWidth - 48.0, height: proceedHeight)
-
-        // Same rule as the password screen: pin the title under the bar, keep the
-        // button at the bottom when it fits, and let the column scroll when the
-        // avatar, the agreement, and the keyboard do not.
-        let pinnedTop = max(insets.top, navigationBarHeight)
-        let floatingButtonY = layout.size.height - insets.bottom - proceedSize.height - inset
-        let available = floatingButtonY - 16.0 - pinnedTop
-        let slack = items.reduce(CGFloat(0.0)) { partial, item in
-            partial + item.size.height + item.spacingBefore.maxValue + item.spacingAfter.maxValue
+        if layout.size.width > 320.0 {
+            self.proceedNode.isHidden = false
+            
+            let inset: CGFloat = 24.0
+            let proceedHeight = self.proceedNode.updateLayout(width: bottomMaximumWidth - 48.0, transition: transition)
+            let proceedSize = CGSize(width: bottomMaximumWidth - 48.0, height: proceedHeight)
+            transition.updateFrame(node: self.proceedNode, frame: CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize))
+        } else {
+            insets.top = navigationBarHeight
+            self.proceedNode.isHidden = true
         }
-        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: pinnedTop), size: CGSize(width: bandWidth, height: max(available, slack))), items: items, transition: transition, failIfDoesNotFit: false)
-        var buttonY = floatingButtonY
-        if slack > available + 1.0 {
-            var lowest = pinnedTop
-            for item in items {
-                if let node = item.node, !node.isHidden {
-                    lowest = max(lowest, node.frame.maxY)
-                }
-            }
-            buttonY = lowest + 16.0
-        }
-        transition.updateFrame(node: self.proceedNode, frame: CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: buttonY), size: proceedSize))
-        // The continue button is a later sibling. Keep the agreement above it so the checkbox receives the tap.
+        
+        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
         self.agreementRow.view.superview?.bringSubviewToFront(self.agreementRow.view)
-        self.placeTellomiField(self.tellomiFirstBackground, field: self.firstNameField, bandMinX: bandMinX, bandWidth: bandWidth)
-        self.placeTellomiField(self.tellomiLastBackground, field: self.lastNameField, bandMinX: bandMinX, bandWidth: bandWidth)
+        self.placeTellomiField(self.tellomiFirstBackground, field: self.firstNameField)
+        self.placeTellomiField(self.tellomiLastBackground, field: self.lastNameField)
         self.proceedNode.title = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).continueAction
-        self.tellomiUpdateFormScroll(layout: layout, bottomInset: insets.bottom)
     }
 
-    private func tellomiUpdateFormScroll(layout: ContainerViewLayout, bottomInset: CGFloat) {
-        guard let scroll = self.tellomiFormScroll else {
-            return
-        }
-        var contentBottom: CGFloat = 0.0
-        for node in scroll.subnodes ?? [] {
-            if node.isHidden {
-                continue
-            }
-            contentBottom = max(contentBottom, node.frame.maxY)
-        }
-        TellomiLoginChrome.applyFormScroll(scroll, layoutSize: layout.size, bottomInset: bottomInset, contentBottom: contentBottom + 16.0)
-    }
-
-    private func placeTellomiField(_ background: ASDisplayNode, field: ASDisplayNode, bandMinX: CGFloat, bandWidth: CGFloat) {
+    /// Gray field behind the text. The field frame stays where upstream put it.
+    private func placeTellomiField(_ background: ASDisplayNode, field: ASDisplayNode) {
         background.isHidden = field.isHidden
         guard !field.isHidden else {
             return
         }
-        let frame = CGRect(x: bandMinX + 24.0, y: field.frame.minY, width: max(0.0, bandWidth - 48.0), height: max(field.frame.height, 52.0))
-        background.frame = frame
-        field.frame = frame.insetBy(dx: 16.0, dy: 0.0)
+        background.frame = field.frame
     }
 
     @objc private func tellomiNameChanged() {

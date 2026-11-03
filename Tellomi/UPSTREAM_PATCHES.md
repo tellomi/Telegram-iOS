@@ -543,3 +543,15 @@ The same one-frame shape style (gzip Lottie, or plain JSON where the file was al
 | `…MonkeyTracking.tgs`, `…MonkeyClose.tgs` | Closed lock. |
 
 The two-step monkey player still asks for frames up to 41, and the round-video atlas still asks `PlaneLogoPlain` for 53 frames. A one-frame file has no later frames. The atlas path is already switched off (`RoundVideoDecorationProvider.isEnabled` is false) and returns nil when the frame count is short, so it does not draw the old plane. The other intro `.tgs` files are unchanged.
+
+## Auth layout back to upstream, precise location, leftover planes
+
+The nickname screen and the two-step screen again use Telegram's authorization layout: `layout.inputHeight` is the keyboard, the continue button is pinned to `height - inputHeight - button - 24`, and the column is measured in the band above that inset (`additionalBottomInset` 90 / 110). The custom form scroll and the slack test that moved the button under the keyboard are gone. Copy, the black button, the agreement checkbox, and email nickname-only stay. The two-step monkey sticker stays hidden; it is not part of the inset math. The signup avatar tap is the same `presentLegacyAvatarPicker(signup: true)` as upstream (`TGMediaAvatarMenuMixin`: camera tile, recent photos, 打开相册, crop). It was not a separate picker.
+
+Phone, email, and code screens still differ from upstream. Those differences are listed in the pull request. A cleared unauthorized state no longer replaces the code screen with the welcome carousel while that login attempt is still current.
+
+Gallery and Location in the attach tray are the same 30×30 MingCute line icons as File and Poll. They had been fitted into the old ink box and drew smaller.
+
+`DeviceLocationManager` asks for `kCLLocationAccuracyBest` and `requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocation")`. `Info.plist` / `InfoBazel.plist` carry `NSLocationTemporaryUsageDescriptionDictionary`. The current-location row sends `accuracy_radius` from `CLLocation.horizontalAccuracy`. Apple Maps is still given WGS-84; MapKit applies the China offset. 高德 uses `dev=1`, 百度 `coord_type=wgs84`, 腾讯 is converted to GCJ-02 in `TellomiMapOpenIn`.
+
+Paper-plane artwork replaced with `Avatar/TellomiMark`: the unsupported-message badge, Call title, CallKit, the context-menu Telegram icon, the Shortcuts icon, and Wallet InfoSend. QR marks were already the Tellomi mark. `PlaneLogo.tgs` is already an arrow. The welcome intro mesh (`RMIntro`, `telegram_plane1.png`) is still a paper-plane model.

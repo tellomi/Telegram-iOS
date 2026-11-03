@@ -1366,6 +1366,13 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         case let .state(state):
             switch state {
                 case .empty:
+                    // A temp-key failure can clear the unauthorized state while the code
+                    // screen is up. That used to rebuild the welcome carousel. Keep the
+                    // screen that is already showing until this attempt is abandoned
+                    // (Back) or a real authorization state arrives.
+                    if self.tellomiPendingIdentifier != nil, self.tellomiActiveLoginAttempt.isCurrent() {
+                        break
+                    }
                     if let _ = self.viewControllers.last as? AuthorizationSequenceSplashController {
                     } else {
                         var controllers: [ViewController] = []

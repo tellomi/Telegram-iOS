@@ -19,7 +19,9 @@ public enum LocationPickerMode {
 }
 
 class LocationPickerInteraction {
-    let sendLocation: (CLLocationCoordinate2D, String?, MapGeoAddress?) -> Void
+    let sendLocation: (CLLocationCoordinate2D, String?, MapGeoAddress?, Double?) -> Void
+    /// Latest GPS horizontal accuracy, in meters. The current-location row sends it.
+    var currentUserAccuracy: Double?
     let sendLiveLocation: (CLLocationCoordinate2D) -> Void
     let sendVenue: (TelegramMediaMap, Int64?, String?) -> Void
     let toggleMapModeSelection: () -> Void
@@ -33,7 +35,7 @@ class LocationPickerInteraction {
     let openHomeWorkInfo: () -> Void
     let showPlacesInThisArea: () -> Void
     
-    init(sendLocation: @escaping (CLLocationCoordinate2D, String?, MapGeoAddress?) -> Void, sendLiveLocation: @escaping (CLLocationCoordinate2D) -> Void, sendVenue: @escaping (TelegramMediaMap, Int64?, String?) -> Void, toggleMapModeSelection: @escaping () -> Void, updateMapMode: @escaping (LocationMapMode) -> Void, goToUserLocation: @escaping () -> Void, goToCoordinate: @escaping (CLLocationCoordinate2D, Bool) -> Void, openSearch: @escaping () -> Void, updateSearchQuery: @escaping (String) -> Void, dismissSearch: @escaping () -> Void, dismissInput: @escaping () -> Void, openHomeWorkInfo: @escaping () -> Void, showPlacesInThisArea: @escaping ()-> Void) {
+    init(sendLocation: @escaping (CLLocationCoordinate2D, String?, MapGeoAddress?, Double?) -> Void, sendLiveLocation: @escaping (CLLocationCoordinate2D) -> Void, sendVenue: @escaping (TelegramMediaMap, Int64?, String?) -> Void, toggleMapModeSelection: @escaping () -> Void, updateMapMode: @escaping (LocationMapMode) -> Void, goToUserLocation: @escaping () -> Void, goToCoordinate: @escaping (CLLocationCoordinate2D, Bool) -> Void, openSearch: @escaping () -> Void, updateSearchQuery: @escaping (String) -> Void, dismissSearch: @escaping () -> Void, dismissInput: @escaping () -> Void, openHomeWorkInfo: @escaping () -> Void, showPlacesInThisArea: @escaping ()-> Void) {
         self.sendLocation = sendLocation
         self.sendLiveLocation = sendLiveLocation
         self.sendVenue = sendVenue
@@ -154,7 +156,7 @@ public final class LocationPickerController: ViewController, AttachmentContainab
             }
         })
                         
-        self.interaction = LocationPickerInteraction(sendLocation: { [weak self] coordinate, name, geoAddress in
+        self.interaction = LocationPickerInteraction(sendLocation: { [weak self] coordinate, name, geoAddress, accuracyRadius in
             guard let strongSelf = self else {
                 return
             }
@@ -163,7 +165,7 @@ public final class LocationPickerController: ViewController, AttachmentContainab
                     latitude: coordinate.latitude,
                     longitude: coordinate.longitude,
                     heading: nil,
-                    accuracyRadius: nil,
+                    accuracyRadius: accuracyRadius,
                     venue: nil,
                     address: geoAddress,
                     liveBroadcastingTimeout: nil,
@@ -201,7 +203,7 @@ public final class LocationPickerController: ViewController, AttachmentContainab
                         guard let self else {
                             return
                         }
-                        self.completion(TelegramMediaMap(coordinate: coordinate, liveBroadcastingTimeout: period), nil, nil, nil, nil)
+                        self.completion(TelegramMediaMap(coordinate: coordinate, liveBroadcastingTimeout: period, accuracyRadius: self.interaction.currentUserAccuracy), nil, nil, nil, nil)
                         self.dismiss()
                     }
                 )
