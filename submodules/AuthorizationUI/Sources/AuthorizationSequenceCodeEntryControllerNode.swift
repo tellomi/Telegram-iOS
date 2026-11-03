@@ -18,7 +18,7 @@ import TelegramStringFormatting
 import TextNodeWithEntities
 
 final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextFieldDelegate {
-    private let strings: PresentationStrings
+    private var strings: PresentationStrings
     private var theme: PresentationTheme
     var tellomiPrimaryActionTitle: String?
     
@@ -1133,6 +1133,13 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             return true
         default:
             return false
+        }
+    }
+
+    func updateStrings(_ strings: PresentationStrings) {
+        self.strings = strings
+        if let layoutArguments = self.layoutArguments {
+            self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
         }
     }
 

@@ -63,6 +63,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     weak var confirmationController: PhoneConfirmationController?
     
     private let termsDisposable = MetaDisposable()
+    private let tellomiLanguageDownloadDisposable = MetaDisposable()
     
     private let hapticFeedback = HapticFeedback()
     private var tellomiBindPhone = false
@@ -76,6 +77,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         self.otherAccountPhoneNumbers = otherAccountPhoneNumbers
         self.network = network
         self.presentationData = presentationData
+        tellomiNoteAppliedPack(presentationData.strings)
         self.openUrl = openUrl
         self.back = back
                 
@@ -111,6 +113,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     deinit {
         self.termsDisposable.dispose()
+        self.tellomiLanguageDownloadDisposable.dispose()
     }
     
     @objc private func cancelPressed() {
@@ -146,8 +149,21 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
                 guard let self, !checked else {
                     return
                 }
-                tellomiApplyInterfaceLanguage(accountManager: self.sharedContext.accountManager, languageCode: code)
-                self.refreshTellomiLanguage()
+                guard let account = self.account else {
+                    tellomiRememberInterfaceLanguage(code)
+                    self.refreshTellomiLanguage()
+                    return
+                }
+                tellomiStartInterfaceLanguageDownload(account: account, accountManager: self.sharedContext.accountManager, languageCode: code, disposable: self.tellomiLanguageDownloadDisposable, applied: { [weak self] strings in
+                    guard let self else {
+                        return
+                    }
+                    self.presentationData = self.presentationData.withStrings(strings)
+                    if self.isNodeLoaded {
+                        self.controllerNode.updateStrings(strings)
+                    }
+                    self.refreshTellomiLanguage()
+                })
             }))
         }
         let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.presentationData.theme.overallDarkAppearance)
@@ -167,6 +183,18 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         if self.isNodeLoaded {
             self.controllerNode.setTellomiBindPhone(bind)
             self.controllerNode.applyPresentationTheme(self.presentationData.theme)
+        }
+    }
+
+    func applyTellomiPresentationData(_ presentationData: PresentationData) {
+        let stringsChanged = presentationData.strings !== self.presentationData.strings
+        self.applyPresentationTheme(presentationData)
+        if stringsChanged {
+            tellomiNoteAppliedPack(presentationData.strings)
+            if self.isNodeLoaded {
+                self.controllerNode.updateStrings(presentationData.strings)
+            }
+            self.updateNavigationItems()
         }
     }
 
@@ -315,6 +343,26 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
                 if let strongSelf = self {
                     strongSelf.controllerNode.updateCountryCode()
                 }
+            })
+            let accountManager = self.sharedContext.accountManager
+            let _ = (accountManager.transaction { transaction -> String? in
+                let settings = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self)
+                return tellomiEmptyStoredLanguageCode(settings)
+            }
+            |> deliverOnMainQueue).start(next: { [weak self] code in
+                guard let self, let code else {
+                    return
+                }
+                tellomiStartInterfaceLanguageDownload(account: account, accountManager: accountManager, languageCode: code, disposable: self.tellomiLanguageDownloadDisposable, applied: { [weak self] strings in
+                    guard let self else {
+                        return
+                    }
+                    self.presentationData = self.presentationData.withStrings(strings)
+                    if self.isNodeLoaded {
+                        self.controllerNode.updateStrings(strings)
+                    }
+                    self.refreshTellomiLanguage()
+                })
             })
         } else {
             self.controllerNode.updateCountryCode()

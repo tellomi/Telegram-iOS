@@ -292,7 +292,7 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
             cancel: "取消"
         )
     case .english:
-        return TellomiLoginCopy(
+        let copy = TellomiLoginCopy(
         phoneTitle: "Log in to see more",
         phonePlaceholder: "Phone number",
         verifyAndLogin: "Verify and log in",
@@ -349,7 +349,75 @@ func tellomiLoginCopy(languageCode: String) -> TellomiLoginCopy {
         useSms: "Get the code by SMS",
         cancel: "Cancel"
     )
+        let resolved = tellomiChromeLanguageCode(savedLanguageCode: languageCode)
+        if tellomiLoginCopyFollowsPack(resolved), let strings = tellomiAppliedPackStrings(matching: resolved) {
+            return tellomiLoginCopyApplyingPack(copy, strings: strings)
+        }
+        return copy
     }
+}
+
+/// Login labels for a language that is not the bundled 简体 / 繁體 / English copy.
+/// Fields that exist in the `ios` pack come from that pack (and its English base).
+/// Tellomi-only lines (email login, bind phone) stay the English product copy.
+func tellomiLoginCopyApplyingPack(_ base: TellomiLoginCopy, strings: PresentationStrings) -> TellomiLoginCopy {
+    return TellomiLoginCopy(
+        phoneTitle: strings.Login_PhoneTitle,
+        phonePlaceholder: strings.Login_PhonePlaceholder,
+        verifyAndLogin: strings.Login_Continue,
+        codeTitlePhone: strings.Login_Code,
+        codeTitleEmail: strings.Login_Code,
+        login: strings.Login_Continue,
+        codePlaceholder: strings.Login_Code,
+        resend: strings.Conversation_MessageDialogRetry,
+        codeSentToast: base.codeSentToast,
+        help: base.help,
+        continueAction: strings.Login_Continue,
+        cloudPasswordTitle: strings.LoginPassword_Title,
+        codeSentPhoneFormat: base.codeSentPhoneFormat,
+        codeSentEmailFormat: base.codeSentEmailFormat,
+        resendCountdownFormat: base.resendCountdownFormat,
+        passwordLogin: base.passwordLogin,
+        codeLogin: base.codeLogin,
+        orDivider: base.orDivider,
+        appleLogin: base.appleLogin,
+        googleLogin: base.googleLogin,
+        emailLogin: base.emailLogin,
+        otherLogin: base.otherLogin,
+        recoverAccount: base.recoverAccount,
+        phonePasswordTitle: strings.LoginPassword_Title,
+        emailPasswordTitle: strings.LoginPassword_Title,
+        passwordPlaceholder: strings.LoginPassword_PasswordPlaceholder,
+        agreeAndLogin: strings.Login_Continue,
+        disagree: strings.Common_Cancel,
+        agreementTitle: base.agreementTitle,
+        unavailableTitle: base.unavailableTitle,
+        unavailableBody: base.unavailableBody,
+        codeNotReceived: strings.Login_HaveNotReceivedCodeInternal,
+        wrongCode: strings.Login_InvalidCodeError,
+        wrongSmsCode: strings.Login_InvalidCodeError,
+        startMessaging: base.startMessaging,
+        ok: strings.Common_OK,
+        bindPhoneTitle: base.bindPhoneTitle,
+        bindPhoneAction: base.bindPhoneAction,
+        bindPhoneNotice: base.bindPhoneNotice,
+        bindEmailTitle: base.bindEmailTitle,
+        emailLabel: base.emailLabel,
+        alreadyAuthorized: base.alreadyAuthorized,
+        switchToAccount: base.switchToAccount,
+        phoneConfirm: base.phoneConfirm,
+        edit: base.edit,
+        yes: base.yes,
+        signUpTitle: strings.Login_InfoTitle,
+        signUpHelp: strings.Login_InfoHelp,
+        firstNamePlaceholder: strings.Login_InfoFirstNamePlaceholder,
+        lastNamePlaceholder: strings.Login_InfoLastNamePlaceholder,
+        chooseLanguage: strings.Settings_AppLanguage,
+        codeSentApp: base.codeSentApp,
+        codeSentCallFormat: base.codeSentCallFormat,
+        useSms: base.useSms,
+        cancel: strings.Common_Cancel
+    )
 }
 
 private func tellomiLoginCopyHant() -> TellomiLoginCopy {
@@ -413,7 +481,11 @@ private func tellomiLoginCopyHant() -> TellomiLoginCopy {
 }
 
 func tellomiCloudPasswordCopy(languageCode: String) -> (title: String, notice: String, forgot: String) {
-    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
+    let resolved = tellomiChromeLanguageCode(savedLanguageCode: languageCode)
+    if tellomiLoginCopyFollowsPack(resolved), let strings = tellomiAppliedPackStrings(matching: resolved) {
+        return (strings.LoginPassword_Title, strings.LoginPassword_PasswordHelp, strings.LoginPassword_ForgotPassword)
+    }
+    switch tellomiLoginScript(languageCode: resolved) {
     case .hans:
         return ("两步验证", "请输入两步验证密码", "忘记密码？")
     case .hant:

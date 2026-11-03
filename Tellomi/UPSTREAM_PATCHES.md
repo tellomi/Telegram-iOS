@@ -356,7 +356,7 @@ are unchanged.
 
 Mirrors Android `tellomi/Telegram` #31 on the phone and code screens. The top-right control is no longer Help. It is the current language plus ▾ (`简体中文 ▾`, `繁體中文 ▾`, `English ▾`). The card is the same centered login card as the agreement prompt, titled「选择语言 / Language」, with those three built-in rows, a check on the current one, and Cancel. There is no Other row and no `langpack.getStrings` call. Upstream language screens need a logged-in account.
 
-The choice is stored in `UserDefaults` `TellomiPreferredInterfaceLanguage` and on the account manager under `SharedDataKeys.localizationSettings`, and `TellomiDidApplySystemLangPack` is set so the automatic pack does not replace it. Login chrome reads that key first and redraws from the bundled `tellomiLoginCopy` (简体, 繁體, English) without a network round-trip. The phone number, email, password, and code already typed stay in the fields. A pack already stored for that same code is kept. A different code is stored with an empty pack at version 0; string lookup falls back to the bundled English `en.lproj` until the existing logged-in langpack sync fills it. Settings ▸ Language writes the same `UserDefaults` key when a pack finishes downloading, so that choice is what login uses next time.
+The choice is stored in `UserDefaults` `TellomiPreferredInterfaceLanguage`, and `TellomiDidApplySystemLangPack` is set so the automatic Chinese pack does not replace it. Login chrome reads that key first. The phone number, email, password, and code already typed stay in the fields. Settings ▸ Language writes the same `UserDefaults` key when a pack finishes downloading. Applying a language no longer stores an empty pack; see "Language pack download" below.
 
 Help moved to「收不到验证码？」on the code screen (SMS, call, in-app, Firebase, and email). The card's Help row opens `https://tellomi.cn/help/` (`TellomiLoginChrome.helpURL`; `/faq` 404s). SMS, call, and Firebase also offer Resend on that card once the countdown has finished. An in-app code (`sentCodeTypeApp`, `.otherSession`) says「验证码已发送到你在其他设备上登录的 Tellomi」and shows「改用短信接收」, which calls `auth.resendCode` through `TelegramEngineUnauthorized.Auth.resendLoginCode`. SMS, call, and email keep their own lines. Traditional copy is bundled too; Android could not ship `zh-rTW`.
 
@@ -375,7 +375,7 @@ Signing in an account that is already on the device sends `auth.logOut` on the n
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Resend goes through the engine, including an app code with no `next_type`. |
 | `submodules/TelegramCore/Sources/Authorization.swift` | `auth.resendCode` is sent even when `next_type` is empty. |
 | `submodules/TelegramCore/Sources/TelegramEngine/Auth/TelegramEngineAuth.swift` | `resendLoginCode`, `logOut`. |
-| `submodules/TelegramCore/Sources/TellomiInterfaceLanguage.swift` | New. Writes the language code into `localizationSettings` with no network. |
+| `submodules/TelegramCore/Sources/TellomiInterfaceLanguage.swift` | Was an empty version-0 pack with no network. That write is no longer how a language is applied. |
 | `submodules/TelegramUI/Sources/SharedAccountContext.swift` | `auth.logOut` on a duplicate login before the record is dropped. |
 | `submodules/SettingsUI/Sources/Language Selection/LocalizationListControllerNode.swift`, `Search/SettingsSearchableItems.swift` | A Settings language writes the same preference key. |
 
@@ -565,3 +565,25 @@ Tellomi langpacks set `base_lang_code` to `en`, so `PresentationStrings.baseLang
 | `submodules/TelegramStringFormatting/Sources/Locale.swift` `localeIdentifierLanguageCode` | When the base code is English and the primary (UI) code is not, the locale uses the primary code. An English UI keeps the base code. A pack whose base is already not English keeps that base, which is what upstream official packs do. The device region suffix is unchanged, so a US region still measures in miles and feet, with Chinese unit names. |
 | `submodules/LocationUI/Sources/LocationUtils.swift` `nearbyVenues` | The bot result is still used when it contains venues. Otherwise the same signal is filled from MapKit. The `accuracyRadius` argument on `TelegramMediaMap.init(coordinate:)` stays; that is the precise-location row, not the venue fallback. |
 | `submodules/LocationUI/Sources/AppleMapVenueSearch.swift` | Nearby: `MKLocalPointsOfInterestRequest` (2.5 km). If that is empty, one `MKLocalSearch` whose query follows the UI language (`餐饮` / `餐飲` / `restaurant`). Text search: `MKLocalSearch` within 100 km of the coordinate. Each hit is a `TelegramMediaMap` venue (`provider` `apple`, foursquare-style `type` so the existing category color and icon path run). No attribution row, no API key. Sending still posts that media; `queryId` is not a bot result. |
+
+## Language pack download
+
+The login language button used to call `tellomiStoreInterfaceLanguage`, which wrote `localizationSettings` with an empty pack at version 0 and no English base. `tellomiLoginCopy` only has 简体, 繁體, and English, so every other language left the phone, code, and sign-up labels in that English copy. The agreement sentence has its own table, which is why that line was the only one that changed. Missing keys fall back to bundled `en.lproj`.
+
+The button now uses the same call as upstream's splash "Continue in …": `TelegramEngineUnauthorized.localization.downloadAndApplyLocalization`. That is `langpack.getLanguage` plus `langpack.getLangPack` for the language and its `base_lang_code`. The `lang_pack` argument stays `""`; the session fills it from `initConnection` (`languagesCategory` `"ios"`). The preference key is written only after that download succeeds, so a failed request does not replace a pack that is already stored. A pack already saved with no strings (the old button) is downloaded again when the phone screen opens.
+
+For a language other than 简体, 繁體, and English, login labels that exist in the pack (`Login.PhoneTitle`, `Login.Continue`, `Login.Code`, `LoginPassword.*`, `Login.Info*`, and the same family) are read from the downloaded strings. Tellomi-only lines (email login, bind phone) stay the English product copy. 简体 and 繁體 keep the bundled product copy. The welcome carousel stays that product copy too: the six pages are not langpack keys, and the pack's `Tour.*` strings are the Telegram tour.
+
+Settings ▸ Language already calls `downloadAndApplyLocalization` on the signed-in engine (`LocalizationListControllerNode`, and the same call from Settings search) and then writes the preference key. It does not write an empty pack.
+
+The `ios` packs on the server are full for the languages this picker lists (on the order of 12k strings). `hi`, `th`, and `el` are near-empty in the official iOS export and are hidden on the server; the client does not special-case them.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | Download and apply through `downloadAndApplyLocalization`. Notes the applied pack for the login labels. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Non-Chinese, non-English login labels come from that pack. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | The language row downloads before the labels change. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift` | Same, using the unauthorized account from the login flow. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift`, `AuthorizationSequenceCodeEntryControllerNode.swift` | Replace the strings and lay out again. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Passes the unauthorized account. A strings-only presentation update reaches the phone and code screens. |
+| `submodules/TelegramCore/Sources/TellomiInterfaceLanguage.swift` | The empty-pack helper is not how a language is applied. |

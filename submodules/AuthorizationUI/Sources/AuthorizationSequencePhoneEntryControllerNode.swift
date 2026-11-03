@@ -636,7 +636,7 @@ private final class TellomiEmailFieldNode: ASDisplayNode, UITextFieldDelegate {
 final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private let sharedContext: SharedAccountContext
     private var account: UnauthorizedAccount?
-    private let strings: PresentationStrings
+    private var strings: PresentationStrings
     private var theme: PresentationTheme
     private let hasOtherAccounts: Bool
     private var tellomiBindPhone = false
@@ -752,6 +752,13 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
 
     func setTellomiBindPhone(_ bind: Bool) {
         self.tellomiBindPhone = bind
+    }
+
+    func updateStrings(_ strings: PresentationStrings) {
+        self.strings = strings
+        if let (layout, navigationBarHeight) = self.layoutArguments {
+            self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
+        }
     }
 
     func applyPresentationTheme(_ theme: PresentationTheme) {
