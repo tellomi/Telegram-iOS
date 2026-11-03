@@ -514,4 +514,22 @@ Suggested folders arrive from `messages.getSuggestedDialogFilters` with English 
 
 ## Channel intro placeholder
 
-`Telegram/Telegram-iOS/Resources/Channel.tgs` is the 「频道是什么？」illustration (`PermissionController` icon `.animation("Channel")`). The original is a gzip Lottie with the duck sticker and the blue “Channel / 55k members” bubble. It is now a one-frame black-and-white phone and three bars. No duck, no blue. The other intro `.tgs` files are unchanged.
+`Telegram/Telegram-iOS/Resources/Channel.tgs` is the 「频道是什么？」illustration (`PermissionController` icon `.animation("Channel")`). The original is a gzip Lottie with the duck sticker and the blue “Channel / 55k members” bubble. It is now a one-frame black-and-white phone and three bars. No duck, no blue.
+
+The same one-frame shape style (gzip Lottie, or plain JSON where the file was already `.json`) replaces these, without a code change. Each drawing is only rectangles and ellipses in black, white, and gray:
+
+| File | Mark |
+| --- | --- |
+| `Telegram/Telegram-iOS/Resources/BroadcastGroup.tgs` | Megaphone. |
+| `submodules/TelegramUI/Resources/Animations/DiscussionGroupSetup.tgs` | Two speech bubbles. |
+| `submodules/TelegramUI/Resources/Animations/ChannelMessages.tgs` | Three text bars. |
+| `…/ChatListFolders.tgs` | Folder. |
+| `…/ChatListNewFolder.tgs` | Folder with a plus. |
+| `…/ChatListCloudFolderLink.tgs` | Folder with two rings. |
+| `…/ChatListFoldersTooltip.json` | Folder. Left as JSON; the tooltip loader asks for that extension. |
+| `Telegram/Telegram-iOS/Resources/PlaneLogo.tgs`, `PlaneLogoPlain.tgs` | Up arrow. |
+| `submodules/PasswordSetupUI/Resources/TwoFactorSetupMonkeyIdle.tgs`, `…Idle1.tgs` | Closed lock, and a lock with the shackle raised. |
+| `…MonkeyIdle2.tgs`, `…MonkeyCloseAndPeek.tgs` | Key. |
+| `…MonkeyTracking.tgs`, `…MonkeyClose.tgs` | Closed lock. |
+
+The two-step monkey player still asks for frames up to 41, and the round-video atlas still asks `PlaneLogoPlain` for 53 frames. A one-frame file has no later frames. The atlas path is already switched off (`RoundVideoDecorationProvider.isEnabled` is false) and returns nil when the frame count is short, so it does not draw the old plane. The other intro `.tgs` files are unchanged.
