@@ -543,3 +543,13 @@ The same one-frame shape style (gzip Lottie, or plain JSON where the file was al
 | `…MonkeyTracking.tgs`, `…MonkeyClose.tgs` | Closed lock. |
 
 The two-step monkey player still asks for frames up to 41, and the round-video atlas still asks `PlaneLogoPlain` for 53 frames. A one-frame file has no later frames. The atlas path is already switched off (`RoundVideoDecorationProvider.isEnabled` is false) and returns nil when the frame count is short, so it does not draw the old plane. The other intro `.tgs` files are unchanged.
+
+## Location picker locale and nearby places
+
+Tellomi langpacks set `base_lang_code` to `en`, so `PresentationStrings.baseLanguageCode` is the English fallback even when the UI language is Chinese. `localeWithStrings` used that code for `CLGeocoder` and `MKDistanceFormatter`, which produced pinyin addresses and `miles` / `feet`. Nearby places and venue search call the inline venue bot (`venue_search_username`, default `foursquare`). This server does not have that bot, so the list was empty (`Map_NoPlacesNearby`) and search showed only the geocoded address.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramStringFormatting/Sources/Locale.swift` `localeIdentifierLanguageCode` | When the base code is English and the primary (UI) code is not, the locale uses the primary code. An English UI keeps the base code. A pack whose base is already not English keeps that base, which is what upstream official packs do. The device region suffix is unchanged, so a US region still measures in miles and feet, with Chinese unit names. |
+| `submodules/LocationUI/Sources/LocationUtils.swift` `nearbyVenues` | The bot result is still used when it contains venues. Otherwise the same signal is filled from MapKit. |
+| `submodules/LocationUI/Sources/AppleMapVenueSearch.swift` | Nearby: `MKLocalPointsOfInterestRequest` (2.5 km). If that is empty, one `MKLocalSearch` whose query follows the UI language (`餐饮` / `餐飲` / `restaurant`). Text search: `MKLocalSearch` within 100 km of the coordinate. Each hit is a `TelegramMediaMap` venue (`provider` `apple`, foursquare-style `type` so the existing category color and icon path run). No attribution row, no API key. Sending still posts that media; `queryId` is not a bot result. |
