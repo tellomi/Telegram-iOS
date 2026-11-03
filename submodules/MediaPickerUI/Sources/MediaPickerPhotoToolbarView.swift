@@ -452,8 +452,9 @@ private final class MediaPickerPhotoToolbarComponent: Component {
                             id: "close",
                             component: AnyComponent(
                                 BundleIconComponent(
-                                    name: component.backButtonType == TGPhotoEditorBackButtonBack ? "Navigation/Back" : "Navigation/Close",
-                                    tintColor: .white
+                                    name: component.backButtonType == TGPhotoEditorBackButtonBack ? "Media Editor/Back" : "Navigation/Close",
+                                    tintColor: .white,
+                                    scaleFactor: component.backButtonType == TGPhotoEditorBackButtonBack ? 1.35 : 1.0
                                 )
                             )
                         ),
@@ -467,12 +468,14 @@ private final class MediaPickerPhotoToolbarComponent: Component {
             )
 
             let doneIconName: String
-            let doneBackgroundColor: UIColor? = UIColor(rgb: 0x0088ff)
+            var doneBackgroundColor: UIColor? = UIColor(rgb: 0x0088ff)
             var doneWidth: CGFloat = toolbarButtonSide
             switch component.doneButtonType {
             case TGPhotoEditorDoneButtonSend:
                 doneIconName = "Media Editor/Send"
                 doneWidth = 46.0
+                // Black disc, white arrow. Not the blue paper-plane button.
+                doneBackgroundColor = UIColor(rgb: 0x111111)
             case TGPhotoEditorDoneButtonSchedule:
                 doneIconName = "Chat/Input/ScheduleIcon"
                 doneWidth = 46.0
@@ -716,7 +719,7 @@ private final class MediaPickerPhotoToolbarComponent: Component {
                         BundleIconComponent(
                             name: self.iconName(tab),
                             tintColor: iconColor,
-                            maxSize: CGSize(width: 28.0, height: 28.0)
+                            maxSize: CGSize(width: 32.0, height: 32.0)
                         )
                     )
                 }

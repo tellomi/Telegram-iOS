@@ -266,7 +266,9 @@ typedef enum {
     
     _glkView.transform = CGAffineTransformMakeScale(0.66, 0.66);
         
-    [UIView animateWithDuration:0.65 delay:0.15 usingSpringWithDamping:1.2f initialSpringVelocity:0.0 options:kNilOptions animations:^{
+    // Damping must stay in 0...1. 1.2 dropped the spring, then a later layout
+    // played the headline a second time over the login form.
+    [UIView animateWithDuration:0.65 delay:0.15 usingSpringWithDamping:0.9f initialSpringVelocity:0.0 options:kNilOptions animations:^{
         _glkView.center = logoTargetPosition;
         firstPage.headerLabel.center = headerTargetPosition;
         firstPage.descriptionLabel.center = descriptionTargetPosition;
@@ -458,6 +460,16 @@ typedef enum {
     return snapshotView;
 }
 
+- (void)tellomiSuppressLivePages {
+    // The transition keeps the snapshots. The live headline must not draw again
+    // on top of them for the frame the splash view is still in the window.
+    // The simulator build never creates the GL view.
+    _pageScrollView.alpha = 0.0;
+    _pageControl.alpha = 0.0;
+    _glkView.alpha = 0.0;
+    _startButton.alpha = 0.0;
+}
+
 - (BOOL)shouldAutorotate
 {
     if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)
@@ -511,7 +523,9 @@ typedef enum {
                 deviceScreen = Inch65;
                 break;
             default:
-                deviceScreen = Inch55;
+                // iPhone X and later are taller than the Plus sizes this switch lists.
+                // Falling through to Inch55 parked the headline on top of the login form.
+                deviceScreen = Inch65;
                 break;
         }
     }

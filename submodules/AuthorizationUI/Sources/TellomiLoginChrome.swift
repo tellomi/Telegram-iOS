@@ -12,7 +12,7 @@ enum TellomiLoginChrome {
     static let buttonForeground = UIColor.white
     static let buttonDisabledBackground = UIColor(rgb: 0xE5E5E5)
     static let buttonDisabledForeground = UIColor(rgb: 0x8E8E93)
-    static let link = UIColor(rgb: 0x3478F6)
+    static let link = UIColor(rgb: 0x111111)
     static let error = UIColor(rgb: 0xFF3B30)
     /// Caret and focused field. Same black as the primary button.
     static let accent = UIColor(rgb: 0x111111)
@@ -25,6 +25,38 @@ enum TellomiLoginChrome {
     static let legalURL = "https://tellomi.cn/legal"
     static let helpURL = "https://tellomi.cn/help/"
     static let fieldCornerRadius: CGFloat = 12.0
+
+    /// Body text that grows with the system text size, capped so a login column
+    /// still fits a 4-inch phone. `Font.regular` is a fixed point size.
+    static func scaledFont(size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+        let font = UIFont.systemFont(ofSize: size, weight: weight)
+        return UIFontMetrics(forTextStyle: .body).scaledFont(for: font, maximumPointSize: size * 1.35)
+    }
+
+    /// Login column. Frames stay in screen coordinates: the scroll view fills the
+    /// controller, and `contentInset.bottom` is the keyboard or the home indicator.
+    static func makeFormScroll() -> ASScrollNode {
+        let scroll = ASScrollNode()
+        scroll.scrollableDirections = [.up, .down]
+        scroll.view.alwaysBounceVertical = false
+        scroll.view.showsVerticalScrollIndicator = true
+        scroll.view.contentInsetAdjustmentBehavior = .never
+        scroll.view.keyboardDismissMode = .interactive
+        scroll.backgroundColor = .clear
+        return scroll
+    }
+
+    static func applyFormScroll(_ scroll: ASScrollNode, layoutSize: CGSize, bottomInset: CGFloat, contentBottom: CGFloat) {
+        scroll.frame = CGRect(origin: CGPoint(), size: layoutSize)
+        let inset = UIEdgeInsets(top: 0.0, left: 0.0, bottom: bottomInset, right: 0.0)
+        scroll.view.contentInset = inset
+        scroll.view.verticalScrollIndicatorInsets = inset
+        let visibleHeight = max(0.0, layoutSize.height - bottomInset)
+        scroll.view.contentSize = CGSize(width: layoutSize.width, height: max(contentBottom, visibleHeight))
+        if contentBottom <= visibleHeight + 1.0 {
+            scroll.view.contentOffset = CGPoint()
+        }
+    }
 
     struct Palette {
         let buttonBackground: UIColor
@@ -53,7 +85,7 @@ enum TellomiLoginChrome {
                 buttonForeground: UIColor(rgb: 0x111111),
                 buttonDisabledBackground: UIColor(rgb: 0x3A3A3C),
                 buttonDisabledForeground: UIColor(rgb: 0x8E8E93),
-                link: UIColor(rgb: 0x3478F6),
+                link: UIColor.white,
                 error: UIColor(rgb: 0xFF453A),
                 accent: UIColor.white,
                 checkbox: UIColor.white,
@@ -378,6 +410,17 @@ private func tellomiLoginCopyHant() -> TellomiLoginCopy {
         useSms: "改用簡訊接收",
         cancel: "取消"
     )
+}
+
+func tellomiCloudPasswordCopy(languageCode: String) -> (title: String, notice: String, forgot: String) {
+    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
+    case .hans:
+        return ("两步验证", "请输入两步验证密码", "忘记密码？")
+    case .hant:
+        return ("兩步驟驗證", "請輸入兩步驟驗證密碼", "忘記密碼？")
+    case .english:
+        return ("Two-step verification", "Enter your two-step verification password.", "Forgot password?")
+    }
 }
 
 func tellomiLoginLanguageIsChinese(_ languageCode: String) -> Bool {

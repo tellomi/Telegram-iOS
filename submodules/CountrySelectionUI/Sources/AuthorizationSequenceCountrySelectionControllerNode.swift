@@ -63,8 +63,45 @@ private func loadCountryCodes() -> [(String, Int)] {
 
 private let countryCodes: [(String, Int)] = loadCountryCodes()
 
-public func localizedCountryNamesAndCodes(strings: PresentationStrings) -> [((String, String), String, [Int])] {
-    let locale = localeWithStrings(strings)
+/// Chinese names indexed by their first character fill the rail with dots. The
+/// system Contacts app groups them by pinyin initial instead.
+private func countryLatinName(_ name: String) -> String {
+    let mutable = NSMutableString(string: name)
+    CFStringTransform(mutable, nil, kCFStringTransformToLatin, false)
+    CFStringTransform(mutable, nil, kCFStringTransformStripDiacritics, false)
+    return (mutable as String).trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+private func countryUsesPinyinIndex(_ locale: Locale?) -> Bool {
+    let identifier = locale?.identifier.lowercased() ?? ""
+    return identifier == "zh" || identifier.hasPrefix("zh-") || identifier.hasPrefix("zh_")
+}
+
+private func countrySectionTitle(name: String, locale: Locale?) -> String {
+    if countryUsesPinyinIndex(locale) {
+        let latin = countryLatinName(name)
+        if let first = latin.first, first.isASCII, first.isLetter {
+            return String(first).uppercased()
+        }
+    }
+    guard let first = name.first else {
+        return "#"
+    }
+    return String(first).uppercased(with: locale ?? .current)
+}
+
+private func countrySortKey(name: String, locale: Locale?) -> String {
+    if countryUsesPinyinIndex(locale) {
+        let latin = countryLatinName(name)
+        if !latin.isEmpty {
+            return latin
+        }
+    }
+    return name
+}
+
+public func localizedCountryNamesAndCodes(strings: PresentationStrings, regionLocale: Locale? = nil) -> [((String, String), String, [Int])] {
+    let locale = regionLocale ?? localeWithStrings(strings)
     var result: [((String, String), String, [Int])] = []
     for country in AuthorizationSequenceCountrySelectionController.countries() {
         if country.hidden || country.id == "FT" {
@@ -209,18 +246,31 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
     private let topEdgeEffectView: EdgeEffectView
     
     private var searchInput: ComponentView<Empty>?
+    private let regionLocale: Locale?
+    private let searchPlaceholder: String?
+    private let focusSearchOnAppear: Bool
+    private let monochromeSectionIndex: Bool
     var isSearching = true
     
     private var validLayout: ContainerViewLayout?
     
-    init(theme: PresentationTheme, strings: PresentationStrings, displayCodes: Bool, glass: Bool, itemSelected: @escaping (((String, String), String, Int)) -> Void) {
+    init(theme: PresentationTheme, strings: PresentationStrings, displayCodes: Bool, glass: Bool, regionLocale: Locale? = nil, searchPlaceholder: String? = nil, focusSearchOnAppear: Bool = true, monochromeSectionIndex: Bool = false, itemSelected: @escaping (((String, String), String, Int)) -> Void) {
         self.theme = theme
         self.strings = strings
         self.displayCodes = displayCodes
         self.glass = glass
+        self.regionLocale = regionLocale
+        self.searchPlaceholder = searchPlaceholder
+        self.focusSearchOnAppear = focusSearchOnAppear
+        self.monochromeSectionIndex = monochromeSectionIndex
         self.itemSelected = itemSelected
         
-        self.needsSubtitle = strings.baseLanguageCode != "en"
+        if let regionLocale = regionLocale {
+            let identifier = regionLocale.identifier.lowercased()
+            self.needsSubtitle = !(identifier == "en" || identifier.hasPrefix("en_") || identifier.hasPrefix("en-"))
+        } else {
+            self.needsSubtitle = strings.baseLanguageCode != "en"
+        }
         
         self.tableView = UITableView(frame: CGRect(), style: glass ? .insetGrouped : .plain)
         self.tableView.accessibilityIdentifier = "Auth.Country.List"
@@ -235,14 +285,21 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
             self.searchTableView.contentInsetAdjustmentBehavior = .never
         }
         
-        let countryNamesAndCodes = localizedCountryNamesAndCodes(strings: strings)
+        let countryNamesAndCodes = localizedCountryNamesAndCodes(strings: strings, regionLocale: regionLocale)
         self.countryNamesAndCodes = countryNamesAndCodes
         
         var sections: [(String, [((String, String), String, Int)])] = []
+        let sortLocale = regionLocale
         for (names, id, codes) in countryNamesAndCodes.sorted(by: { lhs, rhs in
+            if countryUsesPinyinIndex(sortLocale) {
+                return countrySortKey(name: lhs.0.1, locale: sortLocale).localizedStandardCompare(countrySortKey(name: rhs.0.1, locale: sortLocale)) == .orderedAscending
+            }
+            if let sortLocale = sortLocale {
+                return lhs.0.1.compare(rhs.0.1, locale: sortLocale) == .orderedAscending
+            }
             return lhs.0.1 < rhs.0.1
         }) {
-            let title = String(names.1[names.1.startIndex ..< names.1.index(after: names.1.startIndex)]).uppercased()
+            let title = countrySectionTitle(name: names.1, locale: sortLocale)
             if sections.isEmpty || sections[sections.count - 1].0 != title {
                 sections.append((title, []))
             }
@@ -278,6 +335,11 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
             self.searchTableView.backgroundView = UIView()
             self.searchTableView.sectionIndexColor = self.theme.list.itemAccentColor
             }
+        if self.monochromeSectionIndex {
+            let indexColor = self.theme.list.itemPrimaryTextColor
+            self.tableView.sectionIndexColor = indexColor
+            self.searchTableView.sectionIndexColor = indexColor
+        }
     
         self.tableView.delegate = self
         self.tableView.dataSource = self
@@ -324,6 +386,7 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
                         strings: self.strings,
                         metrics: layout.metrics,
                         safeInsets: layout.safeInsets,
+                        placeholder: self.searchPlaceholder,
                         updated: { [weak self] query in
                             guard let self else {
                                 return
@@ -349,7 +412,9 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
                     self.view.addSubview(searchInputView)
                     searchInputView.frame = CGRect(origin: CGPoint(x: searchInputFrame.minX, y: layout.size.height), size: searchInputFrame.size)
 
-                    searchInputView.activateInput()
+                    if self.focusSearchOnAppear {
+                        searchInputView.activateInput()
+                    }
                 }
                 transition.updateFrame(view: searchInputView, frame: searchInputFrame)
             }

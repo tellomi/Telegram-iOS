@@ -21,7 +21,9 @@ func tellomiCheckboxImage(checked: Bool, dark: Bool = false) -> UIImage? {
         if checked {
             context.setFillColor(palette.checkbox.cgColor)
             context.fillEllipse(in: rect)
-            context.setStrokeColor(UIColor.white.cgColor)
+            // Dark mode draws a white disc. A white tick on it disappears.
+            let tick = dark ? UIColor(rgb: 0x111111) : UIColor.white
+            context.setStrokeColor(tick.cgColor)
             context.setLineWidth(1.6)
             context.setLineCap(.round)
             context.setLineJoin(.round)
@@ -368,14 +370,14 @@ final class TellomiOrDividerNode: ASDisplayNode {
 
 final class TellomiAgreementPromptController: ViewController {
     private let kind: TellomiSignUpAgreement.Kind
-    private let chinese: Bool
+    private let languageCode: String
     private let dark: Bool
     private let openUrl: (String) -> Void
     var agreed: (() -> Void)?
 
-    init(kind: TellomiSignUpAgreement.Kind, chinese: Bool, dark: Bool, openUrl: @escaping (String) -> Void) {
+    init(kind: TellomiSignUpAgreement.Kind, languageCode: String, dark: Bool, openUrl: @escaping (String) -> Void) {
         self.kind = kind
-        self.chinese = chinese
+        self.languageCode = languageCode
         self.dark = dark
         self.openUrl = openUrl
         super.init(navigationBarPresentationData: nil)
@@ -387,7 +389,7 @@ final class TellomiAgreementPromptController: ViewController {
     }
 
     override func loadDisplayNode() {
-        self.displayNode = TellomiAgreementPromptNode(kind: self.kind, chinese: self.chinese, dark: self.dark, openUrl: { [weak self] url in
+        self.displayNode = TellomiAgreementPromptNode(kind: self.kind, languageCode: self.languageCode, dark: self.dark, openUrl: { [weak self] url in
             self?.openUrl(url)
         }, agree: { [weak self] in
             self?.agreed?()
@@ -409,9 +411,9 @@ private final class TellomiAgreementPromptNode: ASDisplayNode {
     private let agreement = TellomiSignUpAgreement()
     private let dismissPrompt: () -> Void
 
-    init(kind: TellomiSignUpAgreement.Kind, chinese: Bool, dark: Bool, openUrl: @escaping (String) -> Void, agree: @escaping () -> Void, dismiss: @escaping () -> Void) {
+    init(kind: TellomiSignUpAgreement.Kind, languageCode: String, dark: Bool, openUrl: @escaping (String) -> Void, agree: @escaping () -> Void, dismiss: @escaping () -> Void) {
         self.dismissPrompt = dismiss
-        let copy = tellomiLoginCopy(languageCode: chinese ? "zh" : "en")
+        let copy = tellomiLoginCopy(languageCode: languageCode)
         let palette = TellomiLoginChrome.palette(dark: dark)
         self.agreeButton = SolidRoundedButtonNode(title: copy.agreeAndLogin, theme: TellomiLoginChrome.buttonTheme(dark: dark), glass: false, height: 48.0, cornerRadius: 24.0)
         super.init()
@@ -428,8 +430,9 @@ private final class TellomiAgreementPromptNode: ASDisplayNode {
         self.bodyNode.maximumNumberOfLines = 0
         self.bodyNode.displaysAsynchronously = false
         self.bodyNode.isUserInteractionEnabled = true
-        self.bodyNode.linkHighlightColor = TellomiLoginChrome.link.withAlphaComponent(0.15)
-        self.agreement.install(on: self.bodyNode, theme: defaultPresentationTheme, kind: kind, chinese: chinese, togglesOnText: false, centered: true, openUrl: openUrl, changed: { _ in })
+        self.bodyNode.linkHighlightColor = TellomiLoginChrome.palette(dark: dark).link.withAlphaComponent(0.2)
+        let agreementTheme = dark ? defaultDarkPresentationTheme : defaultPresentationTheme
+        self.agreement.install(on: self.bodyNode, theme: agreementTheme, kind: kind, languageCode: languageCode, togglesOnText: false, centered: true, openUrl: openUrl, changed: { _ in })
 
         self.declineNode.setTitle(copy.disagree, with: Font.regular(15.0), with: palette.secondaryText, for: .normal)
         self.declineNode.accessibilityTraits = [.button]

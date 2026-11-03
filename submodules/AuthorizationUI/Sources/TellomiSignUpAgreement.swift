@@ -5,6 +5,86 @@ import Display
 import TelegramPresentationData
 import TextFormat
 
+struct TellomiAgreementParts {
+    var lead: String
+    var terms: String
+    var mid: String
+    var privacy: String
+    var tail: String
+}
+
+private func tellomiAgreementKey(_ languageCode: String) -> String {
+    let code = languageCode.lowercased().replacingOccurrences(of: "_", with: "-")
+    if code.hasPrefix("zh-hant") || code.hasPrefix("zh-tw") || code.hasPrefix("zh-hk") || code.hasPrefix("zh-mo") {
+        return "zh-hant"
+    }
+    if code == "zh" || code.hasPrefix("zh-") {
+        return "zh-hans"
+    }
+    if let primary = code.split(separator: "-").first {
+        return String(primary)
+    }
+    return "en"
+}
+
+func tellomiAgreementParts(languageCode: String, kind: TellomiSignUpAgreement.Kind) -> TellomiAgreementParts {
+    let key = tellomiAgreementKey(tellomiChromeLanguageCode(savedLanguageCode: languageCode))
+    let signUp = kind == .signUp
+    switch key {
+    case "zh-hans":
+        if signUp {
+            return TellomiAgreementParts(lead: "我已阅读并同意", terms: "《用户服务协议》", mid: "和", privacy: "《隐私政策》", tail: "")
+        }
+        return TellomiAgreementParts(lead: "已阅读并同意 ", terms: "用户协议", mid: " 和 ", privacy: "隐私政策", tail: "")
+    case "zh-hant":
+        if signUp {
+            return TellomiAgreementParts(lead: "我已閱讀並同意", terms: "《用戶服務協議》", mid: "和", privacy: "《隱私政策》", tail: "")
+        }
+        return TellomiAgreementParts(lead: "已閱讀並同意 ", terms: "用戶協議", mid: " 和 ", privacy: "隱私政策", tail: "")
+    case "ar":
+        return TellomiAgreementParts(lead: "لقد قرأت وأوافق على ", terms: "شروط الخدمة", mid: " و", privacy: "سياسة الخصوصية", tail: "")
+    case "be":
+        return TellomiAgreementParts(lead: "Я прачытаў(-ла) і згаджаюся з ", terms: "Умовамі", mid: " і ", privacy: "Палітыкай прыватнасці", tail: "")
+    case "ca":
+        return TellomiAgreementParts(lead: "He llegit i accepto les ", terms: "Condicions", mid: " i la ", privacy: "Política de privadesa", tail: "")
+    case "de":
+        return TellomiAgreementParts(lead: "Ich habe die ", terms: "Nutzungsbedingungen", mid: " und die ", privacy: "Datenschutzrichtlinie", tail: " gelesen und stimme zu")
+    case "es":
+        return TellomiAgreementParts(lead: "He leído y acepto los ", terms: "Términos", mid: " y la ", privacy: "Política de privacidad", tail: "")
+    case "fa":
+        return TellomiAgreementParts(lead: "شرایط ", terms: "خدمات", mid: " و ", privacy: "سیاست حریم خصوصی", tail: " را خوانده‌ام و می‌پذیرم")
+    case "fr":
+        return TellomiAgreementParts(lead: "J'ai lu et j'accepte les ", terms: "Conditions", mid: " et la ", privacy: "Politique de confidentialité", tail: "")
+    case "id":
+        return TellomiAgreementParts(lead: "Saya telah membaca dan menyetujui ", terms: "Ketentuan", mid: " dan ", privacy: "Kebijakan Privasi", tail: "")
+    case "it":
+        return TellomiAgreementParts(lead: "Ho letto e accetto i ", terms: "Termini", mid: " e l'", privacy: "Informativa sulla privacy", tail: "")
+    case "ko":
+        return TellomiAgreementParts(lead: "", terms: "이용약관", mid: " 및 ", privacy: "개인정보 처리방침", tail: "을 읽었으며 동의합니다")
+    case "ms":
+        return TellomiAgreementParts(lead: "Saya telah membaca dan bersetuju dengan ", terms: "Terma", mid: " dan ", privacy: "Dasar Privasi", tail: "")
+    case "nl":
+        return TellomiAgreementParts(lead: "Ik heb de ", terms: "Voorwaarden", mid: " en het ", privacy: "Privacybeleid", tail: " gelezen en ga akkoord")
+    case "pl":
+        return TellomiAgreementParts(lead: "Przeczytałem(-am) i akceptuję ", terms: "Warunki", mid: " oraz ", privacy: "Politykę prywatności", tail: "")
+    case "pt":
+        return TellomiAgreementParts(lead: "Li e concordo com os ", terms: "Termos", mid: " e a ", privacy: "Política de Privacidade", tail: "")
+    case "ru":
+        return TellomiAgreementParts(lead: "Я прочитал(а) и принимаю ", terms: "Условия", mid: " и ", privacy: "Политику конфиденциальности", tail: "")
+    case "tr":
+        return TellomiAgreementParts(lead: "", terms: "Koşullar", mid: " ve ", privacy: "Gizlilik Politikası", tail: "'nı okudum ve kabul ediyorum")
+    case "uk":
+        return TellomiAgreementParts(lead: "Я прочитав(-ла) і приймаю ", terms: "Умови", mid: " та ", privacy: "Політику конфіденційності", tail: "")
+    case "uz":
+        return TellomiAgreementParts(lead: "", terms: "Shartlar", mid: " va ", privacy: "Maxfiylik siyosati", tail: "ni o‘qidim va roziman")
+    default:
+        if signUp {
+            return TellomiAgreementParts(lead: "I have read and agree to the ", terms: "Terms of Service", mid: " and ", privacy: "Privacy Policy", tail: "")
+        }
+        return TellomiAgreementParts(lead: "I have read and agree to the ", terms: "Terms", mid: " and ", privacy: "Privacy Policy", tail: "")
+    }
+}
+
 /// Agreement sentence for sign-up and the login screens. The circle is a real
 /// button on `TellomiAgreementRow`. This object owns the sentence and its taps:
 /// a link opens the document, and the rest of the sentence toggles the box.
@@ -23,7 +103,7 @@ final class TellomiSignUpAgreement: NSObject {
 
     private(set) var agreed = false
     private var kind: Kind = .signUp
-    private var chinese = true
+    private var languageCode = "zh-hans"
     private var appliedTheme: PresentationTheme?
     private weak var node: ImmediateTextNode?
     private var openUrl: ((String) -> Void)?
@@ -37,9 +117,9 @@ final class TellomiSignUpAgreement: NSObject {
     ///
     /// The stock text-node recognizer waits for a double tap and only hits glyph bounds.
     /// This installs a single-tap recognizer and expands the hit rect.
-    func install(on node: ImmediateTextNode, theme: PresentationTheme, kind: Kind = .signUp, chinese: Bool = true, togglesOnText: Bool = true, centered: Bool = false, openUrl: @escaping (String) -> Void, changed: @escaping (Bool) -> Void) {
+    func install(on node: ImmediateTextNode, theme: PresentationTheme, kind: Kind = .signUp, chinese: Bool = true, languageCode: String? = nil, togglesOnText: Bool = true, centered: Bool = false, openUrl: @escaping (String) -> Void, changed: @escaping (Bool) -> Void) {
         self.kind = kind
-        self.chinese = chinese
+        self.languageCode = languageCode ?? (chinese ? "zh-hans" : "en")
         self.appliedTheme = theme
         self.node = node
         self.openUrl = openUrl
@@ -108,8 +188,11 @@ final class TellomiSignUpAgreement: NSObject {
     }
 
     /// Rewrites the sentence after a pre-login language change. The tap recognizer stays.
-    func refreshLanguage() {
-        self.chinese = tellomiLoginPrefersChinese(languageCode: "")
+    /// Pass the chrome language (`tellomiInterfaceLanguageCode`). An empty code used to
+    /// read as English once the system pack flag was set, so a Chinese login kept the
+    /// English agreement.
+    func refreshLanguage(languageCode: String) {
+        self.languageCode = tellomiChromeLanguageCode(savedLanguageCode: languageCode)
         guard self.node != nil else {
             return
         }
@@ -123,73 +206,34 @@ final class TellomiSignUpAgreement: NSObject {
     }
 
     func text(theme _: PresentationTheme) -> NSAttributedString {
-        let font = Font.regular(13.0)
+        let font = TellomiLoginChrome.scaledFont(size: 13.0)
         let body = TellomiLoginChrome.secondaryText
-        let accent = TellomiLoginChrome.link
+        let accent = TellomiLoginChrome.palette(dark: self.appliedTheme?.overallDarkAppearance ?? false).link
         let result = NSMutableAttributedString()
         func toggle(_ s: String, color: UIColor) {
             result.append(NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: color, TellomiSignUpAgreement.toggleAttribute: true]))
         }
         func link(_ s: String, _ url: String) {
-            result.append(NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: accent, NSAttributedString.Key(rawValue: TelegramTextAttributes.URL): url]))
+            let linkFont = UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+            result.append(NSAttributedString(string: s, attributes: [
+                .font: linkFont,
+                .foregroundColor: accent,
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+                .underlineColor: accent,
+                NSAttributedString.Key(rawValue: TelegramTextAttributes.URL): url
+            ]))
         }
-        if self.chinese && tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: "")) == .hant {
-            switch self.kind {
-            case .signUp:
-                toggle("我已閱讀並同意", color: body)
-                link("《用戶服務協議》", TellomiSignUpAgreement.termsURL)
-                toggle("和", color: body)
-                link("《隱私政策》", TellomiSignUpAgreement.privacyURL)
-            case .phone:
-                toggle("已閱讀並同意 ", color: body)
-                link("用戶協議", TellomiSignUpAgreement.termsURL)
-                toggle(" 和 ", color: body)
-                link("隱私政策", TellomiSignUpAgreement.privacyURL)
-            case .email:
-                toggle("已閱讀並同意 ", color: body)
-                link("用戶協議", TellomiSignUpAgreement.termsURL)
-                toggle(" 和 ", color: body)
-                link("隱私政策", TellomiSignUpAgreement.privacyURL)
-            }
-        } else if self.chinese {
-            switch self.kind {
-            case .signUp:
-                toggle("我已阅读并同意", color: body)
-                link("《用户服务协议》", TellomiSignUpAgreement.termsURL)
-                toggle("和", color: body)
-                link("《隐私政策》", TellomiSignUpAgreement.privacyURL)
-            case .phone:
-                toggle("已阅读并同意 ", color: body)
-                link("用户协议", TellomiSignUpAgreement.termsURL)
-                toggle(" 和 ", color: body)
-                link("隐私政策", TellomiSignUpAgreement.privacyURL)
-            case .email:
-                toggle("已阅读并同意 ", color: body)
-                link("用户协议", TellomiSignUpAgreement.termsURL)
-                toggle(" 和 ", color: body)
-                link("隐私政策", TellomiSignUpAgreement.privacyURL)
-            }
-        } else {
-            switch self.kind {
-            case .signUp:
-                toggle("I have read and agree to the ", color: body)
-                link("Terms of Service", TellomiSignUpAgreement.termsURL)
-                toggle(" and ", color: body)
-                link("Privacy Policy", TellomiSignUpAgreement.privacyURL)
-            case .email:
-                toggle("I have read and agree to the ", color: body)
-                link("Terms", TellomiSignUpAgreement.termsURL)
-                toggle(" and ", color: body)
-                link("Privacy Policy", TellomiSignUpAgreement.privacyURL)
-            case .phone:
-                toggle("I have read and agree to the ", color: body)
-                link("Terms", TellomiSignUpAgreement.termsURL)
-                toggle(" and ", color: body)
-                link("Privacy Policy", TellomiSignUpAgreement.privacyURL)
-            }
+        let parts = tellomiAgreementParts(languageCode: self.languageCode, kind: self.kind)
+        toggle(parts.lead, color: body)
+        link(parts.terms, TellomiSignUpAgreement.termsURL)
+        toggle(parts.mid, color: body)
+        link(parts.privacy, TellomiSignUpAgreement.privacyURL)
+        if !parts.tail.isEmpty {
+            toggle(parts.tail, color: body)
         }
         let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = (self.centeredBody || self.kind != .phone) ? .center : .left
+        // The prompt centers its sentence. Phone and email keep the words against the checkbox.
+        paragraph.alignment = (self.centeredBody || self.kind == .signUp) ? .center : .left
         paragraph.lineBreakMode = .byWordWrapping
         result.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: result.length))
         return result

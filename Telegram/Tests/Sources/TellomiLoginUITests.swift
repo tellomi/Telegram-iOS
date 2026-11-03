@@ -86,7 +86,7 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertFalse(agree.waitForExistence(timeout: 2.0))
     }
 
-    func testLanguageSwitcherListsTheThreeBuiltInLanguages() throws {
+    func testLanguageSwitcherListsBundledLanguages() throws {
         self.openPhoneLogin()
         let globe = app.buttons["Auth.Login.Language"]
         XCTAssertTrue(globe.waitForExistence(timeout: 5.0))
@@ -94,6 +94,7 @@ final class TellomiLoginUITests: XCTestCase {
         XCTAssertTrue(app.buttons["简体中文"].waitForExistence(timeout: 5.0))
         XCTAssertTrue(app.buttons["繁體中文"].exists)
         XCTAssertTrue(app.buttons["English"].exists)
+        XCTAssertTrue(app.buttons["Deutsch"].exists)
     }
 
     func testCountryPickerOpens() throws {
