@@ -503,3 +503,11 @@ The notification extension's `standaloneStateManager` read the shared account ma
 A private or secret chat notification no longer appends `→ <this account>`. Official Telegram does not. Groups and channels still do when more than one account is signed in. A one-to-one call does not; a group call still does. The peer id on that helper is `EnginePeer.Id` (a `PeerId` typealias). The file does not import Postbox.
 
 The bundled list has both `1;US` and `1;CA`. The prefix map kept the last writer, so a pasted +1 number resolved to Canada. A calling code with no longer prefix keeps the United States when that row is present. Other shared codes (7, 599) stay last-writer.
+
+## Send mark, folder names, icon size
+
+The media-preview send control used `Media Editor/Send` (`attachlogo.pdf`), the Telegram paper plane, on a `#0088ff` disc. That file, `Chat/Input/Text/SendIcon`, and `IconForwardSend` are now an up arrow. The send disc is `#111111` with a white arrow. The chat composer's generated arrow is unchanged. Launcher icons and the QR mark are unchanged.
+
+The media-preview back control used `Navigation/Back`, whose glyph is about 8pt inside a 30pt box, so it looked lost in the 44pt circle. It now uses `Media Editor/Back` (a chevron that fills a 28pt box) at 1.35×. Attachment-tray tab icons in the glass bar are 36pt instead of 30pt. Media-editor tool icons cap at 32pt instead of 28pt.
+
+Suggested folders arrive from `messages.getSuggestedDialogFilters` with English titles. On a Chinese interface, Unread / Personal / Groups / Channels / Bots and their descriptions are shown in Chinese. A few folder and People Nearby keys that the Chinese pack omits are filled locally and do not replace a translation the pack already has.

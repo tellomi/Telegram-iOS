@@ -307,12 +307,15 @@ private final class AttachButtonComponent: CombinedComponent {
                 tintColor = component.isSelected ? component.theme.rootController.tabBar.selectedIconColor : component.theme.rootController.tabBar.iconColor
             }
 
-            let iconSize = CGSize(width: 30.0, height: 30.0)
+            var iconSize = CGSize(width: 30.0, height: 30.0)
             var topInset: CGFloat = 4.0 + UIScreenPixel
             var spacing: CGFloat = 15.0 + UIScreenPixel
             if case .glass = component.style {
-                topInset += 5.0
-                spacing += UIScreenPixel
+                // The tab glyphs were sitting small in the 30pt slot. 36pt matches
+                // the weight of the other controls in this bar.
+                iconSize = CGSize(width: 36.0, height: 36.0)
+                topInset = 2.0
+                spacing = 19.0
             }
 
             let iconFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((context.availableSize.width - iconSize.width) / 2.0), y: topInset + animationOffset), size: iconSize)
