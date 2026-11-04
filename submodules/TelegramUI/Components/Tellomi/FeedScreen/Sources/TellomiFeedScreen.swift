@@ -215,7 +215,7 @@ public final class TellomiFeedScreen: ViewController {
             mode = .legacy
             legacyTitle = legacy.feedEmptyTitle
             legacyBody = postUnavailable || self.pendingPostId != nil ? legacy.feedPostUnavailable : legacy.feedEmptyText
-        case .feed, .detail where self.engineVisible == false:
+        case .feed where self.engineVisible == false, .detail where self.engineVisible == false:
             mode = .legacy
             legacyTitle = legacy.feedEmptyTitle
             legacyBody = legacy.feedEmptyText
@@ -237,10 +237,10 @@ public final class TellomiFeedScreen: ViewController {
                 posts: self.posts[self.kind] ?? [],
                 loading: self.loading || self.loadingMore,
                 failure: self.banner ?? (chrome.failure ? copy.failed : nil),
-                cities: tellomiDiscoverCities(languageCode: self.presentationData.strings.primaryComponent.languageCode),
                 legacyTitle: legacyTitle,
                 legacyBody: legacyBody,
-                copy: copy
+                copy: copy,
+                cities: tellomiDiscoverCities(languageCode: self.presentationData.strings.primaryComponent.languageCode)
             ))
             if let layout = self.appliedLayout {
                 let navigationHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
@@ -469,6 +469,10 @@ public final class TellomiFeedScreen: ViewController {
                     self.cursors.removeValue(forKey: kind)
                 }
                 self.failed = false
+            case .success:
+                if reset {
+                    self.failed = true
+                }
             case .failure(.hidden):
                 self.engineVisible = false
                 self.failed = false
