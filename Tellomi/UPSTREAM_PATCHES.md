@@ -653,4 +653,4 @@ The bottom bar is on master (Telegram-iOS #60).
 | `submodules/TelegramCore/Sources/Tellomi/TellomiDiscoverCredential.swift` | New. Sends both on `Account.network`. Audience errors map to `DISCOVER_DISABLED`, `AUDIENCE_INVALID`, `USER_ID_INVALID`, and `USER_IS_BLOCKED`. |
 | `submodules/TelegramCore/BUILD` | Depends on `TellomiDiscover`. |
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | Recommend, Following, and Nearby, post detail, text compose, and the Stories privacy screen. The M2 empty state remains when the flag is off. |
-| `submodules/TelegramUI/Components/Tellomi/FeedScreen/BUILD` | Depends on `TellomiDiscover`, `Geocoding`, `ShareWithPeersScreen`, and `Postbox`. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/BUILD` | Depends on `TellomiDiscover`, `Geocoding`, and `ShareWithPeersScreen`. Cloud user ids go through `EnginePeer.Id.tellomiCloudUserId`. |

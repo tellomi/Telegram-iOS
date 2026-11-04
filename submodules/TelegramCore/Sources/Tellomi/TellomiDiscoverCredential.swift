@@ -1,8 +1,19 @@
 import Foundation
 import MtProtoKit
+import Postbox
 import SwiftSignalKit
 import TellomiDiscover
 internal import TelegramApi
+
+public extension EnginePeer.Id {
+    /// Teamgram user id for a cloud user. Groups, channels, and secret chats are nil.
+    var tellomiCloudUserId: Int64? {
+        guard self.namespace == Namespaces.Peer.CloudUser else {
+            return nil
+        }
+        return self.id._internalGetInt64Value()
+    }
+}
 
 public func tellomiDiscoverEngineCredential(account: Account) -> Signal<TellomiDiscoverCredential, MTRpcError> {
     return account.network.request(tellomiDiscoverEngineCredentialInvocation(constructorId: TellomiDiscoverTL.getEngineCredentialId))

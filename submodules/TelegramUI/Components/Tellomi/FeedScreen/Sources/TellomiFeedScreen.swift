@@ -499,9 +499,8 @@ public final class TellomiFeedScreen: ViewController {
             return
         }
         let textLimit = self.textLimit
-        let selfUserId = self.context.account.peerId.id._internalGetInt64Value()
         let controller = TellomiDiscoverComposeController(context: self.context, textLimit: textLimit, publish: { [weak self] text, visibility, userIds, nonce, completion in
-            guard let self else {
+            guard let self, let selfUserId = self.context.account.peerId.tellomiCloudUserId else {
                 completion(.failure(.signedOut))
                 return
             }

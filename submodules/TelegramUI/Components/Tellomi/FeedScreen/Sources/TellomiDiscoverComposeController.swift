@@ -2,7 +2,6 @@ import AccountContext
 import AsyncDisplayKit
 import Display
 import Foundation
-import Postbox
 import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
@@ -118,12 +117,15 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     private func choice() -> TellomiDiscoverAudienceChoice? {
         var ids: [Int64] = []
         for peerId in self.privacy.additionallyIncludePeers {
-            guard peerId.namespace == Namespaces.Peer.CloudUser else {
+            guard let id = peerId.tellomiCloudUserId else {
                 return TellomiDiscoverAudienceChoice(visibility: .include, publishable: false, reason: "audience_invalid", userIds: [])
             }
-            ids.append(peerId.id._internalGetInt64Value())
+            ids.append(id)
         }
-        return tellomiDiscoverAudience(base: self.privacy.base.tellomiDiscoverBase, includePeerIds: ids, selfUserId: self.context.account.peerId.id._internalGetInt64Value())
+        guard let selfUserId = self.context.account.peerId.tellomiCloudUserId else {
+            return nil
+        }
+        return tellomiDiscoverAudience(base: self.privacy.base.tellomiDiscoverBase, includePeerIds: ids, selfUserId: selfUserId)
     }
 
     private func apply() {
