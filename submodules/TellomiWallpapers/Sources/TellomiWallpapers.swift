@@ -77,6 +77,45 @@ public enum TellomiBubbleShadowSpec {
     public static let alpha: Double = 0.18
 }
 
+public enum TellomiBubbleChrome {
+    /// Upstream draws the bubble shadow for every wallpaper, not only a solid
+    /// color. `hasWallpaper` is false for an empty wallpaper.
+    public static func drawsShadow(hasWallpaper: Bool) -> Bool {
+        return hasWallpaper
+    }
+}
+
+public struct TellomiReactionCapsuleBackground: Equatable {
+    public let rgb: UInt32
+    public let alpha: Double
+
+    public init(rgb: UInt32, alpha: Double) {
+        self.rgb = rgb
+        self.alpha = alpha
+    }
+}
+
+public enum TellomiReactionCapsules {
+    /// Day Classic outgoing, before an accent recolors the bubble.
+    /// Upstream is green. A black capsule is the C2 theme, not upstream.
+    public static let classicOutgoingInactive = TellomiReactionCapsuleBackground(rgb: 0x3FC33B, alpha: 0.12)
+    public static let classicOutgoingActive = TellomiReactionCapsuleBackground(rgb: 0x3FC33B, alpha: 1)
+
+    /// Day outgoing, before an accent recolors the bubble. Upstream is white.
+    public static let dayOutgoingInactive = TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 0.12)
+    public static let dayOutgoingActive = TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 1)
+
+    /// Night incoming and freeform, deselected. Upstream white at 7%.
+    public static let darkIncomingInactive = TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 0.07)
+    /// Night outgoing deselected on the base theme. Upstream white at 10%.
+    public static let darkOutgoingInactive = TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 0.1)
+    /// Night outgoing deselected after an accent is applied. Upstream white at 12%.
+    public static let darkAccentedOutgoingInactive = TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 0.12)
+    /// Night selected capsule. Upstream white. The tinted theme's selected
+    /// incoming capsule follows the accent instead of this white.
+    public static let darkActive = TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 1)
+}
+
 public struct TellomiWallpaperEntry: Equatable {
     public let id: String
     public let name: String
