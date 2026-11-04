@@ -18,13 +18,18 @@ style
     fill  -> svg/filled
 
 canvas
-    Empty: keep the imageset's current page size and place the glyph in
-    the original ink box, so the padding stays.
-    WxH: page size in points. The glyph fills that page (MingCute's own
-    viewBox padding is the inset).
-    match:<asset>: copy the page size and ink box of another row's asset
-    before it is replaced. Used for a new filled imageset next to a line
-    one.
+    Empty: page size and ink box come from upstream_ink.json (the icon
+    that was in the tree before the MingCute replacement). The glyph is
+    cropped to its own ink and scaled so its long side matches that ink.
+    WxH: page size in points, for an imageset that has no upstream icon.
+    The glyph fills that page (MingCute's own viewBox padding is the inset).
+    match:<asset>: copy that asset's page and ink box. A filled imageset
+    uses the same box as its line icon.
+
+The fit used to place MingCute's whole 24x24 viewBox in the original ink
+box, and the viewBox already has padding, so the glyph was shrunk twice.
+upstream_ink.json is what a second run reads, so measuring the PDF this
+script just wrote cannot shrink it again.
 
 The PDF is a single black vector on a clear page. The app tints it.
 """
@@ -43,6 +48,7 @@ ROOT = Path(__file__).resolve().parents[2]
 XCASSETS = ROOT / "submodules/TelegramUI/Images.xcassets"
 SVG_ROOT = Path(__file__).resolve().parent / "MingCute" / "svg"
 MAPPING = Path(__file__).resolve().parent / "mapping.csv"
+UPSTREAM = Path(__file__).resolve().parent / "upstream_ink.json"
 
 STYLE_DIR = {"line": "regular", "fill": "filled"}
 
@@ -186,6 +192,43 @@ def parse_canvas(spec, measured):
     return width, height, (0.0, 0.0, width, height)
 
 
+def load_upstream():
+    if not UPSTREAM.is_file():
+        raise SystemExit(f"missing {UPSTREAM}")
+    data = json.loads(UPSTREAM.read_text())
+    icons = {}
+    for asset, spec in data["icons"].items():
+        page_w, page_h = spec["page"]
+        ink = tuple(spec["ink"])
+        icons[asset] = (float(page_w), float(page_h), ink)
+    return icons
+
+
+def glyph_ink(name, style):
+    """Tight ink of the MingCute drawing, in viewBox units (the file is 24x24)."""
+    key = (name, style)
+    cached = glyph_ink.cache.get(key)
+    if cached is not None:
+        return cached
+    path = SVG_ROOT / STYLE_DIR[style] / f"{name}.svg"
+    if not path.is_file():
+        raise SystemExit(f"missing vendored SVG {path}")
+    import cairosvg
+    scale = 32.0
+    png = cairosvg.svg2png(url=str(path), output_width=int(24 * scale), output_height=int(24 * scale))
+    image = Image.open(BytesIO(png)).convert("RGBA")
+    box = ink_box(image)
+    if box is None:
+        raise SystemExit(f"{name}: MingCute svg has no ink")
+    x, y, w, h = box
+    result = (x / scale, y / scale, w / scale, h / scale)
+    glyph_ink.cache[key] = result
+    return result
+
+
+glyph_ink.cache = {}
+
+
 def black_svg(name, style):
     path = SVG_ROOT / STYLE_DIR[style] / f"{name}.svg"
     if not path.is_file():
@@ -200,16 +243,48 @@ def black_svg(name, style):
     return inner.group(2)
 
 
-def compose_svg(page_w, page_h, ink, inner):
-    x, y, w, h = ink
-    # Keep the glyph square inside the ink box so a wide canvas does not stretch it.
-    side = min(w, h)
-    x += (w - side) / 2.0
-    y += (h - side) / 2.0
+def compose_canvas(page_w, page_h, inner):
+    """A new imageset. MingCute's own viewBox padding is the inset."""
+    side = min(page_w, page_h)
+    x = (page_w - side) / 2.0
+    y = (page_h - side) / 2.0
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{page_w}pt" height="{page_h}pt" '
         f'viewBox="0 0 {page_w} {page_h}">'
         f'<svg x="{x}" y="{y}" width="{side}" height="{side}" viewBox="0 0 24 24">{inner}</svg>'
+        f"</svg>"
+    )
+
+
+def compose_ink(page_w, page_h, ink, glyph, inner):
+    """Scale the MingCute ink onto the upstream ink.
+
+    The long side of the glyph's ink matches the long side of the upstream
+    ink, and the glyph is centered on that ink. MingCute outlines are filled
+    paths, so this one scale is also the stroke compensation: the outline
+    weight grows and shrinks with the glyph instead of staying at the
+    double-shrunk 24x24 weight.
+    """
+    ix, iy, iw, ih = ink
+    gx, gy, gw, gh = glyph
+    source = max(gw, gh)
+    if source <= 0:
+        raise SystemExit("glyph ink is empty")
+    factor = max(iw, ih) / source
+    dw, dh = gw * factor, gh * factor
+    ox = ix + iw / 2.0 - dw / 2.0
+    oy = iy + ih / 2.0 - dh / 2.0
+    # A center that sits against the page edge would clip the other axis and
+    # the measured ink would come out smaller than the upstream icon.
+    if dw <= page_w:
+        ox = min(max(ox, 0.0), page_w - dw)
+    if dh <= page_h:
+        oy = min(max(oy, 0.0), page_h - dh)
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{page_w}pt" height="{page_h}pt" '
+        f'viewBox="0 0 {page_w} {page_h}">'
+        f'<svg x="{ox}" y="{oy}" width="{dw}" height="{dh}" '
+        f'viewBox="{gx} {gy} {gw} {gh}">{inner}</svg>'
         f"</svg>"
     )
 
@@ -242,32 +317,56 @@ def write_imageset(asset, pdf_path):
     (directory / "Contents.json").write_text(json.dumps(contents, indent=2) + "\n")
 
 
+def resolve_geometry(asset, canvas, upstream):
+    """Return (page_w, page_h, ink, mode). mode is 'ink' or 'canvas'."""
+    if asset in upstream:
+        page_w, page_h, ink = upstream[asset]
+        return page_w, page_h, ink, "ink"
+    if canvas.startswith("match:"):
+        target = canvas.split(":", 1)[1]
+        if target in upstream:
+            page_w, page_h, ink = upstream[target]
+            return page_w, page_h, ink, "ink"
+        # The matched row is an explicit canvas with no upstream icon.
+        return None
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)", canvas or "")
+    if match:
+        width, height = float(match.group(1)), float(match.group(2))
+        return width, height, (0.0, 0.0, width, height), "canvas"
+    raise SystemExit(f"{asset}: no upstream ink in {UPSTREAM.name} and no canvas")
+
+
 def main():
     rows = read_mapping()
-    measured = {}
+    upstream = load_upstream()
     explicit = {}
     for asset, _, _, canvas in rows:
-        if re.fullmatch(r"\d+(?:\.\d+)?x\d+(?:\.\d+)?", canvas or ""):
-            explicit[asset] = parse_canvas(canvas, {})
-    needed = set()
-    for asset, _, _, canvas in rows:
-        if not canvas:
-            needed.add(asset)
-        elif canvas.startswith("match:"):
-            needed.add(canvas.split(":", 1)[1])
-    for asset in sorted(needed):
-        if asset in explicit:
-            measured[asset] = explicit[asset]
-        else:
-            measured[asset] = measure_existing(asset)
+        match = re.fullmatch(r"(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)", canvas or "")
+        if match and asset not in upstream:
+            width, height = float(match.group(1)), float(match.group(2))
+            explicit[asset] = (width, height, (0.0, 0.0, width, height), "canvas")
 
     written = 0
     for asset, name, style, canvas in rows:
-        geometry = parse_canvas(canvas, measured)
+        geometry = resolve_geometry(asset, canvas, upstream)
+        if geometry is None and canvas.startswith("match:"):
+            target = canvas.split(":", 1)[1]
+            if target not in explicit:
+                raise SystemExit(f"{asset}: match target {target} has no ink and no canvas")
+            geometry = explicit[target]
         if geometry is None:
-            geometry = measured[asset]
-        page_w, page_h, ink = geometry
-        svg = compose_svg(page_w, page_h, ink, black_svg(name, style))
+            raise SystemExit(f"{asset}: no geometry")
+        page_w, page_h, ink, mode = geometry
+        inner = black_svg(name, style)
+        if mode == "canvas":
+            # Already generated. Rewriting would only change the PDF date.
+            pdf_path = imageset_dir(asset) / "icon.pdf"
+            if pdf_path.is_file():
+                print(f"{asset}  {name} {style}  canvas kept")
+                continue
+            svg = compose_canvas(page_w, page_h, inner)
+        else:
+            svg = compose_ink(page_w, page_h, ink, glyph_ink(name, style), inner)
         directory = imageset_dir(asset)
         pdf_path = directory / "icon.pdf"
         write_pdf(svg, pdf_path)
@@ -276,7 +375,7 @@ def main():
         if abs(got_w - page_w) > 0.2 or abs(got_h - page_h) > 0.2:
             raise SystemExit(f"{asset}: wrote {got_w}x{got_h}, wanted {page_w}x{page_h}")
         written += 1
-        print(f"{asset}  {name} {style}  {page_w:.1f}x{page_h:.1f}")
+        print(f"{asset}  {name} {style}  {mode}  {page_w:.1f}x{page_h:.1f}")
     print(f"replaced {written}")
 
 

@@ -17,6 +17,7 @@ import RemoteBuild
 import TartBuild
 import GenerateProfiles
 import PostboxImportCheck
+import IconSizeCheck
 
 
 class ResolvedCodesigningData:
@@ -618,6 +619,8 @@ def resolve_watch_provisioning_profile(arguments, base_path):
 def build(bazel, arguments):
     if PostboxImportCheck.run(os.getcwd()) != 0:
         sys.exit(1)
+    if IconSizeCheck.run(os.getcwd()) != 0:
+        sys.exit(1)
 
     bazel_command_line = BazelCommandLine(
         bazel=bazel,
@@ -704,6 +707,8 @@ def build(bazel, arguments):
 
 def test(bazel, arguments):
     if PostboxImportCheck.run(os.getcwd()) != 0:
+        sys.exit(1)
+    if IconSizeCheck.run(os.getcwd()) != 0:
         sys.exit(1)
 
     bazel_command_line = BazelCommandLine(

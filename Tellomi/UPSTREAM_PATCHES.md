@@ -550,7 +550,7 @@ The nickname screen and the two-step screen again use Telegram's authorization l
 
 Phone, email, and code screens still differ from upstream. Those differences are listed in the pull request. A cleared unauthorized state no longer replaces the code screen with the welcome carousel while that login attempt is still current.
 
-Gallery and Location in the attach tray are the same 30×30 MingCute line icons as File and Poll. They had been fitted into the old ink box and drew smaller.
+Gallery and Location in the attach tray were given the same 30×30 canvas as File and Poll, because fitting them into the old ink box drew them smaller. That canvas is removed by the icon-size fix below. File and Poll still use the 30×30 canvas: they had no upstream icon.
 
 `DeviceLocationManager` asks for `kCLLocationAccuracyBest` and `requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocation")`. `DeviceAccess.authorizeAccess` asks through `LocationManager.requestPreciseLocationIfReduced()` (the helper is on that wrapper, not on `CLLocationManager`). `Info.plist` / `InfoBazel.plist` carry `NSLocationTemporaryUsageDescriptionDictionary`. The current-location row sends `accuracy_radius` from `CLLocation.horizontalAccuracy`. Apple Maps is still given WGS-84; MapKit applies the China offset. 高德 uses `dev=1`, 百度 `coord_type=wgs84`, 腾讯 is converted to GCJ-02 in `TellomiMapOpenIn`.
 
@@ -687,3 +687,20 @@ Teamgram #182 accepts a public username of 4 characters. Upstream iOS already re
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/` | Settings row that opens it. |
 | `submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/` | Draws the bubble shadow whenever the chat has a wallpaper. |
 | `submodules/TellomiWallpapers/` `TellomiReactionCapsules` | Reaction capsule backgrounds. Day Classic outgoing is green `#3FC33B` (12% / solid). Day outgoing is white (12% / solid). Night incoming is white at 7%, night outgoing is white at 10% (12% once an accent is applied) and solid white when selected. The tinted theme's selected incoming capsule follows the accent. The accent itself stays `#3390EC`. |
+
+## Icon ink size
+
+`Tellomi/Icons/generate_icons.py` used to place MingCute's whole 24×24 viewBox inside the original ink box, using the shorter side of that box. The viewBox already has padding, so the glyph was shrunk twice. Of the icons that had an upstream PDF, 69 measured under 0.8 of the old long side (pin 0.57, back 0.44).
+
+The generator now crops each MingCute path to its own ink, scales it uniformly so the long side equals the upstream long side, and centers it on the upstream ink. MingCute outlines are filled paths, so that scale is also the stroke compensation: the outline weight changes with the glyph. `upstream_ink.json` holds the pre-replacement boxes (commit `599d6869aa^`), which is what a later run reads. `Chat/Input/Text/SendIcon` and `IconForwardSend` stay the up arrow from the send-mark change and are not in the mapping, so a regenerate does not draw the paper plane again. Login screens are unchanged.
+
+`Tellomi/Icons/check_sizes.py` fails when a replaced icon's long ink side is under 0.9 of that upstream box. `Make.py build` and `Make.py test` run it. An explicit `WxH` canvas with no upstream icon is not compared.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/Icons/generate_icons.py` | Fit the MingCute ink to the upstream ink. |
+| `Tellomi/Icons/upstream_ink.json` | Page size and ink box from before the replacement. |
+| `Tellomi/Icons/pdf_ink.py`, `check_sizes.py` | Path ink, and the 0.9 check. |
+| `Tellomi/Icons/mapping.csv` | Gallery and Location use the upstream ink again. The two send glyphs are not generated. |
+| `build-system/Make/IconSizeCheck.py`, `Make.py` | The check runs with the Postbox import check. |
+| `submodules/TelegramUI/Images.xcassets` | The regenerated imagesets. |
