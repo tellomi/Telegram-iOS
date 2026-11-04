@@ -66,17 +66,16 @@ func tellomiStartTabObservation(context: AccountContext, rootController: Telegra
         return
     }
     let signal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.tellomiTabSettings])
-    |> map { sharedData -> (Bool, Bool) in
-        let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.tellomiTabSettings]?.get(TellomiTabSettings.self) ?? .defaultSettings
-        return (settings.showFeedTab, settings.showContactsTab)
+    |> map { sharedData -> TellomiTabSettings in
+        return sharedData.entries[ApplicationSpecificSharedDataKeys.tellomiTabSettings]?.get(TellomiTabSettings.self) ?? .defaultSettings
     }
     |> distinctUntilChanged
     |> deliverOnMainQueue
-    let disposable = signal.start(next: { [weak rootController] visibility in
+    let disposable = signal.start(next: { [weak rootController] settings in
         guard let rootController else {
             return
         }
-        tellomiRememberTabVisibility(TellomiTabSettings(showFeedTab: visibility.0, showContactsTab: visibility.1))
+        tellomiRememberTabVisibility(settings)
         rootController.updateRootControllers(showCallsTab: showCallsTab(), showNewsTab: showNewsTab())
     })
     objc_setAssociatedObject(rootController, &tellomiTabObservationKey, TellomiTabObservationBox(disposable), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
