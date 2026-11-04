@@ -644,7 +644,7 @@ The Discover tab stays on the M2 empty state until app config `tellomi_discover_
 
 Visibility is Stories' `EngineStoryPrivacy` and `ShareWithPeersScreen` (editing, so the story screenshot / pin rows stay hidden). Everyone, contacts, and close friends post without an audience token. Close friends still go through `contacts.editCloseFriends`. Selected people (`include`) and exclusion lists (`exclude`) call `discover.getAudienceToken` with the cloud-user id, then post that JWT unchanged. A list that is empty, longer than 500, contains the caller, a duplicate, or a non-user is not sent. A post may include `city`, a `<country>:<slug>` code such as `cn:chengdu`. It is omitted when the user has not chosen one, and it is not edited after send. A bad code is `400 invalid_city` and is not sent. Hong Kong, Macau, and Taiwan use the `cn:` prefix (`cn:hong-kong`, `cn:macau`, `cn:taipei`). The code comes from `CLPlacemark.locality` or the manual city list. Location permission is requested the first time the nearby tab is opened, with When In Use and kilometer accuracy, because `DeviceLocationManager` asks for Always and full accuracy. A denial stays on the list. Street, state, latitude, and longitude are not query parameters.
 
-Depends on the unmerged bottom-bar branch (Telegram-iOS #60).
+The bottom bar is on master (Telegram-iOS #60).
 
 | File | Change |
 | --- | --- |
