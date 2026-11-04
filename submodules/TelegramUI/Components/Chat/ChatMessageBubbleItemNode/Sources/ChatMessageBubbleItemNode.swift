@@ -4024,7 +4024,13 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         }
         strongSelf.backgroundNode.setType(type: backgroundType, highlighted: false, graphics: graphics, maskMode: strongSelf.backgroundMaskMode, hasWallpaper: hasWallpaper, transition: legacyTransition, backgroundNode: presentationContext.backgroundNode)
         strongSelf.backgroundWallpaperNode.setType(type: backgroundType, theme: item.presentationData.theme, essentialGraphics: graphics, maskMode: strongSelf.backgroundMaskMode, backgroundNode: presentationContext.backgroundNode)
-        strongSelf.shadowNode.setType(type: backgroundType, hasWallpaper: hasWallpaper, graphics: graphics)
+        let showsSolidWallpaperShadow: Bool
+        if case .color = item.presentationData.theme.wallpaper {
+            showsSolidWallpaperShadow = true
+        } else {
+            showsSolidWallpaperShadow = false
+        }
+        strongSelf.shadowNode.setType(type: backgroundType, hasWallpaper: showsSolidWallpaperShadow, graphics: graphics)
         
         strongSelf.backgroundType = backgroundType
         

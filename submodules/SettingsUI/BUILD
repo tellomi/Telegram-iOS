@@ -19,6 +19,7 @@ swift_library(
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/MtProtoKit:MtProtoKit",
         "//submodules/TelegramPresentationData:TelegramPresentationData",
+        "//submodules/TellomiWallpapers:TellomiWallpapers",
         "//submodules/AccountContext:AccountContext",
         "//submodules/ActivityIndicator:ActivityIndicator",
         "//submodules/AlertUI:AlertUI",

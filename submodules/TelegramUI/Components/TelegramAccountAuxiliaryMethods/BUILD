@@ -22,6 +22,7 @@ swift_library(
         "//submodules/ChatInterfaceState",
         "//submodules/WallpaperResources",
         "//submodules/AppBundle",
+        "//submodules/TellomiWallpapers:TellomiWallpapers",
         "//submodules/SSignalKit/SwiftSignalKit",
         "//submodules/ICloudResources",
         "//submodules/TelegramUI/Components/Resources/FetchVideoMediaResource",
