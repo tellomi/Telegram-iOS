@@ -89,23 +89,30 @@ func tellomiStopTabObservation(rootController: TelegramRootController) {
     objc_setAssociatedObject(rootController, &tellomiTabObservationKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 }
 
-/// Hidden Contacts tab: other entry points push a contacts page (M2). The tab instance stays off the bar.
+/// Hidden Contacts tab: `openContacts` pushes a page (M2). This lookup is what
+/// `getContactsController` calls, so it never creates or pushes a controller.
 func tellomiResolvedContactsController(root: TelegramRootController, context: AccountContext, tabContacts: ContactsController?) -> ViewController? {
-    guard tellomiBottomNavigationEnabled(appConfiguration: context.currentAppConfiguration.with { $0 }) else {
+    let tabs = root.rootTabController
+    let pushed = root.viewControllers.compactMap { $0 as? ContactsController }.first { $0 !== tabContacts }
+    let tabVisible: Bool
+    if let tabs, let tabContacts {
+        tabVisible = tabs.controllers.contains(where: { $0 === tabContacts })
+    } else {
+        tabVisible = false
+    }
+    switch tellomiContactsControllerRead(
+        navigationEnabled: tellomiBottomNavigationEnabled(appConfiguration: context.currentAppConfiguration.with { $0 }),
+        tabBarReady: tabs != nil,
+        tabVisible: tabVisible,
+        pushedPageExists: pushed != nil
+    ) {
+    case .owned, .none:
         return nil
-    }
-    guard let tabs = root.rootTabController else {
+    case .tab:
         return tabContacts
+    case .pushed:
+        return pushed
     }
-    if let tabContacts, tabs.controllers.contains(where: { $0 === tabContacts }) {
-        return tabContacts
-    }
-    if let existing = root.viewControllers.compactMap({ $0 as? ContactsController }).first(where: { $0 !== tabContacts }) {
-        return existing
-    }
-    let controller = ContactsController(context: context)
-    root.pushViewController(controller, animated: true)
-    return controller
 }
 
 func tellomiOpenContacts(root: TelegramRootController, context: AccountContext) -> Bool {
@@ -144,11 +151,9 @@ func tellomiRevealFeedPost(root: TelegramRootController, context: AccountContext
 }
 
 func tellomiHandleFeedPostLink(url: URL, context: AccountContext, navigationController: NavigationController?) -> Bool {
-    guard let postId = tellomiFeedPostId(in: url) else {
+    let navigationEnabled = tellomiBottomNavigationEnabled(appConfiguration: context.currentAppConfiguration.with { $0 })
+    guard let postId = tellomiFeedPostIdIfHandled(in: url, navigationEnabled: navigationEnabled) else {
         return false
-    }
-    guard tellomiBottomNavigationEnabled(appConfiguration: context.currentAppConfiguration.with { $0 }) else {
-        return true
     }
     let root = (context.sharedContext.mainWindow?.viewController as? TelegramRootController) ?? (navigationController as? TelegramRootController)
     guard let root else {
