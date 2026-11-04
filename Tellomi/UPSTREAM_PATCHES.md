@@ -654,3 +654,15 @@ The bottom bar is on master (Telegram-iOS #60).
 | `submodules/TelegramCore/BUILD` | Depends on `TellomiDiscover`. |
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | Recommend, Following, and Nearby, post detail, text compose, and the Stories privacy screen. The M2 empty state remains when the flag is off. |
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/BUILD` | Depends on `TellomiDiscover`, `Geocoding`, and `ShareWithPeersScreen`. Cloud user ids go through `EnginePeer.Id.tellomiCloudUserId`. |
+
+## Public username minimum length
+
+Teamgram #182 accepts a public username of 4 characters. Upstream iOS already rejected a name shorter than 4 in `_internal_checkAddressNameFormat` (2022-11-08, both the final length check and a name that ends in `_`). The bundled English strings, and the Create Bot field's own minimum, still said 5. Settings ▸ Username, a channel public link, and a group public link all call `validateAddressNameInteractive`, which uses that one check. A sticker-set short name uses it too. A theme link stays 5–64; that gate is `EditThemeController`'s own `slug.count < 5` and is not this rule. Login and the session are unchanged. `zh-Hans` and `zh-Hant` do not ship these keys; a downloaded language pack can still say 5 until that pack is updated.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Peers/AddressNames.swift` | `addressNameMinimumLength` is 4. Both comparisons use it. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Username, channel, group, and Create Bot copy that said 5 characters now says 4. Both copies of `Group.Username.InvalidTooShort` are updated. |
+| `submodules/TelegramUI/Components/CreateBotScreen/Sources/CreateBotUsername.swift` | `minLength` is 4, the same minimum, counted on the full username including the `bot` suffix. |
+| `submodules/TelegramCore/Tests/AddressNameFormatTests.swift` | 4 characters pass. 3 characters, including one that ends in `_`, are `.tooShort`. |
+| `submodules/TelegramUI/Components/CreateBotScreen/Tests/CreateBotUsernameTests.swift` | `abot` (4) passes. `bot` (3) does not. |
