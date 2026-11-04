@@ -26,7 +26,8 @@ final class TellomiDiscoverFeedTests: XCTestCase {
             .status,
             .feed(.recommend, cursor: nil, personalized: true),
             .cards(["post-9"]),
-            .publish(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500)
+            .publish(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: nil),
+            .nearby(city: "cn:chengdu", cursor: nil)
         ]
         for operation in operations {
             let loader = RecordingLoader()
@@ -234,7 +235,7 @@ final class TellomiDiscoverFeedTests: XCTestCase {
         XCTAssertEqual(TellomiDiscoverTL.decodeAudienceToken(response), TellomiDiscoverAudienceToken(token: "signed-jwt", expires: 600))
         let loggedOut = RecordingLoader()
         let finished = expectation(description: "no audience request")
-        loggedOut.loader.run(loggedIn: false, configuration: TellomiDiscoverConfiguration(enabled: true, baseURL: URL(string: "https://feed.example")!), operation: .publish(text: "hi", visibility: .include, audienceToken: "signed-jwt", clientNonce: self.nonce, textLimit: 500)) { result in
+        loggedOut.loader.run(loggedIn: false, configuration: TellomiDiscoverConfiguration(enabled: true, baseURL: URL(string: "https://feed.example")!), operation: .publish(text: "hi", visibility: .include, audienceToken: "signed-jwt", clientNonce: self.nonce, textLimit: 500, city: "cn:chengdu")) { result in
             guard case .failure(.signedOut) = result else {
                 XCTFail("expected signed out")
                 return
@@ -297,16 +298,96 @@ final class TellomiDiscoverFeedTests: XCTestCase {
         XCTAssertTrue(summary.body.contains("原动态已被作者删除"))
         XCTAssertTrue(summary.meta.contains("AI 生成"))
         XCTAssertTrue(summary.meta.contains("四川"))
+        XCTAssertTrue(summary.meta.contains("成都"))
+        XCTAssertEqual(card?.city, "cn:chengdu")
         XCTAssertFalse(summary.body.contains("人民路"))
         let unavailable = tellomiDiscoverParseCards(#"{"cards":[{"id":"post-1","state":"unavailable"}]}"#.data(using: .utf8)!)
         XCTAssertEqual(tellomiDiscoverDisplayPost(unavailable!.first!).unavailable, true)
         XCTAssertEqual(tellomiDiscoverPostSummary(post: tellomiDiscoverDisplayPost(unavailable!.first!), copy: .resolve(languageCode: "zh"), list: false).body, "这条动态已不可见")
+        let street = #"{"cards":[{"id":"post-2","state":"ok","card":{"text":"x","city":"人民南路 1 号"}}]}"#.data(using: .utf8)!
+        XCTAssertNil(tellomiDiscoverParseCards(street)?.first?.city)
+    }
+
+    func testNearbyCityCodeAndFeed() {
+        XCTAssertEqual(tellomiDiscoverKnownCityCode("cn:chengdu"), "cn:chengdu")
+        XCTAssertEqual(tellomiDiscoverKnownCityCode("CN:Chengdu"), "cn:chengdu")
+        XCTAssertNil(tellomiDiscoverCityCode("hk:hong-kong"))
+        XCTAssertNil(tellomiDiscoverCityCode("tw:taipei"))
+        XCTAssertNil(tellomiDiscoverCityCode("mo:macau"))
+        XCTAssertNil(tellomiDiscoverKnownCityCode("cn:not-a-city"))
+        XCTAssertNil(tellomiDiscoverKnownCityCode("30.57,104.07"))
+        XCTAssertEqual(tellomiDiscoverCityCode(locality: "成都市", isoCountryCode: "CN"), "cn:chengdu")
+        XCTAssertEqual(tellomiDiscoverCityCode(locality: "台北市", isoCountryCode: "TW"), "cn:taipei")
+        XCTAssertEqual(tellomiDiscoverCityCode(locality: "臺北市", isoCountryCode: "TW"), "cn:taipei")
+        XCTAssertEqual(tellomiDiscoverCityCode(locality: "Hong Kong", isoCountryCode: "HK"), "cn:hong-kong")
+        XCTAssertEqual(tellomiDiscoverCityCode(locality: "澳门", isoCountryCode: "MO"), "cn:macau")
+        XCTAssertNil(tellomiDiscoverCityCode(locality: "人民南路", isoCountryCode: "CN"))
+        XCTAssertNil(tellomiDiscoverCity(street: "春熙路", city: nil, state: "四川省"))
+        XCTAssertEqual(tellomiDiscoverCity(street: "春熙路", city: "成都市", state: "四川省"), "cn:chengdu")
+        XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chengdu", languageCode: "zh"), "成都")
+        XCTAssertEqual(tellomiDiscoverNearbyGate(city: nil, location: .notDetermined, asked: false), .choose(requestLocation: true))
+        XCTAssertEqual(tellomiDiscoverNearbyGate(city: nil, location: .notDetermined, asked: true), .choose(requestLocation: false))
+        XCTAssertEqual(tellomiDiscoverNearbyGate(city: nil, location: .denied, asked: false), .choose(requestLocation: false))
+        XCTAssertEqual(tellomiDiscoverNearbyGate(city: "cn:chengdu", location: .notDetermined, asked: false), .feed("cn:chengdu"))
+        let base = URL(string: "https://feed.example")!
+        let url = tellomiDiscoverNearbyURL(base: base, city: "cn:chengdu", cursor: "page-2")
+        let items = URLComponents(url: url!, resolvingAgainstBaseURL: false)?.queryItems
+        XCTAssertEqual(url?.path, "/v1/feed/nearby")
+        XCTAssertEqual(items, [URLQueryItem(name: "city", value: "cn:chengdu"), URLQueryItem(name: "cursor", value: "page-2")])
+        XCTAssertNil(tellomiDiscoverNearbyURL(base: base, city: "chengdu", cursor: nil))
+        let body = tellomiDiscoverPublishBody(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: "cn:chengdu")
+        let posted = try! JSONSerialization.jsonObject(with: body!) as! [String: Any]
+        XCTAssertEqual(posted["city"] as? String, "cn:chengdu")
+        XCTAssertNil(tellomiDiscoverPublishBody(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: "人民南路"))
+        let omitted = tellomiDiscoverPublishBody(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: nil)
+        XCTAssertNil((try! JSONSerialization.jsonObject(with: omitted!) as! [String: Any])["city"])
+        let rejected = tellomiDiscoverDecodeHTTP(operation: .publish(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: "cn:chengdu"), result: TellomiDiscoverHTTPResult(status: 400, body: #"{"error":"invalid_city"}"#.data(using: .utf8)!))
+        guard case .failure(.invalidCity) = rejected else {
+            XCTFail("expected invalid_city")
+            return
+        }
+        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "zh").failureText(.invalidCity), "这个城市不能用，请重新选择。")
+        let page = #"{"items":[{"id":"post-9","reason":"nearby"}],"cursor":"next"}"#.data(using: .utf8)!
+        let decoded = tellomiDiscoverDecodeHTTP(operation: .nearby(city: "cn:chengdu", cursor: nil), result: TellomiDiscoverHTTPResult(status: 200, body: page))
+        guard case let .success(.feed(feed)) = decoded else {
+            XCTFail("expected a nearby page")
+            return
+        }
+        XCTAssertEqual(feed.items.map(\.reason), ["nearby"])
+        XCTAssertEqual(feed.cursor, "next")
+        let loader = RecordingLoader()
+        let finished = expectation(description: "nearby page")
+        loader.loader.run(loggedIn: true, configuration: TellomiDiscoverConfiguration(enabled: true, baseURL: base), operation: .nearby(city: "cn:chengdu", cursor: nil)) { result in
+            guard case .success(.feed) = result else {
+                XCTFail("expected nearby items")
+                return
+            }
+            finished.fulfill()
+        }
+        wait(for: [finished], timeout: 1)
+        XCTAssertEqual(loader.calls.count, 1)
+        XCTAssertEqual(loader.calls[0].url.path, "/v1/feed/nearby")
+        XCTAssertEqual(URLComponents(url: loader.calls[0].url, resolvingAgainstBaseURL: false)?.queryItems, [URLQueryItem(name: "city", value: "cn:chengdu")])
+        let bad = RecordingLoader()
+        let rejectedLocally = expectation(description: "bad city")
+        bad.loader.run(loggedIn: true, configuration: TellomiDiscoverConfiguration(enabled: true, baseURL: base), operation: .nearby(city: "not-a-code", cursor: "chengdu")) { result in
+            guard case .failure(.invalidCity) = result else {
+                XCTFail("expected invalid city")
+                return
+            }
+            rejectedLocally.fulfill()
+        }
+        wait(for: [rejectedLocally], timeout: 1)
+        XCTAssertTrue(bad.calls.isEmpty)
+        XCTAssertEqual(bad.credentialFetches, 0)
     }
 
     func testEngineConfigTabsAndTextLimit() {
         let data = #"{"enabled":true,"region":"cn","tabs":["recommend","hot","nearby"],"recommend_mode":"editorial_chronological","personalization_toggle_visible":false,"limits":{"post_text_chars":500}}"#.data(using: .utf8)!
         let config = tellomiDiscoverParseEngineConfig(data)
         XCTAssertEqual(config?.tabs, [.recommend, .nearby])
+        let official = #"{"enabled":true,"region":"cn","tabs":["recommend","following","nearby"],"limits":{"post_text_chars":500}}"#.data(using: .utf8)!
+        XCTAssertEqual(tellomiDiscoverParseEngineConfig(official)?.tabs, [.recommend, .following, .nearby])
         XCTAssertEqual(config?.postTextChars, 500)
         XCTAssertEqual(config?.recommendMode, "editorial_chronological")
     }
@@ -371,14 +452,18 @@ final class TellomiDiscoverFeedUITests: XCTestCase {
         let tabs = tellomiDiscoverChrome(loggedIn: true, enabled: true, kind: .recommend, openedPostId: nil, failed: false)
         XCTAssertEqual(tabs.surface, .feed)
         let nearby = tellomiDiscoverChrome(loggedIn: true, enabled: true, kind: .nearby, openedPostId: nil, failed: false)
-        XCTAssertEqual(nearby.surface, .nearby)
+        XCTAssertEqual(nearby.surface, .chooseCity)
         XCTAssertFalse(nearby.loadsFeed)
         XCTAssertFalse(nearby.issuesNetwork)
+        let chosen = tellomiDiscoverChrome(loggedIn: true, enabled: true, kind: .nearby, openedPostId: nil, failed: false, city: "cn:chengdu")
+        XCTAssertEqual(chosen.surface, .feed)
+        XCTAssertTrue(chosen.loadsFeed)
+        XCTAssertTrue(chosen.issuesNetwork)
     }
 }
 
 private let cardsJSON = """
-{"cards":[{"id":"post-9","state":"ok","version":1,"card":{"kind":"post","display_mode":"post","source_url":"","ai_generated":true,"edited":false,"text":"好看","author":{"id":"profile-1","display_name":"林","handle":"lin","native":true},"media":[{"type":"image","key":"m/a"}],"ip_region_label":"四川"},"stats":{"likes":3,"comments":1,"reposts":0},"me":{"liked":false},"shareable":true,"quoted":{"id":"post-1","state":"deleted"}}]}
+{"cards":[{"id":"post-9","state":"ok","version":1,"card":{"kind":"post","display_mode":"post","source_url":"","ai_generated":true,"edited":false,"text":"好看","author":{"id":"profile-1","display_name":"林","handle":"lin","native":true},"media":[{"type":"image","key":"m/a"}],"ip_region_label":"四川","city":"cn:chengdu"},"stats":{"likes":3,"comments":1,"reposts":0},"me":{"liked":false},"shareable":true,"quoted":{"id":"post-1","state":"deleted"}}]}
 """.data(using: .utf8)!
 
 private final class RecordingLoader {

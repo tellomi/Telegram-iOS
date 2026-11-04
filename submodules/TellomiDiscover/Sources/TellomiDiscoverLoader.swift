@@ -6,6 +6,7 @@ public enum TellomiDiscoverClientError: Equatable, Error {
     case audienceInvalid
     case userInvalid
     case userBlocked
+    case invalidCity
     case notPublishable
     case hidden
     case unavailable
@@ -149,10 +150,15 @@ private func tellomiDiscoverLocalFailure(_ operation: TellomiDiscoverOperation) 
             return .unavailable
         }
         return nil
+    case let .nearby(city, _):
+        return tellomiDiscoverKnownCityCode(city) == nil ? .invalidCity : nil
     case let .cards(identifiers):
         return tellomiDiscoverCardsBody(identifiers) == nil ? .notFound : nil
-    case let .publish(text, visibility, audienceToken, clientNonce, textLimit):
-        if tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit) == nil {
+    case let .publish(text, visibility, audienceToken, clientNonce, textLimit, city):
+        if let city, !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, tellomiDiscoverKnownCityCode(city) == nil {
+            return .invalidCity
+        }
+        if tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit, city: city) == nil {
             return .notPublishable
         }
         return nil
@@ -162,6 +168,9 @@ private func tellomiDiscoverLocalFailure(_ operation: TellomiDiscoverOperation) 
 public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, result: TellomiDiscoverHTTPResult) -> Result<TellomiDiscoverDecoded, TellomiDiscoverClientError> {
     if result.status == 404, tellomiDiscoverErrorCode(result.body) == "feed_hidden" {
         return .failure(.hidden)
+    }
+    if result.status == 400, tellomiDiscoverErrorCode(result.body) == "invalid_city" {
+        return .failure(.invalidCity)
     }
     switch result.status {
     case 200, 201:
@@ -189,7 +198,7 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
             return .failure(.unreadable)
         }
         return .success(.engineConfig(value))
-    case .feed:
+    case .feed, .nearby:
         guard let page = tellomiDiscoverParseFeedPage(result.body) else {
             return .failure(.unreadable)
         }
@@ -232,6 +241,7 @@ public struct TellomiDiscoverCopy: Equatable {
     public var userBlocked: String
     public var discoverDisabled: String
     public var nearbyEmpty: String
+    public var invalidCity: String
     public var aiGenerated: String
     public var quoteDeleted: String
     public var publish: String
@@ -247,11 +257,11 @@ public struct TellomiDiscoverCopy: Equatable {
                 emptyText: "关注的人和推荐会显示在这里。",
                 unavailable: "这条动态已不可见",
                 failed: "暂时打不开，下拉再试一次。",
-                cityPrompt: "同城只按城市显示",
+                cityPrompt: "选择城市",
                 cityPlaceholder: "输入城市",
                 useLocation: "使用当前位置",
                 confirmCity: "确定",
-                cityDenied: "没有定位时可以自己填城市。位置不会精确到街道。",
+                cityDenied: "可以不定位，直接从列表里选。只保存城市，不保存坐标。",
                 visibility: "谁可以看",
                 everyone: "所有人",
                 contacts: "我的联系人",
@@ -262,7 +272,8 @@ public struct TellomiDiscoverCopy: Equatable {
                 userInvalid: "名单里有人无法使用。",
                 userBlocked: "名单里有人已互相拉黑。",
                 discoverDisabled: "发现暂时不可用。",
-                nearbyEmpty: "同城动态稍后会显示在这里。",
+                nearbyEmpty: "这个城市还没有帖子。",
+                invalidCity: "这个城市不能用，请重新选择。",
                 aiGenerated: "AI 生成",
                 quoteDeleted: "原动态已被作者删除",
                 publish: "发布"
@@ -277,11 +288,11 @@ public struct TellomiDiscoverCopy: Equatable {
             emptyText: "Posts from people you follow, and recommendations, show up here.",
             unavailable: "This post isn't available",
             failed: "Couldn't load this. Pull to try again.",
-            cityPrompt: "Nearby uses a city, nothing finer",
+            cityPrompt: "Choose a city",
             cityPlaceholder: "City",
             useLocation: "Use current location",
             confirmCity: "Done",
-            cityDenied: "You can type a city. The street is not kept.",
+            cityDenied: "You can pick a city without location. Only the city is kept.",
             visibility: "Who can see this",
             everyone: "Everyone",
             contacts: "My Contacts",
@@ -292,7 +303,8 @@ public struct TellomiDiscoverCopy: Equatable {
             userInvalid: "Someone on the list can't be added.",
             userBlocked: "Someone on the list is blocked.",
             discoverDisabled: "Discover isn't available right now.",
-            nearbyEmpty: "Nearby posts will show up here.",
+            nearbyEmpty: "No posts in this city yet.",
+            invalidCity: "That city can't be used. Choose another.",
             aiGenerated: "AI generated",
             quoteDeleted: "The original post was deleted by its author",
             publish: "Post"
@@ -333,6 +345,8 @@ public struct TellomiDiscoverCopy: Equatable {
             return self.userBlocked
         case .disabled:
             return self.discoverDisabled
+        case .invalidCity:
+            return self.invalidCity
         case .signedOut, .notPublishable, .hidden, .unavailable, .unauthorized, .notFound, .unreadable:
             return self.failed
         }
@@ -396,6 +410,9 @@ public func tellomiDiscoverPostSummary(post: TellomiDiscoverPost, copy: TellomiD
     }
     let chinese = copy.recommend == "推荐"
     var meta: [String] = []
+    if let city = post.city, let name = tellomiDiscoverCityName(code: city, languageCode: chinese ? "zh" : "en") {
+        meta.append(name)
+    }
     if let region = post.ipRegionLabel, !region.isEmpty {
         meta.append(region)
     }

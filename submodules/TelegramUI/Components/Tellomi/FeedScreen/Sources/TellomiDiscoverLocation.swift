@@ -7,17 +7,25 @@ import TellomiDiscover
 let tellomiDiscoverCityDefaultsKey = "tellomi.discover.city"
 
 func tellomiDiscoverStoredCity() -> String? {
-    guard let stored = UserDefaults.standard.string(forKey: tellomiDiscoverCityDefaultsKey) else {
-        return nil
-    }
-    return tellomiDiscoverNormalizedCity(stored)
+    return tellomiDiscoverKnownCityCode(UserDefaults.standard.string(forKey: tellomiDiscoverCityDefaultsKey))
 }
 
 func tellomiDiscoverStoreCity(_ city: String?) {
-    if let city = city.flatMap(tellomiDiscoverNormalizedCity) {
+    if let city = tellomiDiscoverKnownCityCode(city) {
         UserDefaults.standard.set(city, forKey: tellomiDiscoverCityDefaultsKey)
     } else {
         UserDefaults.standard.removeObject(forKey: tellomiDiscoverCityDefaultsKey)
+    }
+}
+
+func tellomiDiscoverLocationGate() -> TellomiDiscoverLocationGate {
+    switch CLLocationManager().authorizationStatus {
+    case .notDetermined:
+        return .notDetermined
+    case .authorizedAlways, .authorizedWhenInUse:
+        return .allowed
+    default:
+        return .denied
     }
 }
 
@@ -98,7 +106,7 @@ final class TellomiDiscoverCityLocator: NSObject, CLLocationManagerDelegate {
         let longitude = location.coordinate.longitude
         self.geocodeDisposable?.dispose()
         self.geocodeDisposable = reverseGeocodeLocation(latitude: latitude, longitude: longitude).start(next: { [weak self] placemark in
-            let city = tellomiDiscoverCity(street: placemark?.street, city: placemark?.city, state: placemark?.state)
+            let city = tellomiDiscoverCityCode(locality: placemark?.city, isoCountryCode: placemark?.countryCode)
             Queue.mainQueue().async {
                 self?.finish(city: city)
             }

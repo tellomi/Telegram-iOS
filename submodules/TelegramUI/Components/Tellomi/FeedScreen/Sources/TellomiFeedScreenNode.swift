@@ -21,6 +21,7 @@ struct TellomiFeedNodeModel {
     var legacyTitle: String
     var legacyBody: String
     var copy: TellomiDiscoverCopy
+    var cities: [TellomiDiscoverCity] = []
 }
 
 final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate {
@@ -30,6 +31,7 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
     var onNearEnd: (() -> Void)?
     var onUseLocation: (() -> Void)?
     var onSubmitCity: ((String) -> Void)?
+    var onSelectCity: ((String) -> Void)?
 
     private let titleNode = ImmediateTextNode()
     private let textNode = ImmediateTextNode()
@@ -64,6 +66,7 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         self.table.rowHeight = UITableView.automaticDimension
         self.table.estimatedRowHeight = 88
         self.table.register(TellomiDiscoverPostCell.self, forCellReuseIdentifier: "post")
+        self.table.register(UITableViewCell.self, forCellReuseIdentifier: "city")
         self.refresh.addTarget(self, action: #selector(self.refreshChanged), for: .valueChanged)
         self.table.refreshControl = self.refresh
         self.failureLabel.numberOfLines = 2
@@ -152,14 +155,14 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         self.table.separatorColor = presentationData.theme.list.itemPlainSeparatorColor
         let live = self.model.mode != .legacy
         self.tabs.isHidden = !live
-        self.table.isHidden = self.model.mode != .feed
+        self.table.isHidden = self.model.mode == .legacy
         self.failureLabel.isHidden = self.model.failure == nil || !live
         let city = self.model.mode == .city
         self.cityPrompt.isHidden = !city
         self.cityHint.isHidden = !city
-        self.cityField.isHidden = !city
+        self.cityField.isHidden = true
         self.locationButton.isHidden = !city
-        self.cityButton.isHidden = !city
+        self.cityButton.isHidden = true
         let showLegacy = self.model.mode == .legacy || (self.model.mode == .feed && self.model.posts.isEmpty && !self.model.loading)
         self.titleNode.isHidden = !showLegacy
         self.textNode.isHidden = !showLegacy
@@ -204,14 +207,15 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         } else {
             self.failureLabel.frame = .zero
         }
+        self.cityPrompt.frame = CGRect(x: side, y: cursor, width: size.width - side * 2.0, height: 28.0)
+        self.cityHint.frame = CGRect(x: side, y: self.cityPrompt.frame.maxY + 4.0, width: size.width - side * 2.0, height: 56.0)
+        self.locationButton.frame = CGRect(x: side, y: self.cityHint.frame.maxY + 4.0, width: size.width - side * 2.0, height: 40.0)
+        if self.model.mode == .city {
+            cursor = self.locationButton.frame.maxY + 8.0
+        }
         let bottom = max(cursor, size.height - bottomInset)
         self.table.frame = CGRect(x: 0, y: cursor, width: size.width, height: max(0, bottom - cursor))
         self.spinner.center = CGPoint(x: size.width / 2.0, y: cursor + 28.0)
-        self.cityPrompt.frame = CGRect(x: side, y: cursor + 24.0, width: size.width - side * 2.0, height: 44.0)
-        self.cityHint.frame = CGRect(x: side, y: self.cityPrompt.frame.maxY + 4.0, width: size.width - side * 2.0, height: 56.0)
-        self.cityField.frame = CGRect(x: side, y: self.cityHint.frame.maxY + 8.0, width: size.width - side * 2.0, height: 40.0)
-        self.locationButton.frame = CGRect(x: side, y: self.cityField.frame.maxY + 8.0, width: size.width - side * 2.0, height: 40.0)
-        self.cityButton.frame = CGRect(x: side, y: self.locationButton.frame.maxY + 4.0, width: size.width - side * 2.0, height: 40.0)
     }
 
     @objc private func tabChanged() {
@@ -241,6 +245,9 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         let _ = (tableView, section)
+        if self.model.mode == .city {
+            return self.model.cities.count
+        }
         guard self.model.mode == .feed else {
             return 0
         }
@@ -248,6 +255,17 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if self.model.mode == .city {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "city", for: indexPath)
+            let city = self.model.cities[indexPath.row]
+            var content = cell.defaultContentConfiguration()
+            content.text = city.name
+            content.textProperties.color = self.presentationData?.theme.list.itemPrimaryTextColor ?? .label
+            cell.contentConfiguration = content
+            cell.accessibilityIdentifier = "tellomi.discover.city.\(city.code)"
+            cell.backgroundColor = self.presentationData?.theme.list.plainBackgroundColor
+            return cell
+        }
         let cell = tableView.dequeueReusableCell(withIdentifier: "post", for: indexPath) as! TellomiDiscoverPostCell
         let post = self.model.posts[indexPath.row]
         let summary = tellomiDiscoverPostSummary(post: post, copy: self.model.copy, list: true)
@@ -260,6 +278,9 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
     }
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        if self.model.mode == .city {
+            return 48
+        }
         guard self.model.posts.indices.contains(indexPath.row) else {
             return 0
         }
@@ -272,6 +293,13 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
+        if self.model.mode == .city {
+            guard self.model.cities.indices.contains(indexPath.row) else {
+                return
+            }
+            self.onSelectCity?(self.model.cities[indexPath.row].code)
+            return
+        }
         guard self.model.posts.indices.contains(indexPath.row) else {
             return
         }
@@ -280,6 +308,9 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
 
     func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
         let _ = (tableView, cell)
+        guard self.model.mode == .feed else {
+            return
+        }
         if indexPath.row == self.model.posts.count - 1, tableView.contentOffset.y > 1 {
             self.onNearEnd?()
         }

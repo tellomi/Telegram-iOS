@@ -24,6 +24,10 @@ public final class TellomiFeedScreen: ViewController {
     private let loader: TellomiDiscoverLoader
     private var loggedOut = false
     private var kind: TellomiDiscoverFeedKind = .recommend
+    private var cityCode: String? = tellomiDiscoverStoredCity()
+    private var locationAsked = false
+    private var locator: TellomiDiscoverCityLocator?
+    private var banner: String?
     private var tabs: [TellomiDiscoverFeedKind] = [.recommend, .following]
     private var posts: [TellomiDiscoverFeedKind: [TellomiDiscoverPost]] = [:]
     private var cursors: [TellomiDiscoverFeedKind: String] = [:]
@@ -95,6 +99,7 @@ public final class TellomiFeedScreen: ViewController {
         self.configurationDisposable?.dispose()
         self.loggedOutDisposable?.dispose()
         self.audienceDisposable?.dispose()
+        self.locator?.stop()
         self.loader.cancel()
     }
 
@@ -118,6 +123,12 @@ public final class TellomiFeedScreen: ViewController {
         }
         node.onNearEnd = { [weak self] in
             self?.loadFeed(reset: false)
+        }
+        node.onUseLocation = { [weak self] in
+            self?.startLocator()
+        }
+        node.onSelectCity = { [weak self] code in
+            self?.applyCity(code)
         }
         self.displayNode = node
         self.displayNodeDidLoad()
@@ -176,7 +187,7 @@ public final class TellomiFeedScreen: ViewController {
         self.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationData: self.presentationData), transition: .immediate)
 
         if let pendingPostId = self.pendingPostId {
-            let postChrome = tellomiDiscoverChrome(loggedIn: loggedIn, enabled: configuration.enabled, kind: self.kind, openedPostId: pendingPostId, failed: false)
+            let postChrome = tellomiDiscoverChrome(loggedIn: loggedIn, enabled: configuration.enabled, kind: self.kind, openedPostId: pendingPostId, failed: false, city: self.cityCode)
             if case let .detail(id) = postChrome.surface {
                 self.pendingPostId = nil
                 let controller = TellomiDiscoverPostController(context: self.context, postId: id, loader: self.loader, configuration: configuration, loggedIn: loggedIn)
@@ -184,7 +195,7 @@ public final class TellomiFeedScreen: ViewController {
             }
         }
 
-        let chrome = tellomiDiscoverChrome(loggedIn: loggedIn, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: self.failed)
+        let chrome = tellomiDiscoverChrome(loggedIn: loggedIn, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: self.failed, city: self.cityCode)
         if !chrome.issuesNetwork {
             self.loader.cancel()
             self.loading = false
@@ -211,11 +222,11 @@ public final class TellomiFeedScreen: ViewController {
         case .feed, .detail:
             mode = .feed
             legacyTitle = copy.emptyTitle
-            legacyBody = copy.emptyText
-        case .nearby:
-            mode = .feed
-            legacyTitle = copy.emptyTitle
-            legacyBody = copy.nearbyEmpty
+            legacyBody = self.kind == .nearby ? copy.nearbyEmpty : copy.emptyText
+        case .chooseCity:
+            mode = .city
+            legacyTitle = copy.cityPrompt
+            legacyBody = copy.cityDenied
         }
         let selected = self.tabs.firstIndex(of: self.kind) ?? 0
         if self.isNodeLoaded {
@@ -225,7 +236,8 @@ public final class TellomiFeedScreen: ViewController {
                 selectedTab: selected,
                 posts: self.posts[self.kind] ?? [],
                 loading: self.loading || self.loadingMore,
-                failure: chrome.failure ? copy.failed : nil,
+                failure: self.banner ?? (chrome.failure ? copy.failed : nil),
+                cities: tellomiDiscoverCities(languageCode: self.presentationData.strings.primaryComponent.languageCode),
                 legacyTitle: legacyTitle,
                 legacyBody: legacyBody,
                 copy: copy
@@ -261,14 +273,62 @@ public final class TellomiFeedScreen: ViewController {
         }
         self.kind = kind
         self.failed = false
+        self.banner = nil
         self.loading = false
         self.loadingMore = false
+        if kind == .nearby {
+            self.considerNearbyLocation()
+        }
+        self.sync(reload: true)
+    }
+
+    private func considerNearbyLocation() {
+        let gate = tellomiDiscoverNearbyGate(city: self.cityCode, location: tellomiDiscoverLocationGate(), asked: self.locationAsked)
+        if case .choose(true) = gate {
+            self.locationAsked = true
+            self.startLocator()
+        }
+    }
+
+    private func startLocator() {
+        self.locator?.stop()
+        let locator = TellomiDiscoverCityLocator()
+        locator.onCity = { [weak self] code in
+            guard let self else {
+                return
+            }
+            if self.cityCode == nil, let code {
+                self.applyCity(code)
+            } else {
+                self.sync(reload: false)
+            }
+        }
+        locator.onDenied = { [weak self] in
+            self?.sync(reload: false)
+        }
+        self.locator = locator
+        locator.start()
+    }
+
+    private func applyCity(_ code: String) {
+        guard let code = tellomiDiscoverKnownCityCode(code) else {
+            self.banner = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode).invalidCity
+            self.sync(reload: false)
+            return
+        }
+        self.locator?.stop()
+        self.cityCode = code
+        tellomiDiscoverStoreCity(code)
+        self.banner = nil
+        self.failed = false
+        self.posts[.nearby] = nil
+        self.cursors[.nearby] = nil
         self.sync(reload: true)
     }
 
     private func loadFeed(reset: Bool) {
         let configuration = self.configuration()
-        let chrome = tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: false)
+        let chrome = tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: false, city: self.cityCode)
         guard chrome.loadsFeed else {
             return
         }
@@ -310,10 +370,13 @@ public final class TellomiFeedScreen: ViewController {
         } else if self.engineConfigLoaded == false, reset {
             operation = .engineConfig
         } else if kind == .nearby {
-            self.loading = false
-            self.loadingMore = false
-            self.sync(reload: false)
-            return
+            guard let city = tellomiDiscoverKnownCityCode(self.cityCode) else {
+                self.loading = false
+                self.loadingMore = false
+                self.sync(reload: false)
+                return
+            }
+            operation = .nearby(city: city, cursor: cursor)
         } else {
             operation = .feed(kind, cursor: cursor, personalized: true)
         }
@@ -336,6 +399,9 @@ public final class TellomiFeedScreen: ViewController {
                     self.tabs = value.tabs
                     if !self.tabs.contains(self.kind) {
                         self.kind = self.tabs[0]
+                        if self.kind == .nearby {
+                            self.considerNearbyLocation()
+                        }
                     }
                 }
                 self.advance(reset: reset, generation: generation, kind: self.kind, cursor: cursor, configuration: configuration)
@@ -354,6 +420,13 @@ public final class TellomiFeedScreen: ViewController {
                 }
             case .failure(.hidden):
                 self.finishHidden(generation: generation)
+            case .failure(.invalidCity):
+                self.cityCode = nil
+                tellomiDiscoverStoreCity(nil)
+                self.banner = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode).invalidCity
+                self.loading = false
+                self.loadingMore = false
+                self.sync(reload: false)
             case .failure(.disabled), .failure(.signedOut):
                 self.failed = false
                 self.loading = false
@@ -422,7 +495,7 @@ public final class TellomiFeedScreen: ViewController {
 
     @objc private func composePressed() {
         let configuration = self.configuration()
-        guard tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: false).showsCompose else {
+        guard tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: false, city: self.cityCode).showsCompose else {
             return
         }
         let textLimit = self.textLimit
@@ -437,10 +510,10 @@ public final class TellomiFeedScreen: ViewController {
                 completion(.failure(self.loggedOut ? .signedOut : .disabled))
                 return
             }
-            let step = tellomiDiscoverPublishStep(text: text, visibility: visibility, userIds: userIds, selfUserId: selfUserId, clientNonce: nonce, textLimit: textLimit, token: nil, now: Int64(Date().timeIntervalSince1970))
+            let step = tellomiDiscoverPublishStep(text: text, visibility: visibility, userIds: userIds, selfUserId: selfUserId, clientNonce: nonce, textLimit: textLimit, token: nil, now: Int64(Date().timeIntervalSince1970), city: self.cityCode)
             switch step {
             case .ready:
-                self.loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: text, visibility: visibility, audienceToken: nil, clientNonce: nonce, textLimit: textLimit), completion: completion)
+                self.loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: text, visibility: visibility, audienceToken: nil, clientNonce: nonce, textLimit: textLimit, city: self.cityCode), completion: completion)
             case let .needsAudienceToken(kind, ids):
                 self.audienceDisposable?.dispose()
                 self.audienceDisposable = (tellomiDiscoverAudienceToken(account: self.context.account, kind: kind, userIds: ids)
@@ -449,7 +522,7 @@ public final class TellomiFeedScreen: ViewController {
                         completion(.failure(.signedOut))
                         return
                     }
-                    self.loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: text, visibility: visibility, audienceToken: token.token, clientNonce: nonce, textLimit: textLimit), completion: completion)
+                    self.loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: text, visibility: visibility, audienceToken: token.token, clientNonce: nonce, textLimit: textLimit, city: self.cityCode), completion: completion)
                 }, error: { error in
                     completion(.failure(tellomiDiscoverClientError(for: error)))
                 })

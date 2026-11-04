@@ -108,7 +108,7 @@ public enum TellomiDiscoverFeedKind: String, Equatable {
     case recommend
     case following
 
-    /// Shown when `feed/config` lists it. The nearby route is not called yet.
+    /// `GET /v1/feed/nearby`, listed by `feed/config`.
     case nearby
 
     public init?(configName: String) {
@@ -129,8 +129,8 @@ public enum TellomiDiscoverSurface: Equatable {
     case legacyEmpty(postUnavailable: Bool)
     case feed
     case detail(String)
-    /// Config listed nearby. No request is made until that route exists.
-    case nearby
+    /// Nearby has no city yet. The list is on screen and no feed request is made.
+    case chooseCity
 }
 
 public struct TellomiDiscoverChrome: Equatable {
@@ -145,7 +145,7 @@ public struct TellomiDiscoverChrome: Equatable {
     }
 }
 
-public func tellomiDiscoverChrome(loggedIn: Bool, enabled: Bool, kind: TellomiDiscoverFeedKind, openedPostId: String?, failed: Bool) -> TellomiDiscoverChrome {
+public func tellomiDiscoverChrome(loggedIn: Bool, enabled: Bool, kind: TellomiDiscoverFeedKind, openedPostId: String?, failed: Bool, city: String? = nil) -> TellomiDiscoverChrome {
     let postId = openedPostId.flatMap(tellomiDiscoverPostId)
     guard loggedIn, enabled else {
         return TellomiDiscoverChrome(
@@ -165,13 +165,13 @@ public func tellomiDiscoverChrome(loggedIn: Bool, enabled: Bool, kind: TellomiDi
             failure: failed
         )
     }
-    if kind == .nearby {
+    if kind == .nearby, tellomiDiscoverKnownCityCode(city) == nil {
         return TellomiDiscoverChrome(
-            surface: .nearby,
+            surface: .chooseCity,
             showsCompose: true,
             loadsFeed: false,
             loadsPost: false,
-            failure: false
+            failure: failed
         )
     }
     return TellomiDiscoverChrome(
@@ -357,14 +357,12 @@ public func tellomiDiscoverNormalizedCity(_ raw: String) -> String? {
 /// Street and state are accepted so a caller cannot confuse them with the city by
 /// dropping a parameter. Only `city` is returned.
 public func tellomiDiscoverCity(street: String?, city: String?, state: String?) -> String? {
-    // `street` and `state` are part of the signature so a placemark is reduced in one
-    // place. They are not a city and are not returned.
+    // `street` and `state` stay in the signature so a placemark cannot be forwarded
+    // whole. Only `locality` (`city`) can become a city code, and only with no country
+    // when the caller has not passed one.
     let _ = street
     let _ = state
-    guard let city else {
-        return nil
-    }
-    return tellomiDiscoverNormalizedCity(city)
+    return tellomiDiscoverCityCode(locality: city, isoCountryCode: nil)
 }
 
 private func tellomiDiscoverLooksLikeCoordinate(_ value: String) -> Bool {
@@ -393,8 +391,10 @@ public enum TellomiDiscoverOperation: Equatable {
     case status
     case engineConfig
     case feed(TellomiDiscoverFeedKind, cursor: String?, personalized: Bool)
+    /// `GET /v1/feed/nearby?city=&cursor=`. Ten posts per page, newest first. No cursor means the end.
+    case nearby(city: String, cursor: String?)
     case cards([String])
-    case publish(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int)
+    case publish(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int, city: String?)
 }
 
 public struct TellomiDiscoverHTTPCall: Equatable {
@@ -456,8 +456,13 @@ public func tellomiDiscoverHTTPCall(base: URL, operation: TellomiDiscoverOperati
             return nil
         }
         return TellomiDiscoverHTTPCall(method: "POST", url: url, body: body, token: trimmedToken, authorizes: true, contentType: "application/json")
-    case let .publish(text, visibility, audienceToken, clientNonce, textLimit):
-        guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit) else {
+    case let .nearby(city, cursor):
+        guard let url = tellomiDiscoverNearbyURL(base: base, city: city, cursor: cursor) else {
+            return nil
+        }
+        return TellomiDiscoverHTTPCall(method: "GET", url: url, body: nil, token: trimmedToken, authorizes: true, contentType: nil)
+    case let .publish(text, visibility, audienceToken, clientNonce, textLimit, city):
+        guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit, city: city) else {
             return nil
         }
         guard let url = tellomiDiscoverURL(base: base, path: "/v1/feed/posts", query: []) else {
@@ -465,6 +470,17 @@ public func tellomiDiscoverHTTPCall(base: URL, operation: TellomiDiscoverOperati
         }
         return TellomiDiscoverHTTPCall(method: "POST", url: url, body: body, token: trimmedToken, authorizes: true, contentType: "application/json")
     }
+}
+
+public func tellomiDiscoverNearbyURL(base: URL, city: String, cursor: String?) -> URL? {
+    guard let code = tellomiDiscoverKnownCityCode(city) else {
+        return nil
+    }
+    var query = [URLQueryItem(name: "city", value: code)]
+    if let cursor, !cursor.isEmpty {
+        query.append(URLQueryItem(name: "cursor", value: cursor))
+    }
+    return tellomiDiscoverURL(base: base, path: "/v1/feed/nearby", query: query)
 }
 
 public func tellomiDiscoverFeedURL(base: URL, kind: TellomiDiscoverFeedKind, cursor: String?, personalized: Bool) -> URL? {
@@ -498,7 +514,7 @@ public func tellomiDiscoverCardsBody(_ identifiers: [String]) -> Data? {
     return try? JSONSerialization.data(withJSONObject: ["ids": ids], options: [])
 }
 
-public func tellomiDiscoverPublishBody(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int) -> Data? {
+public func tellomiDiscoverPublishBody(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int, city: String? = nil) -> Data? {
     let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
     let limit = textLimit > 0 ? textLimit : tellomiDiscoverPostTextLimit
     guard !body.isEmpty, body.count <= limit else {
@@ -520,6 +536,15 @@ public func tellomiDiscoverPublishBody(text: String, visibility: TellomiDiscover
         }
         object["audience"] = ["audience_token": token]
     }
+    if let city {
+        let trimmed = city.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            guard let code = tellomiDiscoverKnownCityCode(trimmed) else {
+                return nil
+            }
+            object["city"] = code
+        }
+    }
     return try? JSONSerialization.data(withJSONObject: object, options: [])
 }
 
@@ -531,20 +556,26 @@ public enum TellomiDiscoverPublishStep: Equatable {
 
 /// Include and exclude fetch `discover.getAudienceToken` first. The token is copied
 /// unchanged into `audience.audience_token`, and `visibility` is that same kind.
-public func tellomiDiscoverPublishStep(text: String, visibility: TellomiDiscoverVisibility, userIds: [Int64], selfUserId: Int64, clientNonce: String, textLimit: Int, token: TellomiDiscoverAudienceToken?, now: Int64) -> TellomiDiscoverPublishStep {
+public func tellomiDiscoverPublishStep(text: String, visibility: TellomiDiscoverVisibility, userIds: [Int64], selfUserId: Int64, clientNonce: String, textLimit: Int, token: TellomiDiscoverAudienceToken?, now: Int64, city: String? = nil) -> TellomiDiscoverPublishStep {
+    if let city {
+        let trimmed = city.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, tellomiDiscoverKnownCityCode(trimmed) == nil {
+            return .rejected(.invalidCity)
+        }
+    }
     if visibility == .include || visibility == .exclude {
         guard let ids = tellomiDiscoverAudienceUserIds(kind: visibility.rawValue, userIds: userIds, selfUserId: selfUserId) else {
             return .rejected(.audienceInvalid)
         }
         if let token, !token.token.isEmpty, !tellomiDiscoverAudienceTokenNeedsRefresh(expires: token.expires, now: now) {
-            guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: token.token, clientNonce: clientNonce, textLimit: textLimit) else {
+            guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: token.token, clientNonce: clientNonce, textLimit: textLimit, city: city) else {
                 return .rejected(.notPublishable)
             }
             return .ready(body)
         }
         return .needsAudienceToken(kind: visibility.rawValue, userIds: ids)
     }
-    guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: nil, clientNonce: clientNonce, textLimit: textLimit) else {
+    guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: nil, clientNonce: clientNonce, textLimit: textLimit, city: city) else {
         return .rejected(.notPublishable)
     }
     return .ready(body)

@@ -17,8 +17,9 @@ public struct TellomiDiscoverPost: Equatable {
     public var quoteState: String?
     public var quoteText: String?
     public var ipRegionLabel: String?
+    public var city: String?
 
-    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?) {
+    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?) {
         self.id = id
         self.text = text
         self.authorName = authorName
@@ -34,6 +35,7 @@ public struct TellomiDiscoverPost: Equatable {
         self.quoteState = quoteState
         self.quoteText = quoteText
         self.ipRegionLabel = ipRegionLabel
+        self.city = city
     }
 }
 
@@ -107,8 +109,9 @@ public struct TellomiDiscoverCard: Equatable {
     public var quoteState: String?
     public var quoteText: String?
     public var ipRegionLabel: String?
+    public var city: String?
 
-    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?) {
+    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?) {
         self.id = id
         self.state = state
         self.version = version
@@ -128,6 +131,7 @@ public struct TellomiDiscoverCard: Equatable {
         self.quoteState = quoteState
         self.quoteText = quoteText
         self.ipRegionLabel = ipRegionLabel
+        self.city = city
     }
 }
 
@@ -268,7 +272,8 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         imageCount: card.imageCount,
         quoteState: card.quoteState,
         quoteText: card.quoteText,
-        ipRegionLabel: card.ipRegionLabel
+        ipRegionLabel: card.ipRegionLabel,
+        city: card.city
     )
 }
 
@@ -304,7 +309,8 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
         imageCount: imageCount(body?["media"]),
         quoteState: stringValue(quoted?["state"]),
         quoteText: stringValue(quotedCard?["text"]),
-        ipRegionLabel: stringValue(body?["ip_region_label"])
+        ipRegionLabel: stringValue(body?["ip_region_label"]),
+        city: tellomiDiscoverCityCode(stringValue(body?["city"]) ?? stringValue(entry["city"]))
     )
 }
 
