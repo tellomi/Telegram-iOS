@@ -31,13 +31,28 @@ on:
     branches: [ master ]
 
   workflow_dispatch:
+    inputs:
+      runner:
+        description: 'runs-on as JSON. Empty uses vars.IOS_CI_RUNNER, else "xcode-27". Self-hosted Mac Studio: ["self-hosted","macOS","tellomi-mac"]'
+        required: false
+        default: ''
+      allow_xcode_mismatch:
+        description: 'Allow a different Xcode 27.x than versions.json (passes --overrideXcodeVersion). Needed on tellomi-mac-studio (Xcode 27.2).'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
 
 jobs:
   build:
-    runs-on: xcode-27
+    # Default stays xcode-27. Override per dispatch (inputs.runner) or for
+    # every run, including pushes to master, with the repository variable
+    # IOS_CI_RUNNER (JSON, e.g. ["self-hosted","macOS","tellomi-mac"]).
+    runs-on: ${{ fromJSON(github.event.inputs.runner || vars.IOS_CI_RUNNER || '"xcode-27"') }}
+    env:
+      ALLOW_XCODE_MISMATCH: ${{ github.event.inputs.allow_xcode_mismatch || vars.IOS_CI_ALLOW_XCODE_MISMATCH || 'false' }}
     timeout-minutes: 360
 
     steps:
@@ -63,16 +78,32 @@ jobs:
           if [ ! -d "$CANDIDATE" ]; then
             echo "Xcode ${XCODE_VERSION} is not installed on this runner."
             ls -1 /Applications | grep -E '^Xcode' || true
-            exit 1
+            if [ "$ALLOW_XCODE_MISMATCH" != "true" ]; then
+              exit 1
+            fi
+            CANDIDATE="/Applications/Xcode.app"
+            if [ ! -d "$CANDIDATE" ]; then
+              exit 1
+            fi
           fi
-          sudo xcode-select -s "${CANDIDATE}/Contents/Developer"
-          xcodebuild -version
           PLIST_VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "${CANDIDATE}/Contents/Info.plist")"
           echo "CFBundleShortVersionString=${PLIST_VERSION}"
           if [ "$PLIST_VERSION" != "$XCODE_VERSION" ]; then
-            echo "Selected Xcode reports ${PLIST_VERSION}, versions.json requires ${XCODE_VERSION}."
-            exit 1
+            if [ "$ALLOW_XCODE_MISMATCH" = "true" ] && [ "${PLIST_VERSION%%.*}" = "${XCODE_VERSION%%.*}" ]; then
+              echo "::warning::Building with Xcode ${PLIST_VERSION}; versions.json requires ${XCODE_VERSION} (allow_xcode_mismatch)."
+              echo "MAKE_XCODE_FLAGS=--overrideXcodeVersion" >> "$GITHUB_ENV"
+            else
+              echo "Selected Xcode reports ${PLIST_VERSION}, versions.json requires ${XCODE_VERSION}."
+              exit 1
+            fi
           fi
+          # DEVELOPER_DIR selects Xcode without sudo (self-hosted runners may
+          # not have passwordless sudo); xcode-select -p and xcrun honour it.
+          echo "DEVELOPER_DIR=${CANDIDATE}/Contents/Developer" >> "$GITHUB_ENV"
+          export DEVELOPER_DIR="${CANDIDATE}/Contents/Developer"
+          xcode-select -p
+          xcodebuild -version
+          echo "BAZEL_CACHE_DIR=${HOME}/telegram-bazel-cache" >> "$GITHUB_ENV"
 
       - name: Pin Bazel from versions.json
         run: |
@@ -95,6 +126,7 @@ jobs:
           fi
 
       - name: Restore Bazel cache
+        if: runner.environment == 'github-hosted'
         uses: actions/cache/restore@v4
         with:
           path: /Users/runner/telegram-bazel-cache
@@ -136,7 +168,8 @@ jobs:
           # codesigning selector without reading a profile directory.
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
-            --cacheDir /Users/runner/telegram-bazel-cache \
+            --cacheDir "$BAZEL_CACHE_DIR" \
+            ${MAKE_XCODE_FLAGS:-} \
             build \
             --configurationPath="build-system/appstore-configuration.json" \
             --xcodeManagedCodesigning \
@@ -259,7 +292,7 @@ jobs:
           fi
 
       - name: Save Bazel cache
-        if: always()
+        if: always() && runner.environment == 'github-hosted'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
