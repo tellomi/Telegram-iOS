@@ -22,6 +22,7 @@ public enum TellomiDiscoverDecoded: Equatable {
     case feed(TellomiDiscoverFeedPage)
     case cards([TellomiDiscoverCard])
     case created(TellomiDiscoverCreatedPost)
+    case reported
 }
 
 public struct TellomiDiscoverHTTPResult: Equatable {
@@ -162,6 +163,8 @@ private func tellomiDiscoverLocalFailure(_ operation: TellomiDiscoverOperation) 
             return .notPublishable
         }
         return nil
+    case let .report(target, option, detail):
+        return tellomiDiscoverReportBody(target: target, option: option, detail: detail) == nil ? .unavailable : nil
     }
 }
 
@@ -213,10 +216,14 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
             return .failure(.unreadable)
         }
         return .success(.created(created))
+    case .report:
+        return .success(.reported)
     }
 }
 
 public struct TellomiDiscoverCopy: Equatable {
+    public var languageCode: String
+    public var pack: [String: String]
     public var recommend: String
     public var following: String
     public var nearby: String
@@ -245,69 +252,50 @@ public struct TellomiDiscoverCopy: Equatable {
     public var aiGenerated: String
     public var quoteDeleted: String
     public var publish: String
+    public var tellomiId: String
+    public var likes: String
+    public var comments: String
+    public var photos: String
 
-    public static func resolve(languageCode: String) -> TellomiDiscoverCopy {
-        if tellomiDiscoverLanguageIsChinese(languageCode) {
-            return TellomiDiscoverCopy(
-                recommend: "推荐",
-                following: "关注",
-                nearby: "同城",
-                compose: "发布",
-                emptyTitle: "还没有帖子",
-                emptyText: "关注的人和推荐会显示在这里。",
-                unavailable: "这条动态已不可见",
-                failed: "暂时打不开，下拉再试一次。",
-                cityPrompt: "选择城市",
-                cityPlaceholder: "输入城市",
-                useLocation: "使用当前位置",
-                confirmCity: "确定",
-                cityDenied: "可以不定位，直接从列表里选。只保存城市，不保存坐标。",
-                visibility: "谁可以看",
-                everyone: "所有人",
-                contacts: "我的联系人",
-                closeFriends: "密友",
-                selected: "选定的用户",
-                exclude: "不给谁看",
-                audienceInvalid: "名单无效，请重新选择。",
-                userInvalid: "名单里有人无法使用。",
-                userBlocked: "名单里有人已互相拉黑。",
-                discoverDisabled: "发现暂时不可用。",
-                nearbyEmpty: "这个城市还没有帖子。",
-                invalidCity: "这个城市不能用，请重新选择。",
-                aiGenerated: "AI 生成",
-                quoteDeleted: "原动态已被作者删除",
-                publish: "发布"
-            )
+    public static func resolve(languageCode: String, pack: [String: String] = [:]) -> TellomiDiscoverCopy {
+        func text(_ key: String, _ english: String, _ simplified: String, _ traditional: String) -> String {
+            return tellomiLocalizedPackString(languageCode: languageCode, pack: pack, key: key, english: english, simplified: simplified, traditional: traditional)
         }
         return TellomiDiscoverCopy(
-            recommend: "For You",
-            following: "Following",
-            nearby: "Nearby",
-            compose: "Post",
-            emptyTitle: "No posts yet",
-            emptyText: "Posts from people you follow, and recommendations, show up here.",
-            unavailable: "This post isn't available",
-            failed: "Couldn't load this. Pull to try again.",
-            cityPrompt: "Choose a city",
-            cityPlaceholder: "City",
-            useLocation: "Use current location",
-            confirmCity: "Done",
-            cityDenied: "You can pick a city without location. Only the city is kept.",
-            visibility: "Who can see this",
-            everyone: "Everyone",
-            contacts: "My Contacts",
-            closeFriends: "Close Friends",
-            selected: "Selected People",
-            exclude: "Exclude",
-            audienceInvalid: "That list can't be used. Choose again.",
-            userInvalid: "Someone on the list can't be added.",
-            userBlocked: "Someone on the list is blocked.",
-            discoverDisabled: "Discover isn't available right now.",
-            nearbyEmpty: "No posts in this city yet.",
-            invalidCity: "That city can't be used. Choose another.",
-            aiGenerated: "AI generated",
-            quoteDeleted: "The original post was deleted by its author",
-            publish: "Post"
+            languageCode: languageCode,
+            pack: pack,
+            recommend: text("Tellomi.Discover.Recommend", "For You", "推荐", "推薦"),
+            following: text("Tellomi.Discover.Following", "Following", "关注", "追蹤"),
+            nearby: text("Tellomi.Discover.Nearby", "Nearby", "同城", "同城"),
+            compose: text("Tellomi.Discover.Compose", "Post", "发布", "發布"),
+            emptyTitle: text("Tellomi.Discover.EmptyTitle", "No posts yet", "还没有帖子", "還沒有貼文"),
+            emptyText: text("Tellomi.Discover.EmptyText", "Posts from people you follow, and recommendations, show up here.", "关注的人和推荐会显示在这里。", "追蹤的人和推薦會顯示在這裡。"),
+            unavailable: text("Tellomi.Discover.Unavailable", "This post isn't available", "这条动态已不可见", "這則動態已不可見"),
+            failed: text("Tellomi.Discover.Failed", "Couldn't load this. Pull to try again.", "暂时打不开，下拉再试一次。", "暫時打不開，下拉再試一次。"),
+            cityPrompt: text("Tellomi.Discover.CityPrompt", "Choose a city", "选择城市", "選擇城市"),
+            cityPlaceholder: text("Tellomi.Discover.CityPlaceholder", "City", "输入城市", "輸入城市"),
+            useLocation: text("Tellomi.Discover.UseLocation", "Use current location", "使用当前位置", "使用目前位置"),
+            confirmCity: text("Tellomi.Discover.ConfirmCity", "Done", "确定", "確定"),
+            cityDenied: text("Tellomi.Discover.CityDenied", "You can pick a city without location. Only the city is kept.", "可以不定位，直接从列表里选。只保存城市，不保存坐标。", "可以不定位，直接從列表裡選。只保存城市，不保存座標。"),
+            visibility: text("Tellomi.Discover.Visibility", "Who can see this", "谁可以看", "誰可以看"),
+            everyone: text("Tellomi.Discover.Everyone", "Everyone", "所有人", "所有人"),
+            contacts: text("Tellomi.Discover.Contacts", "My Contacts", "我的联系人", "我的聯絡人"),
+            closeFriends: text("Tellomi.Discover.CloseFriends", "Close Friends", "密友", "密友"),
+            selected: text("Tellomi.Discover.Selected", "Selected People", "选定的用户", "指定的使用者"),
+            exclude: text("Tellomi.Discover.Exclude", "Exclude", "不给谁看", "不給誰看"),
+            audienceInvalid: text("Tellomi.Discover.AudienceInvalid", "That list can't be used. Choose again.", "名单无效，请重新选择。", "名單無效，請重新選擇。"),
+            userInvalid: text("Tellomi.Discover.UserInvalid", "Someone on the list can't be added.", "名单里有人无法使用。", "名單裡有人無法使用。"),
+            userBlocked: text("Tellomi.Discover.UserBlocked", "Someone on the list is blocked.", "名单里有人已互相拉黑。", "名單裡有人已互相封鎖。"),
+            discoverDisabled: text("Tellomi.Discover.Disabled", "Discover isn't available right now.", "发现暂时不可用。", "發現暫時無法使用。"),
+            nearbyEmpty: text("Tellomi.Discover.NearbyEmpty", "No posts in this city yet.", "这个城市还没有帖子。", "這個城市還沒有貼文。"),
+            invalidCity: text("Tellomi.Discover.InvalidCity", "That city can't be used. Choose another.", "这个城市不能用，请重新选择。", "這個城市不能用，請重新選擇。"),
+            aiGenerated: text("Tellomi.Discover.AiGenerated", "AI generated", "AI 生成", "AI 生成"),
+            quoteDeleted: text("Tellomi.Discover.QuoteDeleted", "The original post was deleted by its author", "原动态已被作者删除", "原動態已被作者刪除"),
+            publish: text("Tellomi.Discover.Publish", "Post", "发布", "發布"),
+            tellomiId: text("Tellomi.Discover.TellomiId", "Tellomi ID: %@", "Tellomi 号：%@", "Tellomi 號：%@"),
+            likes: text("Tellomi.Discover.Likes", "%d likes", "%d 赞", "%d 讚"),
+            comments: text("Tellomi.Discover.Comments", "%d comments", "%d 评论", "%d 則留言"),
+            photos: text("Tellomi.Discover.Photos", "%d photos", "%d 张图片", "%d 張圖片")
         )
     }
 
@@ -353,11 +341,6 @@ public struct TellomiDiscoverCopy: Equatable {
     }
 }
 
-private func tellomiDiscoverLanguageIsChinese(_ code: String) -> Bool {
-    let value = code.lowercased()
-    return value == "zh" || value.hasPrefix("zh-")
-}
-
 public struct TellomiDiscoverPostSummary: Equatable {
     public var title: String
     public var body: String
@@ -379,7 +362,7 @@ public func tellomiDiscoverPostSummary(post: TellomiDiscoverPost, copy: TellomiD
             title += " @" + handle
         }
     } else if let number = post.tellomiNumber, !number.isEmpty {
-        let label = copy.recommend == "推荐" ? "Tellomi 号：\(number)" : "Tellomi ID: \(number)"
+        let label = tellomiFormatString(copy.tellomiId, number)
         if title.isEmpty {
             title = label
         } else {
@@ -408,22 +391,21 @@ public func tellomiDiscoverPostSummary(post: TellomiDiscoverPost, copy: TellomiD
             body += "\n" + quoteText
         }
     }
-    let chinese = copy.recommend == "推荐"
     var meta: [String] = []
-    if let city = post.city, let name = tellomiDiscoverCityName(code: city, languageCode: chinese ? "zh" : "en") {
+    if let city = post.city, let name = tellomiDiscoverCityName(code: city, languageCode: copy.languageCode, pack: copy.pack) {
         meta.append(name)
     }
     if let region = post.ipRegionLabel, !region.isEmpty {
         meta.append(region)
     }
     if post.likeCount > 0 {
-        meta.append(chinese ? "\(post.likeCount) 赞" : "\(post.likeCount) likes")
+        meta.append(tellomiFormatInteger(copy.likes, post.likeCount))
     }
     if post.commentCount > 0 {
-        meta.append(chinese ? "\(post.commentCount) 评论" : "\(post.commentCount) comments")
+        meta.append(tellomiFormatInteger(copy.comments, post.commentCount))
     }
     if post.imageCount > 0 {
-        meta.append(chinese ? "\(post.imageCount) 张图片" : "\(post.imageCount) photos")
+        meta.append(tellomiFormatInteger(copy.photos, post.imageCount))
     }
     if let badge = tellomiDiscoverVisibleBadge(post.badge, aiGenerated: post.aiGenerated, copy: copy) {
         meta.append(badge)

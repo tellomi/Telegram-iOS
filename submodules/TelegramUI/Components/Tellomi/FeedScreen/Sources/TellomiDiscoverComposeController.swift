@@ -5,6 +5,7 @@ import Foundation
 import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
+import TelegramUIPreferences
 import TellomiDiscover
 import UIKit
 import ShareWithPeersScreen
@@ -32,7 +33,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.published = published
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
-        let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode)
+        let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict))
         self.title = copy.compose
         self.presentationDataDisposable = (context.sharedContext.presentationData
         |> deliverOnMainQueue).start(next: { [weak self] presentationData in
@@ -129,7 +130,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     }
 
     private func apply() {
-        let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode)
+        let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict))
         let choice = self.choice()
         let title = choice.map { copy.visibilityTitle($0.visibility) } ?? copy.everyone
         self.visibilityButton.setTitle(copy.visibility + " · " + title, for: .normal)

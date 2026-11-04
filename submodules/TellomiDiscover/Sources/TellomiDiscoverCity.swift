@@ -82,12 +82,19 @@ public func tellomiDiscoverCityCode(locality: String?, isoCountryCode: String?) 
     return matches[0].code
 }
 
-public func tellomiDiscoverCityName(code: String, languageCode: String) -> String? {
+/// `cn:hong-kong` becomes `Tellomi.Discover.City.cn_hong_kong`. The generator only
+/// turns `.` into `_`, so a hyphen in the slug would be an invalid Swift name.
+public func tellomiDiscoverCityStringKey(_ code: String) -> String {
+    let slug = code.replacingOccurrences(of: ":", with: "_").replacingOccurrences(of: "-", with: "_")
+    return "Tellomi.Discover.City." + slug
+}
+
+public func tellomiDiscoverCityName(code: String, languageCode: String, pack: [String: String] = [:]) -> String? {
     guard let code = tellomiDiscoverCityCode(code) else {
         return nil
     }
     if let record = tellomiDiscoverCityCatalog.first(where: { $0.code == code }) {
-        return tellomiDiscoverCityLanguageIsChinese(languageCode) ? record.zh : record.en
+        return tellomiLocalizedPackString(languageCode: languageCode, pack: pack, key: tellomiDiscoverCityStringKey(code), english: record.en, simplified: record.zh, traditional: tellomiDiscoverCityTraditional[code] ?? record.zh)
     }
     let slug = code.split(separator: ":").last.map(String.init) ?? code
     return slug.split(separator: "-").map { part in
@@ -98,10 +105,9 @@ public func tellomiDiscoverCityName(code: String, languageCode: String) -> Strin
     }.joined(separator: " ")
 }
 
-public func tellomiDiscoverCities(languageCode: String) -> [TellomiDiscoverCity] {
-    let chinese = tellomiDiscoverCityLanguageIsChinese(languageCode)
+public func tellomiDiscoverCities(languageCode: String, pack: [String: String] = [:]) -> [TellomiDiscoverCity] {
     return tellomiDiscoverCityCatalog.map { record in
-        TellomiDiscoverCity(code: record.code, name: chinese ? record.zh : record.en)
+        TellomiDiscoverCity(code: record.code, name: tellomiDiscoverCityName(code: record.code, languageCode: languageCode, pack: pack) ?? record.en)
     }.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
 }
 
@@ -123,10 +129,41 @@ private func tellomiDiscoverCityRecord(_ code: String, _ zh: String, _ en: Strin
     return TellomiDiscoverCityRecord(code: code, zh: zh, en: en, keys: keys)
 }
 
-private func tellomiDiscoverCityLanguageIsChinese(_ code: String) -> Bool {
-    let value = code.lowercased()
-    return value == "zh" || value.hasPrefix("zh-")
-}
+private let tellomiDiscoverCityTraditional: [String: String] = [
+    "cn:chongqing": "重慶",
+    "cn:ningbo": "寧波",
+    "cn:suzhou": "蘇州",
+    "cn:wuxi": "無錫",
+    "cn:wuhan": "武漢",
+    "cn:guangzhou": "廣州",
+    "cn:dongguan": "東莞",
+    "cn:changsha": "長沙",
+    "cn:zhengzhou": "鄭州",
+    "cn:qingdao": "青島",
+    "cn:jinan": "濟南",
+    "cn:xiamen": "廈門",
+    "cn:guiyang": "貴陽",
+    "cn:nanning": "南寧",
+    "cn:sanya": "三亞",
+    "cn:shenyang": "瀋陽",
+    "cn:dalian": "大連",
+    "cn:harbin": "哈爾濱",
+    "cn:changchun": "長春",
+    "cn:shijiazhuang": "石家莊",
+    "cn:lanzhou": "蘭州",
+    "cn:yinchuan": "銀川",
+    "cn:xining": "西寧",
+    "cn:urumqi": "烏魯木齊",
+    "cn:lhasa": "拉薩",
+    "cn:macau": "澳門",
+    "us:new-york": "紐約",
+    "us:los-angeles": "洛杉磯",
+    "us:san-francisco": "舊金山",
+    "gb:london": "倫敦",
+    "jp:tokyo": "東京",
+    "kr:seoul": "首爾",
+    "ca:toronto": "多倫多"
+]
 
 private func tellomiDiscoverCityLooksLikeCoordinate(_ value: String) -> Bool {
     return value.range(of: #"^-?\d{1,3}(\.\d+)?$"#, options: .regularExpression) != nil

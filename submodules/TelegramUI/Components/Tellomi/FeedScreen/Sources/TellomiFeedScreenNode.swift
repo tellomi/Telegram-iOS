@@ -27,6 +27,7 @@ struct TellomiFeedNodeModel {
 final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate {
     var onSelectTab: ((Int) -> Void)?
     var onSelectPost: ((String) -> Void)?
+    var onReportPost: ((String) -> Void)?
     var onRefresh: (() -> Void)?
     var onNearEnd: (() -> Void)?
     var onUseLocation: (() -> Void)?
@@ -272,6 +273,10 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         let primary = self.presentationData?.theme.list.itemPrimaryTextColor ?? .label
         let secondary = self.presentationData?.theme.list.itemSecondaryTextColor ?? .secondaryLabel
         cell.apply(summary: summary, primary: primary, secondary: secondary)
+        cell.reportButton.accessibilityIdentifier = "tellomi.discover.report.\(post.id)"
+        cell.onReport = { [weak self] in
+            self?.onReportPost?(post.id)
+        }
         cell.accessibilityIdentifier = "tellomi.discover.post.\(post.id)"
         cell.backgroundColor = self.presentationData?.theme.list.plainBackgroundColor
         return cell
@@ -318,6 +323,8 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
 }
 
 private final class TellomiDiscoverPostCell: UITableViewCell {
+    var onReport: (() -> Void)?
+    let reportButton = UIButton(type: .system)
     private let titleLabel = UILabel()
     private let bodyLabel = UILabel()
     private let metaLabel = UILabel()
@@ -330,9 +337,12 @@ private final class TellomiDiscoverPostCell: UITableViewCell {
         self.bodyLabel.numberOfLines = 4
         self.metaLabel.font = Font.regular(13.0)
         self.metaLabel.numberOfLines = 2
+        self.reportButton.setTitle("…", for: .normal)
+        self.reportButton.addTarget(self, action: #selector(self.reportPressed), for: .touchUpInside)
         self.contentView.addSubview(self.titleLabel)
         self.contentView.addSubview(self.bodyLabel)
         self.contentView.addSubview(self.metaLabel)
+        self.contentView.addSubview(self.reportButton)
     }
 
     required init?(coder: NSCoder) {
@@ -346,24 +356,31 @@ private final class TellomiDiscoverPostCell: UITableViewCell {
         self.bodyLabel.textColor = primary
         self.metaLabel.text = summary.meta
         self.metaLabel.textColor = secondary
+        self.reportButton.setTitleColor(secondary, for: .normal)
         self.setNeedsLayout()
+    }
+
+    @objc private func reportPressed() {
+        self.onReport?()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         let side: CGFloat = 16.0
-        let width = max(1, self.contentView.bounds.width - side * 2.0)
+        let buttonWidth: CGFloat = 44.0
+        let width = max(1, self.contentView.bounds.width - side * 2.0 - buttonWidth)
         let titleSize = self.titleLabel.sizeThatFits(CGSize(width: width, height: 40))
         let bodySize = self.bodyLabel.sizeThatFits(CGSize(width: width, height: 120))
         let metaSize = self.metaLabel.sizeThatFits(CGSize(width: width, height: 40))
         self.titleLabel.frame = CGRect(x: side, y: 10, width: width, height: titleSize.height)
         self.bodyLabel.frame = CGRect(x: side, y: self.titleLabel.frame.maxY + 4, width: width, height: bodySize.height)
         self.metaLabel.frame = CGRect(x: side, y: self.bodyLabel.frame.maxY + 4, width: width, height: self.metaLabel.text?.isEmpty == false ? metaSize.height : 0)
+        self.reportButton.frame = CGRect(x: self.contentView.bounds.width - side - buttonWidth, y: 0, width: buttonWidth, height: self.contentView.bounds.height)
     }
 
     override func sizeThatFits(_ size: CGSize) -> CGSize {
         let side: CGFloat = 16.0
-        let width = max(1, size.width - side * 2.0)
+        let width = max(1, size.width - side * 2.0 - 44.0)
         let title = self.titleLabel.sizeThatFits(CGSize(width: width, height: 40)).height
         let body = self.bodyLabel.sizeThatFits(CGSize(width: width, height: 120)).height
         let meta = self.metaLabel.text?.isEmpty == false ? self.metaLabel.sizeThatFits(CGSize(width: width, height: 40)).height : 0

@@ -395,6 +395,8 @@ public enum TellomiDiscoverOperation: Equatable {
     case nearby(city: String, cursor: String?)
     case cards([String])
     case publish(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int, city: String?)
+    /// `POST /v1/feed/reports`. Official option id plus `detail`. Not a TL report.
+    case report(target: TellomiDiscoverReportTarget, option: String, detail: String)
 }
 
 public struct TellomiDiscoverHTTPCall: Equatable {
@@ -466,6 +468,14 @@ public func tellomiDiscoverHTTPCall(base: URL, operation: TellomiDiscoverOperati
             return nil
         }
         guard let url = tellomiDiscoverURL(base: base, path: "/v1/feed/posts", query: []) else {
+            return nil
+        }
+        return TellomiDiscoverHTTPCall(method: "POST", url: url, body: body, token: trimmedToken, authorizes: true, contentType: "application/json")
+    case let .report(target, option, detail):
+        guard let body = tellomiDiscoverReportBody(target: target, option: option, detail: detail) else {
+            return nil
+        }
+        guard let url = tellomiDiscoverURL(base: base, path: "/v1/feed/reports", query: []) else {
             return nil
         }
         return TellomiDiscoverHTTPCall(method: "POST", url: url, body: body, token: trimmedToken, authorizes: true, contentType: "application/json")

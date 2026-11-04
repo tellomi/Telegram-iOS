@@ -18,8 +18,9 @@ public struct TellomiDiscoverPost: Equatable {
     public var quoteText: String?
     public var ipRegionLabel: String?
     public var city: String?
+    public var comments: [TellomiDiscoverComment]
 
-    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?) {
+    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = []) {
         self.id = id
         self.text = text
         self.authorName = authorName
@@ -36,6 +37,19 @@ public struct TellomiDiscoverPost: Equatable {
         self.quoteText = quoteText
         self.ipRegionLabel = ipRegionLabel
         self.city = city
+        self.comments = comments
+    }
+}
+
+public struct TellomiDiscoverComment: Equatable {
+    public var id: String
+    public var text: String
+    public var authorName: String
+
+    public init(id: String, text: String, authorName: String) {
+        self.id = id
+        self.text = text
+        self.authorName = authorName
     }
 }
 
@@ -110,8 +124,9 @@ public struct TellomiDiscoverCard: Equatable {
     public var quoteText: String?
     public var ipRegionLabel: String?
     public var city: String?
+    public var comments: [TellomiDiscoverComment]
 
-    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?) {
+    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = []) {
         self.id = id
         self.state = state
         self.version = version
@@ -132,6 +147,7 @@ public struct TellomiDiscoverCard: Equatable {
         self.quoteText = quoteText
         self.ipRegionLabel = ipRegionLabel
         self.city = city
+        self.comments = comments
     }
 }
 
@@ -273,7 +289,8 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         quoteState: card.quoteState,
         quoteText: card.quoteText,
         ipRegionLabel: card.ipRegionLabel,
-        city: card.city
+        city: card.city,
+        comments: card.comments
     )
 }
 
@@ -310,8 +327,31 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
         quoteState: stringValue(quoted?["state"]),
         quoteText: stringValue(quotedCard?["text"]),
         ipRegionLabel: stringValue(body?["ip_region_label"]),
-        city: tellomiDiscoverCityCode(stringValue(body?["city"]) ?? stringValue(entry["city"]))
+        city: tellomiDiscoverCityCode(stringValue(body?["city"]) ?? stringValue(entry["city"])),
+        comments: parseComments(entry["comments"])
     )
+}
+
+private func parseComments(_ json: TellomiJSON?) -> [TellomiDiscoverComment] {
+    guard let json, case let .array(values) = json else {
+        return []
+    }
+    var comments: [TellomiDiscoverComment] = []
+    for value in values {
+        guard let object = objectValue(value) else {
+            continue
+        }
+        guard let identifier = stringValue(object["id"]).flatMap(tellomiDiscoverPostId) else {
+            continue
+        }
+        let author = objectValue(object["author"])
+        comments.append(TellomiDiscoverComment(
+            id: identifier,
+            text: stringValue(object["text"]) ?? "",
+            authorName: stringValue(author?["display_name"]) ?? stringValue(object["author_name"]) ?? ""
+        ))
+    }
+    return comments
 }
 
 private func imageCount(_ json: TellomiJSON?) -> Int {
