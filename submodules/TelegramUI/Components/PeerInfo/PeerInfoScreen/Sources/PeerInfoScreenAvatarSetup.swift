@@ -922,7 +922,10 @@ extension PeerInfoScreenImpl {
                     }
                 })
             }
-        }))
+        }, error: { [weak self] error in
+            dismissStatus?()
+            self?.tellomiNoteAvatarUploadFailure(error)
+        })
     }
     
     public func updateProfileVideo(_ image: UIImage, video: Any?, values: Any?, markup: UploadPeerPhotoMarkup?) {
@@ -1122,7 +1125,10 @@ extension PeerInfoScreenImpl {
                     }
                 })
             }
-        }))
+        }, error: { [weak self] error in
+            dismissStatus?()
+            self?.tellomiNoteAvatarUploadFailure(error)
+        })
     }
     
     public func oldUpdateProfileVideo(_ image: UIImage, asset: Any?, adjustments: TGVideoEditAdjustments?, mode: PeerInfoAvatarEditingMode) {
@@ -1331,6 +1337,9 @@ extension PeerInfoScreenImpl {
                     }
                 })
             }
-        }))
+        }, error: { [weak self] error in
+            dismissStatus?()
+            self?.tellomiNoteAvatarUploadFailure(error)
+        })
     }
 }

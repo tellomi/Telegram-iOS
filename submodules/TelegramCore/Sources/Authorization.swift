@@ -1537,6 +1537,8 @@ public enum SignUpError {
     case codeExpired
     case invalidFirstName
     case invalidLastName
+    /// The account was created. The profile photo was not. `description` is the RPC error text.
+    case avatarUploadFailed(code: Int32, description: String)
 }
 
 public func signUpWithName(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, firstName: String, lastName: String, avatarData: Data?, avatarVideo: Signal<UploadedPeerPhotoData?, NoError>?, videoStartTimestamp: Double?, disableJoinNotifications: Bool = false, forcedPasswordSetupNotice: @escaping (Int32) -> (NoticeEntryKey, CodableEntry)?) -> Signal<Void, SignUpError> {
@@ -1595,27 +1597,23 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                     }
                     |> castError(SignUpError.self)
                     
-                    if let avatarData = avatarData {
-                        let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
-                        account.postbox.mediaBox.storeResourceData(resource.id, data: avatarData)
-                        
-                        return _internal_updatePeerPhotoInternal(postbox: account.postbox, network: account.network, stateManager: nil, accountPeerId: user.id, peer: .single(user), photo: _internal_uploadedPeerPhoto(postbox: account.postbox, network: account.network, resource: resource), video: avatarVideo, videoStartTimestamp: videoStartTimestamp, mapResourceToAvatarSizes: { _, _ in .single([:]) })
-                            |> `catch` { _ -> Signal<UpdatePeerPhotoStatus, SignUpError> in
-                                return .complete()
-                            }
-                            |> mapToSignal { result -> Signal<Void, SignUpError> in
-                                switch result {
-                                case .complete:
-                                    return .complete()
-                                case .progress:
-                                    return .never()
-                                }
-                            }
-                            |> then(appliedState)
-                            |> then(switchedAccounts)
-                    } else {
-                        return appliedState
-                        |> then(switchedAccounts)
+                    let activated = appliedState
+                    |> then(switchedAccounts)
+                    if avatarData == nil && avatarVideo == nil {
+                        return activated
+                    }
+                    return tellomiSignUpAvatarUpload(postbox: account.postbox, network: account.network, accountPeerId: user.id, peer: .single(user), avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp)
+                    |> castError(SignUpError.self)
+                    |> mapToSignal { step -> Signal<Void, SignUpError> in
+                        switch tellomiSignUpAvatarDecision(step) {
+                        case .wait:
+                            return Signal<Void, SignUpError>.never()
+                        case .createAccount:
+                            return activated
+                        case let .createAccountAndShowError(failure):
+                            return activated
+                            |> then(Signal<Void, SignUpError>.fail(.avatarUploadFailed(code: failure.code, description: failure.description)))
+                        }
                     }
                 case .authorizationSignUpRequired:
                     return .fail(.generic)
@@ -1623,6 +1621,64 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
             }
         } else {
             return .fail(.generic)
+        }
+    }
+    |> mapError { _ -> SignUpError in
+    }
+    |> switchToLatest
+}
+
+private func tellomiSignUpAvatarUpload(postbox: Postbox, network: Network, accountPeerId: PeerId, peer: Signal<Peer, NoError>, avatarData: Data?, avatarVideo: Signal<UploadedPeerPhotoData?, NoError>?, videoStartTimestamp: Double?) -> Signal<TellomiSignUpAvatarStep, NoError> {
+    let photo: Signal<UploadedPeerPhotoData, NoError>?
+    if let avatarData {
+        let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
+        postbox.mediaBox.storeResourceData(resource.id, data: avatarData)
+        photo = _internal_uploadedPeerPhoto(postbox: postbox, network: network, resource: resource)
+    } else {
+        photo = nil
+    }
+    return _internal_updatePeerPhotoInternal(postbox: postbox, network: network, stateManager: nil, accountPeerId: accountPeerId, peer: peer, photo: photo, video: avatarVideo, videoStartTimestamp: videoStartTimestamp, mapResourceToAvatarSizes: { _, _ in .single([:]) })
+    |> map { status -> TellomiSignUpAvatarStep in
+        switch status {
+        case .progress:
+            return .working
+        case .complete:
+            return .uploaded
+        }
+    }
+    |> `catch` { error -> Signal<TellomiSignUpAvatarStep, NoError> in
+        let failure: TellomiSignUpAvatarFailure
+        if case let .server(code, description) = error {
+            failure = TellomiSignUpAvatarFailure(code: code, description: description)
+        } else {
+            failure = TellomiSignUpAvatarFailure(code: 500, description: "")
+        }
+        return .single(.failed(failure))
+    }
+}
+
+/// Uploads the sign-up photo again. Does not call `auth.signUp` and does not change the session.
+public func tellomiRetrySignUpAvatar(account: UnauthorizedAccount, avatarData: Data?, avatarVideo: Signal<UploadedPeerPhotoData?, NoError>?, videoStartTimestamp: Double?) -> Signal<Void, SignUpError> {
+    return account.postbox.transaction { transaction -> Signal<Void, SignUpError> in
+        guard let state = transaction.getState() as? AuthorizedAccountState else {
+            return .fail(.generic)
+        }
+        let peerId = state.peerId
+        return account.postbox.loadedPeerWithId(peerId)
+        |> castError(SignUpError.self)
+        |> mapToSignal { peer -> Signal<Void, SignUpError> in
+            return tellomiSignUpAvatarUpload(postbox: account.postbox, network: account.network, accountPeerId: peerId, peer: .single(peer), avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp)
+            |> castError(SignUpError.self)
+            |> mapToSignal { step -> Signal<Void, SignUpError> in
+                switch tellomiSignUpAvatarDecision(step) {
+                case .wait:
+                    return Signal<Void, SignUpError>.never()
+                case .createAccount:
+                    return Signal<Void, SignUpError>.complete()
+                case let .createAccountAndShowError(failure):
+                    return Signal<Void, SignUpError>.fail(.avatarUploadFailed(code: failure.code, description: failure.description))
+                }
+            }
         }
     }
     |> mapError { _ -> SignUpError in

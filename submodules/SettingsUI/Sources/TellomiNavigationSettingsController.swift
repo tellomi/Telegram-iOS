@@ -111,7 +111,7 @@ private enum TellomiNavigationSettingsEntry: ItemListNodeEntry {
 }
 
 private func tellomiNavigationSettingsEntries(presentationData: PresentationData, tabs: TellomiTabSettings, calls: CallListSettings) -> [TellomiNavigationSettingsEntry] {
-    let copy = TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode)
+    let copy = TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
     return [
         .feed(copy.feed, tabs.showFeedTab),
         .chats(presentationData.strings.DialogList_Title),
@@ -148,7 +148,7 @@ public func tellomiNavigationSettingsController(context: AccountContext) -> View
     |> map { presentationData, sharedData -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let tabs = sharedData.entries[ApplicationSpecificSharedDataKeys.tellomiTabSettings]?.get(TellomiTabSettings.self) ?? .defaultSettings
         let calls = sharedData.entries[ApplicationSpecificSharedDataKeys.callListSettings]?.get(CallListSettings.self) ?? .defaultSettings
-        let copy = TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode)
+        let copy = TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(copy.navigationTitle), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: tellomiNavigationSettingsEntries(presentationData: presentationData, tabs: tabs, calls: calls), style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))

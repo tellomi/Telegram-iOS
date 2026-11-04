@@ -11,7 +11,7 @@ func tellomiAppendNavigationSettingsEntry(items: inout [SettingsSection: [PeerIn
     guard tellomiBottomNavigationEnabled(appConfiguration: context.currentAppConfiguration.with { $0 }) else {
         return
     }
-    let title = TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode).navigationTitle
+    let title = TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)).navigationTitle
     items[.advanced, default: []].append(PeerInfoScreenDisclosureItem(id: 7, text: title, icon: PresentationResourcesSettings.appearance, action: {
         tellomiPushNavigationSettings(interaction: interaction, controller: tellomiNavigationSettingsController(context: context))
     }))

@@ -1270,6 +1270,27 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         avatarVideo = nil
                     }
                     
+                    var retryAvatar: (() -> Void)?
+                    retryAvatar = {
+                        guard let strongSelf = self, let controller = controller else {
+                            return
+                        }
+                        controller.inProgress = true
+                        strongSelf.actionDisposable.set((tellomiRetrySignUpAvatar(account: strongSelf.account, avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp)
+                        |> deliverOnMainQueue).startStrict(error: { error in
+                            Queue.mainQueue().async {
+                                guard let strongSelf = self, let controller = controller else {
+                                    return
+                                }
+                                controller.inProgress = false
+                                strongSelf.tellomiPresentSignUpError(controller: controller, error: error, retry: { retryAvatar?() })
+                            }
+                        }, completed: {
+                            Queue.mainQueue().async {
+                                controller?.inProgress = false
+                            }
+                        }))
+                    }
                     strongSelf.actionDisposable.set((signUpWithName(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, firstName: firstName, lastName: lastName, avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp, disableJoinNotifications: !announceSignUp, forcedPasswordSetupNotice: { value in
                         guard let entry = EngineCodableEntry(ApplicationSpecificCounterNotice(value: value)) else {
                             return nil
@@ -1280,22 +1301,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         Queue.mainQueue().async {
                             if let strongSelf = self, let controller = controller {
                                 controller.inProgress = false
-                                
-                                let text: String
-                                switch error {
-                                    case .limitExceeded:
-                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
-                                    case .codeExpired:
-                                        text = strongSelf.presentationData.strings.Login_CodeExpiredError
-                                    case .invalidFirstName:
-                                        text = strongSelf.presentationData.strings.Login_InvalidFirstNameError
-                                    case .invalidLastName:
-                                        text = strongSelf.presentationData.strings.Login_InvalidLastNameError
-                                    case .generic:
-                                        text = strongSelf.presentationData.strings.Login_UnknownError
-                                }
-                                
-                                controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                strongSelf.tellomiPresentSignUpError(controller: controller, error: error, retry: { retryAvatar?() })
                             }
                         }
                     }))
@@ -1307,6 +1313,32 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         return controller
     }
     
+    private func tellomiPresentSignUpError(controller: AuthorizationSequenceSignUpController, error: SignUpError, retry: @escaping () -> Void) {
+        let text: String
+        var actions = [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]
+        switch error {
+        case .limitExceeded:
+            text = self.presentationData.strings.Login_CodeFloodError
+        case .codeExpired:
+            text = self.presentationData.strings.Login_CodeExpiredError
+        case .invalidFirstName:
+            text = self.presentationData.strings.Login_InvalidFirstNameError
+        case .invalidLastName:
+            text = self.presentationData.strings.Login_InvalidLastNameError
+        case .generic:
+            text = self.presentationData.strings.Login_UnknownError
+        case let .avatarUploadFailed(code, description):
+            let pack = tellomiAuthorizationStringPack(self.presentationData.strings)
+            text = tellomiSignUpAvatarFailureText(code: code, description: description, languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: pack)
+            let retryTitle = tellomiSignUpAvatarRetryTitle(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: pack)
+            actions = [
+                TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_OK, action: {}),
+                TextAlertAction(type: .defaultAction, title: retryTitle, action: retry)
+            ]
+        }
+        controller.present(tellomiServerErrorAlert(sharedContext: self.sharedContext, strings: self.presentationData.strings, text: text, actions: actions), in: .window(.root))
+    }
+
     private func updateState(state: InnerState) {
         if self.tellomiDidAuthorize {
             return
@@ -1643,6 +1675,19 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
 /// Server-error alerts from the login state machine. The text goes through Telegram's
 /// `Login_*` mapping, then the bundled Chinese sentence when that mapping is still English.
 /// `Auth.Login.ErrorAlert` is how the UI test reads the custom alert (it is not `app.alerts`).
+private func tellomiAuthorizationStringPack(_ strings: PresentationStrings) -> [String: String] {
+    var pack: [String: String] = [:]
+    if let secondary = strings.secondaryComponent?.dict {
+        for (key, value) in secondary {
+            pack[key] = value
+        }
+    }
+    for (key, value) in strings.primaryComponent.dict {
+        pack[key] = value
+    }
+    return pack
+}
+
 private func tellomiServerErrorAlert(sharedContext: SharedAccountContext, strings: PresentationStrings, text: String, actions: [TextAlertAction]) -> ViewController {
     let localizedText = tellomiLocalizedServerAlert(text, strings: strings)
     let localizedActions = actions.map { action in

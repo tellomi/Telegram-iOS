@@ -11,35 +11,48 @@ public struct TellomiTabCopy: Equatable {
     public var feedEmptyText: String
     public var feedPostUnavailable: String
 
-    public static func resolve(languageCode: String) -> TellomiTabCopy {
-        if tellomiTabLanguageIsChinese(languageCode) {
-            return TellomiTabCopy(
-                feed: "发现",
-                hideFeed: "隐藏发现",
-                hideContacts: "隐藏联系人",
-                navigationTitle: "导航栏",
-                navigationFooter: "聊天和设置始终显示，不能关闭。",
-                feedEmptyTitle: "还没有内容",
-                feedEmptyText: "帖子会显示在这里。",
-                feedPostUnavailable: "这条帖子暂时无法打开。"
-            )
+    public static func resolve(languageCode: String, pack: [String: String] = [:]) -> TellomiTabCopy {
+        func text(_ key: String, _ english: String, _ simplified: String, _ traditional: String) -> String {
+            return tellomiTabPackString(languageCode: languageCode, pack: pack, key: key, english: english, simplified: simplified, traditional: traditional)
         }
         return TellomiTabCopy(
-            feed: "Discover",
-            hideFeed: "Hide Discover",
-            hideContacts: "Hide Contacts",
-            navigationTitle: "Navigation Bar",
-            navigationFooter: "Chats and Settings always stay in the bar.",
-            feedEmptyTitle: "Nothing here yet",
-            feedEmptyText: "Posts will show up here.",
-            feedPostUnavailable: "This post can't be opened yet."
+            feed: text("Tellomi.Discover.Feed", "Discover", "发现", "發現"),
+            hideFeed: text("Tellomi.Discover.HideFeed", "Hide Discover", "隐藏发现", "隱藏發現"),
+            hideContacts: text("Tellomi.Discover.HideContacts", "Hide Contacts", "隐藏联系人", "隱藏聯絡人"),
+            navigationTitle: text("Tellomi.Discover.NavigationTitle", "Navigation Bar", "导航栏", "導覽列"),
+            navigationFooter: text("Tellomi.Discover.NavigationFooter", "Chats and Settings always stay in the bar.", "聊天和设置始终显示，不能关闭。", "聊天和設定始終顯示，不能關閉。"),
+            feedEmptyTitle: text("Tellomi.Discover.FeedEmptyTitle", "Nothing here yet", "还没有内容", "還沒有內容"),
+            feedEmptyText: text("Tellomi.Discover.FeedEmptyText", "Posts will show up here.", "帖子会显示在这里。", "貼文會顯示在這裡。"),
+            feedPostUnavailable: text("Tellomi.Discover.FeedPostUnavailable", "This post can't be opened yet.", "这条帖子暂时无法打开。", "這則貼文暫時無法打開。")
         )
     }
 }
 
-private func tellomiTabLanguageIsChinese(_ code: String) -> Bool {
-    let value = code.lowercased()
-    return value == "zh" || value.hasPrefix("zh-")
+func tellomiTabPackString(languageCode: String, pack: [String: String], key: String, english: String, simplified: String, traditional: String) -> String {
+    if let value = pack[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty, value != key {
+        return value
+    }
+    let code = languageCode.lowercased()
+    if code == "zh-hant" || code.hasPrefix("zh-hant") || code == "zh-tw" || code.hasPrefix("zh-tw") || code == "zh-hk" || code.hasPrefix("zh-hk") || code == "zh-mo" || code.hasPrefix("zh-mo") {
+        return traditional
+    }
+    if code == "zh" || code.hasPrefix("zh") {
+        return simplified
+    }
+    return english
+}
+
+public func tellomiStringPack(primary: [String: String], secondary: [String: String]?) -> [String: String] {
+    var pack: [String: String] = [:]
+    if let secondary {
+        for (key, value) in secondary {
+            pack[key] = value
+        }
+    }
+    for (key, value) in primary {
+        pack[key] = value
+    }
+    return pack
 }
 
 /// `https://tell.cc/m#<id>` (D-57). `https://tell.cc/m/<slug>` stays a message link.

@@ -27,7 +27,8 @@ final class TellomiDiscoverFeedTests: XCTestCase {
             .feed(.recommend, cursor: nil, personalized: true),
             .cards(["post-9"]),
             .publish(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: nil),
-            .nearby(city: "cn:chengdu", cursor: nil)
+            .nearby(city: "cn:chengdu", cursor: nil),
+            .report(target: .post("post-9"), option: "spam", detail: "nope")
         ]
         for operation in operations {
             let loader = RecordingLoader()
@@ -465,6 +466,87 @@ final class TellomiDiscoverFeedUITests: XCTestCase {
 private let cardsJSON = """
 {"cards":[{"id":"post-9","state":"ok","version":1,"card":{"kind":"post","display_mode":"post","source_url":"","ai_generated":true,"edited":false,"text":"好看","author":{"id":"profile-1","display_name":"林","handle":"lin","native":true},"media":[{"type":"image","key":"m/a"}],"ip_region_label":"四川","city":"cn:chengdu"},"stats":{"likes":3,"comments":1,"reposts":0},"me":{"liked":false},"shareable":true,"quoted":{"id":"post-1","state":"deleted"}}]}
 """.data(using: .utf8)!
+
+final class TellomiDiscoverLocalizationAndReportTests: XCTestCase {
+    func testLanguagePackReplacesHardcodedCopy() {
+        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "zh-Hans").recommend, "推荐")
+        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "zh-Hant").recommend, "推薦")
+        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "ja").recommend, "For You")
+        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "de").invalidCity, "That city can't be used. Choose another.")
+        let japanese = [
+            "Tellomi.Discover.Recommend": "おすすめ",
+            "Tellomi.Discover.Likes": "%d いいね",
+            "Tellomi.Discover.City.cn_chengdu": "成都"
+        ]
+        let copy = TellomiDiscoverCopy.resolve(languageCode: "ja", pack: japanese)
+        XCTAssertEqual(copy.recommend, "おすすめ")
+        XCTAssertEqual(copy.following, "Following")
+        XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chengdu", languageCode: "ja", pack: japanese), "成都")
+        XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chengdu", languageCode: "ja"), "Chengdu")
+        XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chengdu", languageCode: "zh-Hant"), "成都")
+        XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chongqing", languageCode: "zh-HK"), "重慶")
+        let post = TellomiDiscoverPost(id: "post-9", text: "hi", authorName: "", authorHandle: nil, tellomiNumber: "100", unavailable: false, aiGenerated: false, badge: nil, likeCount: 2, commentCount: 0, repostCount: 0, imageCount: 0, quoteState: nil, quoteText: nil, ipRegionLabel: nil, city: "cn:chengdu")
+        let summary = tellomiDiscoverPostSummary(post: post, copy: copy, list: false)
+        XCTAssertEqual(summary.title, "Tellomi ID: 100")
+        XCTAssertTrue(summary.meta.contains("2 いいね"))
+        XCTAssertTrue(summary.meta.contains("成都"))
+    }
+
+    func testReportPostsToTheFeedEndpoint() {
+        let base = URL(string: "https://feed.example")!
+        XCTAssertNil(tellomiDiscoverReportCall(loggedIn: false, base: base, token: "jwt", target: .post("post-9"), option: "spam", detail: "x"))
+        XCTAssertNil(tellomiDiscoverReportBody(target: .post("post-9"), option: "not-a-reason", detail: ""))
+        XCTAssertNil(tellomiDiscoverReportBody(target: .post("../x"), option: "spam", detail: ""))
+
+        let postBody = tellomiDiscoverReportBody(target: .post("post-9"), option: "childAbuse", detail: "details")
+        let postJSON = try! JSONSerialization.jsonObject(with: postBody!) as! [String: Any]
+        XCTAssertEqual(postJSON["target_type"] as? String, "content")
+        XCTAssertEqual(postJSON["post_id"] as? String, "post-9")
+        XCTAssertEqual(postJSON["option"] as? String, "child")
+        XCTAssertEqual(postJSON["reason"] as? String, "child")
+        XCTAssertEqual(postJSON["detail"] as? String, "details")
+        XCTAssertNil(postJSON["comment_id"])
+
+        let commentBody = tellomiDiscoverReportBody(target: .comment(postId: "post-9", commentId: "cmt-1"), option: "other", detail: "more")
+        let commentJSON = try! JSONSerialization.jsonObject(with: commentBody!) as! [String: Any]
+        XCTAssertEqual(commentJSON["option"] as? String, "other")
+        XCTAssertEqual(commentJSON["comment_id"] as? String, "cmt-1")
+        XCTAssertEqual(commentJSON["detail"] as? String, "more")
+
+        let call = tellomiDiscoverReportCall(loggedIn: true, base: base, token: "jwt", target: .post("post-9"), option: "violence", detail: "")
+        XCTAssertEqual(call?.method, "POST")
+        XCTAssertEqual(call?.url.path, "/v1/feed/reports")
+        XCTAssertEqual(call?.authorizes, true)
+
+        let loader = RecordingLoader()
+        let finished = expectation(description: "reported")
+        loader.loader.run(loggedIn: true, configuration: TellomiDiscoverConfiguration(enabled: true, baseURL: base), operation: .report(target: .comment(postId: "post-9", commentId: "cmt-1"), option: "spam", detail: "")) { result in
+            guard case .success(.reported) = result else {
+                XCTFail("expected a stored report")
+                return
+            }
+            finished.fulfill()
+        }
+        wait(for: [finished], timeout: 1)
+        XCTAssertEqual(loader.calls.count, 1)
+        XCTAssertEqual(loader.calls[0].url.path, "/v1/feed/reports")
+
+        let signedOut = RecordingLoader()
+        let blocked = expectation(description: "signed out report")
+        signedOut.loader.run(loggedIn: false, configuration: TellomiDiscoverConfiguration(enabled: true, baseURL: base), operation: .report(target: .post("post-9"), option: "spam", detail: "")) { result in
+            guard case .failure(.signedOut) = result else {
+                XCTFail("expected signedOut")
+                return
+            }
+            blocked.fulfill()
+        }
+        wait(for: [blocked], timeout: 1)
+        XCTAssertTrue(signedOut.calls.isEmpty)
+
+        let cards = #"{"cards":[{"id":"post-9","state":"ok","comments":[{"id":"cmt-1","text":"no","author":{"display_name":"A"}}]}]}"#.data(using: .utf8)!
+        XCTAssertEqual(tellomiDiscoverParseCards(cards)?.first?.comments, [TellomiDiscoverComment(id: "cmt-1", text: "no", authorName: "A")])
+    }
+}
 
 private final class RecordingLoader {
     var nowValue: Int64 = 1_000

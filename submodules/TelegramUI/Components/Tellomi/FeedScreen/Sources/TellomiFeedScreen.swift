@@ -103,6 +103,13 @@ public final class TellomiFeedScreen: ViewController {
         self.loader.cancel()
     }
 
+    private func reportPost(_ id: String) {
+        guard let id = tellomiDiscoverPostId(id) else {
+            return
+        }
+        tellomiPresentDiscoverReport(host: self, context: self.context, loggedIn: !self.loggedOut, configuration: self.configuration(), loader: self.loader, target: .post(id))
+    }
+
     public func openPost(id: String) {
         self.pendingPostId = id
         if self.isNodeLoaded {
@@ -117,6 +124,9 @@ public final class TellomiFeedScreen: ViewController {
         }
         node.onSelectPost = { [weak self] id in
             self?.openPost(id: id)
+        }
+        node.onReportPost = { [weak self] id in
+            self?.reportPost(id)
         }
         node.onRefresh = { [weak self] in
             self?.loadFeed(reset: true)
@@ -146,7 +156,7 @@ public final class TellomiFeedScreen: ViewController {
         guard tellomiBottomNavigationEnabled(appConfiguration: self.context.currentAppConfiguration.with { $0 }) else {
             return
         }
-        let copy = TellomiTabCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode)
+        let copy = TellomiTabCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: self.stringPack())
         let items: [ContextMenuItem] = [
             .action(ContextMenuActionItem(text: copy.hideFeed, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Peer Info/HideIcon"), color: theme.contextMenu.primaryColor)
@@ -165,6 +175,10 @@ public final class TellomiFeedScreen: ViewController {
         self.context.sharedContext.mainWindow?.presentInGlobalOverlay(contextController)
     }
 
+    private func stringPack() -> [String: String] {
+        return tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict)
+    }
+
     private func configuration() -> TellomiDiscoverConfiguration {
         return TellomiDiscoverConfiguration.resolve(
             enabledField: tellomiDiscoverConfigField(self.appConfiguration.data?[tellomiDiscoverFeedEnabledKey]),
@@ -175,8 +189,8 @@ public final class TellomiFeedScreen: ViewController {
     private func sync(reload: Bool) {
         let configuration = self.configuration()
         let loggedIn = !self.loggedOut
-        let legacy = TellomiTabCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode)
-        let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode)
+        let legacy = TellomiTabCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: self.stringPack())
+        let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: self.stringPack())
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
         self.title = legacy.feed
         self.navigationItem.title = legacy.feed
@@ -240,7 +254,7 @@ public final class TellomiFeedScreen: ViewController {
                 legacyTitle: legacyTitle,
                 legacyBody: legacyBody,
                 copy: copy,
-                cities: tellomiDiscoverCities(languageCode: self.presentationData.strings.primaryComponent.languageCode)
+                cities: tellomiDiscoverCities(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: self.stringPack())
             ))
             if let layout = self.appliedLayout {
                 let navigationHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
@@ -312,7 +326,7 @@ public final class TellomiFeedScreen: ViewController {
 
     private func applyCity(_ code: String) {
         guard let code = tellomiDiscoverKnownCityCode(code) else {
-            self.banner = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode).invalidCity
+            self.banner = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: self.stringPack()).invalidCity
             self.sync(reload: false)
             return
         }
@@ -423,7 +437,7 @@ public final class TellomiFeedScreen: ViewController {
             case .failure(.invalidCity):
                 self.cityCode = nil
                 tellomiDiscoverStoreCity(nil)
-                self.banner = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode).invalidCity
+                self.banner = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: self.stringPack()).invalidCity
                 self.loading = false
                 self.loadingMore = false
                 self.sync(reload: false)

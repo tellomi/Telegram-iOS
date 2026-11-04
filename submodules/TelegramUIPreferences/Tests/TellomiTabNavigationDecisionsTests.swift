@@ -25,6 +25,11 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh").feedEmptyTitle, "还没有内容")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "en-US").feed, "Discover")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "de").feedPostUnavailable, "This post can't be opened yet.")
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").feed, "發現")
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "ja").feed, "Discover")
+        let japanese = ["Tellomi.Discover.Feed": "発見"]
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "ja", pack: japanese).feed, "発見")
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hans", pack: japanese).navigationTitle, "导航栏")
     }
 
     func testAPostLinkIsNotHandledWhenTheBarIsOff() {

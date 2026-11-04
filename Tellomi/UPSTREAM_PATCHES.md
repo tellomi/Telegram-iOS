@@ -751,3 +751,26 @@ The round video button stays `Chat/Input/Text/IconVideo`, the MingCute camcorder
 | `Chat/Attach Menu/TellomiSticker`, `Item List/Icons/TellomiSticker` | 30pt. Attach menu, settings badges, Premium stickers. |
 | `Item List/Icons/TellomiGif` | 30pt. Settings GIF badge. |
 | `Tellomi/Icons/test_semantic_icons.py` | Face, GIF letters, call sites, camcorder, drawn checks, send contrast. |
+
+## Discover copy, Discover reports, sign-up avatar
+
+Discover and the tab bar read `Tellomi.Discover.*` from the active language pack (`presentationData.strings` primary, then secondary). A missing key falls back to traditional Chinese for `zh-Hant` / `zh-TW` / `zh-HK` / `zh-MO`, simplified Chinese for other `zh*`, and English otherwise. City names use `Tellomi.Discover.City.<country>_<slug>` (the code's `:` is `_`). The English, simplified, and traditional strings are in the three `Localizable.strings` files. The server langpack is unchanged.
+
+A post and a comment have a "…" menu whose Report row opens Telegram's report sheet (`peerReportOptionsController`). The sheet's official ids are `spam`, `violence`, `pornography`, `child`, `drugs`, `personal`, and `other`. Other still asks for a comment. That choice is `POST /v1/feed/reports` with `target_type`, `post_id`, `option`, `reason` (the same id), `detail`, and `comment_id` when the target is a comment. It does not call `messages.report`. A logged-out session does not build the request. Success uses the existing report toast.
+
+`photos.uploadProfilePhoto` keeps its RPC code. If that upload fails during sign-up, the account is still stored and the alert is `头像上传失败（500 …）` with the real code and text. Retry uploads the photo again and does not call `auth.signUp`. The same alert is used when a profile photo upload fails. Login and the session are otherwise unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverStrings.swift` | Pack lookup and count/id formatting. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverLoader.swift`, `TellomiDiscoverCity.swift` | Copy and city names take the pack. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | Tab copy takes the pack. `tellomiStringPack` merges primary over secondary. |
+| `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | The new keys. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverReport.swift`, `TellomiDiscoverFeed.swift`, `TellomiDiscoverParse.swift` | Report body, `POST /v1/feed/reports`, comment rows on a card. |
+| `submodules/TelegramUI/Components/PeerReportScreen/Sources/PeerReportScreen.swift` | Optional `submitLocally` so the sheet does not call the report RPC. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | "…" on a post and a comment. The feed list has the same button. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Peers/PeerPhotoUpdater.swift` | `UploadPeerPhotoError.server` keeps the RPC code and text. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiSignUpAvatar.swift`, `Sources/Authorization.swift` | A failed avatar upload still creates the account. Retry does not sign up again. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | The alert and the retry button. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/TellomiAvatarUploadFailure.swift` | The same alert on the profile photo screen. |
+| Tests | `TellomiDiscoverFeedTests`, `TellomiTabNavigationDecisionsTests`, `TellomiSignUpAvatarTests`. |

@@ -23,6 +23,8 @@ swift_library(
         "//submodules/Geocoding",
         "//submodules/TelegramUI/Components/ShareWithPeersScreen",
         "//submodules/UIKitRuntimeUtils:UIKitRuntimeUtils",
+        "//submodules/TelegramUI/Components/PeerReportScreen",
+        "//submodules/UndoUI",
     ],
     visibility = [
         "//visibility:public",
