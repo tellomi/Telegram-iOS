@@ -1316,7 +1316,7 @@ public final class ChatListNode: ListViewImpl {
             self.chatListFilterValue.set(.single(self.chatListFilter))
             
             if self.chatListFilter != oldValue {
-                self.setChatListLocation(.initial(count: 50, filter: self.chatListFilter))
+                self.applyChatListFilterLocationChange(from: oldValue)
             }
         }
     }
@@ -3586,7 +3586,22 @@ public final class ChatListNode: ListViewImpl {
             }
             
             var scrollToItem = transition.scrollToItem
-            if transition.adjustScrollToFirstItem {
+            // `.known` is only reported while row 0 is still on screen. Once that row
+            // has moved off, the offset is `.unknown` — that is the scrolled list.
+            let scrolledDown: Bool
+            switch self.visibleContentOffset() {
+            case .unknown:
+                scrolledDown = true
+            case let .known(value) where value > 1.0:
+                scrolledDown = true
+            default:
+                scrolledDown = false
+            }
+            // A refresh that the transition treats as "the list was empty" scrolls to
+            // the first row. That is the first population of an empty list. Once the
+            // user has moved down, keep the offset: dialog and folder refreshes must
+            // not send the list back to the top.
+            if transition.adjustScrollToFirstItem && !scrolledDown {
                 var offset: CGFloat = 0.0
                 if let visibleTopInset = self.visibleTopInset {
                     offset = visibleTopInset - self.insets.top
@@ -3769,6 +3784,26 @@ public final class ChatListNode: ListViewImpl {
     private func setChatListLocation(_ location: ChatListNodeLocation) {
         self.currentLocation = location
         self.chatListLocation.set(location)
+    }
+
+    /// A folder refresh that still describes the same chats keeps the anchor the
+    /// list is already sampling. Replacing it with `.initial` reloads the top of
+    /// the list and the scroll offset follows.
+    private func applyChatListFilterLocationChange(from oldValue: ChatListFilter?) {
+        if chatListFilterChangePreservesScrollAnchor(from: oldValue, to: self.chatListFilter), let currentLocation = self.currentLocation {
+            let updated: ChatListNodeLocation
+            switch currentLocation {
+            case let .initial(count, _):
+                updated = .initial(count: count, filter: self.chatListFilter)
+            case let .navigation(index, _):
+                updated = .navigation(index: index, filter: self.chatListFilter)
+            case let .scroll(index, _, _, _, _):
+                updated = .navigation(index: index, filter: self.chatListFilter)
+            }
+            self.setChatListLocation(updated)
+        } else {
+            self.setChatListLocation(.initial(count: 50, filter: self.chatListFilter))
+        }
     }
     
     private func relativeUnreadChatListIndex(position: EngineChatList.RelativePosition) -> Signal<EngineChatList.Item.Index?, NoError> {
