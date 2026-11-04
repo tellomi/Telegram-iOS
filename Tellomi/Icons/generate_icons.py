@@ -12,6 +12,8 @@ asset
 mingcute
     Icon file name without .svg. The file lives in
     Tellomi/Icons/MingCute/svg/regular or svg/filled.
+    A name that starts with semantic/ is read from Tellomi/Icons/semantic
+    instead (a MingCute glyph with a slash, lock, or letters added).
 
 style
     line  -> svg/regular (outline)
@@ -46,11 +48,22 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 XCASSETS = ROOT / "submodules/TelegramUI/Images.xcassets"
-SVG_ROOT = Path(__file__).resolve().parent / "MingCute" / "svg"
-MAPPING = Path(__file__).resolve().parent / "mapping.csv"
-UPSTREAM = Path(__file__).resolve().parent / "upstream_ink.json"
+HERE = Path(__file__).resolve().parent
+SVG_ROOT = HERE / "MingCute" / "svg"
+SEMANTIC = HERE / "semantic"
+MAPPING = HERE / "mapping.csv"
+UPSTREAM = HERE / "upstream_ink.json"
 
 STYLE_DIR = {"line": "regular", "fill": "filled"}
+
+
+def svg_file(name, style):
+    """MingCute file, or a composed glyph under Tellomi/Icons/semantic."""
+    if name.startswith("semantic/"):
+        base = name.split("/", 1)[1]
+        filename = f"{base}-fill.svg" if style == "fill" else f"{base}.svg"
+        return SEMANTIC / filename
+    return SVG_ROOT / STYLE_DIR[style] / f"{name}.svg"
 
 
 def read_mapping():
@@ -210,9 +223,9 @@ def glyph_ink(name, style):
     cached = glyph_ink.cache.get(key)
     if cached is not None:
         return cached
-    path = SVG_ROOT / STYLE_DIR[style] / f"{name}.svg"
+    path = svg_file(name, style)
     if not path.is_file():
-        raise SystemExit(f"missing vendored SVG {path}")
+        raise SystemExit(f"missing SVG {path}")
     import cairosvg
     scale = 32.0
     png = cairosvg.svg2png(url=str(path), output_width=int(24 * scale), output_height=int(24 * scale))
@@ -230,9 +243,9 @@ glyph_ink.cache = {}
 
 
 def black_svg(name, style):
-    path = SVG_ROOT / STYLE_DIR[style] / f"{name}.svg"
+    path = svg_file(name, style)
     if not path.is_file():
-        raise SystemExit(f"missing vendored SVG {path}")
+        raise SystemExit(f"missing SVG {path}")
     text = path.read_text()
     text = text.replace("currentColor", "#000000")
     text = re.sub(r'fill="(?!none)[^"]*"', 'fill="#000000"', text)
