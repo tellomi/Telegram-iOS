@@ -5,184 +5,307 @@ public struct TellomiDiscoverPost: Equatable {
     public var id: String
     public var text: String
     public var authorName: String
-    public var authorUsername: String?
-    public var authorUserId: Int64?
-    public var createdAt: TimeInterval?
-    public var visibility: String?
-    public var city: String?
-    public var shareable: Bool
+    public var authorHandle: String?
+    public var tellomiNumber: String?
+    public var unavailable: Bool
     public var aiGenerated: Bool
     public var badge: String?
     public var likeCount: Int
     public var commentCount: Int
     public var repostCount: Int
     public var imageCount: Int
-    public var quoteDeleted: Bool
+    public var quoteState: String?
     public var quoteText: String?
+    public var ipRegionLabel: String?
 
-    public init(id: String, text: String, authorName: String, authorUsername: String?, authorUserId: Int64?, createdAt: TimeInterval?, visibility: String?, city: String?, shareable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteDeleted: Bool, quoteText: String?) {
+    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?) {
         self.id = id
         self.text = text
         self.authorName = authorName
-        self.authorUsername = authorUsername
-        self.authorUserId = authorUserId
-        self.createdAt = createdAt
-        self.visibility = visibility
-        self.city = city
-        self.shareable = shareable
+        self.authorHandle = authorHandle
+        self.tellomiNumber = tellomiNumber
+        self.unavailable = unavailable
         self.aiGenerated = aiGenerated
         self.badge = badge
         self.likeCount = likeCount
         self.commentCount = commentCount
         self.repostCount = repostCount
         self.imageCount = imageCount
-        self.quoteDeleted = quoteDeleted
+        self.quoteState = quoteState
         self.quoteText = quoteText
+        self.ipRegionLabel = ipRegionLabel
     }
 }
 
-public struct TellomiDiscoverPage: Equatable {
-    public var posts: [TellomiDiscoverPost]
-    public var nextCursor: String?
+public struct TellomiDiscoverCapabilities: Equatable {
+    public var version: Int
+    public var features: [String]
 
-    public init(posts: [TellomiDiscoverPost], nextCursor: String?) {
-        self.posts = posts
-        self.nextCursor = nextCursor
+    public init(version: Int, features: [String]) {
+        self.version = version
+        self.features = features
     }
 }
 
-/// Paths are the content-engine routes named in the M3 appendix
-/// (`/v1/feed/recommend`, `/following`, `/nearby`, `/posts/{id}`).
-/// The private engine document was not readable from this client change, so the JSON
-/// is the snake_case shape those routes already imply (`text`, `visibility`, `city`,
-/// `quote_of`, `shareable`, `ai_generated`, `user_id`), plus a few aliases.
-public func tellomiDiscoverParsePage(_ data: Data) -> TellomiDiscoverPage? {
-    guard let json = TellomiJSON.parse(data) else {
+public struct TellomiDiscoverEngineConfig: Equatable {
+    public var enabled: Bool
+    public var region: String?
+    public var tabs: [TellomiDiscoverFeedKind]
+    public var recommendMode: String?
+    public var personalizationToggleVisible: Bool
+    public var postTextChars: Int
+
+    public init(enabled: Bool, region: String?, tabs: [TellomiDiscoverFeedKind], recommendMode: String?, personalizationToggleVisible: Bool, postTextChars: Int) {
+        self.enabled = enabled
+        self.region = region
+        self.tabs = tabs
+        self.recommendMode = recommendMode
+        self.personalizationToggleVisible = personalizationToggleVisible
+        self.postTextChars = postTextChars
+    }
+}
+
+public struct TellomiDiscoverFeedItem: Equatable {
+    public var id: String
+    public var reason: String
+    public var repostedBy: String?
+
+    public init(id: String, reason: String, repostedBy: String?) {
+        self.id = id
+        self.reason = reason
+        self.repostedBy = repostedBy
+    }
+}
+
+public struct TellomiDiscoverFeedPage: Equatable {
+    public var items: [TellomiDiscoverFeedItem]
+    public var cursor: String?
+
+    public init(items: [TellomiDiscoverFeedItem], cursor: String?) {
+        self.items = items
+        self.cursor = cursor
+    }
+}
+
+public struct TellomiDiscoverCard: Equatable {
+    public var id: String
+    public var state: String
+    public var version: Int?
+    public var text: String
+    public var authorName: String
+    public var authorHandle: String?
+    public var tellomiNumber: String?
+    public var authorId: String?
+    public var badge: String?
+    public var aiGenerated: Bool
+    public var edited: Bool
+    public var shareable: Bool
+    public var likeCount: Int
+    public var commentCount: Int
+    public var repostCount: Int
+    public var imageCount: Int
+    public var quoteState: String?
+    public var quoteText: String?
+    public var ipRegionLabel: String?
+
+    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?) {
+        self.id = id
+        self.state = state
+        self.version = version
+        self.text = text
+        self.authorName = authorName
+        self.authorHandle = authorHandle
+        self.tellomiNumber = tellomiNumber
+        self.authorId = authorId
+        self.badge = badge
+        self.aiGenerated = aiGenerated
+        self.edited = edited
+        self.shareable = shareable
+        self.likeCount = likeCount
+        self.commentCount = commentCount
+        self.repostCount = repostCount
+        self.imageCount = imageCount
+        self.quoteState = quoteState
+        self.quoteText = quoteText
+        self.ipRegionLabel = ipRegionLabel
+    }
+}
+
+public struct TellomiDiscoverCreatedPost: Equatable {
+    public var id: String
+    public var state: String
+    public var version: Int
+
+    public init(id: String, state: String, version: Int) {
+        self.id = id
+        self.state = state
+        self.version = version
+    }
+}
+
+public func tellomiDiscoverParseCapabilities(_ data: Data) -> TellomiDiscoverCapabilities? {
+    guard let object = objectValue(TellomiJSON.parse(data)) else {
         return nil
     }
-    if case .array = json {
-        guard let posts = posts(in: json) else {
-            return nil
-        }
-        return TellomiDiscoverPage(posts: posts, nextCursor: nil)
-    }
-    guard case let .object(object) = json else {
+    guard let version = intValue(object["version"]), version == 1 else {
         return nil
     }
-    let list = object["posts"] ?? object["items"]
-    if let list {
-        guard let posts = posts(in: list) else {
-            return nil
-        }
-        return TellomiDiscoverPage(posts: posts, nextCursor: cursor(in: object))
-    }
-    if object["id"] != nil {
-        guard let post = tellomiDiscoverParsePost(json) else {
-            return nil
-        }
-        return TellomiDiscoverPage(posts: [post], nextCursor: nil)
-    }
-    if object.isEmpty {
-        return TellomiDiscoverPage(posts: [], nextCursor: nil)
-    }
-    return nil
-}
-
-public func tellomiDiscoverParsePost(_ data: Data) -> TellomiDiscoverPost? {
-    guard let json = TellomiJSON.parse(data) else {
+    guard case let .array(values)? = object["features"] else {
         return nil
     }
-    if case let .object(object) = json, let wrapped = object["post"] {
-        return tellomiDiscoverParsePost(wrapped)
+    let features = values.compactMap { stringValue($0) }
+    guard features.count == values.count else {
+        return nil
     }
-    return tellomiDiscoverParsePost(json)
+    return TellomiDiscoverCapabilities(version: version, features: features)
 }
 
-private func tellomiDiscoverParsePost(_ json: TellomiJSON) -> TellomiDiscoverPost? {
-    guard case let .object(object) = json else {
+public func tellomiDiscoverParseStatus(_ data: Data) -> Bool? {
+    guard let object = objectValue(TellomiJSON.parse(data)) else {
+        return nil
+    }
+    return boolValue(object["visible"])
+}
+
+public func tellomiDiscoverParseEngineConfig(_ data: Data) -> TellomiDiscoverEngineConfig? {
+    guard let object = objectValue(TellomiJSON.parse(data)) else {
+        return nil
+    }
+    guard let enabled = boolValue(object["enabled"]) else {
+        return nil
+    }
+    var tabs: [TellomiDiscoverFeedKind] = []
+    if case let .array(values)? = object["tabs"] {
+        for value in values {
+            if let name = stringValue(value), let kind = TellomiDiscoverFeedKind(configName: name), !tabs.contains(kind) {
+                tabs.append(kind)
+            }
+        }
+    }
+    if tabs.isEmpty {
+        tabs = [.recommend, .following]
+    }
+    let limits = objectValue(object["limits"])
+    let textChars = intValue(limits?["post_text_chars"]) ?? tellomiDiscoverPostTextLimit
+    return TellomiDiscoverEngineConfig(
+        enabled: enabled,
+        region: stringValue(object["region"]),
+        tabs: tabs,
+        recommendMode: stringValue(object["recommend_mode"]),
+        personalizationToggleVisible: boolValue(object["personalization_toggle_visible"]) ?? false,
+        postTextChars: textChars > 0 ? textChars : tellomiDiscoverPostTextLimit
+    )
+}
+
+public func tellomiDiscoverParseFeedPage(_ data: Data) -> TellomiDiscoverFeedPage? {
+    guard let object = objectValue(TellomiJSON.parse(data)) else {
+        return nil
+    }
+    guard case let .array(values)? = object["items"] else {
+        return nil
+    }
+    var items: [TellomiDiscoverFeedItem] = []
+    for value in values {
+        guard let item = objectValue(value), let identifier = stringValue(item["id"]).flatMap(tellomiDiscoverPostId) else {
+            return nil
+        }
+        items.append(TellomiDiscoverFeedItem(id: identifier, reason: stringValue(item["reason"]) ?? "", repostedBy: stringValue(item["reposted_by"])))
+    }
+    let cursor = stringValue(object["cursor"]).flatMap { $0.isEmpty ? nil : $0 }
+    return TellomiDiscoverFeedPage(items: items, cursor: cursor)
+}
+
+public func tellomiDiscoverParseCards(_ data: Data) -> [TellomiDiscoverCard]? {
+    guard let object = objectValue(TellomiJSON.parse(data)), case let .array(values)? = object["cards"] else {
+        return nil
+    }
+    var cards: [TellomiDiscoverCard] = []
+    for value in values {
+        guard let card = parseCard(value) else {
+            return nil
+        }
+        cards.append(card)
+    }
+    return cards
+}
+
+public func tellomiDiscoverParseCreatedPost(_ data: Data) -> TellomiDiscoverCreatedPost? {
+    guard let object = objectValue(TellomiJSON.parse(data)) else {
         return nil
     }
     guard let identifier = stringValue(object["id"]).flatMap(tellomiDiscoverPostId) else {
         return nil
     }
-    let text = stringValue(object["text"]) ?? stringValue(object["body"]) ?? stringValue(object["content"]) ?? ""
-    let author = object["author"]
-    let authorName = stringValue(object["author_name"])
-        ?? objectValue(author).flatMap { stringValue($0["name"]) ?? stringValue($0["display_name"]) }
-        ?? ""
-    let username = stringValue(object["author_username"])
-        ?? objectValue(author).flatMap { stringValue($0["username"]) }
-    let userId = int64Value(object["user_id"]) ?? objectValue(author).flatMap { int64Value($0["user_id"]) }
-    let quote = object["quote_of"] ?? object["quote"]
-    var quoteDeleted = boolValue(object["quote_deleted"]) ?? false
-    var quoteText: String?
-    if let quote {
-        if boolValue(quote) == true || boolValue(objectValue(quote)?["deleted"]) == true {
-            quoteDeleted = true
-        } else if let nested = tellomiDiscoverParsePost(quote) {
-            quoteText = nested.text
-            if nested.text.isEmpty, nested.quoteDeleted {
-                quoteDeleted = true
-            }
-        } else if case .null = quote {
-            quoteText = nil
-        }
+    guard let state = stringValue(object["state"]), !state.isEmpty else {
+        return nil
     }
+    guard let version = intValue(object["version"]) else {
+        return nil
+    }
+    return TellomiDiscoverCreatedPost(id: identifier, state: state, version: version)
+}
+
+public func tellomiDiscoverErrorCode(_ data: Data) -> String? {
+    guard let object = objectValue(TellomiJSON.parse(data)) else {
+        return nil
+    }
+    return stringValue(object["error"])
+}
+
+public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDiscoverPost {
     return TellomiDiscoverPost(
-        id: identifier,
-        text: text,
-        authorName: authorName,
-        authorUsername: username,
-        authorUserId: userId,
-        createdAt: timeValue(object["created_at"] ?? object["createdAt"]),
-        visibility: stringValue(object["visibility"]),
-        city: cityValue(object),
-        shareable: boolValue(object["shareable"]) ?? false,
-        aiGenerated: boolValue(object["ai_generated"]) ?? boolValue(object["aiGenerated"]) ?? false,
-        badge: stringValue(object["badge"]),
-        likeCount: intValue(object["like_count"]) ?? intValue(objectValue(object["counts"])?["likes"]) ?? 0,
-        commentCount: intValue(object["comment_count"]) ?? intValue(objectValue(object["counts"])?["comments"]) ?? 0,
-        repostCount: intValue(object["repost_count"]) ?? intValue(objectValue(object["counts"])?["reposts"]) ?? 0,
-        imageCount: imageCount(object["media"]),
-        quoteDeleted: quoteDeleted,
-        quoteText: quoteText
+        id: card.id,
+        text: card.text,
+        authorName: card.authorName,
+        authorHandle: card.authorHandle,
+        tellomiNumber: card.tellomiNumber,
+        unavailable: card.state != "ok",
+        aiGenerated: card.aiGenerated,
+        badge: card.badge,
+        likeCount: card.likeCount,
+        commentCount: card.commentCount,
+        repostCount: card.repostCount,
+        imageCount: card.imageCount,
+        quoteState: card.quoteState,
+        quoteText: card.quoteText,
+        ipRegionLabel: card.ipRegionLabel
     )
 }
 
-private func posts(in json: TellomiJSON) -> [TellomiDiscoverPost]? {
-    guard case let .array(values) = json else {
+private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
+    guard let entry = objectValue(json) else {
         return nil
     }
-    var posts: [TellomiDiscoverPost] = []
-    for value in values {
-        guard let post = tellomiDiscoverParsePost(value) else {
-            return nil
-        }
-        posts.append(post)
-    }
-    return posts
-}
-
-private func cursor(in object: [String: TellomiJSON]) -> String? {
-    let value = stringValue(object["next_cursor"]) ?? stringValue(object["next"]) ?? stringValue(object["cursor"])
-    guard let value, !value.isEmpty else {
+    guard let identifier = stringValue(entry["id"]).flatMap(tellomiDiscoverPostId) else {
         return nil
     }
-    return value
-}
-
-private func cityValue(_ object: [String: TellomiJSON]) -> String? {
-    if let city = stringValue(object["city"]) {
-        return tellomiDiscoverNormalizedCity(city)
-    }
-    guard let location = objectValue(object["location"]) else {
-        return nil
-    }
-    let city = stringValue(location["city"]) ?? stringValue(location["locality"])
-    guard let city else {
-        return nil
-    }
-    return tellomiDiscoverNormalizedCity(city)
+    let state = stringValue(entry["state"]) ?? "ok"
+    let body = objectValue(entry["card"])
+    let author = objectValue(body?["author"])
+    let stats = objectValue(entry["stats"])
+    let quoted = objectValue(entry["quoted"])
+    let quotedCard = objectValue(quoted?["card"])
+    return TellomiDiscoverCard(
+        id: identifier,
+        state: state,
+        version: intValue(entry["version"]),
+        text: stringValue(body?["text"]) ?? "",
+        authorName: stringValue(author?["display_name"]) ?? "",
+        authorHandle: stringValue(author?["handle"]),
+        tellomiNumber: stringValue(author?["tellomi_number"]),
+        authorId: stringValue(author?["id"]),
+        badge: stringValue(author?["badge"]) ?? stringValue(body?["badge"]),
+        aiGenerated: boolValue(body?["ai_generated"]) ?? false,
+        edited: boolValue(body?["edited"]) ?? false,
+        shareable: boolValue(entry["shareable"]) ?? false,
+        likeCount: intValue(stats?["likes"]) ?? 0,
+        commentCount: intValue(stats?["comments"]) ?? 0,
+        repostCount: intValue(stats?["reposts"]) ?? 0,
+        imageCount: imageCount(body?["media"]),
+        quoteState: stringValue(quoted?["state"]),
+        quoteText: stringValue(quotedCard?["text"]),
+        ipRegionLabel: stringValue(body?["ip_region_label"])
+    )
 }
 
 private func imageCount(_ json: TellomiJSON?) -> Int {
@@ -194,8 +317,8 @@ private func imageCount(_ json: TellomiJSON?) -> Int {
         guard let object = objectValue(value) else {
             continue
         }
-        let kind = (stringValue(object["kind"]) ?? stringValue(object["type"]) ?? "image").lowercased()
-        if kind == "image" || kind == "photo" || kind == "picture" {
+        let kind = (stringValue(object["type"]) ?? "").lowercased()
+        if kind == "image" {
             count += 1
         }
     }
@@ -273,29 +396,6 @@ private func int64Value(_ json: TellomiJSON?) -> Int64? {
     }
 }
 
-private func timeValue(_ json: TellomiJSON?) -> TimeInterval? {
-    guard let json else {
-        return nil
-    }
-    switch json {
-    case let .number(value):
-        if value > 10_000_000_000 {
-            return value / 1000
-        }
-        return value
-    case let .string(value):
-        if let date = ISO8601DateFormatter().date(from: value) {
-            return date.timeIntervalSince1970
-        }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
-        return formatter.date(from: value)?.timeIntervalSince1970
-    default:
-        return nil
-    }
-}
 
 private enum TellomiJSON {
     case null

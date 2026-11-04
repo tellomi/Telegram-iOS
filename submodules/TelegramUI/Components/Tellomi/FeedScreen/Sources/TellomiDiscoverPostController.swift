@@ -71,21 +71,21 @@ final class TellomiDiscoverPostController: ViewController {
         guard !self.started else {
             return
         }
-        let chrome = tellomiDiscoverChrome(loggedIn: self.loggedIn, enabled: self.configuration.enabled, kind: .recommend, city: nil, openedPostId: self.postId, failed: false)
+        let chrome = tellomiDiscoverChrome(loggedIn: self.loggedIn, enabled: self.configuration.enabled, openedPostId: self.postId, failed: false)
         guard chrome.loadsPost, case let .detail(id) = chrome.surface else {
             self.failed = true
             self.apply()
             return
         }
         self.started = true
-        self.loader.run(loggedIn: true, configuration: self.configuration, operation: .post(id)) { [weak self] result in
+        self.loader.run(loggedIn: true, configuration: self.configuration, operation: .cards([id])) { [weak self] result in
             guard let self else {
                 return
             }
             switch result {
-            case let .success(.post(post)):
-                self.post = post
-                self.failed = false
+            case let .success(.cards(cards)):
+                self.post = cards.first.map(tellomiDiscoverDisplayPost)
+                self.failed = self.post == nil || self.post?.unavailable == true
             default:
                 self.failed = true
             }

@@ -16,8 +16,8 @@ public let tellomiDiscoverDefaultBaseURLString = "https://feed.tellomi.cn"
 /// expiry; the client stops using the token earlier than that.
 public let tellomiDiscoverCredentialRefreshMargin: Int64 = 120
 
-public let tellomiDiscoverFeedPageSize = 20
-public let tellomiDiscoverPostTextLimit = 4000
+/// A post is at most this many characters until `GET /v1/feed/config` says otherwise.
+public let tellomiDiscoverPostTextLimit = 500
 
 public enum TellomiDiscoverConfigField: Equatable {
     case missing
@@ -104,16 +104,25 @@ public func tellomiDiscoverBaseURL(string: String?) -> URL? {
     return origin.url
 }
 
-public enum TellomiDiscoverFeedKind: Equatable {
+public enum TellomiDiscoverFeedKind: String, Equatable {
     case recommend
     case following
-    case nearby
+
+    public init?(configName: String) {
+        switch configName {
+        case "recommend":
+            self = .recommend
+        case "following":
+            self = .following
+        default:
+            return nil
+        }
+    }
 }
 
 public enum TellomiDiscoverSurface: Equatable {
     case legacyEmpty(postUnavailable: Bool)
     case feed
-    case cityPrompt
     case detail(String)
 }
 
@@ -129,7 +138,7 @@ public struct TellomiDiscoverChrome: Equatable {
     }
 }
 
-public func tellomiDiscoverChrome(loggedIn: Bool, enabled: Bool, kind: TellomiDiscoverFeedKind, city: String?, openedPostId: String?, failed: Bool) -> TellomiDiscoverChrome {
+public func tellomiDiscoverChrome(loggedIn: Bool, enabled: Bool, openedPostId: String?, failed: Bool) -> TellomiDiscoverChrome {
     let postId = openedPostId.flatMap(tellomiDiscoverPostId)
     guard loggedIn, enabled else {
         return TellomiDiscoverChrome(
@@ -147,15 +156,6 @@ public func tellomiDiscoverChrome(loggedIn: Bool, enabled: Bool, kind: TellomiDi
             loadsFeed: false,
             loadsPost: true,
             failure: failed
-        )
-    }
-    if kind == .nearby, tellomiDiscoverNormalizedCity(city ?? "") == nil {
-        return TellomiDiscoverChrome(
-            surface: .cityPrompt,
-            showsCompose: true,
-            loadsFeed: false,
-            loadsPost: false,
-            failure: false
         )
     }
     return TellomiDiscoverChrome(
@@ -190,11 +190,50 @@ public enum TellomiDiscoverStoryBase: Equatable {
     case nobody
 }
 
+/// Engine `visibility`. `everyone` is sent as `public`. `include` and `exclude` need an
+/// audience token the server has not issued yet, so the composer keeps the row and does not post.
 public enum TellomiDiscoverVisibility: String, Equatable {
-    case everyone
+    case everyone = "public"
     case contacts
     case closeFriends = "close_friends"
-    case selected
+    case include
+    case exclude
+}
+
+public struct TellomiDiscoverAudienceList: Equatable {
+    public static let tokenType = "tellomi-feed-audience"
+    public static let memberLimit = 500
+    public static let maximumLifetime: Int64 = 15 * 60
+
+    public var kind: String
+    public var members: [String]
+
+    public init(kind: String, members: [String]) {
+        self.kind = kind
+        self.members = members
+    }
+}
+
+/// A list teamgram will sign as `typ=tellomi-feed-audience`. Empty, over 500, or any other
+/// kind is not a list. This does not produce a JWT and is not sent.
+public func tellomiDiscoverAudienceList(kind: String, members: [String]) -> TellomiDiscoverAudienceList? {
+    guard kind == TellomiDiscoverVisibility.include.rawValue || kind == TellomiDiscoverVisibility.exclude.rawValue else {
+        return nil
+    }
+    guard !members.isEmpty, members.count <= TellomiDiscoverAudienceList.memberLimit else {
+        return nil
+    }
+    let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+    guard members.allSatisfy({ value in
+        !value.isEmpty && value.count <= 128 && value.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }) else {
+        return nil
+    }
+    return TellomiDiscoverAudienceList(kind: kind, members: members)
+}
+
+public func tellomiDiscoverAudienceExpiryIsValid(expires: Int64, now: Int64) -> Bool {
+    return expires > now && expires - now <= TellomiDiscoverAudienceList.maximumLifetime
 }
 
 public struct TellomiDiscoverAudienceChoice: Equatable {
@@ -220,19 +259,19 @@ public func tellomiDiscoverAudience(base: TellomiDiscoverStoryBase, includePeerI
         if includePeerIds.isEmpty {
             return TellomiDiscoverAudienceChoice(visibility: .everyone, publishable: true, reason: nil)
         }
-        return TellomiDiscoverAudienceChoice(visibility: .everyone, publishable: false, reason: "excluded_peers")
+        return TellomiDiscoverAudienceChoice(visibility: .exclude, publishable: false, reason: "excluded_peers")
     case .contacts:
         if includePeerIds.isEmpty {
             return TellomiDiscoverAudienceChoice(visibility: .contacts, publishable: true, reason: nil)
         }
-        return TellomiDiscoverAudienceChoice(visibility: .contacts, publishable: false, reason: "excluded_peers")
+        return TellomiDiscoverAudienceChoice(visibility: .exclude, publishable: false, reason: "excluded_peers")
     case .closeFriends:
         return TellomiDiscoverAudienceChoice(visibility: .closeFriends, publishable: true, reason: nil)
     case .nobody:
         if includePeerIds.isEmpty {
             return nil
         }
-        return TellomiDiscoverAudienceChoice(visibility: .selected, publishable: false, reason: "needs_audience_token")
+        return TellomiDiscoverAudienceChoice(visibility: .include, publishable: false, reason: "needs_audience_token")
     }
 }
 
@@ -287,9 +326,13 @@ public func tellomiDiscoverPostId(_ raw: String) -> String? {
 }
 
 public enum TellomiDiscoverOperation: Equatable {
-    case feed(TellomiDiscoverFeedKind, cursor: String?, city: String?)
-    case post(String)
-    case publish(text: String, visibility: TellomiDiscoverVisibility)
+    /// `GET /v1/capabilities`. No credential.
+    case capabilities
+    case status
+    case engineConfig
+    case feed(TellomiDiscoverFeedKind, cursor: String?, personalized: Bool)
+    case cards([String])
+    case publish(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int)
 }
 
 public struct TellomiDiscoverHTTPCall: Equatable {
@@ -297,89 +340,128 @@ public struct TellomiDiscoverHTTPCall: Equatable {
     public var url: URL
     public var body: Data?
     public var token: String
+    public var authorizes: Bool
     public var contentType: String?
 
-    public init(method: String, url: URL, body: Data?, token: String, contentType: String?) {
+    public init(method: String, url: URL, body: Data?, token: String, authorizes: Bool, contentType: String?) {
         self.method = method
         self.url = url
         self.body = body
         self.token = token
+        self.authorizes = authorizes
         self.contentType = contentType
     }
 }
 
+public func tellomiDiscoverNeedsCredential(_ operation: TellomiDiscoverOperation) -> Bool {
+    if case .capabilities = operation {
+        return false
+    }
+    return true
+}
+
 public func tellomiDiscoverHTTPCall(base: URL, operation: TellomiDiscoverOperation, token: String) -> TellomiDiscoverHTTPCall? {
     let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedToken.isEmpty else {
+    if tellomiDiscoverNeedsCredential(operation), trimmedToken.isEmpty {
         return nil
     }
     switch operation {
-    case let .feed(kind, cursor, city):
-        guard let url = tellomiDiscoverFeedURL(base: base, kind: kind, cursor: cursor, city: city) else {
+    case .capabilities:
+        guard let url = tellomiDiscoverURL(base: base, path: "/v1/capabilities", query: []) else {
             return nil
         }
-        return TellomiDiscoverHTTPCall(method: "GET", url: url, body: nil, token: trimmedToken, contentType: nil)
-    case let .post(identifier):
-        guard let url = tellomiDiscoverPostURL(base: base, id: identifier) else {
+        return TellomiDiscoverHTTPCall(method: "GET", url: url, body: nil, token: "", authorizes: false, contentType: nil)
+    case .status:
+        guard let url = tellomiDiscoverURL(base: base, path: "/v1/feed/status", query: []) else {
             return nil
         }
-        return TellomiDiscoverHTTPCall(method: "GET", url: url, body: nil, token: trimmedToken, contentType: nil)
-    case let .publish(text, visibility):
-        guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility) else {
+        return TellomiDiscoverHTTPCall(method: "GET", url: url, body: nil, token: trimmedToken, authorizes: true, contentType: nil)
+    case .engineConfig:
+        guard let url = tellomiDiscoverURL(base: base, path: "/v1/feed/config", query: []) else {
             return nil
         }
-        guard let url = tellomiDiscoverPostsURL(base: base) else {
+        return TellomiDiscoverHTTPCall(method: "GET", url: url, body: nil, token: trimmedToken, authorizes: true, contentType: nil)
+    case let .feed(kind, cursor, personalized):
+        guard let url = tellomiDiscoverFeedURL(base: base, kind: kind, cursor: cursor, personalized: personalized) else {
             return nil
         }
-        return TellomiDiscoverHTTPCall(method: "POST", url: url, body: body, token: trimmedToken, contentType: "application/json")
+        return TellomiDiscoverHTTPCall(method: "GET", url: url, body: nil, token: trimmedToken, authorizes: true, contentType: nil)
+    case let .cards(identifiers):
+        guard let body = tellomiDiscoverCardsBody(identifiers) else {
+            return nil
+        }
+        guard let url = tellomiDiscoverURL(base: base, path: "/v1/feed/cards", query: []) else {
+            return nil
+        }
+        return TellomiDiscoverHTTPCall(method: "POST", url: url, body: body, token: trimmedToken, authorizes: true, contentType: "application/json")
+    case let .publish(text, visibility, audienceToken, clientNonce, textLimit):
+        guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit) else {
+            return nil
+        }
+        guard let url = tellomiDiscoverURL(base: base, path: "/v1/feed/posts", query: []) else {
+            return nil
+        }
+        return TellomiDiscoverHTTPCall(method: "POST", url: url, body: body, token: trimmedToken, authorizes: true, contentType: "application/json")
     }
 }
 
-public func tellomiDiscoverFeedURL(base: URL, kind: TellomiDiscoverFeedKind, cursor: String?, city: String?) -> URL? {
-    let path: String
-    var query: [URLQueryItem] = [URLQueryItem(name: "limit", value: String(tellomiDiscoverFeedPageSize))]
+public func tellomiDiscoverFeedURL(base: URL, kind: TellomiDiscoverFeedKind, cursor: String?, personalized: Bool) -> URL? {
+    var query: [URLQueryItem] = []
     switch kind {
     case .recommend:
-        path = "/v1/feed/recommend"
+        if !personalized {
+            query.append(URLQueryItem(name: "personalized", value: "false"))
+        }
     case .following:
-        path = "/v1/feed/following"
-    case .nearby:
-        guard let city = tellomiDiscoverNormalizedCity(city ?? "") else {
+        if let cursor, !cursor.isEmpty {
+            query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+    }
+    return tellomiDiscoverURL(base: base, path: "/v1/feed/\(kind.rawValue)", query: query)
+}
+
+public func tellomiDiscoverCardsBody(_ identifiers: [String]) -> Data? {
+    guard !identifiers.isEmpty, identifiers.count <= 100 else {
+        return nil
+    }
+    var ids: [String] = []
+    for identifier in identifiers {
+        guard let identifier = tellomiDiscoverPostId(identifier) else {
             return nil
         }
-        path = "/v1/feed/nearby"
-        query.append(URLQueryItem(name: "city", value: city))
+        ids.append(identifier)
     }
-    if let cursor, !cursor.isEmpty {
-        query.append(URLQueryItem(name: "cursor", value: cursor))
-    }
-    return tellomiDiscoverURL(base: base, path: path, query: query)
+    return try? JSONSerialization.data(withJSONObject: ["ids": ids], options: [])
 }
 
-public func tellomiDiscoverPostURL(base: URL, id: String) -> URL? {
-    guard let identifier = tellomiDiscoverPostId(id) else {
-        return nil
-    }
-    return tellomiDiscoverURL(base: base, path: "/v1/feed/posts/\(identifier)", query: [])
-}
-
-public func tellomiDiscoverPostsURL(base: URL) -> URL? {
-    return tellomiDiscoverURL(base: base, path: "/v1/feed/posts", query: [])
-}
-
-public func tellomiDiscoverPublishBody(text: String, visibility: TellomiDiscoverVisibility) -> Data? {
+public func tellomiDiscoverPublishBody(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int) -> Data? {
     let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !body.isEmpty, body.count <= tellomiDiscoverPostTextLimit else {
+    let limit = textLimit > 0 ? textLimit : tellomiDiscoverPostTextLimit
+    guard !body.isEmpty, body.count <= limit else {
         return nil
     }
-    guard visibility != .selected else {
+    guard tellomiDiscoverClientNonce(clientNonce) else {
         return nil
     }
-    let object: [String: String] = [
+    var object: [String: Any] = [
+        "kind": "post",
         "text": body,
-        "visibility": visibility.rawValue
+        "visibility": visibility.rawValue,
+        "client_nonce": clientNonce
     ]
+    if visibility == .include || visibility == .exclude {
+        let token = audienceToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !token.isEmpty else {
+            return nil
+        }
+        object["audience"] = ["audience_token": token]
+    }
     return try? JSONSerialization.data(withJSONObject: object, options: [])
+}
+
+public func tellomiDiscoverClientNonce(_ value: String) -> Bool {
+    let pattern = #"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"#
+    return value.range(of: pattern, options: .regularExpression) != nil
 }
 
 private func tellomiDiscoverURL(base: URL, path: String, query: [URLQueryItem]) -> URL? {

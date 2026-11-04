@@ -3,8 +3,8 @@ import Foundation
 public enum TellomiDiscoverClientError: Equatable, Error {
     case signedOut
     case disabled
-    case needsCity
     case notPublishable
+    case hidden
     case unavailable
     case unauthorized
     case notFound
@@ -12,8 +12,12 @@ public enum TellomiDiscoverClientError: Equatable, Error {
 }
 
 public enum TellomiDiscoverDecoded: Equatable {
-    case page(TellomiDiscoverPage)
-    case post(TellomiDiscoverPost)
+    case capabilities(TellomiDiscoverCapabilities)
+    case status(Bool)
+    case engineConfig(TellomiDiscoverEngineConfig)
+    case feed(TellomiDiscoverFeedPage)
+    case cards([TellomiDiscoverCard])
+    case created(TellomiDiscoverCreatedPost)
 }
 
 public struct TellomiDiscoverHTTPResult: Equatable {
@@ -74,6 +78,10 @@ public final class TellomiDiscoverLoader {
             completion(.failure(failure))
             return
         }
+        if !tellomiDiscoverNeedsCredential(operation) {
+            self.send(ticket: ticket, baseURL: baseURL, operation: operation, retryUnauthorized: false, completion: completion)
+            return
+        }
         let current = self.credential
         if current == nil || tellomiDiscoverCredentialNeedsRefresh(expires: current?.expires ?? 0, now: self.now()) {
             self.fetchCredential { [weak self] result in
@@ -98,9 +106,10 @@ public final class TellomiDiscoverLoader {
     }
 
     private func send(ticket: Int, baseURL: URL, operation: TellomiDiscoverOperation, retryUnauthorized: Bool, completion: @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) {
-        guard ticket == self.generation, let token = self.credential?.token else {
+        guard ticket == self.generation else {
             return
         }
+        let token = self.credential?.token ?? ""
         guard let call = tellomiDiscoverHTTPCall(base: baseURL, operation: operation, token: token) else {
             completion(.failure(tellomiDiscoverLocalFailure(operation) ?? .unreadable))
             return
@@ -111,7 +120,7 @@ public final class TellomiDiscoverLoader {
             }
             switch result {
             case let .success(response):
-                if response.status == 401 || response.status == 403 {
+                if tellomiDiscoverNeedsCredential(operation), response.status == 401 || response.status == 403 {
                     self.credential = nil
                     guard retryUnauthorized else {
                         completion(.failure(.unauthorized))
@@ -130,18 +139,14 @@ public final class TellomiDiscoverLoader {
 
 private func tellomiDiscoverLocalFailure(_ operation: TellomiDiscoverOperation) -> TellomiDiscoverClientError? {
     switch operation {
-    case let .feed(kind, _, city):
-        if kind == .nearby, tellomiDiscoverNormalizedCity(city ?? "") == nil {
-            return .needsCity
-        }
+    case .capabilities, .status, .engineConfig:
         return nil
-    case let .post(identifier):
-        return tellomiDiscoverPostId(identifier) == nil ? .notFound : nil
-    case let .publish(text, visibility):
-        if visibility == .selected {
-            return .notPublishable
-        }
-        if tellomiDiscoverPublishBody(text: text, visibility: visibility) == nil {
+    case .feed:
+        return nil
+    case let .cards(identifiers):
+        return tellomiDiscoverCardsBody(identifiers) == nil ? .notFound : nil
+    case let .publish(text, visibility, audienceToken, clientNonce, textLimit):
+        if tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit) == nil {
             return .notPublishable
         }
         return nil
@@ -149,6 +154,9 @@ private func tellomiDiscoverLocalFailure(_ operation: TellomiDiscoverOperation) 
 }
 
 public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, result: TellomiDiscoverHTTPResult) -> Result<TellomiDiscoverDecoded, TellomiDiscoverClientError> {
+    if result.status == 404, tellomiDiscoverErrorCode(result.body) == "feed_hidden" {
+        return .failure(.hidden)
+    }
     switch result.status {
     case 200, 201:
         break
@@ -160,16 +168,36 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
         return .failure(.unavailable)
     }
     switch operation {
+    case .capabilities:
+        guard let value = tellomiDiscoverParseCapabilities(result.body) else {
+            return .failure(.unreadable)
+        }
+        return .success(.capabilities(value))
+    case .status:
+        guard let visible = tellomiDiscoverParseStatus(result.body) else {
+            return .failure(.unreadable)
+        }
+        return .success(.status(visible))
+    case .engineConfig:
+        guard let value = tellomiDiscoverParseEngineConfig(result.body) else {
+            return .failure(.unreadable)
+        }
+        return .success(.engineConfig(value))
     case .feed:
-        guard let page = tellomiDiscoverParsePage(result.body) else {
+        guard let page = tellomiDiscoverParseFeedPage(result.body) else {
             return .failure(.unreadable)
         }
-        return .success(.page(page))
-    case .post, .publish:
-        guard let post = tellomiDiscoverParsePost(result.body) else {
+        return .success(.feed(page))
+    case .cards:
+        guard let cards = tellomiDiscoverParseCards(result.body) else {
             return .failure(.unreadable)
         }
-        return .success(.post(post))
+        return .success(.cards(cards))
+    case .publish:
+        guard let created = tellomiDiscoverParseCreatedPost(result.body) else {
+            return .failure(.unreadable)
+        }
+        return .success(.created(created))
     }
 }
 
@@ -207,7 +235,7 @@ public struct TellomiDiscoverCopy: Equatable {
                 compose: "发布",
                 emptyTitle: "还没有帖子",
                 emptyText: "关注的人和推荐会显示在这里。",
-                unavailable: "这条帖子暂时无法打开。",
+                unavailable: "这条动态已不可见",
                 failed: "暂时打不开，下拉再试一次。",
                 cityPrompt: "同城只按城市显示",
                 cityPlaceholder: "输入城市",
@@ -222,7 +250,7 @@ public struct TellomiDiscoverCopy: Equatable {
                 needsAudienceToken: "选定的用户还不能发布。",
                 excludedPeers: "排除部分人还不能发布。",
                 aiGenerated: "AI 生成",
-                quoteDeleted: "原帖子已被作者删除",
+                quoteDeleted: "原动态已被作者删除",
                 publish: "发布"
             )
         }
@@ -233,7 +261,7 @@ public struct TellomiDiscoverCopy: Equatable {
             compose: "Post",
             emptyTitle: "No posts yet",
             emptyText: "Posts from people you follow, and recommendations, show up here.",
-            unavailable: "This post can't be opened yet.",
+            unavailable: "This post isn't available",
             failed: "Couldn't load this. Pull to try again.",
             cityPrompt: "Nearby uses a city, nothing finer",
             cityPlaceholder: "City",
@@ -248,7 +276,7 @@ public struct TellomiDiscoverCopy: Equatable {
             needsAudienceToken: "Selected people can't be published yet.",
             excludedPeers: "Excluding people can't be published yet.",
             aiGenerated: "AI generated",
-            quoteDeleted: "The original post was deleted",
+            quoteDeleted: "The original post was deleted by its author",
             publish: "Post"
         )
     }
@@ -261,8 +289,10 @@ public struct TellomiDiscoverCopy: Equatable {
             return self.contacts
         case .closeFriends:
             return self.closeFriends
-        case .selected:
+        case .include:
             return self.selected
+        case .exclude:
+            return self.excludedPeers
         }
     }
 
@@ -297,29 +327,46 @@ public struct TellomiDiscoverPostSummary: Equatable {
 
 public func tellomiDiscoverPostSummary(post: TellomiDiscoverPost, copy: TellomiDiscoverCopy, list: Bool) -> TellomiDiscoverPostSummary {
     var title = post.authorName
-    if let username = post.authorUsername, !username.isEmpty {
+    if let handle = post.authorHandle, !handle.isEmpty {
         if title.isEmpty {
-            title = "@" + username
+            title = "@" + handle
         } else {
-            title += " @" + username
+            title += " @" + handle
+        }
+    } else if let number = post.tellomiNumber, !number.isEmpty {
+        let label = copy.recommend == "推荐" ? "Tellomi 号：\(number)" : "Tellomi ID: \(number)"
+        if title.isEmpty {
+            title = label
+        } else {
+            title += " · " + label
         }
     }
-    var body = post.text
-    if list, body.count > 280 {
-        body = String(body.prefix(280))
-    }
-    if post.quoteDeleted {
-        if !body.isEmpty {
-            body += "\n"
+    var body: String
+    if post.unavailable {
+        body = copy.unavailable
+    } else {
+        body = post.text
+        if list, body.count > 280 {
+            body = String(body.prefix(280))
         }
-        body += copy.quoteDeleted
-    } else if let quoteText = post.quoteText, !quoteText.isEmpty {
-        body += "\n" + quoteText
+        if post.quoteState == "deleted" {
+            if !body.isEmpty {
+                body += "\n"
+            }
+            body += copy.quoteDeleted
+        } else if post.quoteState == "unavailable" {
+            if !body.isEmpty {
+                body += "\n"
+            }
+            body += copy.unavailable
+        } else if let quoteText = post.quoteText, !quoteText.isEmpty {
+            body += "\n" + quoteText
+        }
     }
     let chinese = copy.recommend == "推荐"
     var meta: [String] = []
-    if let city = post.city, !city.isEmpty {
-        meta.append(city)
+    if let region = post.ipRegionLabel, !region.isEmpty {
+        meta.append(region)
     }
     if post.likeCount > 0 {
         meta.append(chinese ? "\(post.likeCount) 赞" : "\(post.likeCount) likes")

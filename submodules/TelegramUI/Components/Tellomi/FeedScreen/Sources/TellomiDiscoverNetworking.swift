@@ -51,7 +51,9 @@ private final class TellomiDiscoverHTTPS {
         var request = URLRequest(url: call.url)
         request.httpMethod = call.method
         request.httpBody = call.body
-        request.setValue("Bearer \(call.token)", forHTTPHeaderField: "Authorization")
+        if call.authorizes {
+            request.setValue("Bearer \(call.token)", forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let contentType = call.contentType {
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")

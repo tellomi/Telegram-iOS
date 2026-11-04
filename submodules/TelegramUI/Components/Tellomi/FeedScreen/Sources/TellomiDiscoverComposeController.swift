@@ -11,7 +11,9 @@ import ShareWithPeersScreen
 
 final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate {
     private let context: AccountContext
-    private let publish: (String, TellomiDiscoverVisibility, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void
+    private let textLimit: Int
+    private let nonce = UUID().uuidString
+    private let publish: (String, TellomiDiscoverVisibility, String, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void
     private let published: () -> Void
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
@@ -22,8 +24,9 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     private let hintLabel = UILabel()
     private var sending = false
 
-    init(context: AccountContext, publish: @escaping (String, TellomiDiscoverVisibility, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void) {
+    init(context: AccountContext, textLimit: Int, publish: @escaping (String, TellomiDiscoverVisibility, String, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void) {
         self.context = context
+        self.textLimit = textLimit
         self.publish = publish
         self.published = published
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
@@ -93,7 +96,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         }
         self.sending = true
         self.apply()
-        self.publish(self.textView.text ?? "", choice.visibility) { [weak self] result in
+        self.publish(self.textView.text ?? "", choice.visibility, self.nonce) { [weak self] result in
             guard let self else {
                 return
             }
@@ -123,7 +126,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.hintLabel.font = Font.regular(13.0)
         self.textView.textColor = self.presentationData.theme.list.itemPrimaryTextColor
         self.displayNode.backgroundColor = self.presentationData.theme.list.plainBackgroundColor
-        let canSend = !self.sending && choice?.publishable == true && tellomiDiscoverPublishBody(text: self.textView.text ?? "", visibility: choice?.visibility ?? .everyone) != nil
+        let canSend = !self.sending && choice?.publishable == true && tellomiDiscoverPublishBody(text: self.textView.text ?? "", visibility: choice?.visibility ?? .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: self.textLimit) != nil
         let item = UIBarButtonItem(title: copy.publish, style: .done, target: self, action: #selector(self.sendPressed))
         item.isEnabled = canSend
         self.navigationItem.setRightBarButton(item, animated: false)

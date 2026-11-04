@@ -13,6 +13,7 @@ enum TellomiFeedNodeMode {
 
 struct TellomiFeedNodeModel {
     var mode: TellomiFeedNodeMode
+    var tabTitles: [String]
     var selectedTab: Int
     var posts: [TellomiDiscoverPost]
     var loading: Bool
@@ -32,7 +33,7 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
 
     private let titleNode = ImmediateTextNode()
     private let textNode = ImmediateTextNode()
-    private let tabs = UISegmentedControl(items: ["", "", ""])
+    private let tabs = UISegmentedControl()
     private let table = UITableView(frame: .zero, style: .plain)
     private let refresh = UIRefreshControl()
     private let failureLabel = UILabel()
@@ -43,7 +44,7 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
     private let cityButton = UIButton(type: .system)
     private let spinner = UIActivityIndicatorView(style: .medium)
     private let sizingCell = TellomiDiscoverPostCell(style: .default, reuseIdentifier: nil)
-    private var model = TellomiFeedNodeModel(mode: .legacy, selectedTab: 0, posts: [], loading: false, failure: nil, legacyTitle: "", legacyBody: "", copy: .resolve(languageCode: "en"))
+    private var model = TellomiFeedNodeModel(mode: .legacy, tabTitles: [], selectedTab: 0, posts: [], loading: false, failure: nil, legacyTitle: "", legacyBody: "", copy: .resolve(languageCode: "en"))
     private var presentationData: PresentationData?
     private var layout: (size: CGSize, topInset: CGFloat, bottomInset: CGFloat)?
     private var suppressTab = false
@@ -115,12 +116,21 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         self.backgroundColor = presentationData.theme.list.plainBackgroundColor
         self.titleNode.attributedText = NSAttributedString(string: self.model.legacyTitle, font: Font.semibold(17.0), textColor: presentationData.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.textNode.attributedText = NSAttributedString(string: self.model.legacyBody, font: Font.regular(15.0), textColor: presentationData.theme.list.itemSecondaryTextColor, paragraphAlignment: .center)
-        let titles = [copy.recommend, copy.following, copy.nearby]
+        let titles = self.model.tabTitles
         self.suppressTab = true
-        for index in 0 ..< titles.count {
-            self.tabs.setTitle(titles[index], forSegmentAt: index)
+        if self.tabs.numberOfSegments != titles.count {
+            self.tabs.removeAllSegments()
+            for (index, title) in titles.enumerated() {
+                self.tabs.insertSegment(withTitle: title, at: index, animated: false)
+            }
+        } else {
+            for (index, title) in titles.enumerated() {
+                self.tabs.setTitle(title, forSegmentAt: index)
+            }
         }
-        self.tabs.selectedSegmentIndex = min(max(0, self.model.selectedTab), titles.count - 1)
+        if !titles.isEmpty {
+            self.tabs.selectedSegmentIndex = min(max(0, self.model.selectedTab), titles.count - 1)
+        }
         self.suppressTab = false
         self.tabs.selectedSegmentTintColor = presentationData.theme.list.itemAccentColor
         self.failureLabel.text = self.model.failure
