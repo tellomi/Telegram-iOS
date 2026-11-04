@@ -1271,7 +1271,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     }
                     
                     var retryAvatar: (() -> Void)?
-                    retryAvatar = {
+                    retryAvatar = { [weak self, weak controller] in
                         guard let strongSelf = self, let controller = controller else {
                             return
                         }
@@ -1279,15 +1279,12 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         strongSelf.actionDisposable.set((tellomiRetrySignUpAvatar(account: strongSelf.account, avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp)
                         |> deliverOnMainQueue).startStrict(error: { error in
                             Queue.mainQueue().async {
-                                guard let strongSelf = self, let controller = controller else {
-                                    return
-                                }
                                 controller.inProgress = false
                                 strongSelf.tellomiPresentSignUpError(controller: controller, error: error, retry: { retryAvatar?() })
                             }
                         }, completed: {
                             Queue.mainQueue().async {
-                                controller?.inProgress = false
+                                controller.inProgress = false
                             }
                         }))
                     }
