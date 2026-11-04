@@ -19,6 +19,9 @@ swift_library(
         "//submodules/TelegramCore",
         "//submodules/TelegramPresentationData",
         "//submodules/TelegramUIPreferences",
+        "//submodules/TellomiDiscover:TellomiDiscover",
+        "//submodules/Geocoding",
+        "//submodules/TelegramUI/Components/ShareWithPeersScreen",
         "//submodules/UIKitRuntimeUtils:UIKitRuntimeUtils",
     ],
     visibility = [

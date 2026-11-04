@@ -637,3 +637,20 @@ The Calls tab already hides from a long-press on its icon (`CallListController.t
 | `submodules/TelegramCore/Sources/State/ManagedConfigurationUpdates.swift` | The signed-in `help.getConfig` path writes only the addresses the filter keeps. |
 | `submodules/TelegramCore/Sources/State/Serialization.swift` | `requestDatacenterAddress` (datacenter discovery) uses the same filter. |
 | `submodules/TelegramCore/Tests/TellomiDcAddressTests.swift` | The literals from Android `check_dc_address.cpp`, plus empty, hostname-only, mixed, and duplicate cases. |
+
+## Discover feed (M3 / C-M3a)
+
+The Discover tab stays on the M2 empty state until app config `tellomi_discover_feed_enabled` is true. A missing key is off. Logged-out sessions do not call `discover.getEngineCredential` and do not call content-engine. The credential is `discover.getEngineCredential#a80a7f76` (teamgram #152). It is not in the generated Telegram schema; `TelegramApi` only wraps that constructor id, and `TelegramCore` sends it on the logged-in account. The client then calls `GET /v1/feed/recommend`, `GET /v1/feed/following`, `GET /v1/feed/nearby?city=`, and `GET /v1/feed/posts/{id}`. A text post is `POST /v1/feed/posts` with `text` and `visibility` only.
+
+Visibility is Stories' `EngineStoryPrivacy` and `ShareWithPeersScreen` (editing, so the story screenshot / pin rows stay hidden). Everyone, contacts, and close friends can be published. Close friends still go through `contacts.editCloseFriends`. Selected people and exclusion lists are not posted: teamgram does not sign an audience token yet, and peer ids are not sent to the engine. Nearby keeps a city name only. `DeviceLocationManager` asks for Always and full accuracy, so this lookup uses When In Use and kilometer accuracy, reverse-geocodes, and drops the coordinate. A denied lookup is a typed city. Street, state, latitude, and longitude are not query parameters.
+
+Depends on the unmerged bottom-bar branch (Telegram-iOS #60).
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiDiscover/` | New. Flag, credential bytes, feed and post URLs, city and Stories visibility mapping, JSON parse, loader. Host tests in `TellomiDiscoverTests`. |
+| `submodules/TelegramApi/Sources/TellomiDiscoverCredentialRPC.swift` | New. Builds the no-argument `discover.getEngineCredential` invocation. The schema file is unchanged. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDiscoverCredential.swift` | New. Sends that invocation on `Account.network` and maps `DISCOVER_DISABLED` / `AUTH_KEY_UNREGISTERED`. |
+| `submodules/TelegramCore/BUILD` | Depends on `TellomiDiscover`. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | Recommend, Following, and Nearby, post detail, text compose, and the Stories privacy screen. The M2 empty state remains when the flag is off. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/BUILD` | Depends on `TellomiDiscover`, `Geocoding`, and `ShareWithPeersScreen`. |
