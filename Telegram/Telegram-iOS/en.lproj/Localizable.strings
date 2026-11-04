@@ -937,8 +937,8 @@
 
 "Username.Title" = "Username";
 "Username.Placeholder" = "Your Username";
-"Username.Help" = "You can choose a username on **Telegram**. If you do, other people will be able to find you by this username and contact you without knowing your phone number.\n\nYou can use **a-z**, **0-9** and underscores. Minimum length is **5** characters.";
-"Username.InvalidTooShort" = "A username must have at least 5 characters.";
+"Username.Help" = "You can choose a username on **Telegram**. If you do, other people will be able to find you by this username and contact you without knowing your phone number.\n\nYou can use **a-z**, **0-9** and underscores. Minimum length is **4** characters.";
+"Username.InvalidTooShort" = "A username must have at least 4 characters.";
 "Username.InvalidStartsWithNumber" = "Sorry, a username can't start with a number.";
 "Username.InvalidCharacters" = "Sorry, this username is invalid.";
 "Username.InvalidTaken" = "Sorry, this username is already taken.";
@@ -1602,9 +1602,9 @@
 "Channel.Edit.LinkItem" = "Link";
 
 "Channel.Username.Title" = "Link";
-"Channel.Username.Help" = "You can choose a channel name on **Telegram**. If you do, other people will be able to find your channel by this name.\n\nYou can use **a-z**, **0-9** and underscores. Minimum length is **5** characters.";
+"Channel.Username.Help" = "You can choose a channel name on **Telegram**. If you do, other people will be able to find your channel by this name.\n\nYou can use **a-z**, **0-9** and underscores. Minimum length is **4** characters.";
 "Channel.Username.LinkHint" = "This link opens your channel in Telegram:[\nhttps://tell.cc/%@]";
-"Channel.Username.InvalidTooShort" = "Channel names must have at least 5 characters.";
+"Channel.Username.InvalidTooShort" = "Channel names must have at least 4 characters.";
 "Channel.Username.InvalidStartsWithNumber" = "Channel names can't start with a number.";
 "Channel.Username.InvalidCharacters" = "Sorry, this name is invalid.";
 "Channel.Username.InvalidTaken" = "Sorry, this name is already taken.";
@@ -2002,7 +2002,7 @@
 "Conversation.Moderate.Report" = "Report Spam";
 "Conversation.Moderate.DeleteAllMessages" = "Delete All From %@";
 
-"Group.Username.InvalidTooShort" = "Group names must have at least 5 characters.";
+"Group.Username.InvalidTooShort" = "Group names must have at least 4 characters.";
 "Group.Username.InvalidStartsWithNumber" = "Group names can't start with a number.";
 
 "Notification.PinnedTextMessage" = "%@ pinned \"%@\" ";
@@ -3146,7 +3146,7 @@ Unused sets are archived when you add more.";
 
 "Channel.Setup.TypePublicHelp" = "Public channels can be found in search, channel history is available to everyone and anyone can join.";
 "Channel.Setup.TypePrivateHelp" = "Private channels can only be joined if you were invited or have an invite link.";
-"Group.Username.InvalidTooShort" = "Group names must have at least 5 characters.";
+"Group.Username.InvalidTooShort" = "Group names must have at least 4 characters.";
 "Group.Username.InvalidStartsWithNumber" = "Group names can't start with a number.";
 "Group.Username.CreatePublicLinkHelp" = "People can share this link with others and find your group using Telegram search.";
 "Channel.TypeSetup.Title" = "Channel Type";
@@ -4688,7 +4688,7 @@ Sorry for the inconvenience.";
 
 "Group.PublicLink.Title" = "Public Link";
 "Group.PublicLink.Placeholder" = "link";
-"Group.PublicLink.Info" = "People can share this link with others and find your group using Telegram search.\n\nYou can use **a-z**, **0-9** and underscores. Minimum length is **5** characters.";
+"Group.PublicLink.Info" = "People can share this link with others and find your group using Telegram search.\n\nYou can use **a-z**, **0-9** and underscores. Minimum length is **4** characters.";
 
 "CreateGroup.ErrorLocatedGroupsTooMuch" = "Sorry, you have too many location-based groups already. Please delete one of your existing ones first.";
 
@@ -8781,7 +8781,7 @@ Sorry for the inconvenience.";
 "RequestPeer.SelectionConfirmationSend" = "Send";
 
 "CreateGroup.PublicLinkTitle" = "SET A PUBLIC LINK";
-"CreateGroup.PublicLinkInfo" = "You can use **a-z**, **0-9** and underscores. Minimum length is **5** characters.";
+"CreateGroup.PublicLinkInfo" = "You can use **a-z**, **0-9** and underscores. Minimum length is **4** characters.";
 
 "Notification.RequestedPeer" = "You shared %1$@ with %2$@.";
 "Notification.RequestedPeerMultiple" = "You shared %1$@ with %2$@.";
@@ -16172,7 +16172,7 @@ Error: %8$@";
 "CreateBot.NamePlaceholder" = "Name";
 "CreateBot.UsernameStatus.Invalid" = "You can only use **a-z**, **0-9** and underscores.";
 "CreateBot.UsernameStatus.Taken" = "This username is already taken.";
-"CreateBot.UsernameStatus.Short" = "A username must have at least 5 characters.";
+"CreateBot.UsernameStatus.Short" = "A username must have at least 4 characters.";
 "CreateBot.UsernameStatus.Number" = "A username can't start with a number";
 "CreateBot.UsernameStatus.LimitExceeded_1" = "You can't create more than %d bot.";
 "CreateBot.UsernameStatus.LimitExceeded_any" = "You can't create more than %d bots.";
