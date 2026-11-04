@@ -67,6 +67,14 @@ public let tellomiSolidWallpaperBubbleShadow = PresentationThemeBubbleShadow(
     verticalOffset: CGFloat(TellomiBubbleShadowSpec.verticalOffset)
 )
 
+public func tellomiDrawsBubbleShadow(hasWallpaper: Bool) -> Bool {
+    return TellomiBubbleChrome.drawsShadow(hasWallpaper: hasWallpaper)
+}
+
+func tellomiReactionCapsuleColor(_ background: TellomiReactionCapsuleBackground) -> UIColor {
+    return UIColor(rgb: background.rgb, alpha: CGFloat(background.alpha))
+}
+
 public func tellomiDefaultSolidWallpaper(dark: Bool) -> TelegramWallpaper {
     return .color(dark ? tellomiDefaultDarkWallpaperColor : tellomiDefaultLightWallpaperColor)
 }
@@ -729,9 +737,9 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: bubbleStrokeColor,
                     shadow: tellomiSolidWallpaperBubbleShadow,
-                    reactionInactiveBackground: UIColor(rgb: 0x000000).withMultipliedAlpha(0.08),
-                    reactionInactiveForeground: UIColor(rgb: 0x000000),
-                    reactionActiveBackground: UIColor(rgb: 0x000000),
+                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.classicOutgoingInactive),
+                    reactionInactiveForeground: tellomiReactionCapsuleColor(TellomiReactionCapsules.classicOutgoingActive),
+                    reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.classicOutgoingActive),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xFEF1D4, alpha: 1.0),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xD3720A),
@@ -745,9 +753,9 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: bubbleStrokeColor,
                     shadow: tellomiSolidWallpaperBubbleShadow,
-                    reactionInactiveBackground: UIColor(rgb: 0x000000).withMultipliedAlpha(0.08),
-                    reactionInactiveForeground: UIColor(rgb: 0x000000),
-                    reactionActiveBackground: UIColor(rgb: 0x000000),
+                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.classicOutgoingInactive),
+                    reactionInactiveForeground: tellomiReactionCapsuleColor(TellomiReactionCapsules.classicOutgoingActive),
+                    reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.classicOutgoingActive),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xFEF1D4, alpha: 1.0),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xD3720A),
@@ -896,9 +904,9 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: .clear,
                     shadow: tellomiSolidWallpaperBubbleShadow,
-                    reactionInactiveBackground: UIColor(rgb: 0x000000, alpha: 0.08),
-                    reactionInactiveForeground: UIColor(rgb: 0x000000),
-                    reactionActiveBackground: UIColor(rgb: 0x000000),
+                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.dayOutgoingInactive),
+                    reactionInactiveForeground: tellomiReactionCapsuleColor(TellomiReactionCapsules.dayOutgoingActive),
+                    reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.dayOutgoingActive),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xFEF1D4, alpha: 1.0),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xD3720A),
@@ -912,9 +920,9 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: .clear,
                     shadow: tellomiSolidWallpaperBubbleShadow,
-                    reactionInactiveBackground: UIColor(rgb: 0x000000, alpha: 0.08),
-                    reactionInactiveForeground: UIColor(rgb: 0x000000),
-                    reactionActiveBackground: UIColor(rgb: 0x000000),
+                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.dayOutgoingInactive),
+                    reactionInactiveForeground: tellomiReactionCapsuleColor(TellomiReactionCapsules.dayOutgoingActive),
+                    reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.dayOutgoingActive),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xFEF1D4, alpha: 1.0),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xD3720A),

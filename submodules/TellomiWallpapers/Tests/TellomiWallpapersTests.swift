@@ -104,6 +104,29 @@ final class TellomiWallpapersTests: XCTestCase {
         XCTAssertEqual(TellomiBubbleColors.incomingDark, 0x202C33)
         XCTAssertEqual(TellomiBubbleShadowSpec.radius, 0.5)
         XCTAssertEqual(TellomiBubbleShadowSpec.verticalOffset, 0.5)
+        XCTAssertEqual(TellomiBubbleShadowSpec.alpha, 0.18)
+    }
+
+    func testBubbleShadowDrawsForEveryWallpaper() {
+        XCTAssertTrue(TellomiBubbleChrome.drawsShadow(hasWallpaper: true))
+        XCTAssertFalse(TellomiBubbleChrome.drawsShadow(hasWallpaper: false))
+    }
+
+    func testReactionCapsuleBackgroundsMatchUpstream() {
+        XCTAssertEqual(TellomiReactionCapsules.classicOutgoingInactive, TellomiReactionCapsuleBackground(rgb: 0x3FC33B, alpha: 0.12))
+        XCTAssertEqual(TellomiReactionCapsules.classicOutgoingActive, TellomiReactionCapsuleBackground(rgb: 0x3FC33B, alpha: 1))
+        XCTAssertNotEqual(TellomiReactionCapsules.classicOutgoingActive.rgb, 0x000000)
+
+        XCTAssertEqual(TellomiReactionCapsules.dayOutgoingInactive, TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 0.12))
+        XCTAssertEqual(TellomiReactionCapsules.dayOutgoingActive, TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 1))
+        XCTAssertNotEqual(TellomiReactionCapsules.dayOutgoingActive.rgb, 0x000000)
+
+        XCTAssertEqual(TellomiReactionCapsules.darkIncomingInactive, TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 0.07))
+        XCTAssertEqual(TellomiReactionCapsules.darkOutgoingInactive, TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 0.1))
+        XCTAssertEqual(TellomiReactionCapsules.darkAccentedOutgoingInactive, TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 0.12))
+        XCTAssertEqual(TellomiReactionCapsules.darkActive, TellomiReactionCapsuleBackground(rgb: 0xFFFFFF, alpha: 1))
+
+        XCTAssertEqual(TellomiAccentColors.defaultColor, 0x3390EC)
     }
 
     func testOpenSourceNoticeNamesThePatternSources() {
