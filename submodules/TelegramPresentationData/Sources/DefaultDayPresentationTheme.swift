@@ -4,6 +4,7 @@ import Display
 import TelegramCore
 import TelegramUIPreferences
 import SwiftSignalKit
+import TellomiWallpapers
 
 public func selectDateFillStaticColor(theme: PresentationTheme, wallpaper: TelegramWallpaper) -> UIColor {
     if case .color(0xffffff) = wallpaper {
@@ -41,7 +42,9 @@ public func dateFillNeedsBlur(theme: PresentationTheme, wallpaper: TelegramWallp
     } else if case .color = wallpaper {
         return false
     } else if case let .file(file) = wallpaper {
-        if file.isPattern, let intensity = file.settings.intensity, intensity < 0 {
+        if file.slug.hasPrefix("tm_") {
+            return true
+        } else if file.isPattern, let intensity = file.settings.intensity, intensity < 0 {
             return false
         } else {
             return true
@@ -53,13 +56,87 @@ public func dateFillNeedsBlur(theme: PresentationTheme, wallpaper: TelegramWallp
 
 public let defaultServiceBackgroundColor = UIColor(rgb: 0x000000, alpha: 0.2)
 public let defaultPresentationTheme = makeDefaultDayPresentationTheme(serviceBackgroundColor: defaultServiceBackgroundColor, day: false, preview: false)
-public let defaultDayAccentColor = UIColor(rgb: 0x000000)
+public let defaultDayAccentColor = UIColor(rgb: TellomiAccentColors.defaultColor)
 
-public let tellomiDefaultLightWallpaperColor: UInt32 = 0xf2f2f2
-public let tellomiDefaultDarkWallpaperColor: UInt32 = 0x000000
+public let tellomiDefaultLightWallpaperColor: UInt32 = TellomiWallpaperPresets.lightSolid
+public let tellomiDefaultDarkWallpaperColor: UInt32 = TellomiWallpaperPresets.darkSolid
+
+public let tellomiSolidWallpaperBubbleShadow = PresentationThemeBubbleShadow(
+    color: UIColor(rgb: 0x000000, alpha: CGFloat(TellomiBubbleShadowSpec.alpha)),
+    radius: CGFloat(TellomiBubbleShadowSpec.radius),
+    verticalOffset: CGFloat(TellomiBubbleShadowSpec.verticalOffset)
+)
 
 public func tellomiDefaultSolidWallpaper(dark: Bool) -> TelegramWallpaper {
     return .color(dark ? tellomiDefaultDarkWallpaperColor : tellomiDefaultLightWallpaperColor)
+}
+
+public func tellomiDefaultWallpaper(dark: Bool) -> TelegramWallpaper {
+    return tellomiWallpaper(for: TellomiWallpaperCatalog.defaultEntry(dark: dark))
+}
+
+public func tellomiStockWallpapers() -> [TelegramWallpaper] {
+    return TellomiWallpaperCatalog.stockEntries.map(tellomiWallpaper(for:))
+}
+
+public func tellomiAvailableSolidColors(dark: Bool) -> [UInt32] {
+    return [TellomiWallpaperPresets.solidColor(dark: dark)]
+}
+
+public func tellomiAvailableGradients(dark: Bool) -> [[UInt32]] {
+    return dark ? [] : []
+}
+
+public func tellomiEffectiveChatWallpaper(_ wallpaper: TelegramWallpaper, dark: Bool) -> TelegramWallpaper {
+    switch wallpaper {
+    case .builtin:
+        return tellomiDefaultWallpaper(dark: dark)
+    case let .color(color):
+        let stripped = color & 0x00ffffff
+        if stripped == TellomiWallpaperPresets.legacyLightSolid {
+            return tellomiDefaultWallpaper(dark: false)
+        }
+        if stripped == TellomiWallpaperPresets.legacyDarkSolid {
+            return tellomiDefaultWallpaper(dark: true)
+        }
+        return wallpaper
+    default:
+        return wallpaper
+    }
+}
+
+public func tellomiWallpaper(for entry: TellomiWallpaperEntry) -> TelegramWallpaper {
+    if let slug = entry.patternResourceSlug, let intensity = entry.intensity {
+        return .file(TelegramWallpaper.File(
+            id: entry.fileId,
+            accessHash: 0,
+            isCreator: false,
+            isDefault: entry.isDefaultLight || entry.isDefaultDark,
+            isPattern: true,
+            isDark: entry.isDark,
+            slug: entry.id,
+            file: TelegramMediaFile(
+                fileId: EngineMedia.Id(namespace: Namespaces.Media.CloudFile, id: entry.fileId),
+                partialReference: nil,
+                resource: WallpaperDataResource(slug: slug),
+                previewRepresentations: [],
+                videoThumbnails: [],
+                immediateThumbnailData: nil,
+                mimeType: "application/x-tgwallpattern",
+                size: nil,
+                attributes: [
+                    .ImageSize(size: PixelDimensions(width: 1024, height: 1024)),
+                    .FileName(fileName: "\(slug).tgv")
+                ],
+                alternativeRepresentations: []
+            ),
+            settings: WallpaperSettings(colors: entry.colors, intensity: intensity, rotation: nil)
+        ))
+    }
+    if entry.colors.count >= 2 {
+        return .gradient(TelegramWallpaper.Gradient(id: entry.fileId, colors: entry.colors, settings: WallpaperSettings()))
+    }
+    return .color(entry.colors[0])
 }
 
 public func customizeDefaultDayTheme(theme: PresentationTheme, editing: Bool, title: String?, accentColor: UIColor?, outgoingAccentColor: UIColor?, backgroundColors: [UInt32], bubbleColors: [UInt32], animateBubbleColors: Bool?, wallpaper forcedWallpaper: TelegramWallpaper? = nil, serviceBackgroundColor: UIColor?) -> PresentationTheme {
@@ -98,10 +175,10 @@ public func customizeDefaultDayTheme(theme: PresentationTheme, editing: Bool, ti
                     }
                 }
 
-                suggestedWallpaper = tellomiDefaultSolidWallpaper(dark: false)
+                suggestedWallpaper = tellomiDefaultWallpaper(dark: false)
             } else {
-                bubbleColors = [UIColor(rgb: 0xffffff).rgb]
-                suggestedWallpaper = tellomiDefaultSolidWallpaper(dark: false)
+                bubbleColors = [UIColor(rgb: TellomiBubbleColors.incomingLight).rgb]
+                suggestedWallpaper = tellomiDefaultWallpaper(dark: false)
                 outgoingAccent = outgoingAccentColor
             }
         }
@@ -598,7 +675,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     fill: [UIColor(rgb: 0xffffff)],
                     highlightedFill: UIColor(rgb: 0xe6e6ea),
                     stroke: bubbleStrokeColor,
-                    shadow: nil,
+                    shadow: tellomiSolidWallpaperBubbleShadow,
                     reactionInactiveBackground: defaultDayAccentColor.withMultipliedAlpha(0.1),
                     reactionInactiveForeground: defaultDayAccentColor,
                     reactionActiveBackground: defaultDayAccentColor,
@@ -614,7 +691,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     fill: [UIColor(rgb: 0xffffff)],
                     highlightedFill: UIColor(rgb: 0xe6e6ea),
                     stroke: bubbleStrokeColor,
-                    shadow: nil,
+                    shadow: tellomiSolidWallpaperBubbleShadow,
                     reactionInactiveBackground: defaultDayAccentColor.withMultipliedAlpha(0.1),
                     reactionInactiveForeground: defaultDayAccentColor,
                     reactionActiveBackground: defaultDayAccentColor,
@@ -653,7 +730,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     fill: [UIColor(rgb: 0xffffff)],
                     highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: bubbleStrokeColor,
-                    shadow: nil,
+                    shadow: tellomiSolidWallpaperBubbleShadow,
                     reactionInactiveBackground: UIColor(rgb: 0x000000).withMultipliedAlpha(0.08),
                     reactionInactiveForeground: UIColor(rgb: 0x000000),
                     reactionActiveBackground: UIColor(rgb: 0x000000),
@@ -669,7 +746,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     fill: [UIColor(rgb: 0xffffff)],
                     highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: bubbleStrokeColor,
-                    shadow: nil,
+                    shadow: tellomiSolidWallpaperBubbleShadow,
                     reactionInactiveBackground: UIColor(rgb: 0x000000).withMultipliedAlpha(0.08),
                     reactionInactiveForeground: UIColor(rgb: 0x000000),
                     reactionActiveBackground: UIColor(rgb: 0x000000),
@@ -710,7 +787,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                 fill: [UIColor(rgb: 0xffffff)],
                 highlightedFill: UIColor(rgb: 0xe6e6ea),
                 stroke: UIColor(rgb: 0x86a9c9, alpha: 0.5),
-                shadow: nil,
+                shadow: tellomiSolidWallpaperBubbleShadow,
                 reactionInactiveBackground: UIColor(rgb: 0xffffff),
                 reactionInactiveForeground: UIColor(rgb: 0xffffff),
                 reactionActiveBackground: UIColor(rgb: 0xffffff, alpha: 0.8),
@@ -726,7 +803,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                 fill: [UIColor(rgb: 0xffffff)],
                 highlightedFill: UIColor(rgb: 0xe6e6ea),
                 stroke: UIColor(rgb: 0x86a9c9, alpha: 0.5),
-                shadow: nil,
+                shadow: tellomiSolidWallpaperBubbleShadow,
                 reactionInactiveBackground: UIColor(rgb: 0xffffff),
                 reactionInactiveForeground: UIColor(rgb: 0xffffff),
                 reactionActiveBackground: UIColor(rgb: 0xffffff, alpha: 0.8),
@@ -762,7 +839,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     fill: [UIColor(rgb: 0xffffff)],
                     highlightedFill: UIColor(rgb: 0xdadade),
                     stroke: UIColor(rgb: 0xffffff),
-                    shadow: nil,
+                    shadow: tellomiSolidWallpaperBubbleShadow,
                     reactionInactiveBackground: defaultDayAccentColor.withMultipliedAlpha(0.1),
                     reactionInactiveForeground: defaultDayAccentColor,
                     reactionActiveBackground: defaultDayAccentColor,
@@ -775,10 +852,10 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     reactionActiveMediaPlaceholder: UIColor(rgb: 0xffffff, alpha: 0.2)
                 ),
                 withoutWallpaper: PresentationThemeBubbleColorComponents(
-                    fill: [UIColor(rgb: 0xf1f1f4)],
+                    fill: [UIColor(rgb: TellomiBubbleColors.incomingLight)],
                     highlightedFill: UIColor(rgb: 0xdadade),
                     stroke: UIColor(rgb: 0xf1f1f4),
-                    shadow: nil,
+                    shadow: tellomiSolidWallpaperBubbleShadow,
                     reactionInactiveBackground: .clear,
                     reactionInactiveForeground: defaultDayAccentColor,
                     reactionActiveBackground: defaultDayAccentColor,
@@ -820,7 +897,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     fill: [UIColor(rgb: 0xffffff)],
                     highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: .clear,
-                    shadow: nil,
+                    shadow: tellomiSolidWallpaperBubbleShadow,
                     reactionInactiveBackground: UIColor(rgb: 0x000000, alpha: 0.08),
                     reactionInactiveForeground: UIColor(rgb: 0x000000),
                     reactionActiveBackground: UIColor(rgb: 0x000000),
@@ -836,7 +913,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                     fill: [UIColor(rgb: 0xffffff)],
                     highlightedFill: UIColor(rgb: 0xe9e9eb),
                     stroke: .clear,
-                    shadow: nil,
+                    shadow: tellomiSolidWallpaperBubbleShadow,
                     reactionInactiveBackground: UIColor(rgb: 0x000000, alpha: 0.08),
                     reactionInactiveForeground: UIColor(rgb: 0x000000),
                     reactionActiveBackground: UIColor(rgb: 0x000000),
@@ -877,7 +954,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                 fill: [UIColor(rgb: 0xe5e5ea)],
                 highlightedFill: UIColor(rgb: 0xdadade),
                 stroke: UIColor(rgb: 0xe5e5ea),
-                shadow: nil,
+                shadow: tellomiSolidWallpaperBubbleShadow,
                 reactionInactiveBackground: defaultDayAccentColor.withMultipliedAlpha(0.1),
                 reactionInactiveForeground: defaultDayAccentColor,
                 reactionActiveBackground: defaultDayAccentColor,
@@ -893,7 +970,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
                 fill: [UIColor(rgb: 0xe5e5ea)],
                 highlightedFill: UIColor(rgb: 0xdadade),
                 stroke: UIColor(rgb: 0xe5e5ea),
-                shadow: nil,
+                shadow: tellomiSolidWallpaperBubbleShadow,
                 reactionInactiveBackground: UIColor(rgb: 0xF1F0F5),
                 reactionInactiveForeground: defaultDayAccentColor,
                 reactionActiveBackground: defaultDayAccentColor,
@@ -1012,7 +1089,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
     )
 
     let chat = PresentationThemeChat(
-        defaultWallpaper: tellomiDefaultSolidWallpaper(dark: false),
+        defaultWallpaper: tellomiDefaultWallpaper(dark: false),
         animateMessageColors: false,
         message: day ? messageDay : message,
         serviceMessage: day ? serviceMessageDay : serviceMessage,

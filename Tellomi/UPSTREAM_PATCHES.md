@@ -666,3 +666,23 @@ Teamgram #182 accepts a public username of 4 characters. Upstream iOS already re
 | `submodules/TelegramUI/Components/CreateBotScreen/Sources/CreateBotUsername.swift` | `minLength` is 4, the same minimum, counted on the full username including the `bot` suffix. |
 | `submodules/TelegramCore/Tests/AddressNameFormatTests.swift` | 4 characters pass. 3 characters, including one that ends in `_`, are `.tooShort`. |
 | `submodules/TelegramUI/Components/CreateBotScreen/Tests/CreateBotUsernameTests.swift` | `abot` (4) passes. `bot` (3) does not. |
+
+## Chat wallpaper and accent colors
+
+`account.getWallPapers` stays empty. Wallpapers are bundled. The default chat background is a pattern on a gradient: light `tm_doodle_light` is `#EFE7DD` with the doodle at 12% (dark strokes); dark `tm_doodle_dark` is `#0B141A` → `#16232B` with the doodle at 8% (light strokes, negative intensity). The wallpaper grid injects the 10 built-in entries when the server list is empty. The color grid keeps one solid, `#F0F2F5` in light and `#101418` in dark. A saved wallpaper that is still the previous default (`#F2F2F2` or `#000000`) or `.builtin` is read as the new doodle. Incoming bubbles are `#FFFFFF` / `#202C33`. On a solid wallpaper the bubble shadow is 0.5 pt. Date and service capsules use the custom-wallpaper fill; `tm_` patterns ask for blur even when the intensity is negative. The accent swatches are the 12 hex values, default `#3390EC`. A builtin theme with no saved accent uses that blue. Pattern tiles are Lucide (ISC), Tabler Icons (MIT), and Hero Patterns (CC BY 4.0, Steve Schoger). Settings ▸ Open Source Licenses names them. Login and the session are unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiWallpapers/` | Color table, wallpaper catalog, bubble colors, shadow spec, license text. Host tests in `TellomiWallpapersTests`. |
+| `Tellomi/Wallpapers/` | `WallpaperCatalog.json`, the SVG tiles, `generate_patterns.py`, `LICENSES.md`, `test_catalog.py`. |
+| `submodules/TelegramUI/Resources/tm_{doodle,dots,waves}.tgv` | Gzipped SVG the pattern renderer already accepts. |
+| `submodules/TelegramPresentationData/Sources/DefaultDayPresentationTheme.swift` | `tellomiDefaultWallpaper`, stock list, solid presets, legacy-default remap, bubble shadow. Day classic's suggested wallpaper is the light doodle. |
+| `submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift`, `DefaultDarkTintedPresentationTheme.swift` | Default wallpaper is the dark doodle. Dark incoming fill is `#202C33`. |
+| `submodules/TelegramPresentationData/Sources/PresentationData.swift` | Applies the remap when the chat wallpaper is resolved. |
+| `submodules/TelegramPresentationData/Sources/MakePresentationTheme.swift` | A builtin theme with no accent uses `#3390EC`. |
+| `submodules/TelegramUI/Components/Settings/WallpaperGridScreen/` | Empty server list gets the 10 built-ins. Color presets are the one solid. |
+| `submodules/TelegramUI/Components/TelegramAccountAuxiliaryMethods/` | `tm_doodle`, `tm_dots`, and `tm_waves` are read from the app bundle. |
+| `submodules/SettingsUI/Sources/Themes/ThemeColorPresets.swift`, `ThemePickerController.swift` | The accent row is the 12 colors. |
+| `submodules/SettingsUI/Sources/TellomiOpenSourceLicensesController.swift` | The license page. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/` | Settings row that opens it. |
+| `submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/` | Draws the bubble shadow on a solid wallpaper. |

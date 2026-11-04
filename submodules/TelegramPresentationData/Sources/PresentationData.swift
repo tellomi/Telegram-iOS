@@ -462,9 +462,7 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
         let theme = makePresentationTheme(mediaBox: accountManager.mediaBox, themeReference: effectiveTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.colorFor(baseTheme: preferredBaseTheme ?? .day), bubbleColors: effectiveColors?.customBubbleColors ?? [], baseColor: effectiveColors?.baseColor) ?? defaultPresentationTheme
         
         var effectiveChatWallpaper: TelegramWallpaper = (themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: effectiveTheme, accentColor: effectiveColors)] ?? themeSettings.themeSpecificChatWallpapers[effectiveTheme.index]) ?? theme.chat.defaultWallpaper
-        if case .builtin = effectiveChatWallpaper {
-            effectiveChatWallpaper = tellomiDefaultSolidWallpaper(dark: theme.overallDarkAppearance)
-        }
+        effectiveChatWallpaper = tellomiEffectiveChatWallpaper(effectiveChatWallpaper, dark: theme.overallDarkAppearance)
         
         let dateTimeFormat = currentDateTimeFormat()
         let stringsValue: PresentationStrings
@@ -859,9 +857,7 @@ public func updatedPresentationData(accountManager: AccountManager<TelegramAccou
                             }
                         }
                         
-                        if case .builtin = effectiveChatWallpaper {
-                            effectiveChatWallpaper = tellomiDefaultSolidWallpaper(dark: tellomiResolvedThemeIsDark(effectiveTheme, preferredBaseTheme: preferredBaseTheme))
-                        }
+                        effectiveChatWallpaper = tellomiEffectiveChatWallpaper(effectiveChatWallpaper, dark: tellomiResolvedThemeIsDark(effectiveTheme, preferredBaseTheme: preferredBaseTheme))
                         
                         if let colors = effectiveColors, colors.baseColor == .theme {
                             effectiveColors = nil

@@ -3,6 +3,7 @@ import UIKit
 import Postbox
 import TelegramUIPreferences
 import TelegramCore
+import TellomiWallpapers
 
 public func makeDefaultPresentationTheme(reference: PresentationBuiltinThemeReference, extendingThemeReference: PresentationThemeReference? = nil, serviceBackgroundColor: UIColor?, preview: Bool = false) -> PresentationTheme {
     let theme: PresentationTheme
@@ -97,6 +98,9 @@ public func makePresentationTheme(mediaBox: MediaBox, themeReference: Presentati
     var accentColor = accentColor
     if accentColor == .clear {
         accentColor = nil
+    }
+    if accentColor == nil, bubbleColors.isEmpty, case .builtin = themeReference {
+        accentColor = UIColor(rgb: TellomiAccentColors.defaultColor)
     }
     let theme: PresentationTheme
     switch themeReference {

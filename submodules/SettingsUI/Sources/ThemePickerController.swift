@@ -186,44 +186,11 @@ private enum ThemePickerControllerEntry: ItemListNodeEntry {
                 for theme in themes {
                     colorItems.append(.theme(theme))
                 }
-            
-                var defaultColor: PresentationThemeAccentColor? = PresentationThemeAccentColor(baseColor: .blue)
-                var colors = PresentationThemeBaseColor.allCases
-                colors = colors.filter { $0 != .custom && $0 != .preset && $0 != .theme }
-                if case let .builtin(name) = generalThemeReference {
-                    if name == .dayClassic {
-                        colorItems.append(.default)
-                        defaultColor = nil
-            
-                        for preset in dayClassicColorPresets {
-                            colorItems.append(.preset(preset))
-                        }
-                    } else if name == .day {
-                        colorItems.append(.color(.black))
-                        colors = colors.filter { $0 != .black }
-                        defaultColor = PresentationThemeAccentColor(baseColor: .black)
-            
-                        for preset in dayColorPresets {
-                            colorItems.append(.preset(preset))
-                        }
-                    } else if name == .night {
-                        colorItems.append(.color(.blue))
-                        colors = colors.filter { $0 != .blue }
-                        defaultColor = nil
-            
-                        for preset in nightColorPresets {
-                            colorItems.append(.preset(preset))
-                        }
-                    }
-                    if name != .day {
-                        colors = colors.filter { $0 != .black }
-                    }
-                    if name == .night {
-                        colors = colors.filter { $0 != .gray }
-                    } else {
-                        colors = colors.filter { $0 != .white }
-                    }
+                for preset in tellomiAccentPresets {
+                    colorItems.append(.preset(preset))
                 }
+
+                let defaultColor = tellomiAccentPresets.first
                 var currentColor = color ?? defaultColor.flatMap { .accentColor($0) }
                 if let color = currentColor, case let .accentColor(accentColor) = color, accentColor.baseColor == .theme {
                     var themeExists = false
@@ -234,22 +201,7 @@ private enum ThemePickerControllerEntry: ItemListNodeEntry {
                         currentColor = defaultColor.flatMap { .accentColor($0) }
                     }
                 }
-                colorItems.append(contentsOf: colors.map { .color($0) })
-                if let index = colorItems.firstIndex(where: { item in
-                    if case .default = item {
-                        return true
-                    } else {
-                        return false
-                    }
-                }) {
-                    if index > 0 {
-                        let item = colorItems[index]
-                        colorItems.remove(at: index)
-                        colorItems.insert(item, at: 1)
-                    }
-                }
-            
-                
+
                 let baseTheme: TelegramBaseTheme?
                 if case let .builtin(theme) = generalThemeReference {
                     baseTheme = theme.baseTheme

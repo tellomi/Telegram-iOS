@@ -1,4 +1,5 @@
 import Foundation
+import TellomiWallpapers
 import TelegramCore
 import Postbox
 import MediaResources
@@ -79,7 +80,7 @@ public func makeTelegramAccountAuxiliaryMethods(uploadInBackground: ((Postbox, M
                 "fqv01SQemVIBAAAApND8LDRUhRU",
                 "Ye7DfT2kCVIKAAAAhzXfrkdOjxs"
             ]
-            if builtinWallpapers.contains(wallpaperResource.slug) {
+            if TellomiWallpaperCatalog.patternResourceSlugs.contains(wallpaperResource.slug) || builtinWallpapers.contains(wallpaperResource.slug) {
                 if let url = getAppBundle().url(forResource: wallpaperResource.slug, withExtension: "tgv") {
                     return Signal { subscriber in
                         subscriber.putNext(.reset)

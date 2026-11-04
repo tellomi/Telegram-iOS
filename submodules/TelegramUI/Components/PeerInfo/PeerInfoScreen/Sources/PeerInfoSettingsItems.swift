@@ -351,6 +351,10 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.support]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.Settings_Tips, icon: PresentationResourcesSettings.tips, action: {
         interaction.openSettings(.tips)
     }))
+    let openSourceLicensesTitle = presentationData.strings.primaryComponent.languageCode.lowercased().hasPrefix("zh") ? "开源许可" : "Open Source Licenses"
+    items[.support]!.append(PeerInfoScreenDisclosureItem(id: 3, text: openSourceLicensesTitle, icon: PresentationResourcesSettings.faq, action: {
+        interaction.openSettings(.openSourceLicenses)
+    }))
     
     var result: [(AnyHashable, [PeerInfoScreenItem])] = []
     for section in SettingsSection.allCases {

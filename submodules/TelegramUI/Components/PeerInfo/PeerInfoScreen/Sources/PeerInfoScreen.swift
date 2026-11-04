@@ -183,6 +183,7 @@ enum PeerInfoSettingsSection {
     case support
     case faq
     case tips
+    case openSourceLicenses
     case phoneNumber
     case loginEmail
     case username
