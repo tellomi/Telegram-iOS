@@ -692,7 +692,7 @@ Teamgram #182 accepts a public username of 4 characters. Upstream iOS already re
 
 `Tellomi/Icons/generate_icons.py` used to place MingCute's whole 24×24 viewBox inside the original ink box, using the shorter side of that box. The viewBox already has padding, so the glyph was shrunk twice. Of the icons that had an upstream PDF, 69 measured under 0.8 of the old long side (pin 0.57, back 0.44).
 
-The generator now crops each MingCute path to its own ink, scales it uniformly so the long side equals the upstream long side, and centers it on the upstream ink. MingCute outlines are filled paths, so that scale is also the stroke compensation: the outline weight changes with the glyph. `upstream_ink.json` holds the pre-replacement boxes (commit `599d6869aa^`), which is what a later run reads. `Chat/Input/Text/SendIcon` and `IconForwardSend` stay the up arrow from the send-mark change and are not in the mapping, so a regenerate does not draw the paper plane again. Login screens are unchanged.
+The generator now crops each MingCute path to its own ink, scales it uniformly so the long side equals the upstream long side, and centers it on the upstream ink. MingCute outlines are filled paths, so that scale is also the stroke compensation: the outline weight changes with the glyph. `upstream_ink.json` holds the pre-replacement boxes (commit `599d6869aa^`), which is what a later run reads. `Chat/Input/Text/SendIcon` stays the up arrow from the send-mark change and is not in the mapping, so a regenerate does not draw the paper plane again. `IconForwardSend` is the right-pointing forward arrow; see "Icon meaning" below. Login screens are unchanged.
 
 `Tellomi/Icons/check_sizes.py` fails when a replaced icon's long ink side is under 0.9 of that upstream box. `Make.py build` and `Make.py test` run it. An explicit `WxH` canvas with no upstream icon is not compared.
 
@@ -701,6 +701,37 @@ The generator now crops each MingCute path to its own ink, scales it uniformly s
 | `Tellomi/Icons/generate_icons.py` | Fit the MingCute ink to the upstream ink. |
 | `Tellomi/Icons/upstream_ink.json` | Page size and ink box from before the replacement. |
 | `Tellomi/Icons/pdf_ink.py`, `check_sizes.py` | Path ink, and the 0.9 check. |
-| `Tellomi/Icons/mapping.csv` | Gallery and Location use the upstream ink again. The two send glyphs are not generated. |
+| `Tellomi/Icons/mapping.csv` | Gallery and Location use the upstream ink again. `SendIcon` is not generated. |
 | `build-system/Make/IconSizeCheck.py`, `Make.py` | The check runs with the Postbox import check. |
 | `submodules/TelegramUI/Images.xcassets` | The regenerated imagesets. |
+
+## Icon meaning
+
+The MingCute swap kept the old ink box and changed the drawing. These rows pointed at a glyph with a different meaning. Each one is either another MingCute file, a MingCute drawing with a slash, a lock, or letters added under `Tellomi/Icons/semantic/`, or the upstream PDF put back. `generate_icons.py` still scales them with `upstream_ink.json`. `check_sizes.py` passed (204 compared). Login screens are unchanged.
+
+Left as they were, on purpose:
+
+- Sticker and the settings GIF stay `sticker` and `film` in `mapping.csv`. `cursor/semantic-icons-f5af` draws the face and the GIF letters in separate imagesets.
+- `Chat/Input/Text/IconVideo` stays `video-camera`. That branch's test pins the round record button to the camcorder. The play-in-a-frame glyph was `Chat/Attach Menu/Video` and `Item List/Icons/Video`; those are the camcorder now.
+- `Chat/Input/Text/SendIcon` stays the up arrow and is not generated.
+- Location was already MingCute's map pin (a teardrop with a hole). It is not the crosshair (`target`). The three location imagesets are unchanged.
+
+Reverted to the upstream PDF, because the MingCute camcorder's viewfinder reads as a play triangle:
+
+- `Chat/Context Menu/VideoCall` (`ic_menuvideocall.pdf`). It is still a template image.
+
+`MingCute/svg/regular/clock.svg` was MingCute's icon named clock, which is a map pin with a check. The file is now MingCute `time`, a clock face. `Item List/Icons/Clock` and `Chat/Context Menu/Schedule` both use it.
+
+Other substitutions: forward arrows are `share-forward` (the hook points right), including `IconForwardSend`, which is no longer the same up arrow as Send. Unpin is `pin-2` plus a slash. The stealth eye is `eye-off`; the locked one adds a padlock. Mute for notifications is a bell, and "mute for" is that bell plus a Z. Business is a storefront, devices are a phone and a tablet, cellular is signal bars, stories is the dotted ring, Stars is a star inside a circle, data is a cylinder, select-all is a checklist, read-all is an inbox plus one check, mark-as-read is a bubble plus one check. Share is the box with an arrow. Topics is a bulleted list. Proxy is a shield with two arrows. The account-switch chevron points up and down. Poll is a bar chart. Report is a circle with an exclamation point. Members is two people, the group icon stays three. Trending stickers use the flame, not the drop-shaped `flame` glyph. AI tools are the letters AI.
+
+`Tellomi/Icons/test_icon_pairs.py` fails if pin and unpin, Eye and EyeLocked, Read and ReadAll and SelectAll, Business and a channel, or Devices and Cellular resolve to the same SVG.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/Icons/mapping.csv` | The rows above. `SendIcon` is still absent. |
+| `Tellomi/Icons/generate_icons.py` | `semantic/` names read from `Tellomi/Icons/semantic`. |
+| `Tellomi/Icons/semantic/` | Slash, lock, letters, and the other composed glyphs. |
+| `Tellomi/Icons/MingCute/svg/` | The additional MingCute files, and `clock.svg` replaced with `time`. |
+| `Tellomi/Icons/test_icon_pairs.py` | The pair check. |
+| `Chat/Context Menu/VideoCall.imageset` | Upstream camera PDF. |
+| `Images.xcassets` | The regenerated imagesets whose source changed. |

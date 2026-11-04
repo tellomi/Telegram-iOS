@@ -2,6 +2,8 @@
 
 `mapping.csv` is the list of asset-catalog imagesets replaced with MingCute.
 `line` reads `MingCute/svg/regular`, `fill` reads `MingCute/svg/filled`.
+A name starting with `semantic/` is a composed glyph in `semantic/`
+(a MingCute drawing plus a slash, a lock, or letters).
 The app tints the PDF at runtime, so each file is black on a clear page and
 keeps the imageset's point size. An empty canvas column fits the glyph into
 the original ink box. `WxH` is a new imageset. `match:<asset>` copies that
