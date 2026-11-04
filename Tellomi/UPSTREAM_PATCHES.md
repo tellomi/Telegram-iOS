@@ -625,3 +625,15 @@ The Calls tab already hides from a long-press on its icon (`CallListController.t
 | `submodules/SettingsUI/Sources/TellomiNavigationSettingsController.swift` | New. Discover, Calls, and Contacts switches. Chats and Settings are on and disabled (D-7). Calls uses `CallListSettings`, so the old Show Calls Tab switch still works. |
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | New module `TellomiFeedScreen`. Empty Discover tab (D-37). Not `NewsScreen`. Long-press hides it (D-38). `TellomiFeedScreenNode` imports `TelegramUIPreferences` so it can read `TellomiTabCopy`. |
 | `submodules/TelegramUI/BUILD` | Depends on that module. |
+
+## DC addresses from help.getConfig (M7 / D-33)
+
+`Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Network/TellomiDcAddress.swift` | New. `tellomiAcceptDcAddress` and `tellomiAcceptedDatacenterAddresses`. |
+| `submodules/TelegramCore/Sources/Network/TellomiDcOptionInputs.swift` | New. Reads `Api.DcOption` into that filter. |
+| `submodules/TelegramCore/Sources/State/ManagedConfigurationUpdates.swift` | The signed-in `help.getConfig` path writes only the addresses the filter keeps. |
+| `submodules/TelegramCore/Sources/State/Serialization.swift` | `requestDatacenterAddress` (datacenter discovery) uses the same filter. |
+| `submodules/TelegramCore/Tests/TellomiDcAddressTests.swift` | The literals from Android `check_dc_address.cpp`, plus empty, hostname-only, mixed, and duplicate cases. |

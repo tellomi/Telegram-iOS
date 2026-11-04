@@ -1,6 +1,6 @@
 # DC 地址：种子与 `help.getConfig`（M7 / D-33）
 
-结论：iOS **不会**把 `Tellomi/tellomi-server.json` 锁成永久地址。种子只在该数据中心还没有持久地址集时使用。已登录客户端拿到非空的 `help.getConfig` `dc_options` 后，会按数据中心 id 整表替换并写入钥匙串；之后的连接用这份表。没有任何 Tellomi 补丁在每次启动时把种子写回持久表。
+结论：iOS **不会**把 `Tellomi/tellomi-server.json` 锁成永久地址。种子只在该数据中心还没有持久地址集时使用。已登录客户端拿到 `help.getConfig` 里能通过 `inet_pton` 的地址后，会按数据中心 id 整表替换并写入钥匙串；之后的连接用这份表。主机名、空列表、某一只 DC 过滤后一个 IP 都不剩，都不会写入。没有任何 Tellomi 补丁在每次启动时把种子写回持久表。
 
 生产上这份表今天是空的，所以已安装的客户端目前仍停在种子上。把地址写进服务端配置并重启 `bff` 之后，不升级的 iOS 会改连新 IP。下面的测试 IP 步骤用来确认这一点。本文只覆盖 iOS 仓库；安卓不在这个检出里。
 
@@ -38,27 +38,49 @@ if (addressSet != nil && addressSet.addressList.count != 0) {
 
 `Account` 初始化末尾调用 `restartConfigurationUpdates()`，立刻拉一次 `help.getConfig`，之后每小时一次（`managedConfigurationUpdates` 里 `suspendAwareDelay` 一小时再 `restart`）。未登录的 `UnauthorizedAccount` 不跑这条。
 
-`submodules/TelegramCore/Sources/State/ManagedConfigurationUpdates.swift` 把每个 `dcOption` 收成按 DC id 分组的列表，再整表替换：
+`submodules/TelegramCore/Sources/State/ManagedConfigurationUpdates.swift` 把每个 `dcOption` 交给 `tellomiAcceptedDatacenterAddresses`（`TellomiDcAddress.swift`）。发现传输用的 `Serialization.requestDatacenterAddress` 走同一个函数。规则与安卓 `tellomiAcceptDcAddress` 相同：端口必须在 1–65535，并且 `ipv6` 标志选中的地址族要让 `inet_pton` 成功。通过的地址按 DC id 整表替换：
 
 ```swift
-network.request(Api.functions.help.getConfig()) |> retryRequest
-// ...
-for option in dcOptions { /* 按 id 填 addressList */ }
-network.context.performBatchUpdates {
-    for (id, list) in addressList {
-        network.context.updateAddressSetForDatacenter(
-            withId: id,
-            addressSet: MTDatacenterAddressSet(addressList: list),
-            forceUpdateSchemes: false)
+let addressList = tellomiAcceptedDatacenterAddresses(tellomiDcOptionInputs(dcOptions))
+if !addressList.isEmpty {
+    network.context.performBatchUpdates {
+        for (id, list) in addressList {
+            let addresses = list.map { MTDatacenterAddress(ip: $0.host, port: $0.port, /* flags, secret */) }
+            network.context.updateAddressSetForDatacenter(
+                withId: id,
+                addressSet: MTDatacenterAddressSet(addressList: addresses),
+                forceUpdateSchemes: false)
+        }
     }
 }
 ```
 
-`updateAddressSetForDatacenterWithId:forceUpdateSchemes:` 用这只 DC 的新列表换掉旧列表，并写回钥匙串。`dc_options` 为空时循环零次，**不会**清掉已保存的地址。某一只 DC 的列表为空时，`MTDiscoverDatacenterAddressAction` `getConfigSuccess:` 同样不调用更新。因此一条坏的空配置不会把客户端砖死；它只是留在上一次成功的地址（或种子）上。
+`updateAddressSetForDatacenterWithId:forceUpdateSchemes:` 用这只 DC 的新列表换掉旧列表，并写回钥匙串。下面几种情况**不会**调用它，已保存的地址或种子留着：
+
+- `dc_options` 为空。
+- 某一只 DC 的地址全是主机名（例如 `api.tellomi.cn`），或端口非法，或 IPv4/IPv6 标志和字面量对不上。过滤后该 DC 不在结果里。
+- 其它 DC 里还有合法 IP 时，只替换那些 DC。主机名被丢掉，不和 IP 混着写入。
+
+某一只 DC 的列表为空时，`MTDiscoverDatacenterAddressAction` `getConfigSuccess:` 同样不调用更新。因此一条坏的空配置或主机名配置不会把客户端砖死；它只是留在上一次成功的地址（或种子）上。同一地址族里重复的 `主机+端口` 只留第一条。
 
 `forceUpdateSchemes` 这里是 `false`。持久表原先就是空的时（按当前这份空 `dc_options` 连过的客户端就是这样），`previousAddressSetWasEmpty` 为真，`MTProto` `contextDatacenterTransportSchemesUpdated:shouldReset:` 会当场拆掉传输并按新表重连。持久表里已经有上一份非空地址时，当前这条连接要等下次进程启动，或等这条连接失败后的重探，才改用新 IP。启动时方案来自持久表；种子主机名对不上表里的 IP，不会被当成已选方案留下。
 
-iOS 从 `dcOption` 读的标志位：bit 1 媒体、bit 2 仅 TCP、bit 3 CDN、bit 4 代理优先，以及可选 `secret`。**不读** `this_port_only`（bit 5）。发现传输时，除了声明的端口，还会额外探 80 和 5222（`MTDiscoverConnectionSignals` `alternatePortsForProxySettings:`）；声明端口没有那 5 秒附加延迟。正常建连用的是声明端口。唯一一条地址不要标 `media_only`，否则主连接会把该地址滤掉。
+iOS 从 `dcOption` 读的标志位：bit 0 是否按 IPv6 做 `inet_pton`、bit 1 媒体、bit 2 仅 TCP、bit 3 CDN、bit 4 代理优先，以及可选 `secret`。**不读** `this_port_only`（bit 5）。发现传输时，除了声明的端口，还会额外探 80 和 5222（`MTDiscoverConnectionSignals` `alternatePortsForProxySettings:`）；声明端口没有那 5 秒附加延迟。正常建连用的是声明端口。唯一一条地址不要标 `media_only`，否则主连接会把该地址滤掉。
+
+## 和安卓 #52 的差别
+
+安卓 `TELLOMI_LOCK_DC_ADDRESSES` 默认改为 `false` 之后，`help.getConfig` 才会 `replaceAddresses`。iOS 没有这把锁：`tellomi-server.json` 只提供种子，`setSeedAddressSetForDatacenterWithId` 不写钥匙串。持久表非空时种子不会盖回去。这次补上的是安卓在解锁时加的过滤，以前 iOS 会把 `dc_options` 里的主机名原样写进持久表。
+
+| | 安卓 #52 | iOS |
+| --- | --- | --- |
+| 种子会不会锁死 | 不会。某个 DC 已经在 `tgnet.dat` 里时，构建期种子不覆盖它。 | 不会。种子只在持久表缺这只 DC 或列表为空时使用。 |
+| 空 `dc_options` | 不替换，也不为这次配置写地址。 | 不调用 `updateAddressSet`。 |
+| 主机名 | `inet_pton` 失败就丢掉。该地址族一个不剩则不替换。 | 同样丢掉。这只 DC 一个 IP 都不剩则不替换。 |
+| 合法 IP | 替换对应地址族。 | 替换这只 DC 的整张表（iOS 一张表装下四个族）。新表里只有通过过滤的地址。 |
+| 未登录 | 介绍页会请求 `help.getConfig`。 | `UnauthorizedAccount` 不跑这条轮询。登录成功后的 `Account` 启动时立刻请求。登录流程本身没有改。 |
+| 种子形式 | 构建期种子是 IP（`8.137.39.82`），因为拨号只用 `inet_pton`。 | 种子仍是 `api.tellomi.cn`，`GCDAsyncSocket` 用 `getaddrinfo` 解析。它不经过上面的过滤，也不会被 `getConfig` 写进持久表。 |
+
+安卓按 IPv4、IPv6、媒体 IPv4、媒体 IPv6 四个族分别替换：某一族过滤后为空就留着该族的旧地址。iOS 的持久表是每只 DC 一张列表，有合法 IP 时整张换成这些 IP。Tellomi 只有 DC 1 的 IPv4，两边结果一样。不要靠「只下发 IPv6、旧的 IPv4 还留着」这种安卓行为。
 
 ## 生产 `help.getConfig` 现在下发什么
 
