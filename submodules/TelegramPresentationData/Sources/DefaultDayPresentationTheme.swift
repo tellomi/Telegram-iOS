@@ -87,22 +87,20 @@ public func tellomiAvailableGradients(dark: Bool) -> [[UInt32]] {
     return dark ? [] : []
 }
 
-public func tellomiEffectiveChatWallpaper(_ wallpaper: TelegramWallpaper, dark: Bool) -> TelegramWallpaper {
-    switch wallpaper {
-    case .builtin:
-        return tellomiDefaultWallpaper(dark: dark)
-    case let .color(color):
-        let stripped = color & 0x00ffffff
-        if stripped == TellomiWallpaperPresets.legacyLightSolid {
-            return tellomiDefaultWallpaper(dark: false)
-        }
-        if stripped == TellomiWallpaperPresets.legacyDarkSolid {
-            return tellomiDefaultWallpaper(dark: true)
-        }
-        return wallpaper
-    default:
+public func tellomiEffectiveChatWallpaper(_ wallpaper: TelegramWallpaper, dark: Bool, hasSavedWallpaper: Bool) -> TelegramWallpaper {
+    if case let .color(color) = wallpaper, hasSavedWallpaper, !TellomiWallpaperMigration.replacesSavedColor(color) {
         return wallpaper
     }
+    let isBuiltinToken: Bool
+    if case .builtin = wallpaper {
+        isBuiltinToken = true
+    } else {
+        isBuiltinToken = false
+    }
+    if isBuiltinToken && TellomiWallpaperMigration.replacesWithBundledDefault(hasSavedWallpaper: hasSavedWallpaper, isBuiltinToken: true) {
+        return tellomiDefaultWallpaper(dark: dark)
+    }
+    return wallpaper
 }
 
 public func tellomiWallpaper(for entry: TellomiWallpaperEntry) -> TelegramWallpaper {

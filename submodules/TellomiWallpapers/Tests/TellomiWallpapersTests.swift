@@ -76,6 +76,29 @@ final class TellomiWallpapersTests: XCTestCase {
         XCTAssertNotEqual(TellomiWallpaperPresets.darkSolid, TellomiWallpaperPresets.legacyDarkSolid)
     }
 
+    func testSavedWallpaperIncludingPureBlackIsKept() {
+        let chosen = [
+            TellomiWallpaperPresets.legacyDarkSolid,
+            TellomiWallpaperPresets.legacyLightSolid,
+            TellomiWallpaperPresets.darkSolid,
+            TellomiWallpaperPresets.lightSolid,
+            0x112233 as UInt32,
+        ]
+        for color in chosen {
+            XCTAssertFalse(TellomiWallpaperMigration.replacesSavedColor(color), String(format: "%06X", color))
+            XCTAssertFalse(TellomiWallpaperMigration.replacesWithBundledDefault(hasSavedWallpaper: true, isBuiltinToken: false))
+        }
+    }
+
+    func testUnsavedWallpaperUsesTheBundledDefault() {
+        XCTAssertTrue(TellomiWallpaperMigration.replacesWithBundledDefault(hasSavedWallpaper: false, isBuiltinToken: false))
+        XCTAssertTrue(TellomiWallpaperMigration.replacesWithBundledDefault(hasSavedWallpaper: false, isBuiltinToken: true))
+    }
+
+    func testBuiltinTokenMigratesBecauseItIsNotAChosenColor() {
+        XCTAssertTrue(TellomiWallpaperMigration.replacesWithBundledDefault(hasSavedWallpaper: true, isBuiltinToken: true))
+    }
+
     func testBubbleColorsAndSolidShadow() {
         XCTAssertEqual(TellomiBubbleColors.incomingLight, 0xFFFFFF)
         XCTAssertEqual(TellomiBubbleColors.incomingDark, 0x202C33)

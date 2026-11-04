@@ -6,6 +6,7 @@ import TelegramCore
 import Contacts
 import Display
 import TelegramUIPreferences
+import TellomiWallpapers
 import AppBundle
 import Sunrise
 import PresentationStrings
@@ -461,8 +462,9 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
         let effectiveColors = themeSettings.themeSpecificAccentColors[effectiveTheme.index]
         let theme = makePresentationTheme(mediaBox: accountManager.mediaBox, themeReference: effectiveTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.colorFor(baseTheme: preferredBaseTheme ?? .day), bubbleColors: effectiveColors?.customBubbleColors ?? [], baseColor: effectiveColors?.baseColor) ?? defaultPresentationTheme
         
-        var effectiveChatWallpaper: TelegramWallpaper = (themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: effectiveTheme, accentColor: effectiveColors)] ?? themeSettings.themeSpecificChatWallpapers[effectiveTheme.index]) ?? theme.chat.defaultWallpaper
-        effectiveChatWallpaper = tellomiEffectiveChatWallpaper(effectiveChatWallpaper, dark: theme.overallDarkAppearance)
+        let savedChatWallpaper = themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: effectiveTheme, accentColor: effectiveColors)] ?? themeSettings.themeSpecificChatWallpapers[effectiveTheme.index]
+        var effectiveChatWallpaper: TelegramWallpaper = savedChatWallpaper ?? theme.chat.defaultWallpaper
+        effectiveChatWallpaper = tellomiEffectiveChatWallpaper(effectiveChatWallpaper, dark: theme.overallDarkAppearance, hasSavedWallpaper: savedChatWallpaper != nil)
         
         let dateTimeFormat = currentDateTimeFormat()
         let stringsValue: PresentationStrings
@@ -812,11 +814,14 @@ public func updatedPresentationData(accountManager: AccountManager<TelegramAccou
         let themeSpecificWallpaper = (themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: themeSettings.theme, accentColor: currentColors)] ?? themeSettings.themeSpecificChatWallpapers[themeSettings.theme.index])
         
         let currentWallpaper: TelegramWallpaper
+        let currentWallpaperWasSaved: Bool
         if let themeSpecificWallpaper = themeSpecificWallpaper {
             currentWallpaper = themeSpecificWallpaper
+            currentWallpaperWasSaved = true
         } else {
             let theme = makePresentationTheme(mediaBox: accountManager.mediaBox, themeReference: themeSettings.theme, accentColor: currentColors?.color, bubbleColors: currentColors?.customBubbleColors ?? [], wallpaper: currentColors?.wallpaper, baseColor: currentColors?.baseColor) ?? defaultPresentationTheme
             currentWallpaper = theme.chat.defaultWallpaper
+            currentWallpaperWasSaved = false
         }
         
         return (.single(defaultServiceBackgroundColor)
@@ -833,6 +838,7 @@ public func updatedPresentationData(accountManager: AccountManager<TelegramAccou
                         var effectiveColors = currentColors
                         
                         var switchedToNightModeWallpaper = false
+                        var wallpaperWasSaved = currentWallpaperWasSaved
                         var preferredBaseTheme: TelegramBaseTheme?
                         if autoNightModeTriggered {
                             let automaticTheme = themeSettings.automaticThemeSwitchSetting.theme
@@ -843,6 +849,7 @@ public func updatedPresentationData(accountManager: AccountManager<TelegramAccou
                             if let themeSpecificWallpaper = themeSpecificWallpaper {
                                 effectiveChatWallpaper = themeSpecificWallpaper
                                 switchedToNightModeWallpaper = true
+                                wallpaperWasSaved = true
                             }
                             effectiveTheme = automaticTheme
                             if let baseTheme = themeSettings.themePreferredBaseTheme[effectiveTheme.index], [.night, .tinted].contains(baseTheme) {
@@ -857,7 +864,7 @@ public func updatedPresentationData(accountManager: AccountManager<TelegramAccou
                             }
                         }
                         
-                        effectiveChatWallpaper = tellomiEffectiveChatWallpaper(effectiveChatWallpaper, dark: tellomiResolvedThemeIsDark(effectiveTheme, preferredBaseTheme: preferredBaseTheme))
+                        effectiveChatWallpaper = tellomiEffectiveChatWallpaper(effectiveChatWallpaper, dark: tellomiResolvedThemeIsDark(effectiveTheme, preferredBaseTheme: preferredBaseTheme), hasSavedWallpaper: wallpaperWasSaved)
                         
                         if let colors = effectiveColors, colors.baseColor == .theme {
                             effectiveColors = nil
@@ -865,7 +872,7 @@ public func updatedPresentationData(accountManager: AccountManager<TelegramAccou
                         
                         let themeValue = makePresentationTheme(mediaBox: accountManager.mediaBox, themeReference: effectiveTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.colorFor(baseTheme: preferredBaseTheme ?? .day), bubbleColors: effectiveColors?.customBubbleColors ?? [], wallpaper: effectiveColors?.wallpaper, baseColor: effectiveColors?.baseColor, serviceBackgroundColor: serviceBackgroundColor) ?? defaultPresentationTheme
                         
-                        if autoNightModeTriggered && !switchedToNightModeWallpaper {
+                        if autoNightModeTriggered && !switchedToNightModeWallpaper && TellomiWallpaperMigration.replacesWithBundledDefault(hasSavedWallpaper: wallpaperWasSaved, isBuiltinToken: false) {
                             switch effectiveChatWallpaper {
                                 case .builtin, .color, .gradient:
                                     effectiveChatWallpaper = themeValue.chat.defaultWallpaper

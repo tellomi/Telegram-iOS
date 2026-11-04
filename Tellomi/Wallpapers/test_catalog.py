@@ -81,6 +81,8 @@ class CatalogTests(unittest.TestCase):
         self.assertIn("darkSolid: UInt32 = 0x101418", source)
         self.assertIn("incomingLight: UInt32 = 0xFFFFFF", source)
         self.assertIn("incomingDark: UInt32 = 0x202C33", source)
+        self.assertIn("func replacesSavedColor", source)
+        self.assertNotIn("legacyDarkSolid {\n            return tellomiDefaultWallpaper", open(os.path.join(ROOT, "submodules", "TelegramPresentationData", "Sources", "DefaultDayPresentationTheme.swift"), encoding="utf-8").read())
         self.assertIn("radius: Double = 0.5", source)
         for phrase in ("Tabler Icons", "MIT", "Lucide", "ISC", "Steve Schoger", "CC BY 4.0", "Topography", "Polka Dots"):
             self.assertIn(phrase, source)

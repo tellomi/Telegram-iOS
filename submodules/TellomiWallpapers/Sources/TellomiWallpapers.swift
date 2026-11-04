@@ -31,6 +31,30 @@ public enum TellomiAccentColors {
     }
 }
 
+public enum TellomiWallpaperMigration {
+    /// A color stored in the wallpaper map is a choice. `#000000` and the old
+    /// default `#F2F2F2` look the same as a color the user picked, so none of
+    /// them are rewritten.
+    public static func replacesSavedColor(_ color: UInt32) -> Bool {
+        switch color {
+        case TellomiWallpaperPresets.legacyLightSolid, TellomiWallpaperPresets.legacyDarkSolid, TellomiWallpaperPresets.lightSolid, TellomiWallpaperPresets.darkSolid:
+            return false
+        default:
+            return false
+        }
+    }
+
+    /// No saved wallpaper means the built-in default, which is now the doodle.
+    /// `.builtin` is that same default token, not a chosen color, so it migrates
+    /// even when it was stored.
+    public static func replacesWithBundledDefault(hasSavedWallpaper: Bool, isBuiltinToken: Bool) -> Bool {
+        if isBuiltinToken {
+            return true
+        }
+        return !hasSavedWallpaper
+    }
+}
+
 public enum TellomiWallpaperPresets {
     public static let lightSolid: UInt32 = 0xF0F2F5
     public static let darkSolid: UInt32 = 0x101418
