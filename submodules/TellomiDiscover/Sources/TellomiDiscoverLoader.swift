@@ -3,6 +3,9 @@ import Foundation
 public enum TellomiDiscoverClientError: Equatable, Error {
     case signedOut
     case disabled
+    case audienceInvalid
+    case userInvalid
+    case userBlocked
     case notPublishable
     case hidden
     case unavailable
@@ -141,7 +144,10 @@ private func tellomiDiscoverLocalFailure(_ operation: TellomiDiscoverOperation) 
     switch operation {
     case .capabilities, .status, .engineConfig:
         return nil
-    case .feed:
+    case let .feed(kind, _, _):
+        if kind == .nearby {
+            return .unavailable
+        }
         return nil
     case let .cards(identifiers):
         return tellomiDiscoverCardsBody(identifiers) == nil ? .notFound : nil
@@ -220,8 +226,12 @@ public struct TellomiDiscoverCopy: Equatable {
     public var contacts: String
     public var closeFriends: String
     public var selected: String
-    public var needsAudienceToken: String
-    public var excludedPeers: String
+    public var exclude: String
+    public var audienceInvalid: String
+    public var userInvalid: String
+    public var userBlocked: String
+    public var discoverDisabled: String
+    public var nearbyEmpty: String
     public var aiGenerated: String
     public var quoteDeleted: String
     public var publish: String
@@ -247,8 +257,12 @@ public struct TellomiDiscoverCopy: Equatable {
                 contacts: "我的联系人",
                 closeFriends: "密友",
                 selected: "选定的用户",
-                needsAudienceToken: "选定的用户还不能发布。",
-                excludedPeers: "排除部分人还不能发布。",
+                exclude: "不给谁看",
+                audienceInvalid: "名单无效，请重新选择。",
+                userInvalid: "名单里有人无法使用。",
+                userBlocked: "名单里有人已互相拉黑。",
+                discoverDisabled: "发现暂时不可用。",
+                nearbyEmpty: "同城动态稍后会显示在这里。",
                 aiGenerated: "AI 生成",
                 quoteDeleted: "原动态已被作者删除",
                 publish: "发布"
@@ -273,8 +287,12 @@ public struct TellomiDiscoverCopy: Equatable {
             contacts: "My Contacts",
             closeFriends: "Close Friends",
             selected: "Selected People",
-            needsAudienceToken: "Selected people can't be published yet.",
-            excludedPeers: "Excluding people can't be published yet.",
+            exclude: "Exclude",
+            audienceInvalid: "That list can't be used. Choose again.",
+            userInvalid: "Someone on the list can't be added.",
+            userBlocked: "Someone on the list is blocked.",
+            discoverDisabled: "Discover isn't available right now.",
+            nearbyEmpty: "Nearby posts will show up here.",
             aiGenerated: "AI generated",
             quoteDeleted: "The original post was deleted by its author",
             publish: "Post"
@@ -292,18 +310,31 @@ public struct TellomiDiscoverCopy: Equatable {
         case .include:
             return self.selected
         case .exclude:
-            return self.excludedPeers
+            return self.exclude
         }
     }
 
     public func reasonText(_ reason: String?) -> String? {
         switch reason {
-        case "needs_audience_token":
-            return self.needsAudienceToken
-        case "excluded_peers":
-            return self.excludedPeers
+        case "audience_invalid":
+            return self.audienceInvalid
         default:
             return nil
+        }
+    }
+
+    public func failureText(_ error: TellomiDiscoverClientError) -> String? {
+        switch error {
+        case .audienceInvalid:
+            return self.audienceInvalid
+        case .userInvalid:
+            return self.userInvalid
+        case .userBlocked:
+            return self.userBlocked
+        case .disabled:
+            return self.discoverDisabled
+        case .signedOut, .notPublishable, .hidden, .unavailable, .unauthorized, .notFound, .unreadable:
+            return self.failed
         }
     }
 }

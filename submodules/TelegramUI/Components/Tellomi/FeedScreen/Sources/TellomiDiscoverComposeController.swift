@@ -2,6 +2,7 @@ import AccountContext
 import AsyncDisplayKit
 import Display
 import Foundation
+import Postbox
 import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
@@ -13,7 +14,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     private let context: AccountContext
     private let textLimit: Int
     private let nonce = UUID().uuidString
-    private let publish: (String, TellomiDiscoverVisibility, String, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void
+    private let publish: (String, TellomiDiscoverVisibility, [Int64], String, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void
     private let published: () -> Void
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
@@ -23,8 +24,9 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     private let visibilityButton = UIButton(type: .system)
     private let hintLabel = UILabel()
     private var sending = false
+    private var sendError: TellomiDiscoverClientError?
 
-    init(context: AccountContext, textLimit: Int, publish: @escaping (String, TellomiDiscoverVisibility, String, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void) {
+    init(context: AccountContext, textLimit: Int, publish: @escaping (String, TellomiDiscoverVisibility, [Int64], String, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void) {
         self.context = context
         self.textLimit = textLimit
         self.publish = publish
@@ -95,8 +97,9 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
             return
         }
         self.sending = true
+        self.sendError = nil
         self.apply()
-        self.publish(self.textView.text ?? "", choice.visibility, self.nonce) { [weak self] result in
+        self.publish(self.textView.text ?? "", choice.visibility, choice.userIds, self.nonce) { [weak self] result in
             guard let self else {
                 return
             }
@@ -105,14 +108,22 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
             case .success:
                 self.published()
                 self.navigationController?.popViewController(animated: true)
-            case .failure:
+            case let .failure(error):
+                self.sendError = error
                 self.apply()
             }
         }
     }
 
     private func choice() -> TellomiDiscoverAudienceChoice? {
-        return tellomiDiscoverAudience(base: self.privacy.base.tellomiDiscoverBase, includePeerIds: self.privacy.additionallyIncludePeers.map { $0.toInt64() })
+        var ids: [Int64] = []
+        for peerId in self.privacy.additionallyIncludePeers {
+            guard peerId.namespace == Namespaces.Peer.CloudUser else {
+                return TellomiDiscoverAudienceChoice(visibility: .include, publishable: false, reason: "audience_invalid", userIds: [])
+            }
+            ids.append(peerId.id._internalGetInt64Value())
+        }
+        return tellomiDiscoverAudience(base: self.privacy.base.tellomiDiscoverBase, includePeerIds: ids, selfUserId: self.context.account.peerId.id._internalGetInt64Value())
     }
 
     private func apply() {
@@ -121,12 +132,14 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         let title = choice.map { copy.visibilityTitle($0.visibility) } ?? copy.everyone
         self.visibilityButton.setTitle(copy.visibility + " · " + title, for: .normal)
         self.visibilityButton.setTitleColor(self.presentationData.theme.list.itemAccentColor, for: .normal)
-        self.hintLabel.text = copy.reasonText(choice?.reason)
+        let errorText = self.sendError.flatMap { copy.failureText($0) }
+        self.hintLabel.text = errorText ?? copy.reasonText(choice?.reason)
         self.hintLabel.textColor = self.presentationData.theme.list.itemSecondaryTextColor
         self.hintLabel.font = Font.regular(13.0)
         self.textView.textColor = self.presentationData.theme.list.itemPrimaryTextColor
         self.displayNode.backgroundColor = self.presentationData.theme.list.plainBackgroundColor
-        let canSend = !self.sending && choice?.publishable == true && tellomiDiscoverPublishBody(text: self.textView.text ?? "", visibility: choice?.visibility ?? .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: self.textLimit) != nil
+        let text = self.textView.text ?? ""
+        let canSend = !self.sending && choice?.publishable == true && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= self.textLimit && tellomiDiscoverClientNonce(self.nonce)
         let item = UIBarButtonItem(title: copy.publish, style: .done, target: self, action: #selector(self.sendPressed))
         item.isEnabled = canSend
         self.navigationItem.setRightBarButton(item, animated: false)

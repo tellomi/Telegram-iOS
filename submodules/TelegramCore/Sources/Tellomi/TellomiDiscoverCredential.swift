@@ -14,12 +14,17 @@ public func tellomiDiscoverEngineCredential(account: Account) -> Signal<TellomiD
     }
 }
 
+public func tellomiDiscoverAudienceToken(account: Account, kind: String, userIds: [Int64]) -> Signal<TellomiDiscoverAudienceToken, MTRpcError> {
+    let payload = TellomiDiscoverTL.encodeAudienceRequest(kind: kind, userIds: userIds)
+    return account.network.request(tellomiDiscoverBoxedInvocation(name: "discover.getAudienceToken", payload: payload))
+    |> mapToSignal { data -> Signal<TellomiDiscoverAudienceToken, MTRpcError> in
+        guard let token = TellomiDiscoverTL.decodeAudienceToken(data) else {
+            return .fail(MTRpcError(errorCode: 500, errorDescription: "TL_VERIFICATION_ERROR"))
+        }
+        return .single(token)
+    }
+}
+
 public func tellomiDiscoverClientError(for error: MTRpcError) -> TellomiDiscoverClientError {
-    if error.errorCode == 401 || error.errorDescription.contains("AUTH_KEY_UNREGISTERED") {
-        return .signedOut
-    }
-    if error.errorDescription.contains("DISCOVER_DISABLED") || error.errorDescription.contains("USER_ID_INVALID") {
-        return .disabled
-    }
-    return .unavailable
+    return tellomiDiscoverClientError(description: error.errorDescription, code: error.errorCode)
 }

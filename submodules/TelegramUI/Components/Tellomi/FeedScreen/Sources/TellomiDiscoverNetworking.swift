@@ -13,7 +13,10 @@ func tellomiDiscoverMakeLoader(account: Account) -> TellomiDiscoverLoader {
         |> deliverOnMainQueue).start(next: { credential in
             completion(.success(credential))
         }, error: { error in
-            completion(.failure(tellomiDiscoverClientError(for: error)))
+            let mapped = tellomiDiscoverClientError(for: error)
+            // This RPC's USER_ID_INVALID means the signed-in account is deleted.
+            // The same code on getAudienceToken means one id in the list.
+            completion(.failure(mapped == .userInvalid ? .disabled : mapped))
         })
     }, http: { call, completion in
         transport.perform(call, completion: completion)

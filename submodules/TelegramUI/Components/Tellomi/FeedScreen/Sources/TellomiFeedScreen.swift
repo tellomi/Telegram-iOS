@@ -37,6 +37,7 @@ public final class TellomiFeedScreen: ViewController {
     private var feedGeneration = 0
     private var failed = false
     private var pendingPostId: String?
+    private var audienceDisposable: Disposable?
     private var appliedLayout: ContainerViewLayout?
 
     private var feedNode: TellomiFeedScreenNode {
@@ -93,6 +94,7 @@ public final class TellomiFeedScreen: ViewController {
         self.presentationDataDisposable?.dispose()
         self.configurationDisposable?.dispose()
         self.loggedOutDisposable?.dispose()
+        self.audienceDisposable?.dispose()
         self.loader.cancel()
     }
 
@@ -174,7 +176,7 @@ public final class TellomiFeedScreen: ViewController {
         self.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationData: self.presentationData), transition: .immediate)
 
         if let pendingPostId = self.pendingPostId {
-            let postChrome = tellomiDiscoverChrome(loggedIn: loggedIn, enabled: configuration.enabled, openedPostId: pendingPostId, failed: false)
+            let postChrome = tellomiDiscoverChrome(loggedIn: loggedIn, enabled: configuration.enabled, kind: self.kind, openedPostId: pendingPostId, failed: false)
             if case let .detail(id) = postChrome.surface {
                 self.pendingPostId = nil
                 let controller = TellomiDiscoverPostController(context: self.context, postId: id, loader: self.loader, configuration: configuration, loggedIn: loggedIn)
@@ -182,7 +184,7 @@ public final class TellomiFeedScreen: ViewController {
             }
         }
 
-        let chrome = tellomiDiscoverChrome(loggedIn: loggedIn, enabled: configuration.enabled, openedPostId: nil, failed: self.failed)
+        let chrome = tellomiDiscoverChrome(loggedIn: loggedIn, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: self.failed)
         if !chrome.issuesNetwork {
             self.loader.cancel()
             self.loading = false
@@ -210,6 +212,10 @@ public final class TellomiFeedScreen: ViewController {
             mode = .feed
             legacyTitle = copy.emptyTitle
             legacyBody = copy.emptyText
+        case .nearby:
+            mode = .feed
+            legacyTitle = copy.emptyTitle
+            legacyBody = copy.nearbyEmpty
         }
         let selected = self.tabs.firstIndex(of: self.kind) ?? 0
         if self.isNodeLoaded {
@@ -240,6 +246,8 @@ public final class TellomiFeedScreen: ViewController {
             return copy.recommend
         case .following:
             return copy.following
+        case .nearby:
+            return copy.nearby
         }
     }
 
@@ -260,7 +268,7 @@ public final class TellomiFeedScreen: ViewController {
 
     private func loadFeed(reset: Bool) {
         let configuration = self.configuration()
-        let chrome = tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, openedPostId: nil, failed: false)
+        let chrome = tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: false)
         guard chrome.loadsFeed else {
             return
         }
@@ -301,6 +309,11 @@ public final class TellomiFeedScreen: ViewController {
             return
         } else if self.engineConfigLoaded == false, reset {
             operation = .engineConfig
+        } else if kind == .nearby {
+            self.loading = false
+            self.loadingMore = false
+            self.sync(reload: false)
+            return
         } else {
             operation = .feed(kind, cursor: cursor, personalized: true)
         }
@@ -409,11 +422,12 @@ public final class TellomiFeedScreen: ViewController {
 
     @objc private func composePressed() {
         let configuration = self.configuration()
-        guard tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, openedPostId: nil, failed: false).showsCompose else {
+        guard tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: false).showsCompose else {
             return
         }
         let textLimit = self.textLimit
-        let controller = TellomiDiscoverComposeController(context: self.context, textLimit: textLimit, publish: { [weak self] text, visibility, nonce, completion in
+        let selfUserId = self.context.account.peerId.id._internalGetInt64Value()
+        let controller = TellomiDiscoverComposeController(context: self.context, textLimit: textLimit, publish: { [weak self] text, visibility, userIds, nonce, completion in
             guard let self else {
                 completion(.failure(.signedOut))
                 return
@@ -423,7 +437,25 @@ public final class TellomiFeedScreen: ViewController {
                 completion(.failure(self.loggedOut ? .signedOut : .disabled))
                 return
             }
-            self.loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: text, visibility: visibility, audienceToken: nil, clientNonce: nonce, textLimit: textLimit), completion: completion)
+            let step = tellomiDiscoverPublishStep(text: text, visibility: visibility, userIds: userIds, selfUserId: selfUserId, clientNonce: nonce, textLimit: textLimit, token: nil, now: Int64(Date().timeIntervalSince1970))
+            switch step {
+            case .ready:
+                self.loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: text, visibility: visibility, audienceToken: nil, clientNonce: nonce, textLimit: textLimit), completion: completion)
+            case let .needsAudienceToken(kind, ids):
+                self.audienceDisposable?.dispose()
+                self.audienceDisposable = (tellomiDiscoverAudienceToken(account: self.context.account, kind: kind, userIds: ids)
+                |> deliverOnMainQueue).start(next: { [weak self] token in
+                    guard let self else {
+                        completion(.failure(.signedOut))
+                        return
+                    }
+                    self.loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: text, visibility: visibility, audienceToken: token.token, clientNonce: nonce, textLimit: textLimit), completion: completion)
+                }, error: { error in
+                    completion(.failure(tellomiDiscoverClientError(for: error)))
+                })
+            case let .rejected(error):
+                completion(.failure(error))
+            }
         }, published: { [weak self] in
             guard let self else {
                 return

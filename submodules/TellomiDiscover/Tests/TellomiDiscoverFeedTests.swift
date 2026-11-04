@@ -42,14 +42,14 @@ final class TellomiDiscoverFeedTests: XCTestCase {
             XCTAssertEqual(loader.credentialFetches, 0)
             XCTAssertTrue(loader.calls.isEmpty)
         }
-        let chrome = tellomiDiscoverChrome(loggedIn: false, enabled: true, openedPostId: "post-9", failed: false)
+        let chrome = tellomiDiscoverChrome(loggedIn: false, enabled: true, kind: .recommend, openedPostId: "post-9", failed: false)
         XCTAssertFalse(chrome.issuesNetwork)
         XCTAssertEqual(chrome.surface, .legacyEmpty(postUnavailable: true))
     }
 
     func testDisabledFlagNeverBuildsARequest() {
         let configuration = TellomiDiscoverConfiguration.resolve(enabledField: .missing, baseURLField: .missing)
-        let chrome = tellomiDiscoverChrome(loggedIn: true, enabled: false, openedPostId: nil, failed: false)
+        let chrome = tellomiDiscoverChrome(loggedIn: true, enabled: false, kind: .recommend, openedPostId: nil, failed: false)
         XCTAssertEqual(chrome.surface, .legacyEmpty(postUnavailable: false))
         XCTAssertFalse(chrome.issuesNetwork)
         let loader = RecordingLoader()
@@ -160,23 +160,102 @@ final class TellomiDiscoverFeedTests: XCTestCase {
         XCTAssertEqual((try! JSONSerialization.jsonObject(with: contacts!) as! [String: Any])["visibility"] as? String, "contacts")
     }
 
-    func testAudienceListStaysLocalUntilATokenExists() {
+    func testAudienceTokenRequestAndErrors() {
         XCTAssertEqual(TellomiDiscoverAudienceList.tokenType, "tellomi-feed-audience")
         XCTAssertEqual(TellomiDiscoverAudienceList.memberLimit, 500)
-        XCTAssertEqual(TellomiDiscoverAudienceList.maximumLifetime, 15 * 60)
+        XCTAssertEqual(TellomiDiscoverAudienceList.lifetime, 10 * 60)
         XCTAssertEqual(tellomiDiscoverAudienceList(kind: "include", members: ["abc"])?.members, ["abc"])
         XCTAssertNil(tellomiDiscoverAudienceList(kind: "include", members: []))
         XCTAssertNil(tellomiDiscoverAudienceList(kind: "include", members: Array(repeating: "abc", count: 501)))
         XCTAssertNil(tellomiDiscoverAudienceList(kind: "public", members: ["abc"]))
-        XCTAssertTrue(tellomiDiscoverAudienceExpiryIsValid(expires: 1_000, now: 200))
-        XCTAssertFalse(tellomiDiscoverAudienceExpiryIsValid(expires: 1_000, now: 0))
-        XCTAssertEqual(tellomiDiscoverAudience(base: .everyone, includePeerIds: [])?.visibility.rawValue, "public")
-        XCTAssertEqual(tellomiDiscoverAudience(base: .nobody, includePeerIds: [7])?.visibility, .include)
-        XCTAssertEqual(tellomiDiscoverAudience(base: .nobody, includePeerIds: [7])?.publishable, false)
-        XCTAssertEqual(tellomiDiscoverAudience(base: .everyone, includePeerIds: [3])?.visibility, .exclude)
-        XCTAssertEqual(tellomiDiscoverAudience(base: .everyone, includePeerIds: [3])?.publishable, false)
-        XCTAssertEqual(tellomiDiscoverAudience(base: .closeFriends, includePeerIds: [7])?.visibility.rawValue, "close_friends")
-        XCTAssertNil(tellomiDiscoverAudience(base: .nobody, includePeerIds: []))
+        XCTAssertTrue(tellomiDiscoverAudienceExpiryIsValid(expires: 600, now: 0))
+        XCTAssertFalse(tellomiDiscoverAudienceExpiryIsValid(expires: 601, now: 0))
+        XCTAssertFalse(tellomiDiscoverAudienceTokenNeedsRefresh(expires: 1_000, now: 939))
+        XCTAssertTrue(tellomiDiscoverAudienceTokenNeedsRefresh(expires: 1_000, now: 940))
+        XCTAssertEqual(tellomiDiscoverAudience(base: .everyone, includePeerIds: [], selfUserId: 1)?.visibility.rawValue, "public")
+        XCTAssertEqual(tellomiDiscoverAudience(base: .nobody, includePeerIds: [7], selfUserId: 1)?.visibility, .include)
+        XCTAssertEqual(tellomiDiscoverAudience(base: .nobody, includePeerIds: [7], selfUserId: 1)?.publishable, true)
+        XCTAssertEqual(tellomiDiscoverAudience(base: .nobody, includePeerIds: [7], selfUserId: 1)?.userIds, [7])
+        XCTAssertEqual(tellomiDiscoverAudience(base: .nobody, includePeerIds: [1], selfUserId: 1)?.publishable, false)
+        XCTAssertEqual(tellomiDiscoverAudience(base: .everyone, includePeerIds: [3], selfUserId: 1)?.visibility, .exclude)
+        XCTAssertEqual(tellomiDiscoverAudience(base: .everyone, includePeerIds: [3], selfUserId: 1)?.publishable, true)
+        XCTAssertEqual(tellomiDiscoverAudience(base: .closeFriends, includePeerIds: [7], selfUserId: 1)?.visibility.rawValue, "close_friends")
+        XCTAssertNil(tellomiDiscoverAudience(base: .nobody, includePeerIds: [], selfUserId: 1))
+        XCTAssertNil(tellomiDiscoverAudienceUserIds(kind: "include", userIds: [2, 2], selfUserId: 1))
+        XCTAssertNil(tellomiDiscoverAudienceUserIds(kind: "include", userIds: [], selfUserId: 1))
+        XCTAssertNil(tellomiDiscoverAudienceUserIds(kind: "include", userIds: [0], selfUserId: 1))
+        let step = tellomiDiscoverPublishStep(text: "hi", visibility: .include, userIds: [7], selfUserId: 1, clientNonce: self.nonce, textLimit: 500, token: nil, now: 0)
+        guard case let .needsAudienceToken(kind, ids) = step else {
+            XCTFail("expected a token request")
+            return
+        }
+        XCTAssertEqual(kind, "include")
+        XCTAssertEqual(ids, [7])
+        let ready = tellomiDiscoverPublishStep(text: "hi", visibility: .include, userIds: [7], selfUserId: 1, clientNonce: self.nonce, textLimit: 500, token: TellomiDiscoverAudienceToken(token: "signed-jwt", expires: 600), now: 0)
+        guard case let .ready(data) = ready else {
+            XCTFail("expected a post body")
+            return
+        }
+        let posted = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(posted["visibility"] as? String, "include")
+        XCTAssertEqual((posted["audience"] as? [String: String])?["audience_token"], "signed-jwt")
+        let stale = tellomiDiscoverPublishStep(text: "hi", visibility: .exclude, userIds: [7], selfUserId: 1, clientNonce: self.nonce, textLimit: 500, token: TellomiDiscoverAudienceToken(token: "old", expires: 100), now: 40)
+        guard case .needsAudienceToken = stale else {
+            XCTFail("expected a refresh")
+            return
+        }
+        let rejected = tellomiDiscoverPublishStep(text: "hi", visibility: .include, userIds: [1, 7], selfUserId: 1, clientNonce: self.nonce, textLimit: 500, token: nil, now: 0)
+        guard case .rejected(.audienceInvalid) = rejected else {
+            XCTFail("expected the caller's id to reject the list")
+            return
+        }
+        XCTAssertEqual(tellomiDiscoverClientError(description: "DISCOVER_DISABLED", code: 400), .disabled)
+        XCTAssertEqual(tellomiDiscoverClientError(description: "AUDIENCE_INVALID", code: 400), .audienceInvalid)
+        XCTAssertEqual(tellomiDiscoverClientError(description: "USER_ID_INVALID", code: 400), .userInvalid)
+        XCTAssertEqual(tellomiDiscoverClientError(description: "USER_IS_BLOCKED", code: 400), .userBlocked)
+        XCTAssertEqual(tellomiDiscoverClientError(description: "AUTH_KEY_UNREGISTERED", code: 401), .signedOut)
+        let copy = TellomiDiscoverCopy.resolve(languageCode: "zh")
+        XCTAssertEqual(copy.failureText(.disabled), "发现暂时不可用。")
+        XCTAssertEqual(copy.failureText(.audienceInvalid), "名单无效，请重新选择。")
+        XCTAssertEqual(copy.failureText(.userInvalid), "名单里有人无法使用。")
+        XCTAssertEqual(copy.failureText(.userBlocked), "名单里有人已互相拉黑。")
+        let bytes = TellomiDiscoverTL.encodeAudienceRequest(kind: "include", userIds: [42, 43])
+        XCTAssertEqual(Array(bytes), [
+            0xC2, 0x13, 0x52, 0xDC,
+            0x07, 0x69, 0x6E, 0x63, 0x6C, 0x75, 0x64, 0x65,
+            0x15, 0xC4, 0xB5, 0x1C,
+            0x02, 0x00, 0x00, 0x00,
+            0x2A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x2B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ])
+        var response = Data([0x81, 0x71, 0x17, 0xDA])
+        response.append(contentsOf: encodeString("signed-jwt"))
+        response.append(contentsOf: [0x58, 0x02, 0x00, 0x00])
+        XCTAssertEqual(TellomiDiscoverTL.decodeAudienceToken(response), TellomiDiscoverAudienceToken(token: "signed-jwt", expires: 600))
+        let loggedOut = RecordingLoader()
+        let finished = expectation(description: "no audience request")
+        loggedOut.loader.run(loggedIn: false, configuration: TellomiDiscoverConfiguration(enabled: true, baseURL: URL(string: "https://feed.example")!), operation: .publish(text: "hi", visibility: .include, audienceToken: "signed-jwt", clientNonce: self.nonce, textLimit: 500)) { result in
+            guard case .failure(.signedOut) = result else {
+                XCTFail("expected signed out")
+                return
+            }
+            finished.fulfill()
+        }
+        wait(for: [finished], timeout: 1)
+        XCTAssertTrue(loggedOut.calls.isEmpty)
+        XCTAssertNil(tellomiDiscoverFeedURL(base: URL(string: "https://feed.example")!, kind: .nearby, cursor: "chengdu", personalized: true))
+        let nearby = RecordingLoader()
+        let nearbyDone = expectation(description: "no nearby request")
+        nearby.loader.run(loggedIn: true, configuration: TellomiDiscoverConfiguration(enabled: true, baseURL: URL(string: "https://feed.example")!), operation: .feed(.nearby, cursor: "chengdu", personalized: true)) { result in
+            guard case .failure(.unavailable) = result else {
+                XCTFail("expected nearby to stay local")
+                return
+            }
+            nearbyDone.fulfill()
+        }
+        wait(for: [nearbyDone], timeout: 1)
+        XCTAssertTrue(nearby.calls.isEmpty)
+        XCTAssertEqual(nearby.credentialFetches, 0)
     }
 
     func testCredentialRoundTripAndRefresh() {
@@ -225,9 +304,9 @@ final class TellomiDiscoverFeedTests: XCTestCase {
     }
 
     func testEngineConfigTabsAndTextLimit() {
-        let data = #"{"enabled":true,"region":"cn","tabs":["recommend","following","nearby"],"recommend_mode":"editorial_chronological","personalization_toggle_visible":false,"limits":{"post_text_chars":500}}"#.data(using: .utf8)!
+        let data = #"{"enabled":true,"region":"cn","tabs":["recommend","hot","nearby"],"recommend_mode":"editorial_chronological","personalization_toggle_visible":false,"limits":{"post_text_chars":500}}"#.data(using: .utf8)!
         let config = tellomiDiscoverParseEngineConfig(data)
-        XCTAssertEqual(config?.tabs, [.recommend, .following])
+        XCTAssertEqual(config?.tabs, [.recommend, .nearby])
         XCTAssertEqual(config?.postTextChars, 500)
         XCTAssertEqual(config?.recommendMode, "editorial_chronological")
     }
@@ -235,11 +314,11 @@ final class TellomiDiscoverFeedTests: XCTestCase {
     func testCreatedPostAndUIChrome() {
         let created = tellomiDiscoverParseCreatedPost(#"{"id":"post-9","state":"pending","version":1}"#.data(using: .utf8)!)
         XCTAssertEqual(created, TellomiDiscoverCreatedPost(id: "post-9", state: "pending", version: 1))
-        let on = tellomiDiscoverChrome(loggedIn: true, enabled: true, openedPostId: "post-9", failed: false)
+        let on = tellomiDiscoverChrome(loggedIn: true, enabled: true, kind: .recommend, openedPostId: "post-9", failed: false)
         XCTAssertEqual(on.surface, .detail("post-9"))
         XCTAssertTrue(on.loadsPost)
         XCTAssertFalse(on.loadsFeed)
-        let tabs = tellomiDiscoverChrome(loggedIn: true, enabled: true, openedPostId: nil, failed: false)
+        let tabs = tellomiDiscoverChrome(loggedIn: true, enabled: true, kind: .recommend, openedPostId: nil, failed: false)
         XCTAssertEqual(tabs.surface, .feed)
         XCTAssertTrue(tabs.showsCompose)
         XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "zh-Hans").recommend, "推荐")
@@ -285,14 +364,16 @@ final class TellomiDiscoverFeedTests: XCTestCase {
 
 final class TellomiDiscoverFeedUITests: XCTestCase {
     func testUIFeedStaysOnTheEmptyPageUntilTheFlagIsOn() {
-        let signedOut = tellomiDiscoverChrome(loggedIn: false, enabled: true, openedPostId: "post-9", failed: false)
+        let signedOut = tellomiDiscoverChrome(loggedIn: false, enabled: true, kind: .recommend, openedPostId: "post-9", failed: false)
         XCTAssertEqual(signedOut.surface, .legacyEmpty(postUnavailable: true))
         XCTAssertFalse(signedOut.issuesNetwork)
         XCTAssertFalse(signedOut.showsCompose)
-        let tabs = tellomiDiscoverChrome(loggedIn: true, enabled: true, openedPostId: nil, failed: false)
+        let tabs = tellomiDiscoverChrome(loggedIn: true, enabled: true, kind: .recommend, openedPostId: nil, failed: false)
         XCTAssertEqual(tabs.surface, .feed)
-        XCTAssertTrue(tabs.showsCompose)
-        XCTAssertTrue(tabs.loadsFeed)
+        let nearby = tellomiDiscoverChrome(loggedIn: true, enabled: true, kind: .nearby, openedPostId: nil, failed: false)
+        XCTAssertEqual(nearby.surface, .nearby)
+        XCTAssertFalse(nearby.loadsFeed)
+        XCTAssertFalse(nearby.issuesNetwork)
     }
 }
 

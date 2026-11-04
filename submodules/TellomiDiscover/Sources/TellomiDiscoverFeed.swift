@@ -108,12 +108,17 @@ public enum TellomiDiscoverFeedKind: String, Equatable {
     case recommend
     case following
 
+    /// Shown when `feed/config` lists it. The nearby route is not called yet.
+    case nearby
+
     public init?(configName: String) {
         switch configName {
         case "recommend":
             self = .recommend
         case "following":
             self = .following
+        case "nearby":
+            self = .nearby
         default:
             return nil
         }
@@ -124,6 +129,8 @@ public enum TellomiDiscoverSurface: Equatable {
     case legacyEmpty(postUnavailable: Bool)
     case feed
     case detail(String)
+    /// Config listed nearby. No request is made until that route exists.
+    case nearby
 }
 
 public struct TellomiDiscoverChrome: Equatable {
@@ -138,7 +145,7 @@ public struct TellomiDiscoverChrome: Equatable {
     }
 }
 
-public func tellomiDiscoverChrome(loggedIn: Bool, enabled: Bool, openedPostId: String?, failed: Bool) -> TellomiDiscoverChrome {
+public func tellomiDiscoverChrome(loggedIn: Bool, enabled: Bool, kind: TellomiDiscoverFeedKind, openedPostId: String?, failed: Bool) -> TellomiDiscoverChrome {
     let postId = openedPostId.flatMap(tellomiDiscoverPostId)
     guard loggedIn, enabled else {
         return TellomiDiscoverChrome(
@@ -156,6 +163,15 @@ public func tellomiDiscoverChrome(loggedIn: Bool, enabled: Bool, openedPostId: S
             loadsFeed: false,
             loadsPost: true,
             failure: failed
+        )
+    }
+    if kind == .nearby {
+        return TellomiDiscoverChrome(
+            surface: .nearby,
+            showsCompose: true,
+            loadsFeed: false,
+            loadsPost: false,
+            failure: false
         )
     }
     return TellomiDiscoverChrome(
@@ -190,8 +206,8 @@ public enum TellomiDiscoverStoryBase: Equatable {
     case nobody
 }
 
-/// Engine `visibility`. `everyone` is sent as `public`. `include` and `exclude` need an
-/// audience token the server has not issued yet, so the composer keeps the row and does not post.
+/// Engine `visibility`. `everyone` is sent as `public`. `include` and `exclude` are also
+/// the `kind` of `discover.getAudienceToken`, and the post uses that same string.
 public enum TellomiDiscoverVisibility: String, Equatable {
     case everyone = "public"
     case contacts
@@ -203,7 +219,8 @@ public enum TellomiDiscoverVisibility: String, Equatable {
 public struct TellomiDiscoverAudienceList: Equatable {
     public static let tokenType = "tellomi-feed-audience"
     public static let memberLimit = 500
-    public static let maximumLifetime: Int64 = 15 * 60
+    /// teamgram signs the JWT for 10 minutes. The engine still rejects anything past 15.
+    public static let lifetime: Int64 = 10 * 60
 
     public var kind: String
     public var members: [String]
@@ -214,8 +231,8 @@ public struct TellomiDiscoverAudienceList: Equatable {
     }
 }
 
-/// A list teamgram will sign as `typ=tellomi-feed-audience`. Empty, over 500, or any other
-/// kind is not a list. This does not produce a JWT and is not sent.
+/// Member strings of a `typ=tellomi-feed-audience` list. Empty, over 500, or any other
+/// kind is not a list. The RPC itself takes teamgram user ids, not these strings.
 public func tellomiDiscoverAudienceList(kind: String, members: [String]) -> TellomiDiscoverAudienceList? {
     guard kind == TellomiDiscoverVisibility.include.rawValue || kind == TellomiDiscoverVisibility.exclude.rawValue else {
         return nil
@@ -233,46 +250,91 @@ public func tellomiDiscoverAudienceList(kind: String, members: [String]) -> Tell
 }
 
 public func tellomiDiscoverAudienceExpiryIsValid(expires: Int64, now: Int64) -> Bool {
-    return expires > now && expires - now <= TellomiDiscoverAudienceList.maximumLifetime
+    return expires > now && expires - now <= TellomiDiscoverAudienceList.lifetime
+}
+
+/// Re-fetch before `expires`. The 60 seconds is the engine's clock skew, not extra lifetime.
+public let tellomiDiscoverAudienceRefreshMargin: Int64 = 60
+
+public func tellomiDiscoverAudienceTokenNeedsRefresh(expires: Int64, now: Int64) -> Bool {
+    return now >= expires - tellomiDiscoverAudienceRefreshMargin
+}
+
+public struct TellomiDiscoverAudienceToken: Equatable {
+    public var token: String
+    public var expires: Int64
+
+    public init(token: String, expires: Int64) {
+        self.token = token
+        self.expires = expires
+    }
+}
+
+/// `user_ids` for `discover.getAudienceToken`. Nil is `AUDIENCE_INVALID`: bad kind, empty,
+/// more than 500, a duplicate, a non-positive id, or the caller.
+public func tellomiDiscoverAudienceUserIds(kind: String, userIds: [Int64], selfUserId: Int64) -> [Int64]? {
+    guard kind == TellomiDiscoverVisibility.include.rawValue || kind == TellomiDiscoverVisibility.exclude.rawValue else {
+        return nil
+    }
+    guard !userIds.isEmpty, userIds.count <= TellomiDiscoverAudienceList.memberLimit else {
+        return nil
+    }
+    var seen: Set<Int64> = []
+    for id in userIds {
+        if id <= 0 || id == selfUserId || seen.contains(id) {
+            return nil
+        }
+        seen.insert(id)
+    }
+    return userIds
 }
 
 public struct TellomiDiscoverAudienceChoice: Equatable {
     public var visibility: TellomiDiscoverVisibility
-    /// False when the engine still needs an audience token (selected people, or an
-    /// exclusion list). Those peer ids stay on the device and are not posted.
+    /// False when include/exclude fails the list rules. Those posts are not sent.
     public var publishable: Bool
     public var reason: String?
+    /// Teamgram user ids for `include` / `exclude`. Empty for the other visibilities.
+    public var userIds: [Int64]
 
-    public init(visibility: TellomiDiscoverVisibility, publishable: Bool, reason: String?) {
+    public init(visibility: TellomiDiscoverVisibility, publishable: Bool, reason: String?, userIds: [Int64]) {
         self.visibility = visibility
         self.publishable = publishable
         self.reason = reason
+        self.userIds = userIds
     }
 }
 
-/// Stories `Privacy.Base` plus its include list. `nobody` with people is "selected".
-/// `nobody` with an empty list is not a Discover audience. Exclusions on everyone or
-/// contacts cannot be sent until teamgram signs an audience token.
-public func tellomiDiscoverAudience(base: TellomiDiscoverStoryBase, includePeerIds: [Int64]) -> TellomiDiscoverAudienceChoice? {
+/// Stories `Privacy.Base` plus its include list. `nobody` with people is `include`.
+/// `nobody` with an empty list is not a Discover audience. Extra people on everyone
+/// or contacts are `exclude`, and both kinds are published with an audience token.
+public func tellomiDiscoverAudience(base: TellomiDiscoverStoryBase, includePeerIds: [Int64], selfUserId: Int64) -> TellomiDiscoverAudienceChoice? {
     switch base {
     case .everyone:
         if includePeerIds.isEmpty {
-            return TellomiDiscoverAudienceChoice(visibility: .everyone, publishable: true, reason: nil)
+            return TellomiDiscoverAudienceChoice(visibility: .everyone, publishable: true, reason: nil, userIds: [])
         }
-        return TellomiDiscoverAudienceChoice(visibility: .exclude, publishable: false, reason: "excluded_peers")
+        return tellomiDiscoverLimitedAudience(visibility: .exclude, userIds: includePeerIds, selfUserId: selfUserId)
     case .contacts:
         if includePeerIds.isEmpty {
-            return TellomiDiscoverAudienceChoice(visibility: .contacts, publishable: true, reason: nil)
+            return TellomiDiscoverAudienceChoice(visibility: .contacts, publishable: true, reason: nil, userIds: [])
         }
-        return TellomiDiscoverAudienceChoice(visibility: .exclude, publishable: false, reason: "excluded_peers")
+        return tellomiDiscoverLimitedAudience(visibility: .exclude, userIds: includePeerIds, selfUserId: selfUserId)
     case .closeFriends:
-        return TellomiDiscoverAudienceChoice(visibility: .closeFriends, publishable: true, reason: nil)
+        return TellomiDiscoverAudienceChoice(visibility: .closeFriends, publishable: true, reason: nil, userIds: [])
     case .nobody:
         if includePeerIds.isEmpty {
             return nil
         }
-        return TellomiDiscoverAudienceChoice(visibility: .include, publishable: false, reason: "needs_audience_token")
+        return tellomiDiscoverLimitedAudience(visibility: .include, userIds: includePeerIds, selfUserId: selfUserId)
     }
+}
+
+private func tellomiDiscoverLimitedAudience(visibility: TellomiDiscoverVisibility, userIds: [Int64], selfUserId: Int64) -> TellomiDiscoverAudienceChoice {
+    if let userIds = tellomiDiscoverAudienceUserIds(kind: visibility.rawValue, userIds: userIds, selfUserId: selfUserId) {
+        return TellomiDiscoverAudienceChoice(visibility: visibility, publishable: true, reason: nil, userIds: userIds)
+    }
+    return TellomiDiscoverAudienceChoice(visibility: visibility, publishable: false, reason: "audience_invalid", userIds: [])
 }
 
 public func tellomiDiscoverNormalizedCity(_ raw: String) -> String? {
@@ -416,6 +478,8 @@ public func tellomiDiscoverFeedURL(base: URL, kind: TellomiDiscoverFeedKind, cur
         if let cursor, !cursor.isEmpty {
             query.append(URLQueryItem(name: "cursor", value: cursor))
         }
+    case .nearby:
+        return nil
     }
     return tellomiDiscoverURL(base: base, path: "/v1/feed/\(kind.rawValue)", query: query)
 }
@@ -459,6 +523,52 @@ public func tellomiDiscoverPublishBody(text: String, visibility: TellomiDiscover
     return try? JSONSerialization.data(withJSONObject: object, options: [])
 }
 
+public enum TellomiDiscoverPublishStep: Equatable {
+    case ready(Data)
+    case needsAudienceToken(kind: String, userIds: [Int64])
+    case rejected(TellomiDiscoverClientError)
+}
+
+/// Include and exclude fetch `discover.getAudienceToken` first. The token is copied
+/// unchanged into `audience.audience_token`, and `visibility` is that same kind.
+public func tellomiDiscoverPublishStep(text: String, visibility: TellomiDiscoverVisibility, userIds: [Int64], selfUserId: Int64, clientNonce: String, textLimit: Int, token: TellomiDiscoverAudienceToken?, now: Int64) -> TellomiDiscoverPublishStep {
+    if visibility == .include || visibility == .exclude {
+        guard let ids = tellomiDiscoverAudienceUserIds(kind: visibility.rawValue, userIds: userIds, selfUserId: selfUserId) else {
+            return .rejected(.audienceInvalid)
+        }
+        if let token, !token.token.isEmpty, !tellomiDiscoverAudienceTokenNeedsRefresh(expires: token.expires, now: now) {
+            guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: token.token, clientNonce: clientNonce, textLimit: textLimit) else {
+                return .rejected(.notPublishable)
+            }
+            return .ready(body)
+        }
+        return .needsAudienceToken(kind: visibility.rawValue, userIds: ids)
+    }
+    guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: nil, clientNonce: clientNonce, textLimit: textLimit) else {
+        return .rejected(.notPublishable)
+    }
+    return .ready(body)
+}
+
+public func tellomiDiscoverClientError(description: String, code: Int32) -> TellomiDiscoverClientError {
+    if code == 401 || description.contains("AUTH_KEY_UNREGISTERED") {
+        return .signedOut
+    }
+    if description.contains("AUDIENCE_INVALID") {
+        return .audienceInvalid
+    }
+    if description.contains("USER_IS_BLOCKED") {
+        return .userBlocked
+    }
+    if description.contains("USER_ID_INVALID") {
+        return .userInvalid
+    }
+    if description.contains("DISCOVER_DISABLED") {
+        return .disabled
+    }
+    return .unavailable
+}
+
 public func tellomiDiscoverClientNonce(_ value: String) -> Bool {
     let pattern = #"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"#
     return value.range(of: pattern, options: .regularExpression) != nil
@@ -486,11 +596,43 @@ private func tellomiDiscoverURL(base: URL, path: String, query: [URLQueryItem]) 
 public enum TellomiDiscoverTL {
     public static let getEngineCredentialId: Int32 = Int32(bitPattern: 0xA80A7F76)
     public static let engineCredentialId: Int32 = 0x0578CCAA
+    public static let getAudienceTokenId: Int32 = Int32(bitPattern: 0xDC5213C2)
+    public static let audienceTokenId: Int32 = Int32(bitPattern: 0xDA177181)
+    public static let vectorId: Int32 = 0x1CB5C415
 
     public static func encodeRequest() -> Data {
         var data = Data()
         appendInt32(self.getEngineCredentialId, to: &data)
         return data
+    }
+
+    public static func encodeAudienceRequest(kind: String, userIds: [Int64]) -> Data {
+        var data = Data()
+        appendInt32(self.getAudienceTokenId, to: &data)
+        appendString(kind, to: &data)
+        appendInt32(self.vectorId, to: &data)
+        appendInt32(Int32(userIds.count), to: &data)
+        for id in userIds {
+            appendInt64(id, to: &data)
+        }
+        return data
+    }
+
+    public static func decodeAudienceToken(_ data: Data) -> TellomiDiscoverAudienceToken? {
+        var offset = 0
+        guard let constructor = readInt32(data, &offset), constructor == self.audienceTokenId else {
+            return nil
+        }
+        guard let token = readString(data, &offset), !token.isEmpty else {
+            return nil
+        }
+        guard let expires = readInt32(data, &offset) else {
+            return nil
+        }
+        guard offset == data.count else {
+            return nil
+        }
+        return TellomiDiscoverAudienceToken(token: token, expires: Int64(expires))
     }
 
     public static func decodeCredential(_ data: Data) -> TellomiDiscoverCredential? {
@@ -518,6 +660,34 @@ private func appendInt32(_ value: Int32, to data: inout Data) {
     var little = value.littleEndian
     withUnsafeBytes(of: &little) { bytes in
         data.append(contentsOf: bytes)
+    }
+}
+
+private func appendInt64(_ value: Int64, to data: inout Data) {
+    var little = value.littleEndian
+    withUnsafeBytes(of: &little) { bytes in
+        data.append(contentsOf: bytes)
+    }
+}
+
+private func appendString(_ value: String, to data: inout Data) {
+    let bytes = Array(value.utf8)
+    let length = bytes.count
+    if length >= 254 {
+        data.append(254)
+        var raw = Int32(length).littleEndian
+        withUnsafeBytes(of: &raw) { rawBytes in
+            data.append(contentsOf: rawBytes.prefix(3))
+        }
+        data.append(contentsOf: bytes)
+        let padding = (4 - (length % 4)) % 4
+        data.append(contentsOf: Array(repeating: 0, count: padding))
+    } else {
+        data.append(UInt8(length))
+        data.append(contentsOf: bytes)
+        let padded = length + 1
+        let padding = (4 - (padded % 4)) % 4
+        data.append(contentsOf: Array(repeating: 0, count: padding))
     }
 }
 

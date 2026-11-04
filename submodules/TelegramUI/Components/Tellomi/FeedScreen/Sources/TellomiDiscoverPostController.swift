@@ -71,7 +71,7 @@ final class TellomiDiscoverPostController: ViewController {
         guard !self.started else {
             return
         }
-        let chrome = tellomiDiscoverChrome(loggedIn: self.loggedIn, enabled: self.configuration.enabled, openedPostId: self.postId, failed: false)
+        let chrome = tellomiDiscoverChrome(loggedIn: self.loggedIn, enabled: self.configuration.enabled, kind: .recommend, openedPostId: self.postId, failed: false)
         guard chrome.loadsPost, case let .detail(id) = chrome.surface else {
             self.failed = true
             self.apply()

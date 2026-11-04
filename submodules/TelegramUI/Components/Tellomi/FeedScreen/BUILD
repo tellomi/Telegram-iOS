@@ -17,6 +17,7 @@ swift_library(
         "//submodules/AppBundle",
         "//submodules/ContextUI",
         "//submodules/TelegramCore",
+        "//submodules/Postbox:Postbox",
         "//submodules/TelegramPresentationData",
         "//submodules/TelegramUIPreferences",
         "//submodules/TellomiDiscover:TellomiDiscover",
