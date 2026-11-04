@@ -754,7 +754,7 @@ The round video button stays `Chat/Input/Text/IconVideo`, the MingCute camcorder
 
 ## Discover copy, Discover reports, sign-up avatar
 
-Discover and the tab bar read `Tellomi.Discover.*` from the active language pack (`presentationData.strings` primary, then secondary). A missing key falls back to traditional Chinese for `zh-Hant` / `zh-TW` / `zh-HK` / `zh-MO`, simplified Chinese for other `zh*`, and English otherwise. City names use `Tellomi.Discover.City.<country>_<slug>` (the code's `:` is `_`). The English, simplified, and traditional strings are in the three `Localizable.strings` files. The server langpack is unchanged.
+Discover and the tab bar read `Tellomi.Discover.*` from the active language pack (`presentationData.strings` primary, then secondary). A missing key falls back to traditional Chinese for `zh-Hant` / `zh-TW` / `zh-HK` / `zh-MO`, simplified Chinese for other `zh*`, and English otherwise. City names use `Tellomi.Discover.City.<country>_<slug>` (the code's `:` and `-` are `_`, so `cn:hong-kong` is `Tellomi.Discover.City.cn_hong_kong`). The English, simplified, and traditional strings are in the three `Localizable.strings` files. The server langpack is unchanged.
 
 A post and a comment have a "…" menu whose Report row opens Telegram's report sheet (`peerReportOptionsController`). The sheet's official ids are `spam`, `violence`, `pornography`, `child`, `drugs`, `personal`, and `other`. Other still asks for a comment. That choice is `POST /v1/feed/reports` with `target_type`, `post_id`, `option`, `reason` (the same id), `detail`, and `comment_id` when the target is a comment. It does not call `messages.report`. A logged-out session does not build the request. Success uses the existing report toast.
 

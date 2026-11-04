@@ -82,8 +82,11 @@ public func tellomiDiscoverCityCode(locality: String?, isoCountryCode: String?) 
     return matches[0].code
 }
 
+/// `cn:hong-kong` becomes `Tellomi.Discover.City.cn_hong_kong`. The generator only
+/// turns `.` into `_`, so a hyphen in the slug would be an invalid Swift name.
 public func tellomiDiscoverCityStringKey(_ code: String) -> String {
-    return "Tellomi.Discover.City." + code.replacingOccurrences(of: ":", with: "_")
+    let slug = code.replacingOccurrences(of: ":", with: "_").replacingOccurrences(of: "-", with: "_")
+    return "Tellomi.Discover.City." + slug
 }
 
 public func tellomiDiscoverCityName(code: String, languageCode: String, pack: [String: String] = [:]) -> String? {

@@ -485,6 +485,14 @@ final class TellomiDiscoverLocalizationAndReportTests: XCTestCase {
         XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chengdu", languageCode: "ja"), "Chengdu")
         XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chengdu", languageCode: "zh-Hant"), "成都")
         XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chongqing", languageCode: "zh-HK"), "重慶")
+        XCTAssertEqual(tellomiDiscoverCityStringKey("cn:hong-kong"), "Tellomi.Discover.City.cn_hong_kong")
+        XCTAssertEqual(tellomiDiscoverCityStringKey("us:new-york"), "Tellomi.Discover.City.us_new_york")
+        XCTAssertEqual(tellomiDiscoverCityStringKey("us:los-angeles"), "Tellomi.Discover.City.us_los_angeles")
+        XCTAssertEqual(tellomiDiscoverCityStringKey("us:san-francisco"), "Tellomi.Discover.City.us_san_francisco")
+        for city in tellomiDiscoverCities(languageCode: "en") {
+            let ident = tellomiDiscoverCityStringKey(city.code).replacingOccurrences(of: ".", with: "_")
+            XCTAssertNotNil(ident.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression), ident)
+        }
         let post = TellomiDiscoverPost(id: "post-9", text: "hi", authorName: "", authorHandle: nil, tellomiNumber: "100", unavailable: false, aiGenerated: false, badge: nil, likeCount: 2, commentCount: 0, repostCount: 0, imageCount: 0, quoteState: nil, quoteText: nil, ipRegionLabel: nil, city: "cn:chengdu")
         let summary = tellomiDiscoverPostSummary(post: post, copy: copy, list: false)
         XCTAssertEqual(summary.title, "Tellomi ID: 100")
