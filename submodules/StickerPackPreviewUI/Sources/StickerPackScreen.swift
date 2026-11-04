@@ -1224,7 +1224,7 @@ private final class StickerPackContainer: ASDisplayNode {
         let presentationData = self.presentationData
         var items: [ContextMenuItem] = []
         items.append(.action(ContextMenuActionItem(text: presentationData.strings.StickerPack_CreateNew, icon: { theme in
-            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.contextMenu.primaryColor)
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.contextMenu.primaryColor)
         }, action: { [weak self] _, f in
             f(.default)
 

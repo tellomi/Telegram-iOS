@@ -538,7 +538,7 @@ public struct PresentationResourcesChat {
     
     public static func chatInputTextFieldStickersImage(_ theme: PresentationTheme) -> UIImage? {
         return theme.image(PresentationResourceKey.chatInputTextFieldStickersImage.rawValue, { theme in
-            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/AccessoryIconStickers"), color: .white)?.withRenderingMode(.alwaysTemplate)
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: .white)?.withRenderingMode(.alwaysTemplate)
         })
     }
     

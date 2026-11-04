@@ -266,7 +266,7 @@ private final class AttachButtonComponent: CombinedComponent {
                 imageName = component.isSelected ? "Chat/Attach Menu/GiftFilled" : "Chat/Attach Menu/Gift"
             case .sticker:
                 name = strings.Attachment_Sticker
-                imageName = "Chat/Attach Menu/Sticker"
+                imageName = "Chat/Attach Menu/TellomiSticker"
             case .emoji:
                 name = "Emoji"
                 imageName = "Chat/Attach Menu/Emoji"
