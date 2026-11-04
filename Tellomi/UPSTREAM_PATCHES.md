@@ -711,8 +711,8 @@ The MingCute swap kept the old ink box and changed the drawing. These rows point
 
 Left as they were, on purpose:
 
-- Sticker and the settings GIF stay `sticker` and `film` in `mapping.csv`. `cursor/semantic-icons-f5af` draws the face and the GIF letters in separate imagesets.
-- `Chat/Input/Text/IconVideo` stays `video-camera`. That branch's test pins the round record button to the camcorder. The play-in-a-frame glyph was `Chat/Attach Menu/Video` and `Item List/Icons/Video`; those are the camcorder now.
+- Sticker and the settings GIF stay `sticker` and `film` in `mapping.csv`. #68 did not point those rows at a different glyph. The buttons and badges read the face and the GIF letters from the imagesets in the next section.
+- `Chat/Input/Text/IconVideo` stays `video-camera`. The round record button stays the camcorder. The play-in-a-frame glyph was `Chat/Attach Menu/Video` and `Item List/Icons/Video`; those are the camcorder now.
 - `Chat/Input/Text/SendIcon` stays the up arrow and is not generated.
 - Location was already MingCute's map pin (a teardrop with a hole). It is not the crosshair (`target`). The three location imagesets are unchanged.
 
@@ -735,3 +735,19 @@ Other substitutions: forward arrows are `share-forward` (the hook points right),
 | `Tellomi/Icons/test_icon_pairs.py` | The pair check. |
 | `Chat/Context Menu/VideoCall.imageset` | Upstream camera PDF. |
 | `Images.xcassets` | The regenerated imagesets whose source changed. |
+
+## Sticker and GIF glyphs
+
+MingCute's `sticker` is a blank note with a folded corner, and `film` is a film strip with no letters. The composer sticker button, the attach-menu sticker, the sticker rows in context menus, the settings sticker badge, and the settings GIF badge used those two. The emoji keyboard's own sticker and GIF tabs were never in `mapping.csv` and already show a face and the letters GIF. #68 left `AccessoryIconStickers`, `Chat/Attach Menu/Sticker`, `Chat/Context Menu/Sticker`, `Item List/Icons/Sticker`, and `Item List/Icons/Gif` mapped to `sticker` and `film`. It did not substitute another drawing. Those call sites use the face and the GIF letters below instead of those mapped files.
+
+The round video button stays `Chat/Input/Text/IconVideo`, the MingCute camcorder (`video-camera`). It is not the play-in-a-square `video` glyph. Chat-list sent and read marks are still drawn in `generateStatusCheckImage`: one check when the message is sent, and a second stroke only when it is read. The composer send arrow is `actionControlForegroundColor` (white in day) on `actionControlFillColor` (the accent, default `#3390EC`). The media-picker send disc is `#111111` with the arrow tinted white. This change does not edit `generate_icons.py` or `mapping.csv`. The face and GIF imagesets are not rows in the mapping, so a size pass does not rewrite them. The other files in `Tellomi/Icons/semantic/` are #68's compositions.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/Icons/semantic/sticker.svg` | MingCute note outline plus two eyes and a smile. |
+| `Tellomi/Icons/semantic/gif.svg` | Rounded rectangle with the letters GIF. |
+| `Tellomi/Icons/draw_semantic_icons.py` | Writes the three sticker page sizes and the GIF page. Not `mapping.csv`. |
+| `Chat/Input/Text/TellomiSticker` | 24pt. Composer button and context menus. |
+| `Chat/Attach Menu/TellomiSticker`, `Item List/Icons/TellomiSticker` | 30pt. Attach menu, settings badges, Premium stickers. |
+| `Item List/Icons/TellomiGif` | 30pt. Settings GIF badge. |
+| `Tellomi/Icons/test_semantic_icons.py` | Face, GIF letters, call sites, camcorder, drawn checks, send contrast. |

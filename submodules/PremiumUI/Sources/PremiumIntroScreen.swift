@@ -842,7 +842,7 @@ public enum PremiumPerk: CaseIterable {
         case .uniqueReactions:
             return "Item List/Icons/Reactions"
         case .premiumStickers:
-            return "Item List/Icons/Sticker"
+            return "Item List/Icons/TellomiSticker"
         case .advancedChatManagement:
             return "Item List/Icons/Chat"
         case .profileBadge:

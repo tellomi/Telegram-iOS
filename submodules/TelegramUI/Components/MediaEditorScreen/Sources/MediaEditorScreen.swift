@@ -8247,7 +8247,7 @@ public final class MediaEditorScreenImpl: ViewController, MediaEditorScreen, UID
                 })))
             case .businessIntro:
                 hasEmojiSelection = false
-                menuItems.append(.action(ContextMenuActionItem(text: presentationData.strings.MediaEditor_SetAsIntroSticker, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, f in
+                menuItems.append(.action(ContextMenuActionItem(text: presentationData.strings.MediaEditor_SetAsIntroSticker, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, f in
                     guard let self else {
                         return
                     }

@@ -3095,7 +3095,7 @@ public final class EmojiContentPeekBehaviorImpl: EmojiContentPeekBehavior {
                                     if let packReference = packReference {
                                         menuItems.append(
                                             .action(ContextMenuActionItem(text: presentationData.strings.StickerPack_ViewPack, icon: { theme in
-                                                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.actionSheet.primaryTextColor)
+                                                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.actionSheet.primaryTextColor)
                                             }, action: { _, f in
                                                 f(.default)
 

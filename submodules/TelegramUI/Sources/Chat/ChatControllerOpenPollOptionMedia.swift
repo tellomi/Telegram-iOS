@@ -68,7 +68,7 @@ extension ChatControllerImpl {
                     }
                 }
                 if let packReference {
-                    items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
+                    items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
                         f(.default)
                         
                         guard let self, let controllerInteraction = self.controllerInteraction else {
