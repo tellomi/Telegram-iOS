@@ -836,6 +836,12 @@ final class AuthorizedApplicationContext {
             self.showNewsTab = value
             self.rootController.updateRootControllers(showCallsTab: self.showCallsTab, showNewsTab: value)
         })
+
+        tellomiStartTabObservation(context: self.context, rootController: self.rootController, showCallsTab: { [weak self] in
+            return self?.showCallsTab ?? false
+        }, showNewsTab: { [weak self] in
+            return self?.showNewsTab ?? false
+        })
         
         if let code = tellomiLangPackCodePendingApplication(currentLanguageCode: presentationData.strings.primaryComponent.languageCode) {
             self.tellomiLanguageDisposable = context.engine.localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: code).start(error: { _ in
@@ -857,6 +863,7 @@ final class AuthorizedApplicationContext {
     
     deinit {
         self.context.account.postbox.clearCaches()
+        tellomiStopTabObservation(rootController: self.rootController)
         self.showNewsTabDisposable?.dispose()
         self.context.account.shouldKeepOnlinePresence.set(.single(false))
         self.context.account.shouldBeServiceTaskMaster.set(.single(.never))

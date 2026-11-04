@@ -442,6 +442,9 @@ private func openCheckedExternalUrl(context: AccountContext, urlContext: OpenURL
     )
     
     let continueHandling: () -> Void = {
+        if tellomiHandleFeedPostLink(url: parsedUrl, context: context, navigationController: navigationController) {
+            return
+        }
         if let scheme = parsedUrl.scheme, (scheme == "tg" || scheme == context.sharedContext.applicationBindings.appSpecificScheme) {
             if parsedUrl.host == "tonsite" {
                 if let value = URL(string: "tonsite:/" + parsedUrl.path) {

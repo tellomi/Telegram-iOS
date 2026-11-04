@@ -764,6 +764,7 @@ public class ContactsController: ViewController {
                 strongSelf.addPressed()
             })
         })))
+        tellomiAppendHideContactsTabItem(&items, context: self.context, presentationData: self.presentationData)
         
         let controller = makeContextController(presentationData: self.presentationData, source: .reference(ContactsTabBarContextReferenceContentSource(controller: self, sourceView: sourceView)), items: .single(ContextController.Items(content: .list(items))), recognizer: nil, gesture: gesture)
         self.context.sharedContext.mainWindow?.presentInGlobalOverlay(controller)
