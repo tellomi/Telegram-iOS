@@ -43,6 +43,12 @@ public final class TellomiFeedScreen: ViewController {
     private var feedGeneration = 0
     private var failed = false
     private var pendingPostId: String?
+    /// A chat close can still be tearing the feed screen out of the navigation
+    /// stack. Presenting the post then is a no-op, so it is retried for about a
+    /// second (D-57), the same window the Android bar uses.
+    private var postPresentAttempts = 0
+    private var postPresentRetryQueued = false
+    private let postPresentAttemptLimit = 12
     private var audienceDisposable: Disposable?
     private var recommendationDisposable: Disposable?
     private var recommendationKnown = false
@@ -168,6 +174,10 @@ public final class TellomiFeedScreen: ViewController {
     }
 
     public func openPost(id: String) {
+        if self.pendingPostId != id {
+            self.postPresentAttempts = 0
+            self.postPresentRetryQueued = false
+        }
         self.pendingPostId = id
         if self.isNodeLoaded {
             self.sync(reload: false)
@@ -276,9 +286,25 @@ public final class TellomiFeedScreen: ViewController {
         if let pendingPostId = self.pendingPostId {
             let postChrome = tellomiDiscoverChrome(loggedIn: loggedIn, enabled: configuration.enabled, kind: self.kind, openedPostId: pendingPostId, failed: false, city: self.cityCode)
             if case let .detail(id) = postChrome.surface {
-                self.pendingPostId = nil
-                let controller = TellomiDiscoverPostController(context: self.context, postId: id, loader: self.loader, configuration: configuration, loggedIn: loggedIn)
-                self.push(controller)
+                if self.navigationController != nil {
+                    self.pendingPostId = nil
+                    self.postPresentAttempts = 0
+                    self.postPresentRetryQueued = false
+                    let controller = TellomiDiscoverPostController(context: self.context, postId: id, loader: self.loader, configuration: configuration, loggedIn: loggedIn)
+                    self.push(controller)
+                } else if !self.postPresentRetryQueued, self.postPresentAttempts < self.postPresentAttemptLimit {
+                    self.postPresentAttempts += 1
+                    self.postPresentRetryQueued = true
+                    Queue.mainQueue().after(0.08) { [weak self] in
+                        guard let self else {
+                            return
+                        }
+                        self.postPresentRetryQueued = false
+                        if self.pendingPostId != nil {
+                            self.sync(reload: false)
+                        }
+                    }
+                }
             }
         }
 

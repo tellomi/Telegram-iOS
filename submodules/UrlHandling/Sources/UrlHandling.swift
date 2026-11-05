@@ -1680,6 +1680,14 @@ public func resolveUrlImpl(context: AccountContext, peerId: EnginePeer.Id?, url:
                     }
                 }
             }
+
+            // D-57. A chat tap parses `tell.cc/m#<id>` as the username `m` before
+            // the external opener can reopen Discover. Hand that address out as
+            // an external URL so `tellomiHandleFeedPostLink` runs. Checked before
+            // autologin, which would otherwise rewrite the fragment.
+            if tellomiFeedPostLinkEscapesPeerResolution(url, navigationEnabled: tellomiBottomNavigationEnabled(appConfiguration: appConfiguration)) {
+                return .single(.result(.externalUrl(url)))
+            }
             
             if let urlValue = URL(string: url), let host = urlValue.host?.lowercased() {
                 if urlHandlingConfiguration.domains.contains(host), var components = URLComponents(string: url) {
