@@ -26,7 +26,9 @@ swift_test(
     name = "TellomiTabNavigationDecisionsTests",
     srcs = [
         "Sources/TellomiTabNavigationDecisions.swift",
+        "Sources/TellomiSettingsDecisions.swift",
         "Tests/TellomiTabNavigationDecisionsTests.swift",
+        "Tests/TellomiSettingsDecisionsTests.swift",
     ],
     copts = [
         "-warnings-as-errors",

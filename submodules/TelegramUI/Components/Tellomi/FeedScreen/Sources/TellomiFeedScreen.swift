@@ -42,6 +42,8 @@ public final class TellomiFeedScreen: ViewController {
     private var failed = false
     private var pendingPostId: String?
     private var audienceDisposable: Disposable?
+    private var recommendationDisposable: Disposable?
+    private var personalizedRecommend = true
     private var appliedLayout: ContainerViewLayout?
 
     private var feedNode: TellomiFeedScreenNode {
@@ -87,6 +89,26 @@ public final class TellomiFeedScreen: ViewController {
             self.appConfiguration = configuration
             self.sync(reload: false)
         })
+        self.recommendationDisposable = (context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.ApplicationSpecificPreference(key: ApplicationSpecificPreferencesKeys.tellomiRecommendationSettings))
+        |> deliverOnMainQueue).start(next: { [weak self] entry in
+            guard let self else {
+                return
+            }
+            let personalized = tellomiRecommendFeedIsPersonalized(tellomiRecommendationChoice(storedPersonalized: tellomiRecommendationSettings(entry: entry).personalized))
+            let changed = personalized != self.personalizedRecommend
+            self.personalizedRecommend = personalized
+            guard changed else {
+                return
+            }
+            if self.kind == .recommend {
+                if self.loading || self.posts[.recommend] != nil {
+                    self.loadFeed(reset: true)
+                }
+            } else {
+                self.posts[.recommend] = nil
+                self.cursors[.recommend] = nil
+            }
+        })
         self.sync(reload: false)
     }
 
@@ -99,6 +121,7 @@ public final class TellomiFeedScreen: ViewController {
         self.configurationDisposable?.dispose()
         self.loggedOutDisposable?.dispose()
         self.audienceDisposable?.dispose()
+        self.recommendationDisposable?.dispose()
         self.locator?.stop()
         self.loader.cancel()
     }
@@ -392,7 +415,7 @@ public final class TellomiFeedScreen: ViewController {
             }
             operation = .nearby(city: city, cursor: cursor)
         } else {
-            operation = .feed(kind, cursor: cursor, personalized: true)
+            operation = .feed(kind, cursor: cursor, personalized: kind == .recommend ? self.personalizedRecommend : true)
         }
         self.loader.run(loggedIn: true, configuration: configuration, operation: operation) { [weak self] result in
             guard let self, self.feedGeneration == generation else {
