@@ -68,6 +68,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     private var context: AccountContext
     private let isPremiumDisabled: Bool
     private weak var controller: PeerInfoScreenImpl?
+    private let tellomiSettingsCard = TellomiSettingsHeaderCard()
     private var presentationData: PresentationData?
     private var state: PeerInfoState?
     private var peer: EnginePeer?
@@ -374,6 +375,10 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         self.regularContentNode.addSubnode(self.usernameNodeRawContainer)
         
         self.addSubnode(self.regularContentNode)
+        self.tellomiSettingsCard.install(in: self.regularContentNode)
+        self.tellomiSettingsCard.onEdit = { [weak self] in
+            self?.controller?.controllerNode.interaction.openEditing()
+        }
         
         if !isMediaOnly {
             self.regularContentNode.addSubnode(self.buttonsContainerNode)
@@ -597,7 +602,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         let previousPanelStatusData = self.currentPanelStatusData
         self.currentPanelStatusData = panelStatusData.0
         
-        let avatarSize: CGFloat = presentedInFormSheet ? 200.0 : 100.0
+        let avatarSize: CGFloat = (isSettings && !state.isEditing) ? 64.0 : (presentedInFormSheet ? 200.0 : 100.0)
         self.avatarSize = avatarSize
         
         var contentOffset = contentOffset
@@ -699,7 +704,15 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         let avatarOverlayFarme = self.editingContentNode.convert(self.editingContentNode.avatarNode.frame, to: self)
         transition.updateFrame(node: self.avatarOverlayNode, frame: avatarOverlayFarme)
         
-        let avatarFrame = CGRect(origin: CGPoint(x: hasStrip ? bandCenteredOrigin(width: avatarSize, margin: 16.0) : floor((width - avatarSize) / 2.0), y: statusBarHeight + 22.0), size: CGSize(width: avatarSize, height: avatarSize))
+        var avatarFrame = CGRect(origin: CGPoint(x: hasStrip ? bandCenteredOrigin(width: avatarSize, margin: 16.0) : floor((width - avatarSize) / 2.0), y: statusBarHeight + 22.0), size: CGSize(width: avatarSize, height: avatarSize))
+        var tellomiCardMetrics: TellomiSettingsHeaderCardMetrics?
+        if isSettings && !state.isEditing {
+            let editTitle = presentationData.strings.Common_Edit
+            let editWidth = ceil((editTitle as NSString).size(withAttributes: [.font: Font.semibold(17.0)]).width) + 4.0
+            let metrics = tellomiSettingsHeaderCardMetrics(width: Double(width), navigationHeight: Double(navigationHeight), sectionLeft: Double(sideInsets.sectionLeft), sectionRight: Double(sideInsets.sectionRight), editWidth: Double(editWidth))
+            tellomiCardMetrics = metrics
+            avatarFrame = tellomiSettingsCGRect(x: metrics.avatarX, y: metrics.avatarY, width: metrics.avatarSide, height: metrics.avatarSide)
+        }
         
         let regularNavigationContentsAccentColor: UIColor = peer?.effectiveProfileColor != nil ? .white : presentationData.theme.list.itemAccentColor
         let collapsedHeaderNavigationContentsAccentColor = presentationData.theme.list.itemAccentColor
@@ -777,6 +790,9 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         var panelWithAvatarHeight: CGFloat = 35.0 + avatarSize + balanceInset
         if threadData != nil {
             panelWithAvatarHeight += 10.0
+        }
+        if let tellomiCardMetrics {
+            panelWithAvatarHeight = CGFloat(tellomiCardMetrics.panelHeight)
         }
         
         let innerBackgroundTransitionFraction: CGFloat
@@ -1271,22 +1287,14 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             
             if self.isSettings, case let .user(user) = peer {
                 let contact = tellomiAccountContact(phone: user.phone, peerId: user.id)
-                var subtitle = ""
+                let formattedPhone: String?
                 if let phone = contact.phone, !phone.isEmpty {
-                    subtitle = formatPhoneNumber(context: self.context, number: phone)
-                } else if let email = contact.email {
-                    subtitle = tellomiMaskedEmail(email)
+                    formattedPhone = formatPhoneNumber(context: self.context, number: phone)
+                } else {
+                    formattedPhone = nil
                 }
-                
-                if let mainUsername = user.addressName, !mainUsername.isEmpty {
-                    if subtitle.isEmpty {
-                        subtitle = "@\(mainUsername)"
-                    } else {
-                        subtitle = "\(subtitle) • @\(mainUsername)"
-                    }
-                }
-                subtitleStringText = subtitle
-                subtitleAttributes = MultiScaleTextState.Attributes(font: Font.regular(17.0), color: .white)
+                subtitleStringText = tellomiSettingsIdentityLine(formattedPhone: formattedPhone, email: contact.email, username: user.addressName)
+                subtitleAttributes = MultiScaleTextState.Attributes(font: Font.regular(15.0), color: .white)
                 smallSubtitleAttributes = MultiScaleTextState.Attributes(font: Font.regular(16.0), color: .white, shadowColor: titleShadowColor)
                 
                 usernameString = ("", MultiScaleTextState.Attributes(font: Font.regular(16.0), color: .white))
@@ -1409,10 +1417,15 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         if self.navigationRowRightButtonCount > 1 {
             titleConstrainedSize.width -= 60.0
         }
+        if let tellomiCardMetrics, !self.isAvatarExpanded {
+            titleConstrainedSize = CGSize(width: max(0.0, CGFloat(tellomiCardMetrics.textMaxWidth)), height: .greatestFiniteMagnitude)
+        }
         
+        let regularTitleAttributes = (self.isSettings && !self.isAvatarExpanded) ? MultiScaleTextState.Attributes(font: Font.semibold(20.0), color: .white) : titleAttributes
+        let expandedTitleAttributes = self.isSettings ? MultiScaleTextState.Attributes(font: Font.medium(28.0), color: .white) : smallTitleAttributes
         let titleNodeLayout = self.titleNode.updateLayout(text: titleStringText, states: [
-            TitleNodeStateRegular: MultiScaleTextState(attributes: titleAttributes, constrainedSize: titleConstrainedSize),
-            TitleNodeStateExpanded: MultiScaleTextState(attributes: smallTitleAttributes, constrainedSize: titleConstrainedSize)
+            TitleNodeStateRegular: MultiScaleTextState(attributes: regularTitleAttributes, constrainedSize: titleConstrainedSize),
+            TitleNodeStateExpanded: MultiScaleTextState(attributes: expandedTitleAttributes, constrainedSize: titleConstrainedSize)
         ], mainState: TitleNodeStateRegular)
         
         var subtitleRatingSize: CGSize?
@@ -1495,7 +1508,11 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         let subtitleConstrainedSize: CGSize
         let expandedSubtitleConstrainedSize: CGSize
         if self.isSettings {
-            subtitleConstrainedSize = CGSize(width: max(0.0, width - stripLeft - stripRight - textSideInset * 2.0 - subtitleRatingInset), height: .greatestFiniteMagnitude)
+            if let tellomiCardMetrics, !self.isAvatarExpanded {
+                subtitleConstrainedSize = CGSize(width: max(0.0, CGFloat(tellomiCardMetrics.textMaxWidth) - subtitleRatingInset), height: .greatestFiniteMagnitude)
+            } else {
+                subtitleConstrainedSize = CGSize(width: max(0.0, width - stripLeft - stripRight - textSideInset * 2.0 - subtitleRatingInset), height: .greatestFiniteMagnitude)
+            }
             expandedSubtitleConstrainedSize = CGSize(width: max(0.0, width - stripLeft - stripRight - 16.0 * 2.0 - subtitleRatingInset), height: .greatestFiniteMagnitude)
         } else {
             subtitleConstrainedSize = CGSize(width: max(0.0, titleConstrainedSize.width - subtitleRatingInset), height: titleConstrainedSize.height)
@@ -1740,8 +1757,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         
         let titleLockOffset: CGFloat = 16.0 + singleTitleLockOffset
         let titleMaxLockOffset: CGFloat = 7.0
-        let titleOffset: CGFloat
-        let titleCollapseFraction: CGFloat
+        var titleOffset: CGFloat
+        var titleCollapseFraction: CGFloat
         
         if self.isAvatarExpanded {
             let minTitleSize = CGSize(width: titleSize.width * expandedTitleScale, height: titleSize.height * expandedTitleScale)
@@ -1789,6 +1806,29 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 subtitleFrame = CGRect(origin: CGPoint(x: (hasStrip ? bandCenteredOrigin(width: totalSubtitleWidth, margin: 16.0) : floorToScreenPixels((width - totalSubtitleWidth) / 2.0)) + subtitleLeadingInset - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: titleFrame.maxY + 1.0), size: subtitleSize)
                 usernameFrame = CGRect(origin: CGPoint(x: subtitleFrame.maxX + usernameSpacing, y: titleFrame.maxY + 1.0), size: usernameSize)
             }
+        }
+
+        if let tellomiCardMetrics, !self.isAvatarExpanded {
+            let textFrames = tellomiSettingsHeaderCardTextFrames(metrics: tellomiCardMetrics, titleWidth: Double(titleSize.width), titleHeight: Double(titleSize.height), subtitleWidth: Double(subtitleSize.width), subtitleHeight: Double(subtitleSize.height))
+            titleFrame = tellomiSettingsCGRect(x: textFrames.titleX, y: textFrames.titleY, width: textFrames.titleWidth, height: textFrames.titleHeight)
+            subtitleFrame = tellomiSettingsCGRect(x: textFrames.subtitleX, y: textFrames.subtitleY, width: textFrames.subtitleWidth, height: textFrames.subtitleHeight)
+            let titleCollapseOffset = titleFrame.midY - statusBarHeight - titleLockOffset
+            if titleCollapseOffset > 0.0 {
+                titleOffset = -min(titleCollapseOffset, contentOffset)
+                titleCollapseFraction = max(0.0, min(1.0, contentOffset / titleCollapseOffset))
+            }
+            let cardBackground = hasCoverColor ? UIColor(white: 1.0, alpha: 0.16) : presentationData.theme.list.itemBlocksBackgroundColor
+            self.tellomiSettingsCard.update(
+                visible: !isSearching && !state.isEditing,
+                backgroundFrame: tellomiSettingsCGRect(x: tellomiCardMetrics.cardX, y: tellomiCardMetrics.cardY, width: tellomiCardMetrics.cardWidth, height: tellomiCardMetrics.cardHeight),
+                editFrame: tellomiSettingsCGRect(x: tellomiCardMetrics.editX, y: tellomiCardMetrics.editY, width: tellomiCardMetrics.editWidth, height: tellomiCardMetrics.editHeight),
+                editTitle: presentationData.strings.Common_Edit,
+                accent: navigationContentsAccentColor,
+                background: cardBackground,
+                transition: transition
+            )
+        } else {
+            self.tellomiSettingsCard.update(visible: false, backgroundFrame: .zero, editFrame: .zero, editTitle: "", accent: navigationContentsAccentColor, background: .clear, transition: transition)
         }
         
         let titleMinScale: CGFloat = 0.6

@@ -774,3 +774,20 @@ A post and a comment have a "…" menu whose Report row opens Telegram's report 
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | The alert and the retry button. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/TellomiAvatarUploadFailure.swift` | The same alert on the profile photo screen. |
 | Tests | `TellomiDiscoverFeedTests`, `TellomiTabNavigationDecisionsTests`, `TellomiSignUpAvatarTests`. |
+
+## Settings home (M1)
+
+The settings tab is still `PeerInfoScreen` in settings mode. The home list, the header card, and the About / bindings / more pages are Tellomi types. Upstream keeps the old `settingsItems` builder so badges, session counts, and feature gates stay there; the screen asks `tellomiSettingsHomeItems` instead.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings mode calls `tellomiSettingsHomeItems`. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | The Premium grace banner is hidden unless Premium is enabled, and its copy is no longer hard-coded English. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift` | In settings, the resting header is the card from `tellomiSettingsHeaderCardMetrics`: avatar on the left, name and ID beside it, Edit on the right. The ID line is `tellomiSettingsIdentityLine` (phone, or else the full email, then `@username`). |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/TellomiNavigationSettingsEntry.swift` | `tellomiPushSettingsPage` is the shared push used by the home rows. |
+| `submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift` | Adds the personalized-recommendation switch at the top. The value is `TellomiRecommendationSettings`. |
+| `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | Account preference key `tellomiRecommendationSettings` (id 100). |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreen.swift` | The recommend request sends `personalized=false` when the switch is off, and reloads that tab when the switch changes. |
+| `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | `Tellomi.Settings.*`. |
+
+New files, not in the table above: `TellomiSettingsDecisions.swift`, `TellomiRecommendationSettings.swift`, `TellomiSettingsLayout.swift`, `TellomiSettingsHeaderCard.swift`, `TellomiSettingsPages.swift`. Tips and Apple Watch are not on the home or the More page. Saved messages, recent calls, chat folders, power saving, and open-source licenses are on More. A configured proxy stays on the General group. Help Center opens `https://tellomi.cn/help`. About Tellomi is the only place that shows the model name and the two filing numbers.

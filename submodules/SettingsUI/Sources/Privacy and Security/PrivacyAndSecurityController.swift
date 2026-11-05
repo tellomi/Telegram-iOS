@@ -74,6 +74,8 @@ private final class PrivacyAndSecurityControllerArguments {
         self.openMessagePrivacy = openMessagePrivacy
         self.openGiftsPrivacy = openGiftsPrivacy
     }
+
+    var togglePersonalizedRecommendation: (Bool) -> Void = { _ in }
 }
 
 private enum PrivacyAndSecuritySection: Int32 {
@@ -135,6 +137,8 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
     case dataSettings(PresentationTheme, String)
     case dataSettingsInfo(PresentationTheme, String)
     case openLinksIn(PresentationTheme, String, String)
+    case personalizedRecommendation(String, Bool)
+    case personalizedRecommendationFooter(String)
     
     var section: ItemListSectionId {
         switch self {
@@ -152,6 +156,8 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
             return PrivacyAndSecuritySection.dataSettings.rawValue
         case .openLinksIn:
             return PrivacyAndSecuritySection.linkHandling.rawValue
+        case .personalizedRecommendation, .personalizedRecommendationFooter:
+            return -1
         }
     }
     
@@ -223,6 +229,10 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
                 return 32
             case .openLinksIn:
                 return 33
+            case .personalizedRecommendation:
+                return 34
+            case .personalizedRecommendationFooter:
+                return 35
         }
     }
     
@@ -426,6 +436,18 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
                 } else {
                     return false
                 }
+            case let .personalizedRecommendation(lhsText, lhsValue):
+                if case let .personalizedRecommendation(rhsText, rhsValue) = rhs, lhsText == rhsText, lhsValue == rhsValue {
+                    return true
+                } else {
+                    return false
+                }
+            case let .personalizedRecommendationFooter(lhsText):
+                if case let .personalizedRecommendationFooter(rhsText) = rhs, lhsText == rhsText {
+                    return true
+                } else {
+                    return false
+                }
         }
     }
     
@@ -549,6 +571,12 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
                 return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: text, label: value, sectionId: self.section, style: .blocks, action: {
                     arguments.openBrowserSelection()
                 })
+            case let .personalizedRecommendation(text, value):
+                return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: text, value: value, sectionId: self.section, style: .blocks, updated: { updated in
+                    arguments.togglePersonalizedRecommendation(updated)
+                })
+            case let .personalizedRecommendationFooter(text):
+                return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         }
     }
 }
@@ -660,9 +688,13 @@ private func privacyAndSecurityControllerEntries(
     loginEmail: String?,
     accountPeer: EnginePeer?,
     defaultWebBrowser: String,
-    appConfiguration: AppConfiguration
+    appConfiguration: AppConfiguration,
+    personalizedRecommendation: Bool
 ) -> [PrivacyAndSecurityEntry] {
     var entries: [PrivacyAndSecurityEntry] = []
+    let recommendationCopy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
+    entries.append(.personalizedRecommendation(recommendationCopy.personalizedRecommendation, personalizedRecommendation))
+    entries.append(.personalizedRecommendationFooter(recommendationCopy.personalizedRecommendationFooter))
     
     entries.append(.blockedPeers(presentationData.theme, presentationData.strings.Settings_BlockedUsers, blockedPeerCount == nil ? "" : (blockedPeerCount == 0 ? presentationData.strings.PrivacySettings_BlockedPeersEmpty : "\(blockedPeerCount!)")))
     if activeWebsitesCount != 0 {
@@ -1589,6 +1621,12 @@ public func privacyAndSecurityController(
         context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.ApplicationSpecificPreference(key: PreferencesKeys.webBrowserSettings))
     )
     
+    arguments.togglePersonalizedRecommendation = { value in
+        let _ = updateTellomiRecommendationSettings(engine: context.engine, { settings in
+            return settings.withUpdatedPersonalized(value)
+        }).start()
+    }
+
     let signal = combineLatest(
         queue: .mainQueue(),
         context.sharedContext.presentationData,
@@ -1604,9 +1642,11 @@ public func privacyAndSecurityController(
         combineLatest(passkeys.get(), passkeysDataValue.get()),
         context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.App()),
         context.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId)),
-        loginEmail
+        combineLatest(loginEmail, context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.ApplicationSpecificPreference(key: ApplicationSpecificPreferencesKeys.tellomiRecommendationSettings)))
     )
-    |> map { presentationData, state, privacySettings, noticeView, webBrowserData, recentPeers, blockedPeersState, activeWebsitesState, accessChallengeData, twoStepAuth, passkeys, appConfiguration, accountPeer, loginEmail -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, state, privacySettings, noticeView, webBrowserData, recentPeers, blockedPeersState, activeWebsitesState, accessChallengeData, twoStepAuth, passkeys, appConfiguration, accountPeer, recommendationInput -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        let loginEmail = recommendationInput.0
+        let personalizedRecommendation = tellomiRecommendationSettings(entry: recommendationInput.1).personalized
         var canAutoarchive = false
         if let data = appConfiguration.data, let hasAutoarchive = data["autoarchive_setting_available"] as? Bool {
             canAutoarchive = hasAutoarchive
@@ -1640,7 +1680,7 @@ public func privacyAndSecurityController(
             defaultWebBrowser = presentationData.strings.WebBrowser_Telegram
         }
         
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: privacyAndSecurityControllerEntries(presentationData: presentationData, state: state, privacySettings: privacySettings, accessChallengeData: accessChallengeData.data, blockedPeerCount: blockedPeersState.totalCount, activeWebsitesCount: activeWebsitesState.sessions.count, hasTwoStepAuth: twoStepAuth.0, twoStepAuthData: twoStepAuth.1, hasPasskeys: passkeys.0, displayPasskeys: displayPasskeys, canAutoarchive: canAutoarchive, isPremiumDisabled: isPremiumDisabled, isPremium: isPremium, loginEmail: loginEmail, accountPeer: accountPeer, defaultWebBrowser: defaultWebBrowser, appConfiguration: appConfiguration), style: .blocks, ensureVisibleItemTag: focusOnItemTag, animateChanges: false)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: privacyAndSecurityControllerEntries(presentationData: presentationData, state: state, privacySettings: privacySettings, accessChallengeData: accessChallengeData.data, blockedPeerCount: blockedPeersState.totalCount, activeWebsitesCount: activeWebsitesState.sessions.count, hasTwoStepAuth: twoStepAuth.0, twoStepAuthData: twoStepAuth.1, hasPasskeys: passkeys.0, displayPasskeys: displayPasskeys, canAutoarchive: canAutoarchive, isPremiumDisabled: isPremiumDisabled, isPremium: isPremium, loginEmail: loginEmail, accountPeer: accountPeer, defaultWebBrowser: defaultWebBrowser, appConfiguration: appConfiguration, personalizedRecommendation: personalizedRecommendation), style: .blocks, ensureVisibleItemTag: focusOnItemTag, animateChanges: false)
         
         return (controllerState, (listState, arguments))
     }

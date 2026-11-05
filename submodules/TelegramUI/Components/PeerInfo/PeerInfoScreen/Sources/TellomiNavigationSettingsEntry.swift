@@ -13,11 +13,11 @@ func tellomiAppendNavigationSettingsEntry(items: inout [SettingsSection: [PeerIn
     }
     let title = TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)).navigationTitle
     items[.advanced, default: []].append(PeerInfoScreenDisclosureItem(id: 7, text: title, icon: PresentationResourcesSettings.appearance, action: {
-        tellomiPushNavigationSettings(interaction: interaction, controller: tellomiNavigationSettingsController(context: context))
+        tellomiPushSettingsPage(interaction: interaction, controller: tellomiNavigationSettingsController(context: context))
     }))
 }
 
-private func tellomiPushNavigationSettings(interaction: PeerInfoInteraction, controller: ViewController) {
+func tellomiPushSettingsPage(interaction: PeerInfoInteraction, controller: ViewController) {
     guard let host = interaction.getController(), let navigationController = host.navigationController as? NavigationController else {
         return
     }
