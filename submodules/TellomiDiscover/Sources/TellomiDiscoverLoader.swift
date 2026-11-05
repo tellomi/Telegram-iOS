@@ -289,6 +289,15 @@ public struct TellomiDiscoverCopy: Equatable {
     public var pollAdd: String
     public var pollOption: String
     public var pollHint: String
+    public var videoAdd: String
+    public var videoReplace: String
+    public var videoRemove: String
+    public var videoHint: String
+    public var videoTooLong: String
+    public var videoUnknown: String
+    public var videoSelected: String
+    public var videoNotUploaded: String
+    public var videoReading: String
     public var votes: String
     public var notifications: String
     public var notificationsInfo: String
@@ -342,6 +351,15 @@ public struct TellomiDiscoverCopy: Equatable {
             pollAdd: text("Tellomi.Discover.PollAdd", "Add an option", "添加选项", "新增選項"),
             pollOption: text("Tellomi.Discover.PollOption", "Option", "选项", "選項"),
             pollHint: text("Tellomi.Discover.PollHint", "Add at least two options.", "至少两个选项。", "至少兩個選項。"),
+            videoAdd: text("Tellomi.Discover.VideoAdd", "Add a video", "添加视频", "新增影片"),
+            videoReplace: text("Tellomi.Discover.VideoReplace", "Replace", "更换", "更換"),
+            videoRemove: text("Tellomi.Discover.VideoRemove", "Remove", "移除", "移除"),
+            videoHint: text("Tellomi.Discover.VideoHint", "Videos can be up to 60 seconds.", "视频最长 60 秒。", "影片最長 60 秒。"),
+            videoTooLong: text("Tellomi.Discover.VideoTooLong", "This video is longer than 60 seconds. Pick a shorter one.", "这段视频超过 60 秒，请换一段更短的。", "這段影片超過 60 秒，請換一段更短的。"),
+            videoUnknown: text("Tellomi.Discover.VideoUnknown", "Couldn't read how long this video is. Pick another.", "读不到这段视频的时长，请换一个。", "讀不到這段影片的時長，請換一個。"),
+            videoSelected: text("Tellomi.Discover.VideoSelected", "Selected · %s", "已选择 · %s", "已選擇 · %s"),
+            videoNotUploaded: text("Tellomi.Discover.VideoNotUploaded", "Video upload isn't available yet. Remove it to post the text.", "发现还不能上传视频，移除后可以发布文字。", "發現還不能上傳影片，移除後可以發布文字。"),
+            videoReading: text("Tellomi.Discover.VideoReading", "Reading the length…", "正在读取时长…", "正在讀取時長…"),
             votes: text("Tellomi.Discover.Votes", "%d votes", "%d 票", "%d 票"),
             notifications: text("Tellomi.Discover.Notifications", "Discover activity", "发现的互动", "發現的互動"),
             notificationsInfo: text("Tellomi.Discover.NotificationsInfo", "Likes, comments, and reposts. Off stops those pushes.", "点赞、评论和转发。关掉后不再收到这些推送。", "讚、留言和轉發。關掉後不再收到這些推播。")

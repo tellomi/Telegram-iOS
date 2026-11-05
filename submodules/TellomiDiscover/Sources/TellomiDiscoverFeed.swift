@@ -548,6 +548,8 @@ public func tellomiDiscoverCardsBody(_ identifiers: [String]) -> Data? {
     return try? JSONSerialization.data(withJSONObject: ["ids": ids], options: [])
 }
 
+/// `POST /v1/feed/posts`. There is no media field: a video kept on the compose
+/// screen is not serialized here, and this function cannot add one.
 public func tellomiDiscoverPublishBody(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int, city: String? = nil, quoteOf: String? = nil, pollOptions: [String]? = nil) -> Data? {
     let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
     let limit = textLimit > 0 ? textLimit : tellomiDiscoverPostTextLimit
