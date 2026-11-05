@@ -823,3 +823,23 @@ Publishing still uses `POST /v1/feed/posts` and the existing `city` field. The v
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreenNode.swift` | Draws the city line, the change-city action, and the "no city" row. The compose controller is not edited. |
 | `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | The same lines. zh-Hant keeps this simplified pack for them. |
 | `submodules/TellomiDiscover/Tests/TellomiDiscoverNearbyTests.swift` | City normalize, tab order, the nearby query, and the publish keys. |
+
+## Personalized recommendations (D-58)
+
+Privacy and Security shows 「个性化推荐」 at the top. A missing account preference is on. The value is `TellomiRecommendationSettings` under account preference id 100. English, simplified, and traditional strings are `Tellomi.Settings.PersonalizedRecommendation` and `PersonalizedRecommendationFooter`.
+
+teamgram publishes `help.getAppConfig` `tellomi_personalized_recommend_default`. That bool is true only when `TELLOMI_ABOUT_DISCLOSURE=1` and `TELLOMI_ALGORITHM_FILING_NUMBER` is set (`pkg/about`). False means "hide the switch". This client still shows the row: `GET /v1/feed/recommend` with no query is the engine's personalized order, so the off switch has to be on screen. teamgram does not store the per-user choice and does not rank the feed.
+
+The recommend request:
+
+| Switch | Request |
+| --- | --- |
+| On, or no stored value | `GET /v1/feed/recommend` (no query) |
+| Off | `GET /v1/feed/recommend?personalized=false` |
+| On again | The query is omitted again |
+
+Following and nearby ignore the flag. The first read of the preference does not throw away a page. A later change drops `posts[.recommend]` and its cursor immediately. If Recommend is the open tab, that tab reloads in the same turn and shows the empty list while the new page loads. The feed generation moves first, so an older in-flight page cannot write itself back. Another tab keeps what it is showing; Recommend fetches again the next time it opens. The Discover screen does not request Recommend until that preference has been read once, so a stored off applies to the first request.
+
+`GET /v1/feed/config` still parses `recommend_mode` and `personalization_toggle_visible`. Neither decides the switch or the query. The example payload in the feed tests uses `recommend_mode=editorial_chronological` and `personalization_toggle_visible=false`.
+
+**Engine gap.** content-engine is private (`tellomi/content-engine`); this checkout cannot read it. iOS and Android already send `personalized=false`. Nothing in teamgram applies that query. Until content-engine treats `personalized=false` as an order that is not based on the person (time or popularity) and treats a missing query as the personalized order, turning the switch off changes the request and clears the cached page, and the returned order can stay the same. Android has the same query and no privacy row yet; this change does not edit that repo.

@@ -143,6 +143,26 @@ final class TellomiDiscoverFeedTests: XCTestCase {
         XCTAssertNil(tellomiDiscoverFeedURL(base: base, kind: .recommend, cursor: nil, personalized: true)?.query)
     }
 
+    func testRecommendPersonalizationTurnsOffAndRestores() {
+        let base = URL(string: "https://feed.example")!
+        let on = tellomiDiscoverHTTPCall(base: base, operation: .feed(.recommend, cursor: nil, personalized: true), token: "jwt")
+        XCTAssertEqual(on?.method, "GET")
+        XCTAssertEqual(on?.url.path, "/v1/feed/recommend")
+        XCTAssertNil(on?.url.query)
+        XCTAssertTrue(tellomiDiscoverRecommendPersonalizationQuery(personalized: true).isEmpty)
+
+        let off = tellomiDiscoverHTTPCall(base: base, operation: .feed(.recommend, cursor: "stale", personalized: false), token: "jwt")
+        XCTAssertEqual(off?.url.path, "/v1/feed/recommend")
+        XCTAssertEqual(URLComponents(url: off!.url, resolvingAgainstBaseURL: false)?.queryItems, [URLQueryItem(name: "personalized", value: "false")])
+
+        let restored = tellomiDiscoverHTTPCall(base: base, operation: .feed(.recommend, cursor: nil, personalized: true), token: "jwt")
+        XCTAssertNil(restored?.url.query)
+
+        let following = tellomiDiscoverHTTPCall(base: base, operation: .feed(.following, cursor: nil, personalized: false), token: "jwt")
+        XCTAssertEqual(following?.url.path, "/v1/feed/following")
+        XCTAssertNil(following?.url.query)
+    }
+
     func testPublishBodyMatchesTheEngine() {
         let body = tellomiDiscoverPublishBody(text: " 你好 ", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500)
         let object = try! JSONSerialization.jsonObject(with: body!) as! [String: Any]

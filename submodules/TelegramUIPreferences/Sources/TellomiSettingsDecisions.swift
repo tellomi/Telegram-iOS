@@ -90,6 +90,21 @@ public func tellomiRecommendFeedIsPersonalized(_ choice: TellomiRecommendationCh
     return choice.personalized
 }
 
+/// What happens to the cached Recommend page when the stored switch is read or moved.
+/// The first read does not count as a change: nothing has been fetched under another value yet.
+/// A later change drops that page. Recommend reloads immediately; another tab waits until it is opened.
+public enum TellomiRecommendCacheUpdate: Equatable {
+    case none
+    case drop(reload: Bool)
+}
+
+public func tellomiRecommendCacheUpdate(preferenceKnown: Bool, wasPersonalized: Bool, isPersonalized: Bool, viewingRecommend: Bool) -> TellomiRecommendCacheUpdate {
+    guard preferenceKnown, wasPersonalized != isPersonalized else {
+        return .none
+    }
+    return .drop(reload: viewingRecommend)
+}
+
 /// D-50 / D-59. Shown only on About Tellomi.
 /// `help.getAppConfig` may replace each field with a non-empty string.
 public struct TellomiAboutFacts: Equatable {

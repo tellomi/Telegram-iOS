@@ -45,6 +45,7 @@ public final class TellomiFeedScreen: ViewController {
     private var pendingPostId: String?
     private var audienceDisposable: Disposable?
     private var recommendationDisposable: Disposable?
+    private var recommendationKnown = false
     private var personalizedRecommend = true
     private var appliedLayout: ContainerViewLayout?
 
@@ -97,18 +98,32 @@ public final class TellomiFeedScreen: ViewController {
                 return
             }
             let personalized = tellomiRecommendFeedIsPersonalized(tellomiRecommendationChoice(storedPersonalized: tellomiRecommendationSettings(entry: entry).personalized))
-            let changed = personalized != self.personalizedRecommend
+            let update = tellomiRecommendCacheUpdate(preferenceKnown: self.recommendationKnown, wasPersonalized: self.personalizedRecommend, isPersonalized: personalized, viewingRecommend: self.kind == .recommend)
+            self.recommendationKnown = true
             self.personalizedRecommend = personalized
-            guard changed else {
-                return
-            }
-            if self.kind == .recommend {
-                if self.loading || self.posts[.recommend] != nil {
-                    self.loadFeed(reset: true)
+            switch update {
+            case .none:
+                // The view's own sync skipped Recommend until this value arrived.
+                // Do not start that request before the tab has loaded its view.
+                if self.isNodeLoaded, self.kind == .recommend, self.posts[.recommend] == nil, !self.loading {
+                    self.sync(reload: true)
                 }
-            } else {
+            case let .drop(reload):
                 self.posts[.recommend] = nil
                 self.cursors[.recommend] = nil
+                if reload {
+                    self.failed = false
+                    self.banner = nil
+                    self.loading = false
+                    self.loadingMore = false
+                    self.feedGeneration += 1
+                    let configuration = self.configuration()
+                    let chrome = tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, kind: .recommend, openedPostId: nil, failed: false, city: self.cityCode)
+                    if chrome.loadsFeed, self.engineVisible != false {
+                        self.loadFeed(reset: true)
+                    }
+                    self.sync(reload: false)
+                }
             }
         })
         self.sync(reload: false)
@@ -335,7 +350,8 @@ public final class TellomiFeedScreen: ViewController {
                 self.feedNode.updateLayout(size: layout.size, topInset: navigationHeight, bottomInset: layout.intrinsicInsets.bottom, transition: .immediate)
             }
         }
-        if chrome.loadsFeed, !self.pickingCity, self.engineVisible != false, !self.loading, reload || (self.posts[self.kind] == nil && !self.failed && !self.nearbyUnavailable) {
+        let waitingForRecommendation = self.kind == .recommend && !self.recommendationKnown
+        if chrome.loadsFeed, !self.pickingCity, self.engineVisible != false, !self.loading, !waitingForRecommendation, reload || (self.posts[self.kind] == nil && !self.failed && !self.nearbyUnavailable) {
             self.loadFeed(reset: true)
         }
     }

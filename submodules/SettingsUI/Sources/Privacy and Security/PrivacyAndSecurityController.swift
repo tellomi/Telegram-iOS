@@ -692,6 +692,11 @@ private func privacyAndSecurityControllerEntries(
     personalizedRecommendation: Bool
 ) -> [PrivacyAndSecurityEntry] {
     var entries: [PrivacyAndSecurityEntry] = []
+    // D-58. Top of Privacy and Security, on unless this account turned it off.
+    // teamgram's `tellomi_personalized_recommend_default` is false until an
+    // algorithm filing number is published, and that false asks clients to hide
+    // the row. The recommend request stays personalized until this switch is
+    // off, so the row stays on screen either way.
     let recommendationCopy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
     entries.append(.personalizedRecommendation(recommendationCopy.personalizedRecommendation, personalizedRecommendation))
     entries.append(.personalizedRecommendationFooter(recommendationCopy.personalizedRecommendationFooter))
