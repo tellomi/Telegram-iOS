@@ -35,6 +35,31 @@ enum TellomiDocumentByHashDecision: Equatable {
 /// Inclusive upper bound for a video hash probe. GIFs and ordinary documents are not capped.
 let tellomiDocumentByHashVideoByteLimit: Int64 = 100 * 1024 * 1024
 
+/// Account 0 `mainconfig` on Android (`MessagesController.getGlobalMainSettings()`).
+/// iOS stores the same boolean in the sending account's persisted `help.getAppConfig`
+/// (`AppConfiguration`). Missing or `true` keeps the lookup. `false` skips it.
+/// Read on each send; do not cache the value.
+let tellomiGetDocumentByHashKey = "tellomi_get_document_by_hash"
+
+/// Tests only. `nil` reads `tellomiGetDocumentByHashKey` from the persisted configuration.
+var tellomiGetDocumentByHashEnabledOverride: Bool?
+
+/// Lookup stays on unless the key is boolean `false`.
+/// A missing key, an empty configuration, or a non-boolean stays on: Android's
+/// `getBoolean(key, true)` does the same, and a prefs failure there stays on too.
+func tellomiGetDocumentByHashEnabled(configuration: AppConfiguration) -> Bool {
+    if let override = tellomiGetDocumentByHashEnabledOverride {
+        return override
+    }
+    guard case let .dictionary(fields)? = configuration.data, let value = fields[tellomiGetDocumentByHashKey] else {
+        return true
+    }
+    if case let .bool(enabled) = value {
+        return enabled
+    }
+    return true
+}
+
 func tellomiDocumentByHashDecision(_ traits: TellomiDocumentByHashTraits) -> TellomiDocumentByHashDecision {
     if traits.encrypted || traits.mimeType.isEmpty {
         return .skip

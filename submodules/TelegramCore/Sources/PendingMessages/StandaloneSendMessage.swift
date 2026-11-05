@@ -855,7 +855,7 @@ private func uploadedFile(account: Account, data: Data, mimeType: String, attrib
     guard case .lookup = tellomiDocumentByHashDecision(traits) else {
         return bytes
     }
-    return tellomiLookupExistingDocument(network: account.network, data: data, mimeType: mimeType, attributes: attributes, encrypted: false)
+    return tellomiLookupExistingDocument(network: account.network, postbox: account.postbox, data: data, mimeType: mimeType, attributes: attributes, encrypted: false)
     |> mapToSignalPromotingError { document -> Signal<UploadMediaEvent, PendingMessageUploadError> in
         guard let document, let inputDocument = tellomiInputDocument(from: document) else {
             return bytes
