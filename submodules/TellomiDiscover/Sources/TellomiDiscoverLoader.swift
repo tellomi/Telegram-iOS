@@ -23,6 +23,7 @@ public enum TellomiDiscoverDecoded: Equatable {
     case cards([TellomiDiscoverCard])
     case created(TellomiDiscoverCreatedPost)
     case reported
+    case acknowledged
 }
 
 public struct TellomiDiscoverHTTPResult: Equatable {
@@ -155,11 +156,18 @@ private func tellomiDiscoverLocalFailure(_ operation: TellomiDiscoverOperation) 
         return tellomiDiscoverKnownCityCode(city) == nil ? .invalidCity : nil
     case let .cards(identifiers):
         return tellomiDiscoverCardsBody(identifiers) == nil ? .notFound : nil
-    case let .publish(text, visibility, audienceToken, clientNonce, textLimit, city):
+    case let .publish(text, visibility, audienceToken, clientNonce, textLimit, city, quoteOf, pollOptions):
         if let city, !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, tellomiDiscoverKnownCityCode(city) == nil {
             return .invalidCity
         }
-        if tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit, city: city) == nil {
+        if tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit, city: city, quoteOf: quoteOf, pollOptions: pollOptions) == nil {
+            return .notPublishable
+        }
+        return nil
+    case let .repost(identifier), let .unrepost(identifier):
+        return tellomiDiscoverPostId(identifier) == nil ? .notFound : nil
+    case let .vote(identifier, option):
+        if tellomiDiscoverPostId(identifier) == nil || tellomiDiscoverVoteBody(option: option) == nil {
             return .notPublishable
         }
         return nil
@@ -178,6 +186,13 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
     switch result.status {
     case 200, 201:
         break
+    case 204:
+        switch operation {
+        case .repost, .unrepost, .vote:
+            return .success(.acknowledged)
+        default:
+            return .failure(.unavailable)
+        }
     case 401, 403:
         return .failure(.unauthorized)
     case 404:
@@ -218,6 +233,8 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
         return .success(.created(created))
     case .report:
         return .success(.reported)
+    case .repost, .unrepost, .vote:
+        return .success(.acknowledged)
     }
 }
 
@@ -256,6 +273,19 @@ public struct TellomiDiscoverCopy: Equatable {
     public var likes: String
     public var comments: String
     public var photos: String
+    public var reposts: String
+    public var repost: String
+    public var unrepost: String
+    public var quote: String
+    public var shareChat: String
+    public var shareExternal: String
+    public var poll: String
+    public var pollAdd: String
+    public var pollOption: String
+    public var pollHint: String
+    public var votes: String
+    public var notifications: String
+    public var notificationsInfo: String
 
     public static func resolve(languageCode: String, pack: [String: String] = [:]) -> TellomiDiscoverCopy {
         func text(_ key: String, _ english: String, _ simplified: String, _ traditional: String) -> String {
@@ -295,7 +325,20 @@ public struct TellomiDiscoverCopy: Equatable {
             tellomiId: text("Tellomi.Discover.TellomiId", "Tellomi ID: %@", "Tellomi 号：%@", "Tellomi 號：%@"),
             likes: text("Tellomi.Discover.Likes", "%d likes", "%d 赞", "%d 讚"),
             comments: text("Tellomi.Discover.Comments", "%d comments", "%d 评论", "%d 則留言"),
-            photos: text("Tellomi.Discover.Photos", "%d photos", "%d 张图片", "%d 張圖片")
+            photos: text("Tellomi.Discover.Photos", "%d photos", "%d 张图片", "%d 張圖片"),
+            reposts: text("Tellomi.Discover.Reposts", "%d reposts", "%d 转发", "%d 轉發"),
+            repost: text("Tellomi.Discover.Repost", "Repost", "直接转发", "直接轉發"),
+            unrepost: text("Tellomi.Discover.Unrepost", "Undo repost", "取消转发", "取消轉發"),
+            quote: text("Tellomi.Discover.Quote", "Quote", "引用转发", "引用轉發"),
+            shareChat: text("Tellomi.Discover.ShareChat", "Share to a tellomi chat", "分享到 tellomi 聊天", "分享到 tellomi 聊天"),
+            shareExternal: text("Tellomi.Discover.ShareExternal", "Share to another app", "分享到外部 App", "分享到外部 App"),
+            poll: text("Tellomi.Discover.Poll", "Poll", "投票", "投票"),
+            pollAdd: text("Tellomi.Discover.PollAdd", "Add an option", "添加选项", "新增選項"),
+            pollOption: text("Tellomi.Discover.PollOption", "Option", "选项", "選項"),
+            pollHint: text("Tellomi.Discover.PollHint", "Add at least two options.", "至少两个选项。", "至少兩個選項。"),
+            votes: text("Tellomi.Discover.Votes", "%d votes", "%d 票", "%d 票"),
+            notifications: text("Tellomi.Discover.Notifications", "Discover activity", "发现的互动", "發現的互動"),
+            notificationsInfo: text("Tellomi.Discover.NotificationsInfo", "Likes, comments, and reposts. Off stops those pushes.", "点赞、评论和转发。关掉后不再收到这些推送。", "讚、留言和轉發。關掉後不再收到這些推播。")
         )
     }
 
@@ -353,7 +396,7 @@ public struct TellomiDiscoverPostSummary: Equatable {
     }
 }
 
-public func tellomiDiscoverPostSummary(post: TellomiDiscoverPost, copy: TellomiDiscoverCopy, list: Bool) -> TellomiDiscoverPostSummary {
+public func tellomiDiscoverPostSummary(post: TellomiDiscoverPost, copy: TellomiDiscoverCopy, list: Bool, includePoll: Bool = true) -> TellomiDiscoverPostSummary {
     var title = post.authorName
     if let handle = post.authorHandle, !handle.isEmpty {
         if title.isEmpty {
@@ -390,6 +433,14 @@ public func tellomiDiscoverPostSummary(post: TellomiDiscoverPost, copy: TellomiD
         } else if let quoteText = post.quoteText, !quoteText.isEmpty {
             body += "\n" + quoteText
         }
+        if includePoll, let poll = post.poll {
+            for option in poll.options {
+                body += "\n" + option.text
+                if poll.myVote != nil || option.votes > 0 {
+                    body += " · " + tellomiFormatInteger(copy.votes, option.votes)
+                }
+            }
+        }
     }
     var meta: [String] = []
     if let city = post.city, let name = tellomiDiscoverCityName(code: city, languageCode: copy.languageCode, pack: copy.pack) {
@@ -403,6 +454,9 @@ public func tellomiDiscoverPostSummary(post: TellomiDiscoverPost, copy: TellomiD
     }
     if post.commentCount > 0 {
         meta.append(tellomiFormatInteger(copy.comments, post.commentCount))
+    }
+    if post.repostCount > 0 {
+        meta.append(tellomiFormatInteger(copy.reposts, post.repostCount))
     }
     if post.imageCount > 0 {
         meta.append(tellomiFormatInteger(copy.photos, post.imageCount))

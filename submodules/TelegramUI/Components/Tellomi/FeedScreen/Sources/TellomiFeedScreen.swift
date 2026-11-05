@@ -126,11 +126,28 @@ public final class TellomiFeedScreen: ViewController {
         self.loader.cancel()
     }
 
-    private func reportPost(_ id: String) {
+    private func presentPostMenu(_ id: String) {
         guard let id = tellomiDiscoverPostId(id) else {
             return
         }
-        tellomiPresentDiscoverReport(host: self, context: self.context, loggedIn: !self.loggedOut, configuration: self.configuration(), loader: self.loader, target: .post(id))
+        let post = (self.posts[self.kind] ?? []).first(where: { $0.id == id })
+        tellomiPresentDiscoverPostMenu(host: self, context: self.context, loggedIn: !self.loggedOut, configuration: self.configuration(), loader: self.loader, postId: id, post: post, onReposted: { [weak self] reposted in
+            self?.noteRepost(id: id, reposted: reposted)
+        }, onQuote: { [weak self] in
+            self?.composePressed(quoteOf: id, quotePreview: post?.text ?? "")
+        })
+    }
+
+    private func noteRepost(id: String, reposted: Bool) {
+        guard var posts = self.posts[self.kind], let index = posts.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        var current = posts[index]
+        current.reposted = reposted
+        current.repostCount = max(0, current.repostCount + (reposted ? 1 : -1))
+        posts[index] = current
+        self.posts[self.kind] = posts
+        self.sync(reload: false)
     }
 
     public func openPost(id: String) {
@@ -149,7 +166,7 @@ public final class TellomiFeedScreen: ViewController {
             self?.openPost(id: id)
         }
         node.onReportPost = { [weak self] id in
-            self?.reportPost(id)
+            self?.presentPostMenu(id)
         }
         node.onRefresh = { [weak self] in
             self?.loadFeed(reset: true)
@@ -535,40 +552,24 @@ public final class TellomiFeedScreen: ViewController {
     }
 
     @objc private func composePressed() {
+        self.composePressed(quoteOf: nil, quotePreview: "")
+    }
+
+    private func composePressed(quoteOf: String?, quotePreview: String) {
         let configuration = self.configuration()
         guard tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: false, city: self.cityCode).showsCompose else {
             return
         }
         let textLimit = self.textLimit
-        let controller = TellomiDiscoverComposeController(context: self.context, textLimit: textLimit, publish: { [weak self] text, visibility, userIds, nonce, completion in
-            guard let self, let selfUserId = self.context.account.peerId.tellomiCloudUserId else {
+        let controller = TellomiDiscoverComposeController(context: self.context, textLimit: textLimit, quoteOf: quoteOf, quotePreview: quotePreview, publish: { [weak self] request, completion in
+            guard let self else {
                 completion(.failure(.signedOut))
                 return
             }
-            let configuration = self.configuration()
-            guard !self.loggedOut, configuration.enabled else {
-                completion(.failure(self.loggedOut ? .signedOut : .disabled))
-                return
-            }
-            let step = tellomiDiscoverPublishStep(text: text, visibility: visibility, userIds: userIds, selfUserId: selfUserId, clientNonce: nonce, textLimit: textLimit, token: nil, now: Int64(Date().timeIntervalSince1970), city: self.cityCode)
-            switch step {
-            case .ready:
-                self.loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: text, visibility: visibility, audienceToken: nil, clientNonce: nonce, textLimit: textLimit, city: self.cityCode), completion: completion)
-            case let .needsAudienceToken(kind, ids):
-                self.audienceDisposable?.dispose()
-                self.audienceDisposable = (tellomiDiscoverAudienceToken(account: self.context.account, kind: kind, userIds: ids)
-                |> deliverOnMainQueue).start(next: { [weak self] token in
-                    guard let self else {
-                        completion(.failure(.signedOut))
-                        return
-                    }
-                    self.loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: text, visibility: visibility, audienceToken: token.token, clientNonce: nonce, textLimit: textLimit, city: self.cityCode), completion: completion)
-                }, error: { error in
-                    completion(.failure(tellomiDiscoverClientError(for: error)))
-                })
-            case let .rejected(error):
-                completion(.failure(error))
-            }
+            tellomiRunDiscoverPublish(context: self.context, loader: self.loader, configuration: self.configuration(), loggedIn: !self.loggedOut, city: self.cityCode, textLimit: textLimit, request: request, retainAudience: { [weak self] disposable in
+                self?.audienceDisposable?.dispose()
+                self?.audienceDisposable = disposable
+            }, completion: completion)
         }, published: { [weak self] in
             guard let self else {
                 return

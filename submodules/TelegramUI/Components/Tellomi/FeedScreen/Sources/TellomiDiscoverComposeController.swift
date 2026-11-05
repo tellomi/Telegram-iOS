@@ -10,31 +10,49 @@ import TellomiDiscover
 import UIKit
 import ShareWithPeersScreen
 
+struct TellomiDiscoverComposeRequest {
+    var text: String
+    var visibility: TellomiDiscoverVisibility
+    var userIds: [Int64]
+    var nonce: String
+    var quoteOf: String?
+    var pollOptions: [String]?
+}
+
 final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate {
     private let context: AccountContext
     private let textLimit: Int
+    private let quoteOf: String?
+    private let quotePreview: String
     private let nonce = UUID().uuidString
-    private let publish: (String, TellomiDiscoverVisibility, [Int64], String, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void
+    private let publish: (TellomiDiscoverComposeRequest, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void
     private let published: () -> Void
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
     private var privacyDisposable: Disposable?
     private var privacy = EngineStoryPrivacy(base: .everyone, additionallyIncludePeers: [])
     private let textView = UITextView()
+    private let quoteLabel = UILabel()
+    private let pollButton = UIButton(type: .system)
+    private let addOptionButton = UIButton(type: .system)
     private let visibilityButton = UIButton(type: .system)
     private let hintLabel = UILabel()
+    private var optionFields: [UITextField] = []
+    private var pollOn = false
     private var sending = false
     private var sendError: TellomiDiscoverClientError?
 
-    init(context: AccountContext, textLimit: Int, publish: @escaping (String, TellomiDiscoverVisibility, [Int64], String, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void) {
+    init(context: AccountContext, textLimit: Int, quoteOf: String? = nil, quotePreview: String = "", publish: @escaping (TellomiDiscoverComposeRequest, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void) {
         self.context = context
         self.textLimit = textLimit
+        self.quoteOf = quoteOf.flatMap(tellomiDiscoverPostId)
+        self.quotePreview = quotePreview
         self.publish = publish
         self.published = published
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
         let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict))
-        self.title = copy.compose
+        self.title = self.quoteOf == nil ? copy.compose : copy.quote
         self.presentationDataDisposable = (context.sharedContext.presentationData
         |> deliverOnMainQueue).start(next: { [weak self] presentationData in
             guard let self else {
@@ -61,12 +79,25 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.textView.backgroundColor = .clear
         self.textView.delegate = self
         self.textView.accessibilityIdentifier = "tellomi.discover.compose"
+        self.quoteLabel.numberOfLines = 3
+        self.quoteLabel.font = Font.regular(14.0)
+        self.pollButton.contentHorizontalAlignment = .left
+        self.pollButton.addTarget(self, action: #selector(self.pollPressed), for: .touchUpInside)
+        self.pollButton.accessibilityIdentifier = "tellomi.discover.poll"
+        self.addOptionButton.contentHorizontalAlignment = .left
+        self.addOptionButton.addTarget(self, action: #selector(self.addOptionPressed), for: .touchUpInside)
         self.visibilityButton.contentHorizontalAlignment = .left
         self.visibilityButton.addTarget(self, action: #selector(self.visibilityPressed), for: .touchUpInside)
         self.hintLabel.numberOfLines = 2
+        self.displayNode.view.addSubview(self.quoteLabel)
         self.displayNode.view.addSubview(self.textView)
+        self.displayNode.view.addSubview(self.pollButton)
+        self.displayNode.view.addSubview(self.addOptionButton)
         self.displayNode.view.addSubview(self.visibilityButton)
         self.displayNode.view.addSubview(self.hintLabel)
+        if self.quoteOf == nil {
+            self.ensureOptionFields(2)
+        }
         self.apply()
     }
 
@@ -75,11 +106,36 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         guard self.isNodeLoaded else {
             return
         }
-        let top = self.navigationLayout(layout: layout).navigationFrame.maxY + 8.0
         let side: CGFloat = 16.0
         let width = max(1, layout.size.width - side * 2.0)
-        self.textView.frame = CGRect(x: side, y: top, width: width, height: 160)
-        self.visibilityButton.frame = CGRect(x: side, y: self.textView.frame.maxY + 12, width: width, height: 36)
+        var cursor = self.navigationLayout(layout: layout).navigationFrame.maxY + 8.0
+        if self.quoteOf != nil {
+            self.quoteLabel.frame = CGRect(x: side, y: cursor, width: width, height: 52)
+            cursor = self.quoteLabel.frame.maxY + 8.0
+        } else {
+            self.quoteLabel.frame = .zero
+        }
+        self.textView.frame = CGRect(x: side, y: cursor, width: width, height: 120)
+        cursor = self.textView.frame.maxY + 8.0
+        let showPoll = self.pollOn && self.quoteOf == nil
+        for field in self.optionFields {
+            field.isHidden = !showPoll
+            if showPoll {
+                field.frame = CGRect(x: side, y: cursor, width: width, height: 36)
+                cursor = field.frame.maxY + 8.0
+            }
+        }
+        self.addOptionButton.isHidden = !showPoll || self.optionFields.count >= tellomiDiscoverPollOptionLimit
+        if !self.addOptionButton.isHidden {
+            self.addOptionButton.frame = CGRect(x: side, y: cursor, width: width, height: 32)
+            cursor = self.addOptionButton.frame.maxY + 4.0
+        }
+        self.pollButton.isHidden = self.quoteOf != nil
+        if !self.pollButton.isHidden {
+            self.pollButton.frame = CGRect(x: side, y: cursor, width: width, height: 36)
+            cursor = self.pollButton.frame.maxY + 4.0
+        }
+        self.visibilityButton.frame = CGRect(x: side, y: cursor, width: width, height: 36)
         self.hintLabel.frame = CGRect(x: side, y: self.visibilityButton.frame.maxY + 4, width: width, height: 40)
     }
 
@@ -92,14 +148,38 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.presentPrivacy(self.privacy)
     }
 
+    @objc private func pollPressed() {
+        self.pollOn = !self.pollOn
+        if let layout = self.currentlyAppliedLayout {
+            self.containerLayoutUpdated(layout, transition: .immediate)
+        }
+        self.apply()
+    }
+
+    @objc private func addOptionPressed() {
+        guard self.optionFields.count < tellomiDiscoverPollOptionLimit else {
+            return
+        }
+        self.ensureOptionFields(self.optionFields.count + 1)
+        if let layout = self.currentlyAppliedLayout {
+            self.containerLayoutUpdated(layout, transition: .immediate)
+        }
+        self.apply()
+    }
+
     @objc private func sendPressed() {
         guard !self.sending, let choice = self.choice(), choice.publishable else {
+            return
+        }
+        let options = self.pollOptions()
+        if self.pollOn, options == nil {
             return
         }
         self.sending = true
         self.sendError = nil
         self.apply()
-        self.publish(self.textView.text ?? "", choice.visibility, choice.userIds, self.nonce) { [weak self] result in
+        let request = TellomiDiscoverComposeRequest(text: self.textView.text ?? "", visibility: choice.visibility, userIds: choice.userIds, nonce: self.nonce, quoteOf: self.quoteOf, pollOptions: self.pollOn ? options : nil)
+        self.publish(request) { [weak self] result in
             guard let self else {
                 return
             }
@@ -113,6 +193,31 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
                 self.apply()
             }
         }
+    }
+
+    private func pollOptions() -> [String]? {
+        guard self.pollOn, self.quoteOf == nil else {
+            return nil
+        }
+        return tellomiDiscoverNormalizedPollOptions(self.optionFields.map { $0.text ?? "" })
+    }
+
+    private func ensureOptionFields(_ count: Int) {
+        while self.optionFields.count < count {
+            let field = UITextField()
+            field.borderStyle = .roundedRect
+            field.font = Font.regular(16.0)
+            field.accessibilityIdentifier = "tellomi.discover.poll.option.\(self.optionFields.count)"
+            field.addTarget(self, action: #selector(self.optionChanged), for: .editingChanged)
+            self.optionFields.append(field)
+            if self.isNodeLoaded {
+                self.displayNode.view.addSubview(field)
+            }
+        }
+    }
+
+    @objc private func optionChanged() {
+        self.apply()
     }
 
     private func choice() -> TellomiDiscoverAudienceChoice? {
@@ -135,14 +240,32 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         let title = choice.map { copy.visibilityTitle($0.visibility) } ?? copy.everyone
         self.visibilityButton.setTitle(copy.visibility + " · " + title, for: .normal)
         self.visibilityButton.setTitleColor(self.presentationData.theme.list.itemAccentColor, for: .normal)
+        self.pollButton.setTitle(copy.poll, for: .normal)
+        self.pollButton.setTitleColor(self.pollOn ? self.presentationData.theme.list.itemAccentColor : self.presentationData.theme.list.itemSecondaryTextColor, for: .normal)
+        self.addOptionButton.setTitle(copy.pollAdd, for: .normal)
+        self.addOptionButton.setTitleColor(self.presentationData.theme.list.itemAccentColor, for: .normal)
+        let index = 1
+        for (offset, field) in self.optionFields.enumerated() {
+            field.placeholder = copy.pollOption + " \(offset + index)"
+            field.textColor = self.presentationData.theme.list.itemPrimaryTextColor
+        }
+        if self.quoteOf != nil {
+            self.quoteLabel.text = self.quotePreview.isEmpty ? copy.quote : self.quotePreview
+        }
+        self.quoteLabel.textColor = self.presentationData.theme.list.itemSecondaryTextColor
         let errorText = self.sendError.flatMap { copy.failureText($0) }
-        self.hintLabel.text = errorText ?? copy.reasonText(choice?.reason)
+        if self.pollOn, self.pollOptions() == nil, errorText == nil {
+            self.hintLabel.text = copy.pollHint
+        } else {
+            self.hintLabel.text = errorText ?? copy.reasonText(choice?.reason)
+        }
         self.hintLabel.textColor = self.presentationData.theme.list.itemSecondaryTextColor
         self.hintLabel.font = Font.regular(13.0)
         self.textView.textColor = self.presentationData.theme.list.itemPrimaryTextColor
         self.displayNode.backgroundColor = self.presentationData.theme.list.plainBackgroundColor
         let text = self.textView.text ?? ""
-        let canSend = !self.sending && choice?.publishable == true && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= self.textLimit && tellomiDiscoverClientNonce(self.nonce)
+        let pollReady = !self.pollOn || self.pollOptions() != nil
+        let canSend = !self.sending && choice?.publishable == true && pollReady && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= self.textLimit && tellomiDiscoverClientNonce(self.nonce)
         let item = UIBarButtonItem(title: copy.publish, style: .done, target: self, action: #selector(self.sendPressed))
         item.isEnabled = canSend
         self.navigationItem.setRightBarButton(item, animated: false)

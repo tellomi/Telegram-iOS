@@ -26,7 +26,7 @@ final class TellomiDiscoverFeedTests: XCTestCase {
             .status,
             .feed(.recommend, cursor: nil, personalized: true),
             .cards(["post-9"]),
-            .publish(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: nil),
+            .publish(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: nil, quoteOf: nil, pollOptions: nil),
             .nearby(city: "cn:chengdu", cursor: nil),
             .report(target: .post("post-9"), option: "spam", detail: "nope")
         ]
@@ -236,7 +236,7 @@ final class TellomiDiscoverFeedTests: XCTestCase {
         XCTAssertEqual(TellomiDiscoverTL.decodeAudienceToken(response), TellomiDiscoverAudienceToken(token: "signed-jwt", expires: 600))
         let loggedOut = RecordingLoader()
         let finished = expectation(description: "no audience request")
-        loggedOut.loader.run(loggedIn: false, configuration: TellomiDiscoverConfiguration(enabled: true, baseURL: URL(string: "https://feed.example")!), operation: .publish(text: "hi", visibility: .include, audienceToken: "signed-jwt", clientNonce: self.nonce, textLimit: 500, city: "cn:chengdu")) { result in
+        loggedOut.loader.run(loggedIn: false, configuration: TellomiDiscoverConfiguration(enabled: true, baseURL: URL(string: "https://feed.example")!), operation: .publish(text: "hi", visibility: .include, audienceToken: "signed-jwt", clientNonce: self.nonce, textLimit: 500, city: "cn:chengdu", quoteOf: nil, pollOptions: nil)) { result in
             guard case .failure(.signedOut) = result else {
                 XCTFail("expected signed out")
                 return
@@ -342,7 +342,7 @@ final class TellomiDiscoverFeedTests: XCTestCase {
         XCTAssertNil(tellomiDiscoverPublishBody(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: "人民南路"))
         let omitted = tellomiDiscoverPublishBody(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: nil)
         XCTAssertNil((try! JSONSerialization.jsonObject(with: omitted!) as! [String: Any])["city"])
-        let rejected = tellomiDiscoverDecodeHTTP(operation: .publish(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: "cn:chengdu"), result: TellomiDiscoverHTTPResult(status: 400, body: #"{"error":"invalid_city"}"#.data(using: .utf8)!))
+        let rejected = tellomiDiscoverDecodeHTTP(operation: .publish(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: "cn:chengdu", quoteOf: nil, pollOptions: nil), result: TellomiDiscoverHTTPResult(status: 400, body: #"{"error":"invalid_city"}"#.data(using: .utf8)!))
         guard case .failure(.invalidCity) = rejected else {
             XCTFail("expected invalid_city")
             return

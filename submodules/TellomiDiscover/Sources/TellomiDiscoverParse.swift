@@ -19,8 +19,11 @@ public struct TellomiDiscoverPost: Equatable {
     public var ipRegionLabel: String?
     public var city: String?
     public var comments: [TellomiDiscoverComment]
+    public var shareable: Bool
+    public var reposted: Bool
+    public var poll: TellomiDiscoverPoll?
 
-    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = []) {
+    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil) {
         self.id = id
         self.text = text
         self.authorName = authorName
@@ -38,6 +41,9 @@ public struct TellomiDiscoverPost: Equatable {
         self.ipRegionLabel = ipRegionLabel
         self.city = city
         self.comments = comments
+        self.shareable = shareable
+        self.reposted = reposted
+        self.poll = poll
     }
 }
 
@@ -125,8 +131,10 @@ public struct TellomiDiscoverCard: Equatable {
     public var ipRegionLabel: String?
     public var city: String?
     public var comments: [TellomiDiscoverComment]
+    public var reposted: Bool
+    public var poll: TellomiDiscoverPoll?
 
-    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = []) {
+    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], reposted: Bool = false, poll: TellomiDiscoverPoll? = nil) {
         self.id = id
         self.state = state
         self.version = version
@@ -148,6 +156,8 @@ public struct TellomiDiscoverCard: Equatable {
         self.ipRegionLabel = ipRegionLabel
         self.city = city
         self.comments = comments
+        self.reposted = reposted
+        self.poll = poll
     }
 }
 
@@ -290,7 +300,10 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         quoteText: card.quoteText,
         ipRegionLabel: card.ipRegionLabel,
         city: card.city,
-        comments: card.comments
+        comments: card.comments,
+        shareable: card.shareable,
+        reposted: card.reposted,
+        poll: card.poll
     )
 }
 
@@ -307,6 +320,7 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
     let stats = objectValue(entry["stats"])
     let quoted = objectValue(entry["quoted"])
     let quotedCard = objectValue(quoted?["card"])
+    let me = objectValue(entry["me"])
     return TellomiDiscoverCard(
         id: identifier,
         state: state,
@@ -328,8 +342,39 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
         quoteText: stringValue(quotedCard?["text"]),
         ipRegionLabel: stringValue(body?["ip_region_label"]),
         city: tellomiDiscoverCityCode(stringValue(body?["city"]) ?? stringValue(entry["city"])),
-        comments: parseComments(entry["comments"])
+        comments: parseComments(entry["comments"]),
+        reposted: boolValue(me?["reposted"]) ?? false,
+        poll: parsePoll(body?["poll"] ?? entry["poll"])
     )
+}
+
+private func parsePoll(_ json: TellomiJSON?) -> TellomiDiscoverPoll? {
+    guard let object = objectValue(json), case let .array(values)? = object["options"] else {
+        return nil
+    }
+    var options: [TellomiDiscoverPollOption] = []
+    for value in values {
+        if let text = stringValue(value)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+            options.append(TellomiDiscoverPollOption(text: text, votes: 0))
+            continue
+        }
+        guard let item = objectValue(value) else {
+            continue
+        }
+        let text = (stringValue(item["text"]) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            continue
+        }
+        options.append(TellomiDiscoverPollOption(text: text, votes: max(0, intValue(item["votes"]) ?? 0)))
+    }
+    guard options.count >= tellomiDiscoverPollOptionMinimum else {
+        return nil
+    }
+    var myVote: Int?
+    if let vote = intValue(object["my_vote"]), vote >= 0, vote < options.count {
+        myVote = vote
+    }
+    return TellomiDiscoverPoll(options: options, myVote: myVote)
 }
 
 private func parseComments(_ json: TellomiJSON?) -> [TellomiDiscoverComment] {

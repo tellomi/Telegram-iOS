@@ -791,3 +791,16 @@ The settings tab is still `PeerInfoScreen` in settings mode. The home list, the 
 | `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | `Tellomi.Settings.*`. |
 
 New files, not in the table above: `TellomiSettingsDecisions.swift`, `TellomiRecommendationSettings.swift`, `TellomiSettingsLayout.swift`, `TellomiSettingsHeaderCard.swift`, `TellomiSettingsPages.swift`. Tips and Apple Watch are not on the home or the More page. Saved messages, recent calls, chat folders, power saving, and open-source licenses are on More. A configured proxy stays on the General group. Help Center opens `https://tellomi.cn/help`. About Tellomi is the only place that shows the model name and the two filing numbers.
+
+## Discover polls, forwards, and notification switch (M3)
+
+The feed client already posted text, listed recommend / following / nearby, and showed quote-deleted copy. It did not create or vote in a poll, did not offer the four forward actions, and Notifications had no Discover switch.
+
+| File | Change |
+| --- | --- |
+| `submodules/SettingsUI/Sources/Notifications/NotificationsAndSoundsController.swift` | Adds the Discover activity switch and its footer after message categories. Off writes the local preference and `account.updateNotifySettings` for user 777005 (`mute_until = Int32.max`). On writes `mute_until = 0`. Opening the screen reads that peer's settings once, unless the switch was already moved. Reset all notifications turns the switch back on and clears the mute. |
+| `submodules/SettingsUI/BUILD` | Depends on `TellomiDiscover` for the switch copy. |
+| `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | Account preference id 101, `tellomiDiscoverNotificationSettings`. |
+| `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | Poll, forward, and notification keys. |
+
+The push filter is the one already in teamgram `pkg/push`: muting user 777005 (`@faxian`) suppresses like, comment, reply, mention, follow, and repost pushes. Private-chat mute does not. The in-app notification list (`GET /v1/feed/me/notifications`) is still not a screen.
