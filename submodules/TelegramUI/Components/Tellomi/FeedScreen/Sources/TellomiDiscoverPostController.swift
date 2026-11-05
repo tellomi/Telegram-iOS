@@ -17,8 +17,10 @@ final class TellomiDiscoverPostController: ViewController {
     private let loggedIn: Bool
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
+    private var audienceDisposable: Disposable?
     private let textNode = ImmediateTextNode()
     private var commentRows: [TellomiDiscoverCommentRow] = []
+    private var pollButtons: [UIButton] = []
     private var post: TellomiDiscoverPost?
     private var failed = false
     private var started = false
@@ -34,8 +36,8 @@ final class TellomiDiscoverPostController: ViewController {
         let copy = TellomiTabCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict))
         self.title = copy.feed
         if loggedIn {
-            let item = UIBarButtonItem(title: "…", style: .plain, target: self, action: #selector(self.reportPressed))
-            item.accessibilityIdentifier = "tellomi.discover.report"
+            let item = UIBarButtonItem(title: "…", style: .plain, target: self, action: #selector(self.menuPressed))
+            item.accessibilityIdentifier = "tellomi.discover.share"
             self.navigationItem.setRightBarButton(item, animated: false)
         }
         self.presentationDataDisposable = (context.sharedContext.presentationData
@@ -54,6 +56,7 @@ final class TellomiDiscoverPostController: ViewController {
 
     deinit {
         self.presentationDataDisposable?.dispose()
+        self.audienceDisposable?.dispose()
     }
 
     override func loadDisplayNode() {
@@ -72,6 +75,10 @@ final class TellomiDiscoverPostController: ViewController {
         let size = self.textNode.updateLayout(CGSize(width: width, height: 4000))
         transition.updateFrame(node: self.textNode, frame: CGRect(x: 16, y: top, width: size.width, height: size.height))
         var commentY = self.textNode.frame.maxY + 12.0
+        for button in self.pollButtons {
+            button.frame = CGRect(x: 16, y: commentY, width: width, height: 40)
+            commentY += 48.0
+        }
         for row in self.commentRows {
             let height = row.layout(width: width)
             row.frame = CGRect(x: 16, y: commentY, width: width, height: height)
@@ -79,8 +86,52 @@ final class TellomiDiscoverPostController: ViewController {
         }
     }
 
-    @objc private func reportPressed() {
-        tellomiPresentDiscoverReport(host: self, context: self.context, loggedIn: self.loggedIn, configuration: self.configuration, loader: self.loader, target: .post(self.postId))
+    @objc private func menuPressed() {
+        tellomiPresentDiscoverPostMenu(host: self, context: self.context, loggedIn: self.loggedIn, configuration: self.configuration, loader: self.loader, postId: self.postId, post: self.post, onReposted: { [weak self] reposted in
+            guard let self, var post = self.post else {
+                return
+            }
+            post.reposted = reposted
+            post.repostCount = max(0, post.repostCount + (reposted ? 1 : -1))
+            self.post = post
+            self.apply()
+        }, onQuote: { [weak self] in
+            self?.openQuote()
+        })
+    }
+
+    private func openQuote() {
+        let preview = self.post?.text ?? ""
+        let textLimit = tellomiDiscoverPostTextLimit
+        let controller = TellomiDiscoverComposeController(context: self.context, textLimit: textLimit, quoteOf: self.postId, quotePreview: preview, publish: { [weak self] request, completion in
+            guard let self else {
+                completion(.failure(.signedOut))
+                return
+            }
+            tellomiRunDiscoverPublish(context: self.context, loader: self.loader, configuration: self.configuration, loggedIn: self.loggedIn, city: tellomiDiscoverStoredCity(), textLimit: textLimit, request: request, retainAudience: { [weak self] disposable in
+                self?.audienceDisposable?.dispose()
+                self?.audienceDisposable = disposable
+            }, completion: completion)
+        }, published: {})
+        self.push(controller)
+    }
+
+    @objc private func votePressed(_ button: UIButton) {
+        let option = button.tag
+        guard let poll = self.post?.poll, poll.voted.isEmpty, poll.options.indices.contains(option) else {
+            return
+        }
+        self.loader.run(loggedIn: true, configuration: self.configuration, operation: .vote(postId: self.postId, option: option)) { [weak self] result in
+            guard let self, case let .success(.voted(tally)) = result, var post = self.post, let poll = post.poll else {
+                return
+            }
+            post.poll = tellomiDiscoverPoll(poll, applying: tally)
+            self.post = post
+            self.apply()
+            if let layout = self.currentlyAppliedLayout {
+                self.containerLayoutUpdated(layout, transition: .immediate)
+            }
+        }
     }
 
     private func loadIfAllowed() {
@@ -119,7 +170,7 @@ final class TellomiDiscoverPostController: ViewController {
         self.displayNode.backgroundColor = self.presentationData.theme.list.plainBackgroundColor
         let body: String
         if let post = self.post {
-            let summary = tellomiDiscoverPostSummary(post: post, copy: copy, list: false)
+            let summary = tellomiDiscoverPostSummary(post: post, copy: copy, list: false, includePoll: false)
             body = [summary.title, summary.body, summary.meta].filter { !$0.isEmpty }.joined(separator: "\n\n")
         } else if self.failed || !self.loggedIn || !self.configuration.enabled {
             body = legacy.feedPostUnavailable
@@ -127,7 +178,35 @@ final class TellomiDiscoverPostController: ViewController {
             body = ""
         }
         self.textNode.attributedText = NSAttributedString(string: body, font: Font.regular(16.0), textColor: self.presentationData.theme.list.itemPrimaryTextColor)
+        self.installPoll(self.post?.poll, copy: copy)
         self.installComments(self.post?.comments ?? [], color: self.presentationData.theme.list.itemPrimaryTextColor)
+    }
+
+    private func installPoll(_ poll: TellomiDiscoverPoll?, copy: TellomiDiscoverCopy) {
+        for button in self.pollButtons {
+            button.removeFromSuperview()
+        }
+        guard self.isNodeLoaded, let poll else {
+            self.pollButtons = []
+            return
+        }
+        let hasVoted = !poll.voted.isEmpty
+        self.pollButtons = poll.options.enumerated().map { index, option in
+            let button = UIButton(type: .system)
+            var title = option.text
+            if hasVoted || option.votes > 0 {
+                title += " · " + tellomiFormatInteger(copy.votes, option.votes)
+            }
+            button.setTitle(title, for: .normal)
+            button.contentHorizontalAlignment = .left
+            button.tag = index
+            button.isEnabled = !hasVoted
+            button.accessibilityIdentifier = "tellomi.discover.vote.\(index)"
+            button.setTitleColor(poll.voted.contains(index) ? self.presentationData.theme.list.itemAccentColor : self.presentationData.theme.list.itemPrimaryTextColor, for: .normal)
+            button.addTarget(self, action: #selector(self.votePressed(_:)), for: .touchUpInside)
+            self.displayNode.view.addSubview(button)
+            return button
+        }
     }
 
     private func installComments(_ comments: [TellomiDiscoverComment], color: UIColor) {

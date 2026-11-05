@@ -14,6 +14,8 @@ private enum ApplicationSpecificPreferencesKeyValues: Int32 {
     case qrStudioPeerLook = 25
     /// Tellomi Discover recommendation switch. 100 stays clear of upstream's next id.
     case tellomiRecommendationSettings = 100
+    /// Discover activity pushes. Same account-preference namespace as the recommendation switch.
+    case tellomiDiscoverNotificationSettings = 101
 }
 
 public struct ApplicationSpecificPreferencesKeys {
@@ -26,6 +28,7 @@ public struct ApplicationSpecificPreferencesKeys {
     public static let walletState: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.walletState.rawValue)
     public static let qrStudioLook: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.qrStudioLook.rawValue)
     public static let tellomiRecommendationSettings: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.tellomiRecommendationSettings.rawValue)
+    public static let tellomiDiscoverNotificationSettings: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.tellomiDiscoverNotificationSettings.rawValue)
     
     public static func qrStudioPeerLook(peerId: EnginePeer.Id) -> EngineDataBuffer {
         let key = EngineDataBuffer(length: 4 + 8)

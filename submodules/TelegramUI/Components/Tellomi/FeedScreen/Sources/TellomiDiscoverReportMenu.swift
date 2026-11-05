@@ -57,7 +57,7 @@ func tellomiPresentDiscoverReport(host: ViewController, context: AccountContext,
     host.present(sheet, in: .window(.root))
 }
 
-private func tellomiPresentDiscoverReportReasons(host: ViewController, context: AccountContext, loggedIn: Bool, configuration: TellomiDiscoverConfiguration, loader: TellomiDiscoverLoader, target: TellomiDiscoverReportTarget) {
+func tellomiPresentDiscoverReportReasons(host: ViewController, context: AccountContext, loggedIn: Bool, configuration: TellomiDiscoverConfiguration, loader: TellomiDiscoverLoader, target: TellomiDiscoverReportTarget) {
     guard loggedIn else {
         return
     }
