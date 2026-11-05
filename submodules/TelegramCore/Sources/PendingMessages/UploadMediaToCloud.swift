@@ -178,7 +178,7 @@ func uploadFileToCloud(
         fileReference = .standalone(media: file)
     }
 
-    return messageMediaPreuploadManager.upload(
+    let byteUpload = messageMediaPreuploadManager.upload(
         network: network,
         postbox: postbox,
         source: .resource(fileReference.resourceReference(file.resource)),
@@ -236,5 +236,18 @@ func uploadFileToCloud(
                 }
             }
         }
+    }
+    let traits = tellomiDocumentByHashTraits(file: file, encrypted: false)
+    guard case .lookup = tellomiDocumentByHashDecision(traits) else {
+        return byteUpload
+    }
+    return tellomiLookupExistingDocument(network: network, postbox: postbox, resource: file.resource, declaredSize: file.size, mimeType: file.mimeType, attributes: file.attributes, encrypted: false)
+    |> mapToSignalPromotingError { document -> Signal<CloudUploadEvent, PendingMessageUploadError> in
+        guard let document, let cloud = telegramMediaFileFromApiDocument(document, altDocuments: nil), cloud.resource is CloudDocumentMediaResource else {
+            return byteUpload
+        }
+        postbox.mediaBox.copyResourceData(from: file.resource.id, to: cloud.resource.id, synchronous: true)
+        return .single(.progress(1.0))
+        |> then(.single(.done(cloud)))
     }
 }

@@ -806,6 +806,20 @@ The feed client already posted text, listed recommend / following / nearby, and 
 
 The push filter is the one already in teamgram `pkg/push`: muting user 777005 (`@faxian`) suppresses like, comment, reply, mention, follow, and repost pushes. Private-chat mute does not. The in-app notification list (`GET /v1/feed/me/notifications`) is still not a screen.
 
+## Document hash before upload (ADR-0082)
+
+Before the byte upload of a GIF, an ordinary document, or a video no larger than 100 MiB, the client hashes the exact bytes it would upload and calls `messages.getDocumentByHash` (`#b1f2061f`, sha256 + size + mime). A reusable document (non-zero id, dc id > 0, same size and mime) is sent as `inputMediaDocument` and the bytes are not uploaded. `documentEmpty`, an RPC error, a short read, a size mismatch, or an incomplete local file falls through to the existing multipart upload. Secret chats are not probed: the uploaded bytes are ciphertext. Voice, music, round video, and stickers are not probed, matching TDLib's `allow_get_by_hash` (animations and documents only). Videos above 100 MiB start uploading immediately; the server still deduplicates those bytes after the upload. A forced re-upload skips the probe so a rejected file reference does not reuse the same document.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHash.swift` | New. Which files are probed, the video size cap, and what counts as a reusable document. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHashUpload.swift` | New. SHA-256 of the local bytes and the RPC, with fail-open. |
+| `submodules/TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift` | Chat send probes before `multipartUpload`. A hit reuses the document, including a video cover when one is attached. |
+| `submodules/TelegramCore/Sources/PendingMessages/UploadMediaToCloud.swift` | Composer pre-upload uses the same probe. |
+| `submodules/TelegramCore/Sources/PendingMessages/StandaloneUploadedMedia.swift` | Share-sheet file and video upload uses the same probe. |
+| `submodules/TelegramCore/Sources/PendingMessages/StandaloneSendMessage.swift` | In-memory file send uses the same probe. |
+| `submodules/TelegramCore/Tests/TellomiDocumentByHashTests.swift` | Role selection, the video cap, attribute mapping, the reusable-document check, and the SHA-256 vector. |
+
 ## Discover nearby tab (D-11 / D-12)
 
 The Discover bar always shows 推荐, 关注, and 同城, in that order. `GET /v1/feed/config` may omit `nearby`; the tab stays. An unknown config name is still not added.
