@@ -230,9 +230,9 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
             case .openLinksIn:
                 return 33
             case .personalizedRecommendation:
-                return 34
+                return -2
             case .personalizedRecommendationFooter:
-                return 35
+                return -1
         }
     }
     

@@ -97,8 +97,16 @@ public final class TellomiFeedScreen: ViewController {
             let personalized = tellomiRecommendFeedIsPersonalized(tellomiRecommendationChoice(storedPersonalized: tellomiRecommendationSettings(entry: entry).personalized))
             let changed = personalized != self.personalizedRecommend
             self.personalizedRecommend = personalized
-            if changed, self.kind == .recommend, (self.loading || self.posts[.recommend] != nil) {
-                self.loadFeed(reset: true)
+            guard changed else {
+                return
+            }
+            if self.kind == .recommend {
+                if self.loading || self.posts[.recommend] != nil {
+                    self.loadFeed(reset: true)
+                }
+            } else {
+                self.posts[.recommend] = nil
+                self.cursors[.recommend] = nil
             }
         })
         self.sync(reload: false)

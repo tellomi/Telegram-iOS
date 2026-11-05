@@ -17422,6 +17422,7 @@ Error: %8$@";
 "Tellomi.Settings.More" = "More";
 "Tellomi.Settings.HelpCenter" = "Help Center";
 "Tellomi.Settings.Support" = "Support";
+"Tellomi.Settings.SupportUnavailable" = "Support isn't available right now. Try again later.";
 "Tellomi.Settings.Legal" = "Terms and Privacy";
 "Tellomi.Settings.About" = "About Tellomi";
 "Tellomi.Settings.Phone" = "Phone";

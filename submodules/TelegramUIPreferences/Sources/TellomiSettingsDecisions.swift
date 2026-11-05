@@ -233,6 +233,7 @@ public struct TellomiSettingsCopy: Equatable {
     public var more: String
     public var helpCenter: String
     public var support: String
+    public var supportUnavailable: String
     public var legal: String
     public var about: String
     public var phone: String
@@ -285,6 +286,7 @@ public struct TellomiSettingsCopy: Equatable {
             more: text("Tellomi.Settings.More", "More", "更多", "更多"),
             helpCenter: text("Tellomi.Settings.HelpCenter", "Help Center", "帮助中心", "幫助中心"),
             support: text("Tellomi.Settings.Support", "Support", "客服", "客服"),
+            supportUnavailable: text("Tellomi.Settings.SupportUnavailable", "Support isn't available right now. Try again later.", "暂时联系不上客服，请稍后再试。", "暫時聯絡不上客服，請稍後再試。"),
             legal: text("Tellomi.Settings.Legal", "Terms and Privacy", "协议与隐私", "協議與隱私"),
             about: text("Tellomi.Settings.About", "About Tellomi", "关于 Tellomi", "關於 Tellomi"),
             phone: text("Tellomi.Settings.Phone", "Phone", "手机号", "手機號碼"),

@@ -176,6 +176,7 @@
 "Tellomi.Settings.More" = "更多";
 "Tellomi.Settings.HelpCenter" = "帮助中心";
 "Tellomi.Settings.Support" = "客服";
+"Tellomi.Settings.SupportUnavailable" = "暂时联系不上客服，请稍后再试。";
 "Tellomi.Settings.Legal" = "协议与隐私";
 "Tellomi.Settings.About" = "关于 Tellomi";
 "Tellomi.Settings.Phone" = "手机号";

@@ -1,6 +1,7 @@
 import AccountContext
 import Display
 import Foundation
+import PresentationDataUtils
 import SettingsUI
 import SwiftSignalKit
 import TelegramCore
@@ -278,12 +279,18 @@ private func tellomiOpenSupportChat(context: AccountContext, interaction: PeerIn
     guard let navigationController = interaction.getController()?.navigationController as? NavigationController else {
         return
     }
+    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+    let copy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
     let _ = (context.engine.peers.supportPeerId()
     |> take(1)
     |> deliverOnMainQueue).startStandalone(next: { peerId in
-        guard let peerId else {
+        if let peerId {
+            navigationController.pushViewController(context.sharedContext.makeChatController(context: context, chatLocation: .peer(id: peerId), subject: nil, botStart: nil, mode: .standard(.default), params: nil))
             return
         }
-        navigationController.pushViewController(context.sharedContext.makeChatController(context: context, chatLocation: .peer(id: peerId), subject: nil, botStart: nil, mode: .standard(.default), params: nil))
+        guard let controller = interaction.getController() else {
+            return
+        }
+        controller.present(textAlertController(context: context, title: nil, text: copy.supportUnavailable, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), in: .window(.root))
     })
 }

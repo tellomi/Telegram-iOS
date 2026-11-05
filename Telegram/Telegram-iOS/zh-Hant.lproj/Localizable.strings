@@ -176,6 +176,7 @@
 "Tellomi.Settings.More" = "更多";
 "Tellomi.Settings.HelpCenter" = "幫助中心";
 "Tellomi.Settings.Support" = "客服";
+"Tellomi.Settings.SupportUnavailable" = "暫時聯絡不上客服，請稍後再試。";
 "Tellomi.Settings.Legal" = "協議與隱私";
 "Tellomi.Settings.About" = "關於 Tellomi";
 "Tellomi.Settings.Phone" = "手機號碼";
