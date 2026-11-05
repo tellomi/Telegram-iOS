@@ -1245,6 +1245,72 @@ public func statsCategoryForFileWithAttributes(_ attributes: [TelegramMediaFileA
     return .file
 }
 
+private func tellomiUploadedContentReusingDocument(network: Network, postbox: Postbox, peerId: PeerId, original: TelegramMediaFile, cloud: TelegramMediaFile, text: String, attributes: [MessageAttribute], autoclearMessageAttribute: AutoclearTimeoutMessageAttribute?, referenceKey: CachedSentMediaReferenceKey?) -> Signal<PendingMessageUploadedContentResult?, PendingMessageUploadError> {
+    guard let resource = cloud.resource as? CloudDocumentMediaResource, let fileReference = resource.fileReference else {
+        return .single(nil)
+    }
+    postbox.mediaBox.copyResourceData(from: original.resource.id, to: resource.id, synchronous: true)
+
+    var videoCoverSignal: Signal<UploadedMediaThumbnailResult, PendingMessageUploadError> = .single(.none)
+    if let cover = original.videoCover, let coverResource = cover.representations.first?.resource {
+        let fileReferenceMedia: AnyMediaReference
+        if let partialReference = original.partialReference {
+            fileReferenceMedia = partialReference.mediaReference(original)
+        } else {
+            fileReferenceMedia = .standalone(media: original)
+        }
+        videoCoverSignal = uploadedVideoCover(network: network, postbox: postbox, resourceReference: fileReferenceMedia.resourceReference(coverResource), peerId: peerId)
+        |> map { result -> UploadedMediaThumbnailResult in
+            if let result {
+                return .photo(result)
+            } else {
+                return .none
+            }
+        }
+        |> `catch` { _ -> Signal<UploadedMediaThumbnailResult, PendingMessageUploadError> in
+            return .single(.none)
+        }
+    }
+
+    return videoCoverSignal
+    |> mapToSignal { videoCover -> Signal<PendingMessageUploadedContentResult?, PendingMessageUploadError> in
+        var flags: Int32 = 0
+        var ttlSeconds: Int32?
+        var videoTimestamp: Int32?
+        var emojiSearchQuery: String?
+        if let autoclearMessageAttribute {
+            flags |= 1 << 0
+            ttlSeconds = autoclearMessageAttribute.timeout
+        }
+        for attribute in attributes {
+            if let _ = attribute as? MediaSpoilerMessageAttribute {
+                flags |= 1 << 2
+            } else if let attribute = attribute as? ForwardVideoTimestampAttribute {
+                flags |= 1 << 4
+                videoTimestamp = attribute.timestamp
+            } else if let attribute = attribute as? EmojiSearchQueryMessageAttribute {
+                emojiSearchQuery = attribute.query
+                flags |= 1 << 1
+            }
+        }
+        var videoCoverPhoto: Api.InputPhoto?
+        if case let .photo(photo) = videoCover {
+            videoCoverPhoto = photo
+        }
+        if videoCoverPhoto != nil {
+            flags |= 1 << 3
+        }
+        let result = PendingMessageUploadedContentResult.content(PendingMessageUploadedContentAndReuploadInfo(content: .media(Api.InputMedia.inputMediaDocument(.init(flags: flags, id: Api.InputDocument.inputDocument(.init(id: resource.fileId, accessHash: resource.accessHash, fileReference: Buffer(data: fileReference))), videoCover: videoCoverPhoto, videoTimestamp: videoTimestamp, ttlSeconds: ttlSeconds, query: emojiSearchQuery)), text), reuploadInfo: nil, cacheReferenceKey: nil))
+        if ttlSeconds != nil {
+            return .single(Optional(result))
+        }
+        return maybeCacheUploadedResource(postbox: postbox, key: referenceKey, result: result, media: cloud)
+        |> map { cached -> PendingMessageUploadedContentResult? in
+            return cached
+        }
+    }
+}
+
 private func uploadedMediaFileContent(network: Network, postbox: Postbox, auxiliaryMethods: AccountAuxiliaryMethods, transformOutgoingMessageMedia: TransformOutgoingMessageMedia?, messageMediaPreuploadManager: MessageMediaPreuploadManager, forceReupload: Bool, isGrouped: Bool, isPaid: Bool, passFetchProgress: Bool, forceNoBigParts: Bool, peerId: PeerId, messageId: MessageId?, text: String, attributes: [MessageAttribute], autoremoveMessageAttribute: AutoremoveTimeoutMessageAttribute?, autoclearMessageAttribute: AutoclearTimeoutMessageAttribute?, file: TelegramMediaFile) -> Signal<PendingMessageUploadedContentResult, PendingMessageUploadError> {
     return maybePredownloadedFileResource(postbox: postbox, auxiliaryMethods: auxiliaryMethods, peerId: peerId, resource: file.resource, autoRemove: autoremoveMessageAttribute != nil || autoclearMessageAttribute != nil, forceRefresh: forceReupload)
     |> mapToSignal { result -> Signal<PendingMessageUploadedContentResult, PendingMessageUploadError> in
@@ -1484,7 +1550,7 @@ private func uploadedMediaFileContent(network: Network, postbox: Postbox, auxili
             }
         })
             
-        return combineLatest(upload, transformedFileAndThumbnail, resourceStatus)
+        let byteUpload = combineLatest(upload, transformedFileAndThumbnail, resourceStatus)
         |> mapToSignal { content, fileAndThumbnailResult, resourceStatus -> Signal<PendingMessageUploadedContentResult, PendingMessageUploadError> in
             guard let content = content else {
                 if let resourceStatus = resourceStatus, case let .Fetching(_, progress) = resourceStatus {
@@ -1639,5 +1705,27 @@ private func uploadedMediaFileContent(network: Network, postbox: Postbox, auxili
             }
             return SignalTakeAction(passthrough: true, complete: complete)
         })
+
+        if forceReupload || peerId.namespace == Namespaces.Peer.SecretChat {
+            return byteUpload
+        }
+        let traits = tellomiDocumentByHashTraits(file: file, encrypted: false)
+        guard case .lookup = tellomiDocumentByHashDecision(traits) else {
+            return byteUpload
+        }
+        return tellomiLookupExistingDocument(network: network, postbox: postbox, resource: file.resource, declaredSize: file.size, mimeType: file.mimeType, attributes: file.attributes, encrypted: false)
+        |> mapToSignalPromotingError { document -> Signal<PendingMessageUploadedContentResult, PendingMessageUploadError> in
+            guard let document, let cloud = telegramMediaFileFromApiDocument(document, altDocuments: nil) else {
+                return byteUpload
+            }
+            return tellomiUploadedContentReusingDocument(network: network, postbox: postbox, peerId: peerId, original: file, cloud: cloud, text: text, attributes: attributes, autoclearMessageAttribute: autoclearMessageAttribute, referenceKey: referenceKey)
+            |> mapToSignal { content -> Signal<PendingMessageUploadedContentResult, PendingMessageUploadError> in
+                if let content {
+                    return .single(.progress(PendingMessageUploadedContentProgress(progress: 1.0)))
+                    |> then(.single(content))
+                }
+                return byteUpload
+            }
+        }
     }
 }
