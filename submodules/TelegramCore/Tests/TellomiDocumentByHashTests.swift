@@ -1,5 +1,6 @@
 import XCTest
 import Postbox
+import SwiftSignalKit
 @testable import TelegramCore
 
 final class TellomiDocumentByHashTests: XCTestCase {
@@ -72,6 +73,38 @@ final class TellomiDocumentByHashTests: XCTestCase {
         XCTAssertFalse(tellomiDocumentByHashIsReusable(id: 7, dcId: 2, size: 10, mimeType: "", expectedSize: 10, expectedMimeType: ""))
     }
 
+    func testKillSwitchDefaultsOnAndForcedOffSkipsTheLookup() {
+        XCTAssertEqual(tellomiGetDocumentByHashKey, "tellomi_get_document_by_hash")
+        tellomiGetDocumentByHashEnabledOverride = nil
+        defer {
+            tellomiGetDocumentByHashEnabledOverride = nil
+        }
+
+        let on = self.configuration(.dictionary([tellomiGetDocumentByHashKey: .bool(true)]))
+        let off = self.configuration(.dictionary([tellomiGetDocumentByHashKey: .bool(false)]))
+        XCTAssertTrue(tellomiGetDocumentByHashEnabled(configuration: .defaultValue))
+        XCTAssertTrue(tellomiGetDocumentByHashEnabled(configuration: self.configuration(nil)))
+        XCTAssertTrue(tellomiGetDocumentByHashEnabled(configuration: self.configuration(.dictionary(["other": .bool(false)]))))
+        XCTAssertTrue(tellomiGetDocumentByHashEnabled(configuration: on))
+        XCTAssertTrue(tellomiGetDocumentByHashEnabled(configuration: self.configuration(.dictionary([tellomiGetDocumentByHashKey: .number(0)]))))
+        XCTAssertTrue(tellomiGetDocumentByHashEnabled(configuration: self.configuration(.dictionary([tellomiGetDocumentByHashKey: .string("false")]))))
+        XCTAssertFalse(tellomiGetDocumentByHashEnabled(configuration: off))
+
+        // The three upload lookups call this before SHA-256 or messages.getDocumentByHash.
+        // "getDocumentByHash" is the stand-in for that work; "upload" is the immediate miss.
+        XCTAssertEqual(self.lookupResult(enabled: tellomiGetDocumentByHashEnabled(configuration: .defaultValue)), "getDocumentByHash" as String?)
+        XCTAssertEqual(self.lookupResult(enabled: tellomiGetDocumentByHashEnabled(configuration: on)), "getDocumentByHash" as String?)
+        XCTAssertEqual(self.lookupResult(enabled: tellomiGetDocumentByHashEnabled(configuration: off)), "upload" as String?)
+
+        tellomiGetDocumentByHashEnabledOverride = false
+        XCTAssertFalse(tellomiGetDocumentByHashEnabled(configuration: on))
+        XCTAssertEqual(self.lookupResult(enabled: tellomiGetDocumentByHashEnabled(configuration: on)), "upload" as String?)
+
+        tellomiGetDocumentByHashEnabledOverride = nil
+        XCTAssertTrue(tellomiGetDocumentByHashEnabled(configuration: .defaultValue))
+        XCTAssertEqual(self.lookupResult(enabled: tellomiGetDocumentByHashEnabled(configuration: .defaultValue)), "getDocumentByHash" as String?)
+    }
+
     func testSha256OfTheBytesThatWouldBeUploaded() throws {
         let digest = tellomiSha256(data: Data("abc".utf8))
         XCTAssertEqual(self.hex(digest), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
@@ -89,6 +122,43 @@ final class TellomiDocumentByHashTests: XCTestCase {
 
     private func traits(mimeType: String, encrypted: Bool = false, isAnimated: Bool = false, isAnimatedSticker: Bool = false, isVideoSticker: Bool = false, isSticker: Bool = false, isCustomEmoji: Bool = false, isVoice: Bool = false, isMusic: Bool = false, isVideo: Bool = false, isInstantVideo: Bool = false) -> TellomiDocumentByHashTraits {
         return TellomiDocumentByHashTraits(mimeType: mimeType, encrypted: encrypted, isAnimated: isAnimated, isAnimatedSticker: isAnimatedSticker, isVideoSticker: isVideoSticker, isSticker: isSticker, isCustomEmoji: isCustomEmoji, isVoice: isVoice, isMusic: isMusic, isVideo: isVideo, isInstantVideo: isInstantVideo)
+    }
+
+    private func configuration(_ data: JSON?) -> AppConfiguration {
+        return AppConfiguration(data: data, hash: data == nil ? 0 : 1)
+    }
+
+    /// Runs the same gate the upload path uses. A disabled switch must emit the miss without calling the lookup.
+    private func lookupResult(enabled: Bool, file: StaticString = #file, line: UInt = #line) -> String? {
+        var lookedUp = false
+        let value = self.wait(tellomiDocumentByHashLookupIfEnabled(enabled: enabled, skipped: "upload") {
+            lookedUp = true
+            return .single("getDocumentByHash")
+        }, file: file, line: line)
+        if enabled {
+            XCTAssertTrue(lookedUp, "lookup was not started", file: file, line: line)
+        } else {
+            XCTAssertFalse(lookedUp, "getDocumentByHash ran while the switch was off", file: file, line: line)
+        }
+        return value
+    }
+
+    /// Subscribes and returns the first value. A lookup that never emits fails the test.
+    private func wait<T>(_ signal: Signal<T, NoError>, file: StaticString = #file, line: UInt = #line) -> T? {
+        let result = Atomic<T?>(value: nil)
+        let emitted = Atomic<Bool>(value: false)
+        let done = DispatchSemaphore(value: 0)
+        let disposable = (signal |> take(1)).start(next: { value in
+            let _ = emitted.swap(true)
+            let _ = result.swap(value)
+        }, completed: {
+            done.signal()
+        })
+        let status = done.wait(timeout: .now() + 2.0)
+        disposable.dispose()
+        XCTAssertEqual(status, .success, "lookup did not return", file: file, line: line)
+        XCTAssertTrue(emitted.with { $0 }, "lookup emitted nothing", file: file, line: line)
+        return result.with { $0 }
     }
 
     private func hex(_ data: Data) -> String {

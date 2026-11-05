@@ -820,6 +820,19 @@ Before the byte upload of a GIF, an ordinary document, or a video no larger than
 | `submodules/TelegramCore/Sources/PendingMessages/StandaloneSendMessage.swift` | In-memory file send uses the same probe. |
 | `submodules/TelegramCore/Tests/TellomiDocumentByHashTests.swift` | Role selection, the video cap, attribute mapping, the reusable-document check, and the SHA-256 vector. |
 
+## Document hash kill switch (ADR-0083 B1 / D4)
+
+Extends the section above. The #82 send sites stay as they are: a GIF, an ordinary document (including a file sent as `image/jpeg` or `image/png`), or a video no larger than 100 MiB still calls `messages.getDocumentByHash` before the byte upload. Secret chats, voice, music, round video, stickers, videos above 100 MiB, and a forced re-upload still skip it. Compressed photos stay on `uploadedMediaImageContent` / `inputMediaUploadedPhoto`. This RPC returns a document, and those bytes are a generated JPEG, so that path is not hooked. A later photo lookup needs an RPC that returns `InputPhoto`.
+
+Account 0 `mainconfig` on Android is `MessagesController.getGlobalMainSettings()`, key `tellomi_get_document_by_hash`, boolean, default true (`getBoolean(key, true)`). iOS reads the same key from the sending account's persisted `help.getAppConfig` (`AppConfiguration` under `PreferencesKeys.appConfiguration`), which is where that JSON boolean is stored. A missing key, `true`, or a non-boolean keeps the lookup. `false` makes `tellomiLookupExistingDocument` return before SHA-256 and before the RPC, and the caller runs the existing upload. The value is read on each send. There is no new user-visible copy.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHash.swift` | `tellomi_get_document_by_hash`, default on. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHashUpload.swift` | A disabled switch returns before the hash and `messages.getDocumentByHash`. |
+| `submodules/TelegramCore/Sources/PendingMessages/StandaloneSendMessage.swift` | The in-memory file lookup takes the same postbox so it can read the key. |
+| `submodules/TelegramCore/Tests/TellomiDocumentByHashTests.swift` | Default on. `false`, and a forced-off override, return the miss without running the lookup. |
+
 ## Discover nearby tab (D-11 / D-12)
 
 The Discover bar always shows 推荐, 关注, and 同城, in that order. `GET /v1/feed/config` may omit `nearby`; the tab stays. An unknown config name is still not added.

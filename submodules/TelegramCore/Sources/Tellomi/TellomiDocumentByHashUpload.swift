@@ -125,7 +125,40 @@ func tellomiInputDocument(from document: Api.Document) -> Api.InputDocument? {
     return .inputDocument(.init(id: data.id, accessHash: data.accessHash, fileReference: data.fileReference))
 }
 
+/// When `enabled` is false the lookup closure is not called, so the caller neither hashes nor sends `messages.getDocumentByHash`.
+func tellomiDocumentByHashLookupIfEnabled<T>(enabled: Bool, skipped: T, lookup: () -> Signal<T, NoError>) -> Signal<T, NoError> {
+    if !enabled {
+        return .single(skipped)
+    }
+    return lookup()
+}
+
+private func tellomiReadGetDocumentByHashEnabled(postbox: Postbox) -> Signal<Bool, NoError> {
+    if tellomiGetDocumentByHashEnabledOverride != nil {
+        return .single(tellomiGetDocumentByHashEnabled(configuration: .defaultValue))
+    }
+    return postbox.transaction { transaction -> Bool in
+        return tellomiGetDocumentByHashEnabled(configuration: currentAppConfiguration(transaction: transaction))
+    }
+}
+
+private func tellomiLookupExistingDocumentGated(postbox: Postbox, lookup: @escaping () -> Signal<Api.Document?, NoError>) -> Signal<Api.Document?, NoError> {
+    return tellomiReadGetDocumentByHashEnabled(postbox: postbox)
+    |> mapToSignal { enabled -> Signal<Api.Document?, NoError> in
+        if !enabled {
+            Logger.shared.log("TellomiDocumentByHash", "kill switch off")
+        }
+        return tellomiDocumentByHashLookupIfEnabled(enabled: enabled, skipped: nil, lookup: lookup)
+    }
+}
+
 func tellomiLookupExistingDocument(network: Network, postbox: Postbox, resource: MediaResource, declaredSize: Int64?, mimeType: String, attributes: [TelegramMediaFileAttribute], encrypted: Bool) -> Signal<Api.Document?, NoError> {
+    return tellomiLookupExistingDocumentGated(postbox: postbox) {
+        tellomiLookupExistingDocumentUngated(network: network, postbox: postbox, resource: resource, declaredSize: declaredSize, mimeType: mimeType, attributes: attributes, encrypted: encrypted)
+    }
+}
+
+private func tellomiLookupExistingDocumentUngated(network: Network, postbox: Postbox, resource: MediaResource, declaredSize: Int64?, mimeType: String, attributes: [TelegramMediaFileAttribute], encrypted: Bool) -> Signal<Api.Document?, NoError> {
     let traits = tellomiDocumentByHashTraits(mimeType: mimeType, attributes: attributes, encrypted: encrypted)
     guard case let .lookup(role) = tellomiDocumentByHashDecision(traits) else {
         return .single(nil)
@@ -157,7 +190,13 @@ func tellomiLookupExistingDocument(network: Network, postbox: Postbox, resource:
     }
 }
 
-func tellomiLookupExistingDocument(network: Network, data: Data, mimeType: String, attributes: [TelegramMediaFileAttribute], encrypted: Bool) -> Signal<Api.Document?, NoError> {
+func tellomiLookupExistingDocument(network: Network, postbox: Postbox, data: Data, mimeType: String, attributes: [TelegramMediaFileAttribute], encrypted: Bool) -> Signal<Api.Document?, NoError> {
+    return tellomiLookupExistingDocumentGated(postbox: postbox) {
+        tellomiLookupExistingDocumentUngated(network: network, data: data, mimeType: mimeType, attributes: attributes, encrypted: encrypted)
+    }
+}
+
+private func tellomiLookupExistingDocumentUngated(network: Network, data: Data, mimeType: String, attributes: [TelegramMediaFileAttribute], encrypted: Bool) -> Signal<Api.Document?, NoError> {
     let traits = tellomiDocumentByHashTraits(mimeType: mimeType, attributes: attributes, encrypted: encrypted)
     guard case let .lookup(role) = tellomiDocumentByHashDecision(traits) else {
         return .single(nil)
@@ -178,11 +217,17 @@ func tellomiLookupExistingDocument(network: Network, data: Data, mimeType: Strin
 }
 
 func tellomiLookupExistingDocument(network: Network, postbox: Postbox, source: MultipartUploadSource, mimeType: String, attributes: [TelegramMediaFileAttribute], encrypted: Bool) -> Signal<Api.Document?, NoError> {
+    return tellomiLookupExistingDocumentGated(postbox: postbox) {
+        tellomiLookupExistingDocumentUngated(network: network, postbox: postbox, source: source, mimeType: mimeType, attributes: attributes, encrypted: encrypted)
+    }
+}
+
+private func tellomiLookupExistingDocumentUngated(network: Network, postbox: Postbox, source: MultipartUploadSource, mimeType: String, attributes: [TelegramMediaFileAttribute], encrypted: Bool) -> Signal<Api.Document?, NoError> {
     switch source {
     case let .resource(reference):
-        return tellomiLookupExistingDocument(network: network, postbox: postbox, resource: reference.resource, declaredSize: nil, mimeType: mimeType, attributes: attributes, encrypted: encrypted)
+        return tellomiLookupExistingDocumentUngated(network: network, postbox: postbox, resource: reference.resource, declaredSize: nil, mimeType: mimeType, attributes: attributes, encrypted: encrypted)
     case let .data(data):
-        return tellomiLookupExistingDocument(network: network, data: data, mimeType: mimeType, attributes: attributes, encrypted: encrypted)
+        return tellomiLookupExistingDocumentUngated(network: network, data: data, mimeType: mimeType, attributes: attributes, encrypted: encrypted)
     case let .tempFile(file):
         guard let size = tellomiFileByteCount(path: file.path) else {
             return .single(nil)
