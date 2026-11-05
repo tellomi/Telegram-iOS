@@ -1,4 +1,9 @@
-项目硬规则见 docs/TELLOMI_RULES.md
+## 必读（按顺序）
+
+1. `docs/TELLOMI_RULES.md` —— 铁律（四仓同文，改规则开 PR）
+2. 模块边界：https://github.com/tellomi/tellomi/blob/main/docs/MODULE_BOUNDARIES.md
+3. 本仓：`CLAUDE.md`（构建、模拟器、子系统不变量）；改动记入 `Tellomi/UPSTREAM_PATCHES.md`
+
 # AGENTS.md
 
 Guidance for coding agents working in this repository. The project guide is [`CLAUDE.md`](CLAUDE.md): how to build,
