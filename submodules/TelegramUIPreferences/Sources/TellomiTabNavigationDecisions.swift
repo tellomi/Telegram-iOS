@@ -85,6 +85,17 @@ public func tellomiFeedPostIdIfHandled(in url: URL, navigationEnabled: Bool) -> 
     return tellomiFeedPostId(in: url)
 }
 
+/// A chat tap resolves `tell.cc/<name>` as a username. `tell.cc/m#<id>` would
+/// become the user `m` and never reopen Discover (D-57). True means `resolveUrl`
+/// must hand the address to the external opener, which turns Discover back on
+/// and opens the post. The kill switch stays on the username path.
+public func tellomiFeedPostLinkEscapesPeerResolution(_ url: String, navigationEnabled: Bool) -> Bool {
+    guard let parsed = URL(string: url) else {
+        return false
+    }
+    return tellomiFeedPostIdIfHandled(in: parsed, navigationEnabled: navigationEnabled) != nil
+}
+
 /// What `getContactsController` may return. None of these create or push a page.
 /// Opening Contacts while the tab is hidden is `openContacts`.
 public enum TellomiContactsControllerRead: Equatable {

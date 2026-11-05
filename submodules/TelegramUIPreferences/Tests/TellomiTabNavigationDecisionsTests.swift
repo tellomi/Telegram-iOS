@@ -61,6 +61,17 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertNil(tellomiFeedPostIdIfHandled(in: URL(string: "https://tell.cc/m/extra#example")!, navigationEnabled: true))
     }
 
+    func testAChatTapOnAPostLinkDoesNotResolveAsTheUserM() {
+        XCTAssertTrue(tellomiFeedPostLinkEscapesPeerResolution("https://tell.cc/m#example", navigationEnabled: true))
+        XCTAssertTrue(tellomiFeedPostLinkEscapesPeerResolution("https://TELL.CC/m#example", navigationEnabled: true))
+        XCTAssertTrue(tellomiFeedPostLinkEscapesPeerResolution("http://tell.cc/m/#example%20id", navigationEnabled: true))
+        XCTAssertFalse(tellomiFeedPostLinkEscapesPeerResolution("https://tell.cc/m#example", navigationEnabled: false))
+        XCTAssertFalse(tellomiFeedPostLinkEscapesPeerResolution("https://tell.cc/m/some-slug", navigationEnabled: true))
+        XCTAssertFalse(tellomiFeedPostLinkEscapesPeerResolution("https://t.me/m#example", navigationEnabled: true))
+        XCTAssertFalse(tellomiFeedPostLinkEscapesPeerResolution("https://tell.cc/m", navigationEnabled: true))
+        XCTAssertFalse(tellomiFeedPostLinkEscapesPeerResolution("not a url", navigationEnabled: true))
+    }
+
     func testTheContactsGetterDoesNotPush() {
         XCTAssertEqual(
             tellomiContactsControllerRead(navigationEnabled: true, tabBarReady: true, tabVisible: false, pushedPageExists: false),
