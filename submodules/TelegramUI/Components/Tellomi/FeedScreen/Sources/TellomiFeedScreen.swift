@@ -28,7 +28,9 @@ public final class TellomiFeedScreen: ViewController {
     private var locationAsked = false
     private var locator: TellomiDiscoverCityLocator?
     private var banner: String?
-    private var tabs: [TellomiDiscoverFeedKind] = [.recommend, .following]
+    private var tabs: [TellomiDiscoverFeedKind] = tellomiDiscoverHomeTabs()
+    private var pickingCity = false
+    private var nearbyUnavailable = false
     private var posts: [TellomiDiscoverFeedKind: [TellomiDiscoverPost]] = [:]
     private var cursors: [TellomiDiscoverFeedKind: String] = [:]
     private var sawCapabilities = false
@@ -180,6 +182,22 @@ public final class TellomiFeedScreen: ViewController {
         node.onSelectCity = { [weak self] code in
             self?.applyCity(code)
         }
+        node.onChangeCity = { [weak self] in
+            self?.pickingCity = true
+            self?.sync(reload: false)
+        }
+        node.onClearCity = { [weak self] in
+            self?.clearCity()
+        }
+        node.onLegacyTitle = { [weak self] in
+            guard let self, self.kind == .nearby, self.nearbyUnavailable else {
+                return
+            }
+            self.nearbyUnavailable = false
+            self.failed = false
+            self.loadFeed(reset: true)
+            self.sync(reload: false)
+        }
         self.displayNode = node
         self.displayNodeDidLoad()
         self.sync(reload: true)
@@ -273,16 +291,28 @@ public final class TellomiFeedScreen: ViewController {
             mode = .legacy
             legacyTitle = legacy.feedEmptyTitle
             legacyBody = legacy.feedEmptyText
-        case .feed, .detail:
-            mode = .feed
-            legacyTitle = copy.emptyTitle
-            legacyBody = self.kind == .nearby ? copy.nearbyEmpty : copy.emptyText
-        case .chooseCity:
+        case .feed where self.pickingCity, .chooseCity:
             mode = .city
             legacyTitle = copy.cityPrompt
             legacyBody = copy.cityDenied
+        case .feed, .detail:
+            mode = .feed
+            if self.kind == .nearby, self.nearbyUnavailable {
+                legacyTitle = copy.nearbyUnavailable
+                legacyBody = copy.nearbyUnavailableHint
+            } else if self.kind == .nearby {
+                legacyTitle = copy.nearbyEmpty
+                legacyBody = copy.cityDenied
+            } else {
+                legacyTitle = copy.emptyTitle
+                legacyBody = copy.emptyText
+            }
         }
         let selected = self.tabs.firstIndex(of: self.kind) ?? 0
+        let languageCode = self.presentationData.strings.primaryComponent.languageCode
+        let pack = self.stringPack()
+        let publishCity = tellomiDiscoverPublishCity(self.cityCode)
+        let showCityLine = mode == .feed
         if self.isNodeLoaded {
             self.feedNode.update(presentationData: self.presentationData, model: TellomiFeedNodeModel(
                 mode: mode,
@@ -294,14 +324,18 @@ public final class TellomiFeedScreen: ViewController {
                 legacyTitle: legacyTitle,
                 legacyBody: legacyBody,
                 copy: copy,
-                cities: tellomiDiscoverCities(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: self.stringPack())
+                cities: tellomiDiscoverCities(languageCode: languageCode, pack: pack),
+                cityLine: showCityLine ? tellomiDiscoverComposeCityLine(self.cityCode, languageCode: languageCode, pack: pack) : nil,
+                cityAction: showCityLine ? (publishCity == nil ? copy.cityPrompt : copy.changeCity) : nil,
+                clearCityTitle: mode == .city && publishCity != nil ? copy.composeCityNone : nil,
+                legacyTitleTappable: mode == .feed && self.kind == .nearby && self.nearbyUnavailable && !self.loading
             ))
             if let layout = self.appliedLayout {
                 let navigationHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
                 self.feedNode.updateLayout(size: layout.size, topInset: navigationHeight, bottomInset: layout.intrinsicInsets.bottom, transition: .immediate)
             }
         }
-        if chrome.loadsFeed, self.engineVisible != false, !self.loading, reload || (self.posts[self.kind] == nil && !self.failed) {
+        if chrome.loadsFeed, !self.pickingCity, self.engineVisible != false, !self.loading, reload || (self.posts[self.kind] == nil && !self.failed && !self.nearbyUnavailable) {
             self.loadFeed(reset: true)
         }
     }
@@ -322,7 +356,9 @@ public final class TellomiFeedScreen: ViewController {
             return
         }
         let kind = self.tabs[index]
+        self.pickingCity = false
         guard kind != self.kind else {
+            self.sync(reload: false)
             return
         }
         self.kind = kind
@@ -373,11 +409,26 @@ public final class TellomiFeedScreen: ViewController {
         self.locator?.stop()
         self.cityCode = code
         tellomiDiscoverStoreCity(code)
+        self.pickingCity = false
+        self.nearbyUnavailable = false
         self.banner = nil
         self.failed = false
         self.posts[.nearby] = nil
         self.cursors[.nearby] = nil
         self.sync(reload: true)
+    }
+
+    private func clearCity() {
+        self.locator?.stop()
+        self.cityCode = nil
+        tellomiDiscoverStoreCity(nil)
+        self.pickingCity = false
+        self.nearbyUnavailable = false
+        self.banner = nil
+        self.failed = false
+        self.posts[.nearby] = nil
+        self.cursors[.nearby] = nil
+        self.sync(reload: false)
     }
 
     private func loadFeed(reset: Bool) {
@@ -449,17 +500,18 @@ public final class TellomiFeedScreen: ViewController {
             case let .success(.engineConfig(value)):
                 self.engineConfigLoaded = true
                 self.textLimit = value.postTextChars
-                if !value.tabs.isEmpty {
-                    self.tabs = value.tabs
-                    if !self.tabs.contains(self.kind) {
-                        self.kind = self.tabs[0]
-                        if self.kind == .nearby {
-                            self.considerNearbyLocation()
-                        }
+                self.tabs = tellomiDiscoverHomeTabs()
+                if !self.tabs.contains(self.kind) {
+                    self.kind = self.tabs[0]
+                    if self.kind == .nearby {
+                        self.considerNearbyLocation()
                     }
                 }
                 self.advance(reset: reset, generation: generation, kind: self.kind, cursor: cursor, configuration: configuration)
             case let .success(.feed(page)):
+                if kind == .nearby {
+                    self.nearbyUnavailable = false
+                }
                 if page.items.isEmpty {
                     if reset {
                         self.posts[kind] = []
@@ -474,7 +526,17 @@ public final class TellomiFeedScreen: ViewController {
                 }
             case .failure(.hidden):
                 self.finishHidden(generation: generation)
+            case .failure(.nearbyUnavailable):
+                self.nearbyUnavailable = true
+                self.failed = false
+                self.banner = nil
+                self.posts[kind] = []
+                self.cursors.removeValue(forKey: kind)
+                self.loading = false
+                self.loadingMore = false
+                self.sync(reload: false)
             case .failure(.invalidCity):
+                self.nearbyUnavailable = false
                 self.cityCode = nil
                 tellomiDiscoverStoreCity(nil)
                 self.banner = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: self.stringPack()).invalidCity
@@ -482,11 +544,13 @@ public final class TellomiFeedScreen: ViewController {
                 self.loadingMore = false
                 self.sync(reload: false)
             case .failure(.disabled), .failure(.signedOut):
+                self.nearbyUnavailable = false
                 self.failed = false
                 self.loading = false
                 self.loadingMore = false
                 self.sync(reload: false)
             case .failure:
+                self.nearbyUnavailable = false
                 if reset {
                     self.failed = true
                 }
@@ -494,6 +558,7 @@ public final class TellomiFeedScreen: ViewController {
                 self.loadingMore = false
                 self.sync(reload: false)
             default:
+                self.nearbyUnavailable = false
                 self.failed = true
                 self.loading = false
                 self.loadingMore = false
@@ -566,7 +631,8 @@ public final class TellomiFeedScreen: ViewController {
                 completion(.failure(.signedOut))
                 return
             }
-            tellomiRunDiscoverPublish(context: self.context, loader: self.loader, configuration: self.configuration(), loggedIn: !self.loggedOut, city: self.cityCode, textLimit: textLimit, request: request, retainAudience: { [weak self] disposable in
+            let city = tellomiDiscoverPublishCity(self.cityCode)
+            tellomiRunDiscoverPublish(context: self.context, loader: self.loader, configuration: self.configuration(), loggedIn: !self.loggedOut, city: city, textLimit: textLimit, request: request, retainAudience: { [weak self] disposable in
                 self?.audienceDisposable?.dispose()
                 self?.audienceDisposable = disposable
             }, completion: completion)
