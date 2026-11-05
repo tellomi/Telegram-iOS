@@ -150,6 +150,10 @@ private enum TellomiAboutEntry: ItemListNodeEntry {
     }
 }
 
+/// String fields from `help.getAppConfig` (`EngineData.Item.Configuration.App`).
+/// `TellomiAboutDisclosure` reads `tellomi_ai_model_name`,
+/// `tellomi_generative_ai_registration_number` (or `tellomi_ai_registration_number`),
+/// and `tellomi_algorithm_filing_number`. Other types stay out so a number cannot replace the placeholder.
 private func tellomiAboutConfiguration(_ data: JSON?) -> [String: Any]? {
     guard case let .dictionary(dictionary)? = data else {
         return nil

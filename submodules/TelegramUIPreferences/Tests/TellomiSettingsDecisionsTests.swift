@@ -62,6 +62,34 @@ final class TellomiSettingsDecisionsTests: XCTestCase {
         XCTAssertEqual(replaced.modelName, "Qwen")
         XCTAssertEqual(replaced.generativeAIRegistrationNumber, "网信算备示例")
         XCTAssertEqual(replaced.algorithmFilingNumber, "待公示")
+        let blankConfig: [String: Any] = [
+            TellomiAboutDisclosure.modelConfigurationKey: "  \n",
+            TellomiAboutDisclosure.generativeRegistrationConfigurationKey: " ",
+            TellomiAboutDisclosure.algorithmFilingConfigurationKey: 12,
+            TellomiAboutDisclosure.publishedGenerativeRegistrationConfigurationKey: false
+        ]
+        let blank = TellomiAboutDisclosure.facts(configuration: blankConfig, numberPlaceholder: placeholder)
+        XCTAssertEqual(blank.modelName, "通义千问 Qwen")
+        XCTAssertEqual(blank.generativeAIRegistrationNumber, "待公示")
+        XCTAssertEqual(blank.algorithmFilingNumber, "待公示")
+        let published = TellomiAboutDisclosure.facts(configuration: [
+            TellomiAboutDisclosure.publishedGenerativeRegistrationConfigurationKey: " 示例登记 ",
+            TellomiAboutDisclosure.modelConfigurationKey: "通义千问",
+            TellomiAboutDisclosure.algorithmFilingConfigurationKey: "网信算备示例"
+        ], numberPlaceholder: placeholder)
+        XCTAssertEqual(published.modelName, "通义千问")
+        XCTAssertEqual(published.generativeAIRegistrationNumber, "示例登记")
+        XCTAssertEqual(published.algorithmFilingNumber, "网信算备示例")
+        let preferred = TellomiAboutDisclosure.facts(configuration: [
+            TellomiAboutDisclosure.generativeRegistrationConfigurationKey: "登记甲",
+            TellomiAboutDisclosure.publishedGenerativeRegistrationConfigurationKey: "登记乙"
+        ], numberPlaceholder: placeholder)
+        XCTAssertEqual(preferred.generativeAIRegistrationNumber, "登记甲")
+        let fallbackKey = TellomiAboutDisclosure.facts(configuration: [
+            TellomiAboutDisclosure.generativeRegistrationConfigurationKey: " ",
+            TellomiAboutDisclosure.publishedGenerativeRegistrationConfigurationKey: "登记乙"
+        ], numberPlaceholder: placeholder)
+        XCTAssertEqual(fallbackKey.generativeAIRegistrationNumber, "登记乙")
         let text = tellomiAboutDisclosureText(modelLabel: "AI 模型", registrationLabel: "生成式人工智能服务登记编号", algorithmLabel: "算法备案编号", facts: facts)
         XCTAssertTrue(text.contains("通义千问 Qwen"))
         XCTAssertTrue(text.contains("待公示"))
