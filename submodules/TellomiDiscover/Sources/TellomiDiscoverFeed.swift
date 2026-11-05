@@ -399,7 +399,7 @@ public enum TellomiDiscoverOperation: Equatable {
     case repost(String)
     /// `DELETE /v1/feed/posts/{id}/repost`.
     case unrepost(String)
-    /// `PUT /v1/feed/posts/{id}/vote` with `{"option": index}`.
+    /// `PUT /v1/feed/posts/{id}/vote` with `{"options": [index]}`.
     case vote(postId: String, option: Int)
     /// `POST /v1/feed/reports`. Official option id plus `detail`. Not a TL report.
     case report(target: TellomiDiscoverReportTarget, option: String, detail: String)

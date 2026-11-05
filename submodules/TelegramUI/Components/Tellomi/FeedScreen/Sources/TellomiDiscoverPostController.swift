@@ -118,16 +118,14 @@ final class TellomiDiscoverPostController: ViewController {
 
     @objc private func votePressed(_ button: UIButton) {
         let option = button.tag
-        guard let poll = self.post?.poll, poll.myVote == nil, poll.options.indices.contains(option) else {
+        guard let poll = self.post?.poll, poll.voted.isEmpty, poll.options.indices.contains(option) else {
             return
         }
         self.loader.run(loggedIn: true, configuration: self.configuration, operation: .vote(postId: self.postId, option: option)) { [weak self] result in
-            guard let self, case .success(.acknowledged) = result, var post = self.post, var poll = post.poll, poll.options.indices.contains(option) else {
+            guard let self, case let .success(.voted(tally)) = result, var post = self.post, let poll = post.poll else {
                 return
             }
-            poll.options[option].votes += 1
-            poll.myVote = option
-            post.poll = poll
+            post.poll = tellomiDiscoverPoll(poll, applying: tally)
             self.post = post
             self.apply()
             if let layout = self.currentlyAppliedLayout {
@@ -192,19 +190,19 @@ final class TellomiDiscoverPostController: ViewController {
             self.pollButtons = []
             return
         }
-        let voted = poll.myVote != nil
+        let hasVoted = !poll.voted.isEmpty
         self.pollButtons = poll.options.enumerated().map { index, option in
             let button = UIButton(type: .system)
             var title = option.text
-            if voted || option.votes > 0 {
+            if hasVoted || option.votes > 0 {
                 title += " · " + tellomiFormatInteger(copy.votes, option.votes)
             }
             button.setTitle(title, for: .normal)
             button.contentHorizontalAlignment = .left
             button.tag = index
-            button.isEnabled = !voted
+            button.isEnabled = !hasVoted
             button.accessibilityIdentifier = "tellomi.discover.vote.\(index)"
-            button.setTitleColor(index == poll.myVote ? self.presentationData.theme.list.itemAccentColor : self.presentationData.theme.list.itemPrimaryTextColor, for: .normal)
+            button.setTitleColor(poll.voted.contains(index) ? self.presentationData.theme.list.itemAccentColor : self.presentationData.theme.list.itemPrimaryTextColor, for: .normal)
             button.addTarget(self, action: #selector(self.votePressed(_:)), for: .touchUpInside)
             self.displayNode.view.addSubview(button)
             return button

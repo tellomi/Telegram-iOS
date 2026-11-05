@@ -344,37 +344,49 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
         city: tellomiDiscoverCityCode(stringValue(body?["city"]) ?? stringValue(entry["city"])),
         comments: parseComments(entry["comments"]),
         reposted: boolValue(me?["reposted"]) ?? false,
-        poll: parsePoll(body?["poll"] ?? entry["poll"])
+        poll: parsePoll(labels: body?["poll"], tally: entry["poll"])
     )
 }
 
-private func parsePoll(_ json: TellomiJSON?) -> TellomiDiscoverPoll? {
-    guard let object = objectValue(json), case let .array(values)? = object["options"] else {
+/// Option labels are `card.poll.options` (`[String]`). Counts and this account's
+/// choice are the sibling `poll.counts` / `poll.voted`. An empty `voted` is not voted.
+private func parsePoll(labels: TellomiJSON?, tally: TellomiJSON?) -> TellomiDiscoverPoll? {
+    guard let labelObject = objectValue(labels), case let .array(values)? = labelObject["options"] else {
         return nil
     }
-    var options: [TellomiDiscoverPollOption] = []
+    var texts: [String] = []
     for value in values {
-        if let text = stringValue(value)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
-            options.append(TellomiDiscoverPollOption(text: text, votes: 0))
-            continue
+        guard let text = stringValue(value)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            return nil
         }
-        guard let item = objectValue(value) else {
-            continue
-        }
-        let text = (stringValue(item["text"]) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else {
-            continue
-        }
-        options.append(TellomiDiscoverPollOption(text: text, votes: max(0, intValue(item["votes"]) ?? 0)))
+        texts.append(text)
     }
-    guard options.count >= tellomiDiscoverPollOptionMinimum else {
+    guard texts.count >= tellomiDiscoverPollOptionMinimum else {
         return nil
     }
-    var myVote: Int?
-    if let vote = intValue(object["my_vote"]), vote >= 0, vote < options.count {
-        myVote = vote
+    let tallyObject = objectValue(tally)
+    let counts = intArray(tallyObject?["counts"]) ?? []
+    let votedRaw = intArray(tallyObject?["voted"]) ?? []
+    var options: [TellomiDiscoverPollOption] = []
+    for (index, text) in texts.enumerated() {
+        let votes = counts.indices.contains(index) ? max(0, counts[index]) : 0
+        options.append(TellomiDiscoverPollOption(text: text, votes: votes))
     }
-    return TellomiDiscoverPoll(options: options, myVote: myVote)
+    let voted = votedRaw.filter { options.indices.contains($0) }
+    return TellomiDiscoverPoll(options: options, voted: voted)
+}
+
+public func tellomiDiscoverParseVote(_ data: Data) -> TellomiDiscoverVoteTally? {
+    guard let object = objectValue(TellomiJSON.parse(data)) else {
+        return nil
+    }
+    guard let counts = intArray(object["counts"]), let voted = intArray(object["voted"]) else {
+        return nil
+    }
+    guard counts.allSatisfy({ $0 >= 0 }), voted.allSatisfy({ $0 >= 0 }) else {
+        return nil
+    }
+    return TellomiDiscoverVoteTally(counts: counts, voted: voted)
 }
 
 private func parseComments(_ json: TellomiJSON?) -> [TellomiDiscoverComment] {
@@ -461,6 +473,20 @@ private func boolValue(_ json: TellomiJSON?) -> Bool? {
     default:
         return nil
     }
+}
+
+private func intArray(_ json: TellomiJSON?) -> [Int]? {
+    guard let json, case let .array(values) = json else {
+        return nil
+    }
+    var numbers: [Int] = []
+    for value in values {
+        guard let number = intValue(value) else {
+            return nil
+        }
+        numbers.append(number)
+    }
+    return numbers
 }
 
 private func intValue(_ json: TellomiJSON?) -> Int? {

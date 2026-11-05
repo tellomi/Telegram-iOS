@@ -24,6 +24,7 @@ public enum TellomiDiscoverDecoded: Equatable {
     case created(TellomiDiscoverCreatedPost)
     case reported
     case acknowledged
+    case voted(TellomiDiscoverVoteTally)
 }
 
 public struct TellomiDiscoverHTTPResult: Equatable {
@@ -188,7 +189,7 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
         break
     case 204:
         switch operation {
-        case .repost, .unrepost, .vote:
+        case .repost, .unrepost:
             return .success(.acknowledged)
         default:
             return .failure(.unavailable)
@@ -233,8 +234,13 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
         return .success(.created(created))
     case .report:
         return .success(.reported)
-    case .repost, .unrepost, .vote:
+    case .repost, .unrepost:
         return .success(.acknowledged)
+    case .vote:
+        guard let tally = tellomiDiscoverParseVote(result.body) else {
+            return .failure(.unreadable)
+        }
+        return .success(.voted(tally))
     }
 }
 
@@ -436,7 +442,7 @@ public func tellomiDiscoverPostSummary(post: TellomiDiscoverPost, copy: TellomiD
         if includePoll, let poll = post.poll {
             for option in poll.options {
                 body += "\n" + option.text
-                if poll.myVote != nil || option.votes > 0 {
+                if !poll.voted.isEmpty || option.votes > 0 {
                     body += " · " + tellomiFormatInteger(copy.votes, option.votes)
                 }
             }

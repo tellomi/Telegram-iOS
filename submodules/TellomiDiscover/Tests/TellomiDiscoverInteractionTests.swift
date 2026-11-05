@@ -28,14 +28,18 @@ final class TellomiDiscoverInteractionTests: XCTestCase {
         XCTAssertEqual(vote?.method, "PUT")
         XCTAssertEqual(vote?.url.path, "/v1/feed/posts/post-9/vote")
         let voteJSON = try! JSONSerialization.jsonObject(with: vote!.body!) as! [String: Any]
-        XCTAssertEqual((voteJSON["option"] as? NSNumber)?.intValue, 1)
+        let sent = voteJSON["options"] as? [NSNumber]
+        XCTAssertEqual(sent?.map(\.intValue), [1])
+        XCTAssertNil(voteJSON["option"])
         XCTAssertNil(tellomiDiscoverVoteBody(option: -1))
         XCTAssertNil(tellomiDiscoverVoteBody(option: 10))
 
         let acknowledged = tellomiDiscoverDecodeHTTP(operation: .repost("post-9"), result: TellomiDiscoverHTTPResult(status: 204, body: Data()))
         XCTAssertEqual(acknowledged, .success(.acknowledged))
-        let voted = tellomiDiscoverDecodeHTTP(operation: .vote(postId: "post-9", option: 0), result: TellomiDiscoverHTTPResult(status: 200, body: Data("{}".utf8)))
-        XCTAssertEqual(voted, .success(.acknowledged))
+        let empty = tellomiDiscoverDecodeHTTP(operation: .vote(postId: "post-9", option: 0), result: TellomiDiscoverHTTPResult(status: 200, body: Data("{}".utf8)))
+        XCTAssertEqual(empty, .failure(.unreadable))
+        let voted = tellomiDiscoverDecodeHTTP(operation: .vote(postId: "post-9", option: 0), result: TellomiDiscoverHTTPResult(status: 200, body: Data(#"{"counts":[3,1],"voted":[0]}"#.utf8)))
+        XCTAssertEqual(voted, .success(.voted(TellomiDiscoverVoteTally(counts: [3, 1], voted: [0]))))
     }
 
     func testQuoteAndPollPublishBodies() {
@@ -48,6 +52,8 @@ final class TellomiDiscoverInteractionTests: XCTestCase {
         XCTAssertNil(tellomiDiscoverNormalizedPollOptions(["only one"]))
         XCTAssertNil(tellomiDiscoverNormalizedPollOptions(["", "  "]))
         XCTAssertEqual(tellomiDiscoverNormalizedPollOptions(["  是 ", "否"]), ["是", "否"])
+        XCTAssertNil(tellomiDiscoverNormalizedPollOptions(["是", String(repeating: "字", count: 41)]))
+        XCTAssertEqual(tellomiDiscoverPollOptionTextLimit, 40)
 
         let poll = tellomiDiscoverPublishBody(text: "今天吃什么", visibility: .contacts, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, pollOptions: ["面", "饭"])
         let pollJSON = try! JSONSerialization.jsonObject(with: poll!) as! [String: Any]
@@ -61,14 +67,18 @@ final class TellomiDiscoverInteractionTests: XCTestCase {
     }
 
     func testPollRoundTripOnACard() {
-        let cards = #"{"cards":[{"id":"post-9","state":"ok","card":{"text":"选","poll":{"options":[{"text":"甲","votes":2},{"text":"乙","votes":0}],"my_vote":0}},"me":{"reposted":true},"shareable":true}]}"#.data(using: .utf8)!
+        let cards = #"{"cards":[{"id":"post-9","state":"ok","card":{"text":"选","poll":{"options":["甲","乙"]}},"poll":{"counts":[2,0],"voted":[0]},"me":{"reposted":true},"shareable":true}]}"#.data(using: .utf8)!
         let card = tellomiDiscoverParseCards(cards)?.first
         XCTAssertEqual(card?.shareable, true)
         XCTAssertEqual(card?.reposted, true)
         XCTAssertEqual(card?.poll, TellomiDiscoverPoll(options: [
             TellomiDiscoverPollOption(text: "甲", votes: 2),
             TellomiDiscoverPollOption(text: "乙", votes: 0)
-        ], myVote: 0))
+        ], voted: [0]))
+        let open = #"{"cards":[{"id":"post-9","state":"ok","card":{"poll":{"options":["甲","乙"]}},"poll":{"counts":[2,0],"voted":[]}}]}"#.data(using: .utf8)!
+        XCTAssertEqual(tellomiDiscoverParseCards(open)?.first?.poll?.voted, [])
+        let legacy = #"{"cards":[{"id":"post-9","state":"ok","card":{"poll":{"options":[{"text":"甲","votes":2}],"my_vote":0}}}]}"#.data(using: .utf8)!
+        XCTAssertNil(tellomiDiscoverParseCards(legacy)?.first?.poll)
         let post = tellomiDiscoverDisplayPost(card!)
         XCTAssertEqual(post.shareable, true)
         XCTAssertEqual(post.reposted, true)
@@ -76,6 +86,9 @@ final class TellomiDiscoverInteractionTests: XCTestCase {
         XCTAssertTrue(summary.body.contains("甲 · 2 票"))
         let hidden = tellomiDiscoverPostSummary(post: post, copy: .resolve(languageCode: "zh"), list: false, includePoll: false)
         XCTAssertFalse(hidden.body.contains("甲"))
+        let updated = tellomiDiscoverPoll(post.poll!, applying: TellomiDiscoverVoteTally(counts: [3, 1], voted: [0]))
+        XCTAssertEqual(updated.options.map(\.votes), [3, 1])
+        XCTAssertEqual(updated.voted, [0])
     }
 
     func testDiscoverNotificationMuteMatchesThePushRule() {

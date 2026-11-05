@@ -30,7 +30,8 @@ public func tellomiDiscoverShareURL(postId: String) -> URL? {
 
 public let tellomiDiscoverPollOptionMinimum = 2
 public let tellomiDiscoverPollOptionLimit = 10
-public let tellomiDiscoverPollOptionTextLimit = 100
+/// Engine option text is at most 40 characters (`docs/api.md`).
+public let tellomiDiscoverPollOptionTextLimit = 40
 
 public struct TellomiDiscoverPollOption: Equatable {
     public var text: String
@@ -44,17 +45,39 @@ public struct TellomiDiscoverPollOption: Equatable {
 
 public struct TellomiDiscoverPoll: Equatable {
     public var options: [TellomiDiscoverPollOption]
-    /// Index into `options` after this account has voted. Missing means not voted.
-    public var myVote: Int?
+    /// Indices from the outer `poll.voted`. Empty means this account has not voted.
+    public var voted: [Int]
 
-    public init(options: [TellomiDiscoverPollOption], myVote: Int?) {
+    public init(options: [TellomiDiscoverPollOption], voted: [Int]) {
         self.options = options
-        self.myVote = myVote
+        self.voted = voted
     }
 }
 
+/// `200 {"counts":[Int],"voted":[Int]}` from `PUT /v1/feed/posts/{id}/vote`.
+public struct TellomiDiscoverVoteTally: Equatable {
+    public var counts: [Int]
+    public var voted: [Int]
+
+    public init(counts: [Int], voted: [Int]) {
+        self.counts = counts
+        self.voted = voted
+    }
+}
+
+/// Option labels stay. Counts replace the tallies (a missing slot is 0). `voted` is kept only when it points at an option.
+public func tellomiDiscoverPoll(_ poll: TellomiDiscoverPoll, applying tally: TellomiDiscoverVoteTally) -> TellomiDiscoverPoll {
+    var options = poll.options
+    for index in options.indices {
+        let count = tally.counts.indices.contains(index) ? tally.counts[index] : 0
+        options[index].votes = max(0, count)
+    }
+    let voted = tally.voted.filter { options.indices.contains($0) }
+    return TellomiDiscoverPoll(options: options, voted: voted)
+}
+
 /// Trimmed options, in order. Fewer than 2, more than 10, a blank, a newline,
-/// or an option over 100 characters is not a poll.
+/// or an option over 40 characters is not a poll.
 public func tellomiDiscoverNormalizedPollOptions(_ raw: [String]) -> [String]? {
     var options: [String] = []
     for value in raw {
@@ -77,7 +100,7 @@ public func tellomiDiscoverVoteBody(option: Int) -> Data? {
     guard option >= 0, option < tellomiDiscoverPollOptionLimit else {
         return nil
     }
-    return try? JSONSerialization.data(withJSONObject: ["option": option], options: [])
+    return try? JSONSerialization.data(withJSONObject: ["options": [option]], options: [])
 }
 
 /// teamgram `push.DiscoverNotifyUserID` (@faxian). `account.updateNotifySettings`
