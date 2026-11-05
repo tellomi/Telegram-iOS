@@ -833,6 +833,25 @@ Account 0 `mainconfig` on Android is `MessagesController.getGlobalMainSettings()
 | `submodules/TelegramCore/Sources/PendingMessages/StandaloneSendMessage.swift` | The in-memory file lookup takes the same postbox so it can read the key. |
 | `submodules/TelegramCore/Tests/TellomiDocumentByHashTests.swift` | Default on. `false`, and a forced-off override, return the miss without running the lookup. |
 
+## Download file hashes (ADR-0083 B2)
+
+After a full plaintext `upload.getFile` download is about to become the finished file, the client calls `upload.getFileHashes#9156982a` (`location:InputFileLocation`, `offset:long`). Parts are SHA-256 of 128 KiB, the same split as `upload.getCdnFileHashes` / teamgram `cdn.PartHashes` (teamgram #215, `59922c63`). `offset` drops parts that start before it. The last part is shorter. A later page is requested when the returned parts do not cover the file.
+
+A miss (empty vector), an RPC error, or 12 seconds without a result after the file is ready to finish leaves the file in place. A part whose bytes differ, or a confirmed end shorter than the file, deletes the partial file and fails the download. CDN downloads already check ciphertext hashes. Web files, legacy `inputFileLocation`, secret-chat decryption, and a download that never fills the file (a prefix, a video preload, a file already on disk) do not call this method. iOS does not encrypt the media cache, so that skip stays false. `messages.getDocumentByHash` is unchanged. The schema already names the long-offset method; nothing generated is edited.
+
+Account 0 `mainconfig` on Android is `MessagesController.getGlobalMainSettings()`, key `tellomi_get_file_hashes`, boolean, default true. iOS reads the same key from the account's persisted `help.getAppConfig` (`AppConfiguration`), the same place B1 reads `tellomi_get_document_by_hash`. A missing key, `true`, or a non-boolean runs the check. `false` does not send the RPC. The value is read when the file is ready to finish.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashes.swift` | Part rules, fail-open, and the kill switch. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashDownload.swift` | The long-offset RPC, paging, and the commit decision. |
+| `submodules/TelegramCore/Sources/Network/MultipartFetch.swift` | Notes the location and CDN, and observes a plaintext download. |
+| `submodules/TelegramCore/Sources/Network/FetchV2.swift` | Notes the location, a CDN redirect, and a fallback to the datacenter. |
+| `submodules/Postbox/Sources/MediaBox.swift` | `beforeCompleteCommit`, read when a partial file would be linked. |
+| `submodules/Postbox/Sources/MediaBoxFileContextV2Impl.swift` | Holds that link. A refusal deletes the partial and fails the fetch. |
+| `submodules/TelegramCore/Tests/TellomiFileHashesTests.swift` | 128 KiB parts, mismatch versus miss, the switch, legacy location. |
+| `submodules/Postbox/Tests/MediaBoxFileContextV2FileHashGateTests.swift` | The link waits. Allow keeps the file. Refuse deletes it and fails the fetch. |
+
 ## Discover nearby tab (D-11 / D-12)
 
 The Discover bar always shows 推荐, 关注, and 同城, in that order. `GET /v1/feed/config` may omit `nearby`; the tab stays. An unknown config name is still not added.
