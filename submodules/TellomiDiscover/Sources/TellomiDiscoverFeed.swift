@@ -517,13 +517,22 @@ public func tellomiDiscoverNearbyURL(base: URL, city: String, cursor: String?) -
     return tellomiDiscoverURL(base: base, path: "/v1/feed/nearby", query: query)
 }
 
+/// Query on `GET /v1/feed/recommend` (D-58).
+/// On, and a missing preference, send no personalization query: that is the engine's personalized order.
+/// Off sends `personalized=false`, which asks for an order that is not based on this person.
+/// content-engine is what changes the order. This client only attaches the query.
+public func tellomiDiscoverRecommendPersonalizationQuery(personalized: Bool) -> [URLQueryItem] {
+    if personalized {
+        return []
+    }
+    return [URLQueryItem(name: "personalized", value: "false")]
+}
+
 public func tellomiDiscoverFeedURL(base: URL, kind: TellomiDiscoverFeedKind, cursor: String?, personalized: Bool) -> URL? {
     var query: [URLQueryItem] = []
     switch kind {
     case .recommend:
-        if !personalized {
-            query.append(URLQueryItem(name: "personalized", value: "false"))
-        }
+        query.append(contentsOf: tellomiDiscoverRecommendPersonalizationQuery(personalized: personalized))
     case .following:
         if let cursor, !cursor.isEmpty {
             query.append(URLQueryItem(name: "cursor", value: cursor))
