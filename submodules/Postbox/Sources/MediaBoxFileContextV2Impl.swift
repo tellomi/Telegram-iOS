@@ -105,7 +105,9 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
         private let fullPath: String
         private let metaPath: String
         
-        private let destinationFile: MediaBoxFileManager.Item?
+        private var destinationFile: MediaBoxFileManager.Item?
+        private let beforeCompleteCommit: (() -> MediaBoxBeforeCompleteCommit?)?
+        private var completeCommitGate: CompleteCommitGate = .idle
         
         private let fileMap: MediaBoxFileMap
         private var rangeRequests = Bag<RangeRequest>()
@@ -121,6 +123,11 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
         
         private var isComplete: Bool = false
         
+        private enum CompleteCommitGate {
+            case idle
+            case waiting
+        }
+        
         init(
             queue: Queue,
             manager: MediaBoxFileManager,
@@ -128,7 +135,8 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
             resourceId: Data,
             partialPath: String,
             fullPath: String,
-            metaPath: String
+            metaPath: String,
+            beforeCompleteCommit: (() -> MediaBoxBeforeCompleteCommit?)?
         ) {
             self.queue = queue
             self.manager = manager
@@ -137,6 +145,7 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
             self.partialPath = partialPath
             self.fullPath = fullPath
             self.metaPath = metaPath
+            self.beforeCompleteCommit = beforeCompleteCommit
             
             if !FileManager.default.fileExists(atPath: self.partialPath) {
                 let _ = try? FileManager.default.removeItem(atPath: self.metaPath)
@@ -314,6 +323,13 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
         private func updateRequests() {
             var rangesByPriority: [MediaBoxFetchPriority: RangeSet<Int64>] = [:]
             for (index, rangeRequest) in self.rangeRequests.copyItemsWithIndices() {
+                // A finished file can sit here while a commit hook checks it. The bytes
+                // are already in the map, so fetching them again would race the check,
+                // and completing the request would report the download done before the
+                // hook allows the link.
+                if self.completeCommitGate == .waiting, self.fileMap.contains(rangeRequest.value) != nil {
+                    continue
+                }
                 if self.updateRangeRequest(request: rangeRequest) {
                     self.rangeRequests.remove(index)
                     continue
@@ -476,16 +492,78 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
         /// partial file becomes the complete file. Once linked, the complete path is
         /// served as-is with no map behind it, so the bytes the map vouches for are
         /// flushed to disk first.
+        ///
+        /// A commit hook can hold that link. While it is waiting, the bytes stay in
+        /// the partial file and in-flight full-range requests are not completed.
         private func linkCompleteFileIfFullyWritten() {
-            if !self.isComplete, let truncationSize = self.fileMap.truncationSize, truncationSize == self.fileMap.sum {
-                self.isComplete = true
-                
-                self.destinationFile?.sync()
-                let linkResult = link(self.partialPath, self.fullPath)
-                if linkResult != 0 {
-                    postboxLog("MediaBoxFileContextV2Impl: error while linking \(self.partialPath): \(linkResult)")
-                }
+            if self.isComplete {
+                return
             }
+            guard let truncationSize = self.fileMap.truncationSize, truncationSize == self.fileMap.sum else {
+                return
+            }
+            if self.completeCommitGate == .waiting {
+                return
+            }
+            if let hook = self.beforeCompleteCommit?(), let resourceKey = String(data: self.resourceId, encoding: .utf8) {
+                self.destinationFile?.sync()
+                self.completeCommitGate = .waiting
+                let deferred = hook(resourceKey, self.partialPath, truncationSize, { [weak self] allow in
+                    self?.queue.justDispatch {
+                        self?.completeFileHashDecision(allow)
+                    }
+                })
+                if deferred {
+                    return
+                }
+                self.completeCommitGate = .idle
+            }
+            self.commitCompleteFile()
+        }
+        
+        private func completeFileHashDecision(_ allow: Bool) {
+            assert(self.queue.isCurrent())
+            guard self.completeCommitGate == .waiting else {
+                return
+            }
+            if allow {
+                self.completeCommitGate = .idle
+                self.commitCompleteFile()
+                self.updateRequests()
+                self.updateStatusRequests()
+                return
+            }
+            self.completeCommitGate = .idle
+            self.rejectCompleteFile()
+        }
+        
+        private func commitCompleteFile() {
+            guard !self.isComplete, let truncationSize = self.fileMap.truncationSize, truncationSize == self.fileMap.sum else {
+                return
+            }
+            self.isComplete = true
+            self.destinationFile?.sync()
+            let linkResult = link(self.partialPath, self.fullPath)
+            if linkResult != 0 {
+                postboxLog("MediaBoxFileContextV2Impl: error while linking \(self.partialPath): \(linkResult)")
+            }
+        }
+        
+        /// The finished bytes did not match. Drop the partial file and fail the fetch
+        /// so a retry does not keep the rejected bytes.
+        private func rejectCompleteFile() {
+            assert(self.queue.isCurrent())
+            self.isComplete = false
+            self.destinationFile = nil
+            unlink(self.partialPath)
+            unlink(self.metaPath)
+            unlink(self.fullPath)
+            self.fileMap.reset()
+            self.destinationFile = self.manager.open(path: self.partialPath, mode: .readwrite)
+            self.fileMap.serialize(manager: self.manager, to: self.metaPath)
+            self.storageBox?.update(id: self.resourceId, size: 0)
+            postboxLog("MediaBoxFileContextV2Impl: rejected complete file at \(self.partialPath)")
+            self.processFetchError(error: .generic, from: nil)
         }
         
         /// Writes `dataRange` of `data` at `resourceOffset` and records it in the map.
@@ -679,6 +757,8 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
             let updatedStatus: MediaResourceStatus
             if self.isComplete {
                 updatedStatus = .Local
+            } else if self.completeCommitGate == .waiting {
+                updatedStatus = .Fetching(isActive: true, progress: 1.0)
             } else if let totalSize = self.fileMap.truncationSize ?? request.size {
                 let progress = Float(self.fileMap.sum) / Float(totalSize)
                 if self.pendingFetch != nil {
@@ -716,14 +796,17 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
             if request.reportedStatus != status {
                 request.reportedStatus = status
                 request.next(status)
-                
-                if self.isComplete {
-                    request.completed()
-                    return true
-                } else if let truncationSize = self.fileMap.truncationSize, self.fileMap.sum == truncationSize {
-                    request.completed()
-                    return true
-                }
+            }
+            
+            if self.completeCommitGate == .waiting {
+                return false
+            }
+            if self.isComplete {
+                request.completed()
+                return true
+            } else if let truncationSize = self.fileMap.truncationSize, self.fileMap.sum == truncationSize {
+                request.completed()
+                return true
             }
             
             return false
@@ -737,6 +820,7 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
     private let path: String
     private let partialPath: String
     private let metaPath: String
+    private let beforeCompleteCommit: (() -> MediaBoxBeforeCompleteCommit?)?
     
     private let references = Bag<Void>()
     
@@ -753,7 +837,8 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
         resourceId: Data,
         path: String,
         partialPath: String,
-        metaPath: String
+        metaPath: String,
+        beforeCompleteCommit: (() -> MediaBoxBeforeCompleteCommit?)? = nil
     ) {
         self.queue = queue
         self.manager = manager
@@ -762,6 +847,7 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
         self.path = path
         self.partialPath = partialPath
         self.metaPath = metaPath
+        self.beforeCompleteCommit = beforeCompleteCommit
     }
     
     func addReference() -> Int {
@@ -785,7 +871,8 @@ public final class MediaBoxFileContextV2Impl: MediaBoxFileContext {
                 resourceId: self.resourceId,
                 partialPath: self.partialPath,
                 fullPath: self.path,
-                metaPath: self.metaPath
+                metaPath: self.metaPath,
+                beforeCompleteCommit: self.beforeCompleteCommit
             )
             self.partialState = partialState
             return f(partialState)
