@@ -28,10 +28,15 @@ final class TellomiSettingsDecisionsTests: XCTestCase {
         XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "zh-Hant").account, "帳號")
         XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "zh-TW").bindings, "帳號與綁定")
         XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "en").helpCenter, "Help Center")
+        XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "en").personalizedRecommendationSection, "Discover")
         XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "en").personalizedRecommendation, "Personalized Recommendations")
+        XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "en").personalizedRecommendationFooter, "When this is off, For You is not ranked from your activity.")
+        XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "zh-Hans").personalizedRecommendationSection, "发现")
         XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "zh-Hans").personalizedRecommendation, "个性化推荐")
-        XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "zh-Hans").personalizedRecommendationFooter, "关闭后，发现里的推荐不再针对你个人。")
+        XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "zh-Hans").personalizedRecommendationFooter, "关闭后，推荐不再根据你的浏览记录排序。")
+        XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "zh-Hant").personalizedRecommendationSection, "發現")
         XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "zh-Hant").personalizedRecommendation, "個人化推薦")
+        XCTAssertEqual(TellomiSettingsCopy.resolve(languageCode: "zh-Hant").personalizedRecommendationFooter, "關閉後，推薦不再根據你的瀏覽記錄排序。")
         let packed = TellomiSettingsCopy.resolve(languageCode: "en", pack: ["Tellomi.Settings.Account": "Compte"])
         XCTAssertEqual(packed.account, "Compte")
         XCTAssertEqual(packed.general, "General")
@@ -61,6 +66,10 @@ final class TellomiSettingsDecisionsTests: XCTestCase {
         XCTAssertTrue(tellomiRecommendFeedIsPersonalized(restored))
         XCTAssertEqual(tellomiRecommendCacheUpdate(preferenceKnown: true, wasPersonalized: false, isPersonalized: true, viewingRecommend: true), .drop(reload: true))
         XCTAssertEqual(tellomiRecommendCacheUpdate(preferenceKnown: true, wasPersonalized: true, isPersonalized: true, viewingRecommend: true), .none)
+        XCTAssertEqual(tellomiRecommendCacheUpdate(preferenceKnown: true, wasPersonalized: false, isPersonalized: true, viewingRecommend: false), .drop(reload: false))
+
+        XCTAssertTrue(tellomiPersonalizedRecommendationRowVisible(personalizationToggleVisible: true))
+        XCTAssertTrue(tellomiPersonalizedRecommendationRowVisible(personalizationToggleVisible: false))
     }
 
     func testAboutFactsStayReplaceable() {

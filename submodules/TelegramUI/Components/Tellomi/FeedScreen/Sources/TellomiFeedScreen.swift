@@ -525,7 +525,7 @@ public final class TellomiFeedScreen: ViewController {
             }
             operation = .nearby(city: city, cursor: cursor)
         } else {
-            operation = .feed(kind, cursor: cursor, personalized: kind == .recommend ? self.personalizedRecommend : true)
+            operation = .feed(kind, cursor: cursor, personalized: tellomiDiscoverFeedRequestPersonalized(kind: kind, switchOn: self.personalizedRecommend))
         }
         self.loader.run(loggedIn: true, configuration: configuration, operation: operation) { [weak self] result in
             guard let self, self.feedGeneration == generation else {

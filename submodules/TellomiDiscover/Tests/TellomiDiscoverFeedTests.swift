@@ -158,9 +158,18 @@ final class TellomiDiscoverFeedTests: XCTestCase {
         let restored = tellomiDiscoverHTTPCall(base: base, operation: .feed(.recommend, cursor: nil, personalized: true), token: "jwt")
         XCTAssertNil(restored?.url.query)
 
-        let following = tellomiDiscoverHTTPCall(base: base, operation: .feed(.following, cursor: nil, personalized: false), token: "jwt")
+        let following = tellomiDiscoverHTTPCall(base: base, operation: .feed(.following, cursor: nil, personalized: tellomiDiscoverFeedRequestPersonalized(kind: .following, switchOn: false)), token: "jwt")
         XCTAssertEqual(following?.url.path, "/v1/feed/following")
         XCTAssertNil(following?.url.query)
+        XCTAssertFalse(following!.url.absoluteString.contains("personalized"))
+
+        XCTAssertTrue(tellomiDiscoverFeedRequestPersonalized(kind: .recommend, switchOn: true))
+        XCTAssertFalse(tellomiDiscoverFeedRequestPersonalized(kind: .recommend, switchOn: false))
+        XCTAssertTrue(tellomiDiscoverFeedRequestPersonalized(kind: .following, switchOn: false))
+        XCTAssertTrue(tellomiDiscoverFeedRequestPersonalized(kind: .nearby, switchOn: false))
+        let nearby = tellomiDiscoverHTTPCall(base: base, operation: .nearby(city: "cn:chengdu", cursor: nil), token: "jwt")
+        XCTAssertEqual(nearby?.url.path, "/v1/feed/nearby")
+        XCTAssertFalse(nearby!.url.absoluteString.contains("personalized"))
     }
 
     func testPublishBodyMatchesTheEngine() {
@@ -411,6 +420,9 @@ final class TellomiDiscoverFeedTests: XCTestCase {
         XCTAssertEqual(tellomiDiscoverParseEngineConfig(official)?.tabs, [.recommend, .following, .nearby])
         XCTAssertEqual(config?.postTextChars, 500)
         XCTAssertEqual(config?.recommendMode, "editorial_chronological")
+        XCTAssertEqual(config?.personalizationToggleVisible, false)
+        XCTAssertEqual(tellomiDiscoverParseEngineConfig(official)?.personalizationToggleVisible, false)
+        XCTAssertNil(tellomiDiscoverFeedURL(base: URL(string: "https://feed.example")!, kind: .recommend, cursor: nil, personalized: tellomiDiscoverFeedRequestPersonalized(kind: .recommend, switchOn: true))?.query)
     }
 
     func testCreatedPostAndUIChrome() {

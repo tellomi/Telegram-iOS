@@ -87,6 +87,8 @@ private enum PrivacyAndSecuritySection: Int32 {
     case dataSettings
     case loginEmail
     case linkHandling
+    /// After the privacy block and before auto-archive, matching Android #87.
+    case discover
 }
 
 public enum PrivacyAndSecurityEntryTag: ItemListItemTag {
@@ -137,6 +139,7 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
     case dataSettings(PresentationTheme, String)
     case dataSettingsInfo(PresentationTheme, String)
     case openLinksIn(PresentationTheme, String, String)
+    case personalizedRecommendationHeader(String)
     case personalizedRecommendation(String, Bool)
     case personalizedRecommendationFooter(String)
     
@@ -156,8 +159,8 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
             return PrivacyAndSecuritySection.dataSettings.rawValue
         case .openLinksIn:
             return PrivacyAndSecuritySection.linkHandling.rawValue
-        case .personalizedRecommendation, .personalizedRecommendationFooter:
-            return -1
+        case .personalizedRecommendationHeader, .personalizedRecommendation, .personalizedRecommendationFooter:
+            return PrivacyAndSecuritySection.discover.rawValue
         }
     }
     
@@ -211,28 +214,30 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
                 return 23
             case .selectivePrivacyInfo:
                 return 24
-            case .autoArchiveHeader:
+            case .personalizedRecommendationHeader:
                 return 25
-            case .autoArchive:
-                return 26
-            case .autoArchiveInfo:
-                return 27
-            case .accountHeader:
-                return 28
-            case .accountTimeout:
-                return 29
-            case .accountInfo:
-                return 30
-            case .dataSettings:
-                return 31
-            case .dataSettingsInfo:
-                return 32
-            case .openLinksIn:
-                return 33
             case .personalizedRecommendation:
-                return -2
+                return 26
             case .personalizedRecommendationFooter:
-                return -1
+                return 27
+            case .autoArchiveHeader:
+                return 28
+            case .autoArchive:
+                return 29
+            case .autoArchiveInfo:
+                return 30
+            case .accountHeader:
+                return 31
+            case .accountTimeout:
+                return 32
+            case .accountInfo:
+                return 33
+            case .dataSettings:
+                return 34
+            case .dataSettingsInfo:
+                return 35
+            case .openLinksIn:
+                return 36
         }
     }
     
@@ -436,6 +441,12 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
                 } else {
                     return false
                 }
+            case let .personalizedRecommendationHeader(lhsText):
+                if case let .personalizedRecommendationHeader(rhsText) = rhs, lhsText == rhsText {
+                    return true
+                } else {
+                    return false
+                }
             case let .personalizedRecommendation(lhsText, lhsValue):
                 if case let .personalizedRecommendation(rhsText, rhsValue) = rhs, lhsText == rhsText, lhsValue == rhsValue {
                     return true
@@ -571,6 +582,8 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
                 return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: text, label: value, sectionId: self.section, style: .blocks, action: {
                     arguments.openBrowserSelection()
                 })
+            case let .personalizedRecommendationHeader(text):
+                return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
             case let .personalizedRecommendation(text, value):
                 return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: text, value: value, sectionId: self.section, style: .blocks, updated: { updated in
                     arguments.togglePersonalizedRecommendation(updated)
@@ -692,14 +705,6 @@ private func privacyAndSecurityControllerEntries(
     personalizedRecommendation: Bool
 ) -> [PrivacyAndSecurityEntry] {
     var entries: [PrivacyAndSecurityEntry] = []
-    // D-58. Top of Privacy and Security, on unless this account turned it off.
-    // teamgram's `tellomi_personalized_recommend_default` is false until an
-    // algorithm filing number is published, and that false asks clients to hide
-    // the row. The recommend request stays personalized until this switch is
-    // off, so the row stays on screen either way.
-    let recommendationCopy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
-    entries.append(.personalizedRecommendation(recommendationCopy.personalizedRecommendation, personalizedRecommendation))
-    entries.append(.personalizedRecommendationFooter(recommendationCopy.personalizedRecommendationFooter))
     
     entries.append(.blockedPeers(presentationData.theme, presentationData.strings.Settings_BlockedUsers, blockedPeerCount == nil ? "" : (blockedPeerCount == 0 ? presentationData.strings.PrivacySettings_BlockedPeersEmpty : "\(blockedPeerCount!)")))
     if activeWebsitesCount != 0 {
@@ -826,6 +831,18 @@ private func privacyAndSecurityControllerEntries(
         entries.append(.groupPrivacy(presentationData.theme, presentationData.strings.Privacy_GroupsAndChannels, presentationData.strings.Channel_NotificationLoading))
         entries.append(.groupPrivacyFooter)
         //entries.append(.selectivePrivacyInfo(presentationData.theme, presentationData.strings.PrivacyLastSeenSettings_GroupsAndChannelsHelp))
+    }
+
+    // D-58, aligned with Android #87. Discover section after privacy and before
+    // auto-archive. `personalization_toggle_visible` is not read: a missing
+    // key and an explicit false both parse as false, which would hide the only
+    // control that can send `personalized=false`.
+    let engineFlagThatWouldHideTheRow = false
+    if tellomiPersonalizedRecommendationRowVisible(personalizationToggleVisible: engineFlagThatWouldHideTheRow) {
+        let recommendationCopy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
+        entries.append(.personalizedRecommendationHeader(recommendationCopy.personalizedRecommendationSection.uppercased()))
+        entries.append(.personalizedRecommendation(recommendationCopy.personalizedRecommendation, personalizedRecommendation))
+        entries.append(.personalizedRecommendationFooter(recommendationCopy.personalizedRecommendationFooter))
     }
     
     if canAutoarchive {

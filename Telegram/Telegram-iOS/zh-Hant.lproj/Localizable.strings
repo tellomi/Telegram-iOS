@@ -203,8 +203,9 @@
 "Tellomi.Settings.AddAccount" = "新增帳號";
 "Tellomi.Settings.Logout" = "登出";
 "Tellomi.Settings.OpenSource" = "開源許可";
+"Tellomi.Settings.PersonalizedRecommendationSection" = "發現";
 "Tellomi.Settings.PersonalizedRecommendation" = "個人化推薦";
-"Tellomi.Settings.PersonalizedRecommendationFooter" = "關閉後，發現裡的推薦不再針對你個人。";
+"Tellomi.Settings.PersonalizedRecommendationFooter" = "關閉後，推薦不再根據你的瀏覽記錄排序。";
 "Tellomi.Settings.ModelLabel" = "AI 模型";
 "Tellomi.Settings.RegistrationLabel" = "生成式人工智慧服務登記編號";
 "Tellomi.Settings.AlgorithmLabel" = "演算法備案編號";

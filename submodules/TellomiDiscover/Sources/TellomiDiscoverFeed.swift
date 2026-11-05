@@ -528,11 +528,22 @@ public func tellomiDiscoverRecommendPersonalizationQuery(personalized: Bool) -> 
     return [URLQueryItem(name: "personalized", value: "false")]
 }
 
+/// Recommend is the only feed that reads 「个性化推荐」.
+/// Following and nearby keep the production request, which has no `personalized` query.
+public func tellomiDiscoverFeedRequestPersonalized(kind: TellomiDiscoverFeedKind, switchOn: Bool) -> Bool {
+    switch kind {
+    case .recommend:
+        return switchOn
+    case .following, .nearby:
+        return true
+    }
+}
+
 public func tellomiDiscoverFeedURL(base: URL, kind: TellomiDiscoverFeedKind, cursor: String?, personalized: Bool) -> URL? {
     var query: [URLQueryItem] = []
     switch kind {
     case .recommend:
-        query.append(contentsOf: tellomiDiscoverRecommendPersonalizationQuery(personalized: personalized))
+        query.append(contentsOf: tellomiDiscoverRecommendPersonalizationQuery(personalized: tellomiDiscoverFeedRequestPersonalized(kind: kind, switchOn: personalized)))
     case .following:
         if let cursor, !cursor.isEmpty {
             query.append(URLQueryItem(name: "cursor", value: cursor))

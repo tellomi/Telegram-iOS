@@ -3,6 +3,8 @@ import SwiftSignalKit
 import TelegramCore
 
 /// Per-account Discover recommendation switch (D-58). Missing means on.
+/// Same semantics as Android `mainconfig` key `tellomi_discover_personalized`:
+/// stored with the account, default on, not synced as a server privacy rule.
 public struct TellomiRecommendationSettings: Equatable, Codable {
     public var personalized: Bool
 
