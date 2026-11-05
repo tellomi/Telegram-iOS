@@ -90,7 +90,8 @@ public func tellomiRecommendFeedIsPersonalized(_ choice: TellomiRecommendationCh
     return choice.personalized
 }
 
-/// D-50 / D-59. Shown only on About Tellomi. A non-empty app-config string replaces the fallback.
+/// D-50 / D-59. Shown only on About Tellomi.
+/// `help.getAppConfig` may replace each field with a non-empty string.
 public struct TellomiAboutFacts: Equatable {
     public var modelName: String
     public var generativeAIRegistrationNumber: String
@@ -106,10 +107,13 @@ public struct TellomiAboutFacts: Equatable {
 public enum TellomiAboutDisclosure {
     public static let modelConfigurationKey = "tellomi_ai_model_name"
     public static let generativeRegistrationConfigurationKey = "tellomi_generative_ai_registration_number"
+    /// Key teamgram `pkg/about` puts on `help.getAppConfig`. The longer key wins when both are set.
+    public static let publishedGenerativeRegistrationConfigurationKey = "tellomi_ai_registration_number"
     public static let algorithmFilingConfigurationKey = "tellomi_algorithm_filing_number"
     /// D-22. DeepSeek is the backup and is not listed here.
     public static let defaultModelName = "通义千问 Qwen"
 
+    /// A missing key, a non-string, or a blank string keeps `fallback`.
     public static func facts(configuration: [String: Any]?, numberPlaceholder: String) -> TellomiAboutFacts {
         func string(_ key: String, fallback: String) -> String {
             guard let raw = configuration?[key] as? String else {
@@ -118,9 +122,13 @@ public enum TellomiAboutDisclosure {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? fallback : trimmed
         }
+        let registration = string(
+            Self.generativeRegistrationConfigurationKey,
+            fallback: string(Self.publishedGenerativeRegistrationConfigurationKey, fallback: numberPlaceholder)
+        )
         return TellomiAboutFacts(
             modelName: string(Self.modelConfigurationKey, fallback: Self.defaultModelName),
-            generativeAIRegistrationNumber: string(Self.generativeRegistrationConfigurationKey, fallback: numberPlaceholder),
+            generativeAIRegistrationNumber: registration,
             algorithmFilingNumber: string(Self.algorithmFilingConfigurationKey, fallback: numberPlaceholder)
         )
     }
