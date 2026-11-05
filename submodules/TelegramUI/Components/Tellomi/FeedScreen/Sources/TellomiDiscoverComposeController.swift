@@ -2,6 +2,7 @@ import AccountContext
 import AsyncDisplayKit
 import Display
 import Foundation
+import Postbox
 import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
@@ -11,7 +12,8 @@ import UIKit
 import ShareWithPeersScreen
 
 /// Text, visibility, and an optional poll or quote. A picked video is not a
-/// field: `POST /v1/feed/posts` has nowhere to put one.
+/// field: `POST /v1/feed/posts` has nowhere to put one. `@username` stays in
+/// `text`. A public link may add `linkPreview`.
 struct TellomiDiscoverComposeRequest {
     var text: String
     var visibility: TellomiDiscoverVisibility
@@ -19,6 +21,7 @@ struct TellomiDiscoverComposeRequest {
     var nonce: String
     var quoteOf: String?
     var pollOptions: [String]?
+    var linkPreview: TellomiDiscoverLink.Preview?
 }
 
 final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate {
@@ -57,6 +60,21 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     private var videoBusy = false
     private var videoGeneration = 0
     private var videoDecision: TellomiDiscoverVideo.Decision = .none
+    private let placeholderLabel = UILabel()
+    private let mentionButton = UIButton(type: .system)
+    private let suggestionStack = UIStackView()
+    private let linkCard = TellomiDiscoverLinkCardView()
+    private var people: [TellomiDiscoverMention.Person] = []
+    private var peopleDisposable: Disposable?
+    private var activeQuery: TellomiDiscoverMention.Query?
+    private var editingMention = false
+    private var paintingMentions = false
+    private var linkWork: DispatchWorkItem?
+    private var linkGeneration = 0
+    private var linkURL: String?
+    private var linkPreview: TellomiDiscoverLink.Preview?
+    private var linkSettled = false
+    private var linkHolding = false
 
     init(context: AccountContext, textLimit: Int, quoteOf: String? = nil, quotePreview: String = "", publish: @escaping (TellomiDiscoverComposeRequest, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void) {
         self.context = context
@@ -87,6 +105,8 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     deinit {
         self.presentationDataDisposable?.dispose()
         self.privacyDisposable?.dispose()
+        self.peopleDisposable?.dispose()
+        self.linkWork?.cancel()
         TellomiDiscoverLocalVideo.discard(self.videoURL)
     }
 
@@ -97,6 +117,16 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.textView.backgroundColor = .clear
         self.textView.delegate = self
         self.textView.accessibilityIdentifier = "tellomi.discover.compose"
+        self.placeholderLabel.font = Font.regular(17.0)
+        self.placeholderLabel.numberOfLines = 2
+        self.placeholderLabel.isUserInteractionEnabled = false
+        self.mentionButton.contentHorizontalAlignment = .left
+        self.mentionButton.addTarget(self, action: #selector(self.mentionPressed), for: .touchUpInside)
+        self.mentionButton.accessibilityIdentifier = "tellomi.discover.mention"
+        self.suggestionStack.axis = .vertical
+        self.suggestionStack.alignment = .fill
+        self.suggestionStack.distribution = .fillEqually
+        self.suggestionStack.isHidden = true
         self.quoteLabel.numberOfLines = 3
         self.quoteLabel.font = Font.regular(14.0)
         self.pollButton.contentHorizontalAlignment = .left
@@ -133,6 +163,10 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.displayNode.view.addSubview(self.scrollView)
         self.scrollView.addSubview(self.quoteLabel)
         self.scrollView.addSubview(self.textView)
+        self.scrollView.addSubview(self.placeholderLabel)
+        self.scrollView.addSubview(self.linkCard)
+        self.scrollView.addSubview(self.mentionButton)
+        self.scrollView.addSubview(self.suggestionStack)
         self.scrollView.addSubview(self.pollButton)
         self.scrollView.addSubview(self.addOptionButton)
         self.scrollView.addSubview(self.videoButton)
@@ -145,6 +179,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         if self.quoteOf == nil {
             self.ensureOptionFields(2)
         }
+        self.reloadPeople()
         self.apply()
     }
 
@@ -165,7 +200,26 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
             self.quoteLabel.frame = .zero
         }
         self.textView.frame = CGRect(x: side, y: cursor, width: width, height: 120)
+        self.placeholderLabel.frame = CGRect(x: side + 5, y: cursor + 8, width: width - 10, height: 44)
         cursor = self.textView.frame.maxY + 8.0
+        if self.linkCard.isHidden {
+            self.linkCard.frame = .zero
+        } else {
+            let cardHeight = self.linkCard.sizeThatFits(CGSize(width: width, height: 200)).height
+            self.linkCard.frame = CGRect(x: side, y: cursor, width: width, height: cardHeight)
+            cursor = self.linkCard.frame.maxY + 8.0
+        }
+        self.mentionButton.frame = CGRect(x: side, y: cursor, width: width, height: 36)
+        cursor = self.mentionButton.frame.maxY + 2.0
+        if self.suggestionStack.isHidden {
+            self.suggestionStack.frame = .zero
+        } else {
+            let suggestionHeight = self.suggestionStack.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+            let rows = CGFloat(max(self.suggestionStack.arrangedSubviews.count, 1)) * 36.0
+            let height = max(suggestionHeight, rows)
+            self.suggestionStack.frame = CGRect(x: side, y: cursor, width: width, height: height)
+            cursor = self.suggestionStack.frame.maxY + 4.0
+        }
         let showPoll = self.pollOn && self.quoteOf == nil
         for field in self.optionFields {
             field.isHidden = !showPoll
@@ -223,7 +277,19 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
 
     func textViewDidChange(_ textView: UITextView) {
         let _ = textView
-        self.apply()
+        if self.editingMention || self.paintingMentions {
+            return
+        }
+        self.refreshCompose()
+    }
+
+    func textViewDidChangeSelection(_ textView: UITextView) {
+        let _ = textView
+        if self.editingMention || self.paintingMentions {
+            return
+        }
+        self.showSuggestions()
+        self.relayout()
     }
 
     @objc private func visibilityPressed() {
@@ -262,14 +328,32 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         case .sendText:
             break
         }
+        let text = self.textView.text ?? ""
+        guard TellomiDiscoverMention.invalid(text).isEmpty else {
+            return
+        }
         let options = self.pollOptions()
         if self.pollOn, options == nil {
             return
         }
+        if let url = TellomiDiscoverLink.firstUrl(text), TellomiDiscoverLink.fetchable(url), url != self.linkURL || !self.linkSettled {
+            if let cached = TellomiDiscoverLinkClient.peek(url) {
+                self.linkURL = url
+                self.linkPreview = cached
+                self.linkSettled = true
+            } else {
+                self.linkHolding = true
+                self.apply()
+                self.requestLink(url, immediate: true)
+                return
+            }
+        }
+        self.linkHolding = false
+        let preview = (TellomiDiscoverLink.firstUrl(text) == self.linkURL && self.linkSettled) ? self.linkPreview : nil
         self.sending = true
         self.sendError = nil
         self.apply()
-        let request = TellomiDiscoverComposeRequest(text: self.textView.text ?? "", visibility: choice.visibility, userIds: choice.userIds, nonce: self.nonce, quoteOf: self.quoteOf, pollOptions: self.pollOn ? options : nil)
+        let request = TellomiDiscoverComposeRequest(text: text, visibility: choice.visibility, userIds: choice.userIds, nonce: self.nonce, quoteOf: self.quoteOf, pollOptions: self.pollOn ? options : nil, linkPreview: preview)
         self.publish(request) { [weak self] result in
             guard let self else {
                 return
@@ -519,22 +603,283 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
             self.quoteLabel.text = self.quotePreview.isEmpty ? copy.quote : self.quotePreview
         }
         self.quoteLabel.textColor = self.presentationData.theme.list.itemSecondaryTextColor
+        let text = self.textView.text ?? ""
+        let invalid = TellomiDiscoverMention.invalid(text)
+        let mentionText = invalid.first.map { TellomiDiscoverMention.invalidLine(template: copy.mentionInvalid, username: $0) }
         let errorText = self.sendError.flatMap { copy.failureText($0) }
-        if self.pollOn, self.pollOptions() == nil, errorText == nil {
+        if let errorText {
+            self.hintLabel.text = errorText
+        } else if let mentionText {
+            self.hintLabel.text = mentionText
+        } else if self.pollOn, self.pollOptions() == nil {
             self.hintLabel.text = copy.pollHint
         } else {
-            self.hintLabel.text = errorText ?? copy.reasonText(choice?.reason)
+            self.hintLabel.text = copy.reasonText(choice?.reason)
         }
-        self.hintLabel.textColor = self.presentationData.theme.list.itemSecondaryTextColor
+        self.hintLabel.textColor = mentionText != nil && errorText == nil ? self.presentationData.theme.list.itemDestructiveColor : self.presentationData.theme.list.itemSecondaryTextColor
         self.hintLabel.font = Font.regular(13.0)
-        self.textView.textColor = self.presentationData.theme.list.itemPrimaryTextColor
+        self.placeholderLabel.text = copy.mentionHint
+        self.placeholderLabel.textColor = self.presentationData.theme.list.itemSecondaryTextColor
+        self.placeholderLabel.isHidden = !text.isEmpty
+        self.mentionButton.setTitle(copy.mention, for: .normal)
+        self.mentionButton.setTitleColor(self.presentationData.theme.list.itemAccentColor, for: .normal)
+        self.linkCard.apply(primary: self.presentationData.theme.list.itemPrimaryTextColor, secondary: self.presentationData.theme.list.itemSecondaryTextColor, accent: self.presentationData.theme.list.itemAccentColor, background: self.presentationData.theme.list.itemHighlightedBackgroundColor)
         self.displayNode.backgroundColor = self.presentationData.theme.list.plainBackgroundColor
-        let text = self.textView.text ?? ""
+        self.textView.typingAttributes = [
+            NSAttributedString.Key.font: Font.regular(17.0),
+            NSAttributedString.Key.foregroundColor: self.presentationData.theme.list.itemPrimaryTextColor
+        ]
+        self.paintMentions()
         let pollReady = !self.pollOn || self.pollOptions() != nil
-        let canSend = !self.sending && !self.videoBusy && choice?.publishable == true && pollReady && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= self.textLimit && tellomiDiscoverClientNonce(self.nonce)
+        let canSend = !self.sending && !self.videoBusy && !self.linkHolding && invalid.isEmpty && choice?.publishable == true && pollReady && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= self.textLimit && tellomiDiscoverClientNonce(self.nonce)
         let item = UIBarButtonItem(title: copy.publish, style: .done, target: self, action: #selector(self.sendPressed))
         item.isEnabled = canSend
         self.navigationItem.setRightBarButton(item, animated: false)
+    }
+
+    private func refreshCompose() {
+        self.showSuggestions()
+        self.refreshLink()
+        self.apply()
+        self.relayout()
+    }
+
+    private func paintMentions() {
+        guard self.isNodeLoaded, !self.paintingMentions, self.textView.markedTextRange == nil else {
+            return
+        }
+        self.paintingMentions = true
+        defer { self.paintingMentions = false }
+        let storage = self.textView.textStorage
+        let selected = self.textView.selectedRange
+        let full = NSRange(location: 0, length: storage.length)
+        guard full.length > 0 else {
+            return
+        }
+        let primary = self.presentationData.theme.list.itemPrimaryTextColor
+        let accent = self.presentationData.theme.list.itemAccentColor
+        storage.beginEditing()
+        storage.addAttribute(.font, value: Font.regular(17.0), range: full)
+        storage.addAttribute(.foregroundColor, value: primary, range: full)
+        let text = self.textView.text ?? ""
+        for mention in TellomiDiscoverMention.parse(text) {
+            let range = NSRange(location: mention.start, length: mention.end - mention.start)
+            if range.location >= 0, NSMaxRange(range) <= storage.length {
+                storage.addAttribute(.foregroundColor, value: accent, range: range)
+            }
+        }
+        storage.endEditing()
+        if selected.location <= storage.length {
+            self.textView.selectedRange = selected
+        }
+    }
+
+    @objc private func mentionPressed() {
+        self.textView.becomeFirstResponder()
+        let text = self.textView.text ?? ""
+        var start = self.textView.selectedRange.location
+        var end = self.textView.selectedRange.location + self.textView.selectedRange.length
+        let length = (text as NSString).length
+        if start > length {
+            start = length
+        }
+        if end > length || end < start {
+            end = start
+        }
+        if start == end, TellomiDiscoverMention.queryAt(text, caret: end) != nil {
+            self.showSuggestions(force: true)
+            return
+        }
+        let ns = text as NSString
+        let updated = ns.replacingCharacters(in: NSRange(location: start, length: end - start), with: "@")
+        self.editingMention = true
+        self.textView.text = updated
+        let caret = min(start + 1, (updated as NSString).length)
+        self.textView.selectedRange = NSRange(location: caret, length: 0)
+        self.editingMention = false
+        self.refreshCompose()
+    }
+
+    private func showSuggestions(force: Bool = false) {
+        guard self.isNodeLoaded else {
+            return
+        }
+        let text = self.textView.text ?? ""
+        let caret = self.textView.selectedRange.location
+        let query = TellomiDiscoverMention.queryAt(text, caret: caret)
+        if !force, query == self.activeQuery, !self.suggestionStack.isHidden || query == nil {
+            return
+        }
+        self.activeQuery = query
+        for view in self.suggestionStack.arrangedSubviews {
+            self.suggestionStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        guard let query else {
+            self.suggestionStack.isHidden = true
+            return
+        }
+        let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict))
+        let people = TellomiDiscoverMention.suggestions(self.people, prefix: query.prefix, limit: TellomiDiscoverMention.suggestionLimit)
+        if people.isEmpty {
+            self.suggestionStack.addArrangedSubview(self.suggestionRow(copy.mentionEmpty, username: nil))
+        } else {
+            for person in people {
+                let label = person.name.isEmpty ? "@" + person.username : "@" + person.username + "  " + person.name
+                self.suggestionStack.addArrangedSubview(self.suggestionRow(label, username: person.username))
+            }
+        }
+        self.suggestionStack.isHidden = false
+    }
+
+    private func suggestionRow(_ title: String, username: String?) -> UIButton {
+        let button = TellomiDiscoverMentionRowButton(type: .system)
+        button.contentHorizontalAlignment = .left
+        button.titleLabel?.font = Font.regular(16.0)
+        button.setTitle(title, for: .normal)
+        let color = username == nil ? self.presentationData.theme.list.itemSecondaryTextColor : self.presentationData.theme.list.itemPrimaryTextColor
+        button.setTitleColor(color, for: .normal)
+        button.isEnabled = username != nil
+        button.username = username
+        if username != nil {
+            button.accessibilityIdentifier = "tellomi.discover.mention.row"
+            button.addTarget(self, action: #selector(self.suggestionPressed(_:)), for: .touchUpInside)
+        }
+        return button
+    }
+
+    @objc private func suggestionPressed(_ sender: UIButton) {
+        guard let username = (sender as? TellomiDiscoverMentionRowButton)?.username else {
+            return
+        }
+        self.applyInsertion(username)
+    }
+
+    private func applyInsertion(_ username: String) {
+        guard let query = self.activeQuery else {
+            return
+        }
+        let text = self.textView.text ?? ""
+        guard let insertion = TellomiDiscoverMention.insert(text, query: query, username: username) else {
+            return
+        }
+        self.editingMention = true
+        self.textView.text = insertion.text
+        let length = (insertion.text as NSString).length
+        let caret = min(max(insertion.caret, 0), length)
+        self.textView.selectedRange = NSRange(location: caret, length: 0)
+        self.editingMention = false
+        self.refreshCompose()
+    }
+
+    private func reloadPeople() {
+        let account = self.context.account
+        let selfId = account.peerId
+        self.peopleDisposable?.dispose()
+        self.peopleDisposable = (account.postbox.transaction { transaction -> [TellomiDiscoverMention.Person] in
+            var ids = transaction.getContactPeerIds()
+            for id in transaction.chatListGetAllPeerIds() {
+                ids.insert(id)
+            }
+            var people: [TellomiDiscoverMention.Person] = []
+            for id in ids {
+                if id == selfId {
+                    continue
+                }
+                guard let user = transaction.getPeer(id) as? TelegramUser, !user.isDeleted else {
+                    continue
+                }
+                guard let username = user.addressName, TellomiDiscoverMention.validUsername(username) else {
+                    continue
+                }
+                people.append(TellomiDiscoverMention.Person(username: username, name: Self.displayName(user)))
+            }
+            return people
+        }
+        |> deliverOnMainQueue).start(next: { [weak self] people in
+            guard let self else {
+                return
+            }
+            self.people = people
+            self.showSuggestions(force: true)
+            self.relayout()
+        })
+    }
+
+    private static func displayName(_ user: TelegramUser) -> String {
+        let first = user.firstName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let last = user.lastName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !first.isEmpty && !last.isEmpty {
+            return first + " " + last
+        }
+        if !first.isEmpty {
+            return first
+        }
+        return last
+    }
+
+    private func refreshLink() {
+        guard self.isNodeLoaded else {
+            return
+        }
+        let url = TellomiDiscoverLink.firstUrl(self.textView.text ?? "")
+        guard let url, TellomiDiscoverLink.fetchable(url) else {
+            self.linkGeneration += 1
+            self.linkWork?.cancel()
+            self.linkURL = nil
+            self.linkPreview = nil
+            self.linkSettled = false
+            self.linkHolding = false
+            self.linkCard.hide()
+            return
+        }
+        if url == self.linkURL {
+            if self.linkSettled, let preview = self.linkPreview {
+                self.linkCard.show(preview, opens: false)
+            }
+            return
+        }
+        if let cached = TellomiDiscoverLinkClient.peek(url) {
+            self.linkURL = url
+            self.linkPreview = cached
+            self.linkSettled = true
+            self.linkCard.show(cached, opens: false)
+            return
+        }
+        self.linkURL = url
+        self.linkPreview = nil
+        self.linkSettled = false
+        let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict))
+        self.linkCard.showLoading(copy.linkPreviewLoading)
+        self.requestLink(url, immediate: false)
+    }
+
+    private func requestLink(_ url: String, immediate: Bool) {
+        self.linkWork?.cancel()
+        let generation = self.linkGeneration
+        let work = DispatchWorkItem { [weak self] in
+            TellomiDiscoverLinkClient.load(url) { preview in
+                guard let self, generation == self.linkGeneration, self.linkURL == url else {
+                    return
+                }
+                self.linkSettled = true
+                self.linkPreview = preview
+                if let preview {
+                    self.linkCard.show(preview, opens: false)
+                } else {
+                    self.linkCard.hide()
+                }
+                let resume = self.linkHolding
+                self.linkHolding = false
+                self.apply()
+                self.relayout()
+                if resume {
+                    self.sendPressed()
+                }
+            }
+        }
+        self.linkWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (immediate ? 0 : 0.45), execute: work)
     }
 
     private func presentPrivacy(_ privacy: EngineStoryPrivacy) {
@@ -622,6 +967,10 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
             self.push(controller)
         })
     }
+}
+
+private final class TellomiDiscoverMentionRowButton: UIButton {
+    var username: String?
 }
 
 private extension Stories.Item.Privacy.Base {
