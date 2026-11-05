@@ -108,7 +108,7 @@ public enum TellomiDiscoverFeedKind: String, Equatable {
     case recommend
     case following
 
-    /// `GET /v1/feed/nearby`, listed by `feed/config`.
+    /// `GET /v1/feed/nearby`. The home bar always includes this tab.
     case nearby
 
     public init?(configName: String) {

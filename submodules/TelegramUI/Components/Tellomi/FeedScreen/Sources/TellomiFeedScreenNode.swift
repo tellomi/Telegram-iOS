@@ -22,6 +22,10 @@ struct TellomiFeedNodeModel {
     var legacyBody: String
     var copy: TellomiDiscoverCopy
     var cities: [TellomiDiscoverCity] = []
+    var cityLine: String? = nil
+    var cityAction: String? = nil
+    var clearCityTitle: String? = nil
+    var legacyTitleTappable: Bool = false
 }
 
 final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate {
@@ -33,6 +37,9 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
     var onUseLocation: (() -> Void)?
     var onSubmitCity: ((String) -> Void)?
     var onSelectCity: ((String) -> Void)?
+    var onChangeCity: (() -> Void)?
+    var onClearCity: (() -> Void)?
+    var onLegacyTitle: (() -> Void)?
 
     private let titleNode = ImmediateTextNode()
     private let textNode = ImmediateTextNode()
@@ -45,6 +52,9 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
     private let cityField = UITextField()
     private let locationButton = UIButton(type: .system)
     private let cityButton = UIButton(type: .system)
+    private let cityLineLabel = UILabel()
+    private let cityActionButton = UIButton(type: .system)
+    private let clearCityButton = UIButton(type: .system)
     private let spinner = UIActivityIndicatorView(style: .medium)
     private let sizingCell = TellomiDiscoverPostCell(style: .default, reuseIdentifier: nil)
     private var model = TellomiFeedNodeModel(mode: .legacy, tabTitles: [], selectedTab: 0, posts: [], loading: false, failure: nil, legacyTitle: "", legacyBody: "", copy: .resolve(languageCode: "en"))
@@ -82,8 +92,15 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         self.cityField.delegate = self
         self.locationButton.addTarget(self, action: #selector(self.locationPressed), for: .touchUpInside)
         self.cityButton.addTarget(self, action: #selector(self.cityPressed), for: .touchUpInside)
+        self.cityLineLabel.numberOfLines = 2
+        self.cityActionButton.addTarget(self, action: #selector(self.changeCityPressed), for: .touchUpInside)
+        self.clearCityButton.addTarget(self, action: #selector(self.clearCityPressed), for: .touchUpInside)
         self.tabs.accessibilityIdentifier = "tellomi.discover.tabs"
         self.cityField.accessibilityIdentifier = "tellomi.discover.city"
+        self.cityLineLabel.accessibilityIdentifier = "tellomi.discover.cityLine"
+        self.cityActionButton.accessibilityIdentifier = "tellomi.discover.changeCity"
+        self.clearCityButton.accessibilityIdentifier = "tellomi.discover.clearCity"
+        self.titleNode.accessibilityIdentifier = "tellomi.discover.emptyTitle"
     }
 
     override func didLoad() {
@@ -96,7 +113,13 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         self.view.addSubview(self.cityField)
         self.view.addSubview(self.locationButton)
         self.view.addSubview(self.cityButton)
+        self.view.addSubview(self.cityLineLabel)
+        self.view.addSubview(self.cityActionButton)
+        self.view.addSubview(self.clearCityButton)
         self.view.addSubview(self.spinner)
+        self.titleNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.legacyTitlePressed)))
+        self.titleNode.isUserInteractionEnabled = false
+        self.textNode.isUserInteractionEnabled = false
         self.apply()
     }
 
@@ -152,6 +175,16 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         self.cityButton.setTitle(copy.confirmCity, for: .normal)
         self.locationButton.setTitleColor(presentationData.theme.list.itemAccentColor, for: .normal)
         self.cityButton.setTitleColor(presentationData.theme.list.itemAccentColor, for: .normal)
+        self.cityLineLabel.text = self.model.cityLine
+        self.cityLineLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
+        self.cityLineLabel.font = Font.regular(14.0)
+        self.cityActionButton.setTitle(self.model.cityAction, for: .normal)
+        self.cityActionButton.setTitleColor(presentationData.theme.list.itemAccentColor, for: .normal)
+        self.cityActionButton.titleLabel?.font = Font.semibold(14.0)
+        self.clearCityButton.setTitle(self.model.clearCityTitle, for: .normal)
+        self.clearCityButton.setTitleColor(presentationData.theme.list.itemAccentColor, for: .normal)
+        self.clearCityButton.titleLabel?.font = Font.regular(16.0)
+        self.titleNode.isUserInteractionEnabled = self.model.legacyTitleTappable
         self.table.backgroundColor = presentationData.theme.list.plainBackgroundColor
         self.table.separatorColor = presentationData.theme.list.itemPlainSeparatorColor
         let live = self.model.mode != .legacy
@@ -164,6 +197,9 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         self.cityField.isHidden = true
         self.locationButton.isHidden = !city
         self.cityButton.isHidden = true
+        self.cityLineLabel.isHidden = self.model.cityLine == nil
+        self.cityActionButton.isHidden = self.model.cityLine == nil
+        self.clearCityButton.isHidden = self.model.clearCityTitle == nil
         let showLegacy = self.model.mode == .legacy || (self.model.mode == .feed && self.model.posts.isEmpty && !self.model.loading)
         self.titleNode.isHidden = !showLegacy
         self.textNode.isHidden = !showLegacy
@@ -208,15 +244,46 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         } else {
             self.failureLabel.frame = .zero
         }
+        if self.model.cityLine != nil {
+            let actionWidth = min(140.0, max(72.0, self.cityActionButton.sizeThatFits(CGSize(width: 160.0, height: 32.0)).width + 8.0))
+            self.cityActionButton.frame = CGRect(x: size.width - side - actionWidth, y: cursor, width: actionWidth, height: 32.0)
+            self.cityLineLabel.frame = CGRect(x: side, y: cursor, width: max(1.0, size.width - side * 2.0 - actionWidth - 8.0), height: 32.0)
+            cursor += 36.0
+        } else {
+            self.cityLineLabel.frame = .zero
+            self.cityActionButton.frame = .zero
+        }
         self.cityPrompt.frame = CGRect(x: side, y: cursor, width: size.width - side * 2.0, height: 28.0)
         self.cityHint.frame = CGRect(x: side, y: self.cityPrompt.frame.maxY + 4.0, width: size.width - side * 2.0, height: 56.0)
         self.locationButton.frame = CGRect(x: side, y: self.cityHint.frame.maxY + 4.0, width: size.width - side * 2.0, height: 40.0)
         if self.model.mode == .city {
             cursor = self.locationButton.frame.maxY + 8.0
+            if self.model.clearCityTitle != nil {
+                self.clearCityButton.frame = CGRect(x: side, y: cursor, width: size.width - side * 2.0, height: 44.0)
+                cursor = self.clearCityButton.frame.maxY + 4.0
+            } else {
+                self.clearCityButton.frame = .zero
+            }
+        } else {
+            self.clearCityButton.frame = .zero
         }
         let bottom = max(cursor, size.height - bottomInset)
         self.table.frame = CGRect(x: 0, y: cursor, width: size.width, height: max(0, bottom - cursor))
         self.spinner.center = CGPoint(x: size.width / 2.0, y: cursor + 28.0)
+        let showLegacy = self.model.mode == .legacy || (self.model.mode == .feed && self.model.posts.isEmpty && !self.model.loading)
+        if showLegacy {
+            self.view.bringSubviewToFront(self.titleNode.view)
+            self.view.bringSubviewToFront(self.textNode.view)
+        }
+        self.view.bringSubviewToFront(self.tabs)
+        self.view.bringSubviewToFront(self.failureLabel)
+        self.view.bringSubviewToFront(self.cityLineLabel)
+        self.view.bringSubviewToFront(self.cityActionButton)
+        self.view.bringSubviewToFront(self.cityPrompt)
+        self.view.bringSubviewToFront(self.cityHint)
+        self.view.bringSubviewToFront(self.locationButton)
+        self.view.bringSubviewToFront(self.clearCityButton)
+        self.view.bringSubviewToFront(self.spinner)
     }
 
     @objc private func tabChanged() {
@@ -236,6 +303,21 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
 
     @objc private func cityPressed() {
         self.onSubmitCity?(self.cityField.text ?? "")
+    }
+
+    @objc private func changeCityPressed() {
+        self.onChangeCity?()
+    }
+
+    @objc private func clearCityPressed() {
+        self.onClearCity?()
+    }
+
+    @objc private func legacyTitlePressed() {
+        guard self.model.legacyTitleTappable else {
+            return
+        }
+        self.onLegacyTitle?()
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {

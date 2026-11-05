@@ -12,6 +12,8 @@ public enum TellomiDiscoverClientError: Equatable, Error {
     case unavailable
     case unauthorized
     case notFound
+    /// `GET /v1/feed/nearby` answered 404, 405, or 501. The route is not deployed.
+    case nearbyUnavailable
     case unreadable
 }
 
@@ -184,6 +186,9 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
     if result.status == 400, tellomiDiscoverErrorCode(result.body) == "invalid_city" {
         return .failure(.invalidCity)
     }
+    if case .nearby = operation, tellomiDiscoverNearbyMissingEndpoint(result.status) {
+        return .failure(.nearbyUnavailable)
+    }
     switch result.status {
     case 200, 201:
         break
@@ -271,6 +276,11 @@ public struct TellomiDiscoverCopy: Equatable {
     public var userBlocked: String
     public var discoverDisabled: String
     public var nearbyEmpty: String
+    public var nearbyUnavailable: String
+    public var nearbyUnavailableHint: String
+    public var changeCity: String
+    public var composeCity: String
+    public var composeCityNone: String
     public var invalidCity: String
     public var aiGenerated: String
     public var quoteDeleted: String
@@ -333,6 +343,11 @@ public struct TellomiDiscoverCopy: Equatable {
             userBlocked: text("Tellomi.Discover.UserBlocked", "Someone on the list is blocked.", "名单里有人已互相拉黑。", "名單裡有人已互相封鎖。"),
             discoverDisabled: text("Tellomi.Discover.Disabled", "Discover isn't available right now.", "发现暂时不可用。", "發現暫時無法使用。"),
             nearbyEmpty: text("Tellomi.Discover.NearbyEmpty", "No posts in this city yet.", "这个城市还没有帖子。", "這個城市還沒有貼文。"),
+            nearbyUnavailable: text("Tellomi.Discover.NearbyUnavailable", "City posts are not available yet.", "同城暂时还不能刷新。", "同城暂时还不能刷新。"),
+            nearbyUnavailableHint: text("Tellomi.Discover.NearbyUnavailableHint", "You can still pick a city. A post keeps only the city.", "仍可以选城市。帖子只记录城市，不记录位置。", "仍可以选城市。帖子只记录城市，不记录位置。"),
+            changeCity: text("Tellomi.Discover.ChangeCity", "Change city", "更换城市", "更换城市"),
+            composeCity: text("Tellomi.Discover.ComposeCity", "Posting in %@", "发布到 %@", "发布到 %@"),
+            composeCityNone: text("Tellomi.Discover.ComposeCityNone", "No city on this post", "这条不标注城市", "这条不标注城市"),
             invalidCity: text("Tellomi.Discover.InvalidCity", "That city can't be used. Choose another.", "这个城市不能用，请重新选择。", "這個城市不能用，請重新選擇。"),
             aiGenerated: text("Tellomi.Discover.AiGenerated", "AI generated", "AI 生成", "AI 生成"),
             quoteDeleted: text("Tellomi.Discover.QuoteDeleted", "The original post was deleted by its author", "原动态已被作者删除", "原動態已被作者刪除"),
@@ -402,6 +417,8 @@ public struct TellomiDiscoverCopy: Equatable {
             return self.discoverDisabled
         case .invalidCity:
             return self.invalidCity
+        case .nearbyUnavailable:
+            return self.nearbyUnavailable
         case .signedOut, .notPublishable, .hidden, .unavailable, .unauthorized, .notFound, .unreadable:
             return self.failed
         }

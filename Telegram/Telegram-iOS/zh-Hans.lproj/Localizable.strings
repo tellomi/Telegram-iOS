@@ -81,6 +81,11 @@
 "Tellomi.Discover.UserBlocked" = "名单里有人已互相拉黑。";
 "Tellomi.Discover.Disabled" = "发现暂时不可用。";
 "Tellomi.Discover.NearbyEmpty" = "这个城市还没有帖子。";
+"Tellomi.Discover.NearbyUnavailable" = "同城暂时还不能刷新。";
+"Tellomi.Discover.NearbyUnavailableHint" = "仍可以选城市。帖子只记录城市，不记录位置。";
+"Tellomi.Discover.ChangeCity" = "更换城市";
+"Tellomi.Discover.ComposeCity" = "发布到 %@";
+"Tellomi.Discover.ComposeCityNone" = "这条不标注城市";
 "Tellomi.Discover.InvalidCity" = "这个城市不能用，请重新选择。";
 "Tellomi.Discover.AiGenerated" = "AI 生成";
 "Tellomi.Discover.QuoteDeleted" = "原动态已被作者删除";
