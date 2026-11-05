@@ -126,8 +126,20 @@ private enum LegacyAssetImageData {
 }
 
 private enum LegacyAssetVideoData {
-    case asset(TGMediaAsset)
+    // Second value is the track display size (preferredTransform applied). Zero means it was not measured.
+    case asset(TGMediaAsset, CGSize)
     case tempFile(path: String, dimensions: CGSize, duration: Double)
+}
+
+private func aspectFilledThumbnail(_ image: UIImage, _ size: CGSize) -> UIImage {
+    let target = CGSize(width: max(size.width, 1.0), height: max(size.height, 1.0))
+    let filled = image.size.aspectFilled(target)
+    let origin = CGPoint(x: (target.width - filled.width) / 2.0, y: (target.height - filled.height) / 2.0)
+    UIGraphicsBeginImageContextWithOptions(target, true, 1.0)
+    image.draw(in: CGRect(origin: origin, size: filled))
+    let result = UIGraphicsGetImageFromCurrentImageContext()
+    UIGraphicsEndImageContext()
+    return result ?? image
 }
 
 private enum LegacyAssetItem {
@@ -247,8 +259,9 @@ public func legacyAssetPickerItemGenerator() -> ((Any?, NSAttributedString?, Str
             }
             
             if let asset = dict["asset"] as? TGMediaAsset {
+                let displayDimensions = (dict["dimensions"] as? NSValue)?.cgSizeValue ?? CGSize.zero
                 var result: [AnyHashable: Any] = [:]
-                result["item" as NSString] = LegacyAssetItemWrapper(item: .video(data: .asset(asset), thumbnail: thumbnail, cover: cover, adjustments: dict["adjustments"] as? TGVideoEditAdjustments, caption: caption, asFile: asFile, asAnimation: false, stickers: stickers), timer: (dict["timer"] as? NSNumber)?.intValue, spoiler: (dict["spoiler"] as? NSNumber)?.boolValue, price: price, groupedId: (dict["groupedId"] as? NSNumber)?.int64Value, uniqueId: uniqueId)
+                result["item" as NSString] = LegacyAssetItemWrapper(item: .video(data: .asset(asset, displayDimensions), thumbnail: thumbnail, cover: cover, adjustments: dict["adjustments"] as? TGVideoEditAdjustments, caption: caption, asFile: asFile, asAnimation: false, stickers: stickers), timer: (dict["timer"] as? NSNumber)?.intValue, spoiler: (dict["spoiler"] as? NSNumber)?.boolValue, price: price, groupedId: (dict["groupedId"] as? NSNumber)?.int64Value, uniqueId: uniqueId)
                 return result
             } else if let url = (dict["url"] as? String) ?? (dict["url"] as? URL)?.absoluteString {
                 let dimensions = (dict["dimensions"]! as AnyObject).cgSizeValue!
@@ -810,7 +823,8 @@ public func legacyAssetPickerEnqueueMessages(
                             var finalDimensions: CGSize
                             var finalDuration: Double
                             switch data {
-                                case let .asset(asset):
+                                case let .asset(asset, displayDimensions):
+                                    let orientedSize = (displayDimensions.width >= 1.0 && displayDimensions.height >= 1.0) ? displayDimensions : asset.dimensions
                                     if let adjustments = adjustments {
                                         if adjustments.cropApplied(forAvatar: false) {
                                             finalDimensions = adjustments.cropRect.size
@@ -818,7 +832,7 @@ public func legacyAssetPickerEnqueueMessages(
                                                 finalDimensions = CGSize(width: finalDimensions.height, height: finalDimensions.width)
                                             }
                                         } else {
-                                            finalDimensions = asset.dimensions
+                                            finalDimensions = orientedSize
                                         }
                                         if adjustments.trimEndValue > 0.0 {
                                             finalDuration = adjustments.trimEndValue - adjustments.trimStartValue
@@ -826,7 +840,7 @@ public func legacyAssetPickerEnqueueMessages(
                                             finalDuration = asset.videoDuration
                                         }
                                     } else {
-                                        finalDimensions = asset.dimensions
+                                        finalDimensions = orientedSize
                                         finalDuration = asset.videoDuration
                                     }
                                 case let .tempFile(_, dimensions, duration):
@@ -842,7 +856,14 @@ public func legacyAssetPickerEnqueueMessages(
                             if let thumbnail = thumbnail {
                                 let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
                                 let thumbnailSize = finalDimensions.aspectFitted(CGSize(width: 320.0, height: 320.0))
-                                let thumbnailImage = TGScaleImageToPixelSize(thumbnail, thumbnailSize)!
+                                let thumbnailIsPortrait = thumbnail.size.height > thumbnail.size.width + 1.0
+                                let targetIsPortrait = thumbnailSize.height > thumbnailSize.width + 1.0
+                                let thumbnailImage: UIImage
+                                if thumbnailIsPortrait == targetIsPortrait {
+                                    thumbnailImage = TGScaleImageToPixelSize(thumbnail, thumbnailSize)!
+                                } else {
+                                    thumbnailImage = aspectFilledThumbnail(thumbnail, thumbnailSize)
+                                }
                                 if let thumbnailData = thumbnailImage.jpegData(compressionQuality: 0.4) {
                                     TelegramEngine(account: account).resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: thumbnailData)
                                     previewRepresentations.append(TelegramMediaImageRepresentation(dimensions: PixelDimensions(thumbnailSize), resource: resource, progressiveSizes: [], immediateThumbnailData: nil, hasVideo: false, isPersonal: false))
@@ -900,7 +921,7 @@ public func legacyAssetPickerEnqueueMessages(
                             let resource: TelegramMediaResource
                             var fileName: String = "video.mp4"
                             switch data {
-                                case let .asset(asset):
+                                case let .asset(asset, _):
                                     if let assetFileName = asset.fileName, !assetFileName.isEmpty {
                                         fileName = (assetFileName as NSString).lastPathComponent
                                     }
@@ -938,7 +959,7 @@ public func legacyAssetPickerEnqueueMessages(
                                     fileAttributes.append(.hintFileIsLarge)
                                 }
                             } else {
-                                if case let .asset(asset) = data, let phAsset = asset.backingAsset, let resource = PHAssetResource.assetResources(for: phAsset).last, let sizeValue = resource.value(forKey: "fileSize") as? CLong, sizeValue > 0 {
+                                if case let .asset(asset, _) = data, let phAsset = asset.backingAsset, let resource = PHAssetResource.assetResources(for: phAsset).last, let sizeValue = resource.value(forKey: "fileSize") as? CLong, sizeValue > 0 {
                                     let size = Int64(bitPattern: UInt64(sizeValue))
                                     
                                     if size > 10 * 1024 * 1024 {

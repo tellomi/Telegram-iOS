@@ -805,6 +805,17 @@ The feed client already posted text, listed recommend / following / nearby, and 
 
 The push filter is the one already in teamgram `pkg/push`: muting user 777005 (`@faxian`) suppresses like, comment, reply, mention, follow, and repost pushes. Private-chat mute does not. The in-app notification list (`GET /v1/feed/me/notifications`) is still not a screen.
 
+## Chat video aspect
+
+A portrait clip is often stored as landscape pixels plus a 90° `preferredTransform`. Gallery send wrote `PHAsset` pixel width and height into `documentAttributeVideo`, so the bubble (and Android, which reads the same attributes) laid the clip out at 16:9 and cropped the top and bottom. The transcode already used the transformed size. Link previews and the round video note are unchanged. Discover compose is unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/LegacyComponents/Sources/TGMediaVideoConverter.m` | `displayDimensionsForAsset:` is the coded size with `preferredTransform` applied. The converter's render size uses the same helper. |
+| `submodules/LegacyComponents/Sources/TGMediaAssetsController.m` | The gallery video signal reports that display size. If the asset cannot be read, it keeps the photo-library size. |
+| `submodules/LegacyMediaPickerUI/Sources/LegacyMediaPickers.swift` | Inline video attributes use the reported display size unless the user cropped. A preview whose orientation does not match that size is aspect-filled into the thumbnail instead of stretched. |
+| `submodules/TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift` | A compress that goes through the modern exporter uses the display size when there is no crop, so the file and the attributes stay the same shape. |
+
 ## Discover nearby tab (D-11 / D-12)
 
 The Discover bar always shows 推荐, 关注, and 同城, in that order. `GET /v1/feed/config` may omit `nearby`; the tab stays. An unknown config name is still not added.

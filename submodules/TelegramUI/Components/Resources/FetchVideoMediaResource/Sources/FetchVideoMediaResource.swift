@@ -11,6 +11,14 @@ import LegacyMediaPickerUI
 import MediaEditor
 import Photos
 
+private func videoDisplayDimensions(of asset: AVAsset) -> CGSize {
+    let display = TGMediaVideoConverter.displayDimensions(for: asset)
+    if display.width >= 1.0, display.height >= 1.0 {
+        return display
+    }
+    return .zero
+}
+
 private final class AVURLAssetCopyItem: MediaResourceDataFetchCopyLocalItem {
     private let url: URL
     
@@ -332,7 +340,7 @@ public func fetchVideoLibraryMediaResource(postbox: Postbox, resource: VideoLibr
                                 }
                             } else if let dict = legacy_unarchiveDeprecated(data: adjustmentsValue.data.makeData()) as? [AnyHashable : Any], let legacyAdjustments = TGVideoEditAdjustments(dictionary: dict) {
                                 if alwaysUseModernPipeline {
-                                    mediaEditorValues = MediaEditorValues(legacyAdjustments: legacyAdjustments, defaultPreset: qualityPreset)
+                                    mediaEditorValues = MediaEditorValues(legacyAdjustments: legacyAdjustments, defaultPreset: qualityPreset, displayDimensions: videoDisplayDimensions(of: avAsset))
                                 } else {
                                     adjustments = legacyAdjustments
                                 }
@@ -529,7 +537,8 @@ public func fetchLocalFileVideoMediaResource(postbox: Postbox, resource: LocalFi
                     mediaEditorValues = values
                 } else if let dict = legacy_unarchiveDeprecated(data: videoAdjustments.data.makeData()) as? [AnyHashable : Any], let legacyAdjustments = TGVideoEditAdjustments(dictionary: dict) {
                     if alwaysUseModernPipeline && !isImage {
-                        mediaEditorValues = MediaEditorValues(legacyAdjustments: legacyAdjustments, defaultPreset: qualityPreset)
+                        let display = avAsset.flatMap { videoDisplayDimensions(of: $0) }
+                        mediaEditorValues = MediaEditorValues(legacyAdjustments: legacyAdjustments, defaultPreset: qualityPreset, displayDimensions: display)
                     } else {
                         adjustments = legacyAdjustments
                     }
@@ -918,7 +927,7 @@ private extension MediaEditorValues {
         )
     }
     
-    convenience init(legacyAdjustments: TGVideoEditAdjustments, defaultPreset: MediaQualityPreset) {
+    convenience init(legacyAdjustments: TGVideoEditAdjustments, defaultPreset: MediaQualityPreset, displayDimensions: CGSize? = nil) {
         var videoTrimRange: Range<Double>?
         if legacyAdjustments.trimStartValue > 0.0 || !legacyAdjustments.trimEndValue.isZero {
             videoTrimRange = legacyAdjustments.trimStartValue ..< legacyAdjustments.trimEndValue
@@ -1024,11 +1033,19 @@ private extension MediaEditorValues {
             qualityPreset = defaultPreset
         }
         
+        let cropApplied = legacyAdjustments.cropApplied(forAvatar: false)
+        var sourceSize = legacyAdjustments.originalSize
+        var cropRect = legacyAdjustments.cropRect
+        if !cropApplied, let displayDimensions, displayDimensions.width >= 1.0, displayDimensions.height >= 1.0 {
+            sourceSize = displayDimensions
+            cropRect = CGRect(origin: .zero, size: displayDimensions)
+        }
+        
         self.init(
             peerId: EnginePeer.Id(0),
-            originalDimensions: PixelDimensions(legacyAdjustments.originalSize),
+            originalDimensions: PixelDimensions(sourceSize),
             cropOffset: .zero,
-            cropRect: legacyAdjustments.cropRect,
+            cropRect: cropRect,
             cropScale: 1.0,
             cropRotation: legacyAdjustments.cropRotation,
             cropMirroring: legacyAdjustments.cropMirrored,

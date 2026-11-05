@@ -28,6 +28,8 @@
 
 + (TGMediaVideoConversionPreset)presetFromAdjustments:(TGMediaVideoEditAdjustments *)adjustments;
 + (CGSize)dimensionsFor:(CGSize)dimensions adjustments:(TGMediaVideoEditAdjustments *)adjustments preset:(TGMediaVideoConversionPreset)preset;
+// Coded size with preferredTransform applied. Portrait camera clips are stored landscape and rotated; PHAsset pixel size does not always match.
++ (CGSize)displayDimensionsForAsset:(AVAsset *)asset;
 
 @end
 

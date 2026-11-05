@@ -1480,14 +1480,31 @@ static TGVideoEditAdjustments *TGMediaAssetsPatchedLivePhotoAdjustments(PGPhotoE
                     
                     SSignal *thumbnailSignal = adjustments.trimStartValue > FLT_EPSILON ? trimmedVideoThumbnailSignal : videoThumbnailSignal;
                     
-                    TGMediaVideoConversionPreset preset = [TGMediaVideoConverter presetFromAdjustments:adjustments];
-                    CGSize dimensions = [TGMediaVideoConverter dimensionsFor:asset.originalSize adjustments:adjustments preset:preset];
                     NSTimeInterval duration = adjustments.trimApplied ? (adjustments.trimEndValue - adjustments.trimStartValue) : asset.videoDuration;
                     
                     UIImage *coverImage = [editingContext coverImageForItem:asset];
                     
-                    [signals addObject:[thumbnailSignal map:^id(UIImage *image)
+                    // PHAsset.pixelWidth/Height is the coded size. A portrait clip is often 1920x1080 with a 90 degree
+                    // preferredTransform, and the bubble then lays out 16:9 and crops the top and bottom.
+                    SSignal *fallbackDimensions = [SSignal single:[NSValue valueWithCGSize:asset.originalSize]];
+                    SSignal *resolvedDimensions = [[[[TGMediaAssetImageSignals avAssetForVideoAsset:asset allowNetworkAccess:true] filter:^bool(id value) {
+                        return [value isKindOfClass:[AVAsset class]];
+                    }] take:1] map:^NSValue *(AVAsset *avAsset) {
+                        CGSize display = [TGMediaVideoConverter displayDimensionsForAsset:avAsset];
+                        if (display.width < 1.0 || display.height < 1.0)
+                            display = asset.originalSize;
+                        return [NSValue valueWithCGSize:display];
+                    }];
+                    SSignal *dimensionsSignal = [[fallbackDimensions then:[resolvedDimensions catch:^SSignal *(id error) {
+                        return [SSignal complete];
+                    }]] takeLast];
+                    
+                    [signals addObject:[[SSignal combineSignals:@[thumbnailSignal, dimensionsSignal]] map:^id(NSArray *values)
                     {
+                        UIImage *image = values.firstObject;
+                        CGSize dimensions = asset.originalSize;
+                        if (values.count > 1 && [values[1] isKindOfClass:[NSValue class]])
+                            dimensions = [(NSValue *)values[1] CGSizeValue];
                         NSMutableDictionary *dict = [[NSMutableDictionary alloc] init];
                         dict[@"type"] = @"video";
                         dict[@"document"] = @false;

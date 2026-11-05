@@ -100,6 +100,21 @@
 @end
 
 
+static CGSize TGVideoTrackDisplayDimensions(AVAssetTrack *track)
+{
+    if (track == nil)
+        return CGSizeZero;
+    CGSize natural = track.naturalSize;
+    CGSize transformed = CGRectApplyAffineTransform((CGRect){CGPointZero, natural}, track.preferredTransform).size;
+    CGFloat width = ABS(transformed.width);
+    CGFloat height = ABS(transformed.height);
+    if (width < 1.0 || height < 1.0) {
+        width = ABS(natural.width);
+        height = ABS(natural.height);
+    }
+    return CGSizeMake(width, height);
+}
+
 @implementation TGMediaVideoConverter
 
 + (SSignal *)convertAVAsset:(AVAsset *)avAsset adjustments:(TGMediaVideoEditAdjustments *)adjustments path:(NSString *)path watcher:(TGMediaVideoFileWatcher *)watcher entityRenderer:(id<TGPhotoPaintEntityRenderer>)entityRenderer
@@ -329,6 +344,11 @@
     }];
 }
 
++ (CGSize)displayDimensionsForAsset:(AVAsset *)asset
+{
+    return TGVideoTrackDisplayDimensions([[asset tracksWithMediaType:AVMediaTypeVideo] firstObject]);
+}
+
 + (CGSize)dimensionsFor:(CGSize)dimensions adjustments:(TGMediaVideoEditAdjustments *)adjustments preset:(TGMediaVideoConversionPreset)preset {
     CGRect transformedRect = CGRectMake(0.0f, 0.0f, dimensions.width, dimensions.height);
     
@@ -348,7 +368,7 @@
 
 + (AVAssetReaderVideoCompositionOutput *)setupVideoCompositionOutputWithAVAsset:(AVAsset *)avAsset image:(UIImage *)image composition:(AVMutableComposition *)composition videoTrack:(AVAssetTrack *)videoTrack preset:(TGMediaVideoConversionPreset)preset entityRenderer:(id<TGPhotoPaintEntityRenderer>)entityRenderer adjustments:(TGMediaVideoEditAdjustments *)adjustments timeRange:(CMTimeRange)timeRange outputSettings:(NSDictionary **)outputSettings dimensions:(CGSize *)dimensions conversionContext:(SAtomic *)conversionContext
 {
-    CGSize transformedSize = CGRectApplyAffineTransform((CGRect){CGPointZero, videoTrack.naturalSize}, videoTrack.preferredTransform).size;
+    CGSize transformedSize = TGVideoTrackDisplayDimensions(videoTrack);
     CGRect transformedRect = CGRectMake(0, 0, transformedSize.width, transformedSize.height);
     if (CGSizeEqualToSize(transformedRect.size, CGSizeZero))
         transformedRect = CGRectMake(0, 0, videoTrack.naturalSize.width, videoTrack.naturalSize.height);
