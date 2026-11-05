@@ -19,6 +19,7 @@ final class TellomiDiscoverPostController: ViewController {
     private var presentationDataDisposable: Disposable?
     private var audienceDisposable: Disposable?
     private let textNode = ImmediateTextNode()
+    private let linkCard = TellomiDiscoverLinkCardView()
     private var commentRows: [TellomiDiscoverCommentRow] = []
     private var pollButtons: [UIButton] = []
     private var post: TellomiDiscoverPost?
@@ -64,6 +65,7 @@ final class TellomiDiscoverPostController: ViewController {
         self.displayNode.addSubnode(self.textNode)
         self.textNode.maximumNumberOfLines = 0
         self.displayNodeDidLoad()
+        self.displayNode.view.addSubview(self.linkCard)
         self.apply()
         self.loadIfAllowed()
     }
@@ -75,6 +77,13 @@ final class TellomiDiscoverPostController: ViewController {
         let size = self.textNode.updateLayout(CGSize(width: width, height: 4000))
         transition.updateFrame(node: self.textNode, frame: CGRect(x: 16, y: top, width: size.width, height: size.height))
         var commentY = self.textNode.frame.maxY + 12.0
+        if self.linkCard.isHidden {
+            self.linkCard.frame = .zero
+        } else {
+            let cardHeight = self.linkCard.sizeThatFits(CGSize(width: width, height: 200)).height
+            self.linkCard.frame = CGRect(x: 16, y: commentY, width: width, height: cardHeight)
+            commentY = self.linkCard.frame.maxY + 12.0
+        }
         for button in self.pollButtons {
             button.frame = CGRect(x: 16, y: commentY, width: width, height: 40)
             commentY += 48.0
@@ -178,6 +187,12 @@ final class TellomiDiscoverPostController: ViewController {
             body = ""
         }
         self.textNode.attributedText = NSAttributedString(string: body, font: Font.regular(16.0), textColor: self.presentationData.theme.list.itemPrimaryTextColor)
+        self.linkCard.apply(primary: self.presentationData.theme.list.itemPrimaryTextColor, secondary: self.presentationData.theme.list.itemSecondaryTextColor, accent: self.presentationData.theme.list.itemAccentColor, background: self.presentationData.theme.list.itemHighlightedBackgroundColor)
+        if let preview = self.post?.linkPreview, self.post?.unavailable != true {
+            self.linkCard.show(preview, opens: true)
+        } else {
+            self.linkCard.hide()
+        }
         self.installPoll(self.post?.poll, copy: copy)
         self.installComments(self.post?.comments ?? [], color: self.presentationData.theme.list.itemPrimaryTextColor)
     }

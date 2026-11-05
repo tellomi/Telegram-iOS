@@ -22,8 +22,9 @@ public struct TellomiDiscoverPost: Equatable {
     public var shareable: Bool
     public var reposted: Bool
     public var poll: TellomiDiscoverPoll?
+    public var linkPreview: TellomiDiscoverLink.Preview?
 
-    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil) {
+    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil) {
         self.id = id
         self.text = text
         self.authorName = authorName
@@ -44,6 +45,7 @@ public struct TellomiDiscoverPost: Equatable {
         self.shareable = shareable
         self.reposted = reposted
         self.poll = poll
+        self.linkPreview = linkPreview
     }
 }
 
@@ -133,8 +135,9 @@ public struct TellomiDiscoverCard: Equatable {
     public var comments: [TellomiDiscoverComment]
     public var reposted: Bool
     public var poll: TellomiDiscoverPoll?
+    public var linkPreview: TellomiDiscoverLink.Preview?
 
-    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], reposted: Bool = false, poll: TellomiDiscoverPoll? = nil) {
+    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil) {
         self.id = id
         self.state = state
         self.version = version
@@ -158,6 +161,7 @@ public struct TellomiDiscoverCard: Equatable {
         self.comments = comments
         self.reposted = reposted
         self.poll = poll
+        self.linkPreview = linkPreview
     }
 }
 
@@ -303,7 +307,8 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         comments: card.comments,
         shareable: card.shareable,
         reposted: card.reposted,
-        poll: card.poll
+        poll: card.poll,
+        linkPreview: card.linkPreview
     )
 }
 
@@ -344,8 +349,31 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
         city: tellomiDiscoverCityCode(stringValue(body?["city"]) ?? stringValue(entry["city"])),
         comments: parseComments(entry["comments"]),
         reposted: boolValue(me?["reposted"]) ?? false,
-        poll: parsePoll(labels: body?["poll"], tally: entry["poll"])
+        poll: parsePoll(labels: body?["poll"], tally: entry["poll"]),
+        linkPreview: storedLinkPreview(card: body, entry: entry)
     )
+}
+
+/// `card.link_preview`, then the same object beside the card. A private URL is dropped.
+private func storedLinkPreview(card: [String: TellomiJSON]?, entry: [String: TellomiJSON]) -> TellomiDiscoverLink.Preview? {
+    if let preview = linkPreviewObject(card?["link_preview"]) {
+        return preview
+    }
+    return linkPreviewObject(entry["link_preview"])
+}
+
+private func linkPreviewObject(_ json: TellomiJSON?) -> TellomiDiscoverLink.Preview? {
+    guard let object = objectValue(json) else {
+        return nil
+    }
+    return TellomiDiscoverLink.parseStored(url: strictString(object["url"]), title: strictString(object["title"]), description: strictString(object["description"]), image: strictString(object["image"]))
+}
+
+private func strictString(_ json: TellomiJSON?) -> String? {
+    guard let json, case let .string(value) = json else {
+        return nil
+    }
+    return value
 }
 
 /// Option labels are `card.poll.options` (`[String]`). Counts and this account's

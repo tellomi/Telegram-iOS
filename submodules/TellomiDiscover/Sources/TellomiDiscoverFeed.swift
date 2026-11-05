@@ -394,7 +394,7 @@ public enum TellomiDiscoverOperation: Equatable {
     /// `GET /v1/feed/nearby?city=&cursor=`. Ten posts per page, newest first. No cursor means the end.
     case nearby(city: String, cursor: String?)
     case cards([String])
-    case publish(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int, city: String?, quoteOf: String?, pollOptions: [String]?)
+    case publish(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int, city: String?, quoteOf: String?, pollOptions: [String]?, linkPreview: TellomiDiscoverLink.Preview?)
     /// `PUT /v1/feed/posts/{id}/repost`. Only a shareable post. Empty body.
     case repost(String)
     /// `DELETE /v1/feed/posts/{id}/repost`.
@@ -469,8 +469,8 @@ public func tellomiDiscoverHTTPCall(base: URL, operation: TellomiDiscoverOperati
             return nil
         }
         return TellomiDiscoverHTTPCall(method: "GET", url: url, body: nil, token: trimmedToken, authorizes: true, contentType: nil)
-    case let .publish(text, visibility, audienceToken, clientNonce, textLimit, city, quoteOf, pollOptions):
-        guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit, city: city, quoteOf: quoteOf, pollOptions: pollOptions) else {
+    case let .publish(text, visibility, audienceToken, clientNonce, textLimit, city, quoteOf, pollOptions, linkPreview):
+        guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit, city: city, quoteOf: quoteOf, pollOptions: pollOptions, linkPreview: linkPreview) else {
             return nil
         }
         guard let url = tellomiDiscoverURL(base: base, path: "/v1/feed/posts", query: []) else {
@@ -550,7 +550,11 @@ public func tellomiDiscoverCardsBody(_ identifiers: [String]) -> Data? {
 
 /// `POST /v1/feed/posts`. There is no media field: a video kept on the compose
 /// screen is not serialized here, and this function cannot add one.
-public func tellomiDiscoverPublishBody(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int, city: String? = nil, quoteOf: String? = nil, pollOptions: [String]? = nil) -> Data? {
+///
+/// `@username` stays inside `text`. There is no `mentions` or `entities` field.
+/// A public link may add `link_preview` (`url`, and `title` / `description` /
+/// `image` only when present). A private or loopback URL adds nothing.
+public func tellomiDiscoverPublishBody(text: String, visibility: TellomiDiscoverVisibility, audienceToken: String?, clientNonce: String, textLimit: Int, city: String? = nil, quoteOf: String? = nil, pollOptions: [String]? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil) -> Data? {
     let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
     let limit = textLimit > 0 ? textLimit : tellomiDiscoverPostTextLimit
     guard !body.isEmpty, body.count <= limit else {
@@ -593,6 +597,9 @@ public func tellomiDiscoverPublishBody(text: String, visibility: TellomiDiscover
         }
         object["poll"] = ["options": options]
     }
+    if let fields = TellomiDiscoverLink.publishFields(linkPreview) {
+        object["link_preview"] = fields.object
+    }
     return try? JSONSerialization.data(withJSONObject: object, options: [])
 }
 
@@ -604,7 +611,7 @@ public enum TellomiDiscoverPublishStep: Equatable {
 
 /// Include and exclude fetch `discover.getAudienceToken` first. The token is copied
 /// unchanged into `audience.audience_token`, and `visibility` is that same kind.
-public func tellomiDiscoverPublishStep(text: String, visibility: TellomiDiscoverVisibility, userIds: [Int64], selfUserId: Int64, clientNonce: String, textLimit: Int, token: TellomiDiscoverAudienceToken?, now: Int64, city: String? = nil, quoteOf: String? = nil, pollOptions: [String]? = nil) -> TellomiDiscoverPublishStep {
+public func tellomiDiscoverPublishStep(text: String, visibility: TellomiDiscoverVisibility, userIds: [Int64], selfUserId: Int64, clientNonce: String, textLimit: Int, token: TellomiDiscoverAudienceToken?, now: Int64, city: String? = nil, quoteOf: String? = nil, pollOptions: [String]? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil) -> TellomiDiscoverPublishStep {
     if let city {
         let trimmed = city.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty, tellomiDiscoverKnownCityCode(trimmed) == nil {
@@ -625,14 +632,14 @@ public func tellomiDiscoverPublishStep(text: String, visibility: TellomiDiscover
             return .rejected(.audienceInvalid)
         }
         if let token, !token.token.isEmpty, !tellomiDiscoverAudienceTokenNeedsRefresh(expires: token.expires, now: now) {
-            guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: token.token, clientNonce: clientNonce, textLimit: textLimit, city: city, quoteOf: quoteOf, pollOptions: pollOptions) else {
+            guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: token.token, clientNonce: clientNonce, textLimit: textLimit, city: city, quoteOf: quoteOf, pollOptions: pollOptions, linkPreview: linkPreview) else {
                 return .rejected(.notPublishable)
             }
             return .ready(body)
         }
         return .needsAudienceToken(kind: visibility.rawValue, userIds: ids)
     }
-    guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: nil, clientNonce: clientNonce, textLimit: textLimit, city: city, quoteOf: quoteOf, pollOptions: pollOptions) else {
+    guard let body = tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: nil, clientNonce: clientNonce, textLimit: textLimit, city: city, quoteOf: quoteOf, pollOptions: pollOptions, linkPreview: linkPreview) else {
         return .rejected(.notPublishable)
     }
     return .ready(body)

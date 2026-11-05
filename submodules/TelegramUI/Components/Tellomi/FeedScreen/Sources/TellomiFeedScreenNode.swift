@@ -354,7 +354,7 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         let summary = tellomiDiscoverPostSummary(post: post, copy: self.model.copy, list: true)
         let primary = self.presentationData?.theme.list.itemPrimaryTextColor ?? .label
         let secondary = self.presentationData?.theme.list.itemSecondaryTextColor ?? .secondaryLabel
-        cell.apply(summary: summary, primary: primary, secondary: secondary)
+        cell.apply(summary: summary, preview: post.linkPreview, primary: primary, secondary: secondary, accent: self.presentationData?.theme.list.itemAccentColor ?? .systemBlue, background: self.presentationData?.theme.list.itemHighlightedBackgroundColor ?? .secondarySystemBackground)
         cell.reportButton.accessibilityIdentifier = "tellomi.discover.report.\(post.id)"
         cell.onReport = { [weak self] in
             self?.onReportPost?(post.id)
@@ -371,10 +371,11 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         guard self.model.posts.indices.contains(indexPath.row) else {
             return 0
         }
-        let summary = tellomiDiscoverPostSummary(post: self.model.posts[indexPath.row], copy: self.model.copy, list: true)
+        let post = self.model.posts[indexPath.row]
+        let summary = tellomiDiscoverPostSummary(post: post, copy: self.model.copy, list: true)
         let primary = self.presentationData?.theme.list.itemPrimaryTextColor ?? .label
         let secondary = self.presentationData?.theme.list.itemSecondaryTextColor ?? .secondaryLabel
-        self.sizingCell.apply(summary: summary, primary: primary, secondary: secondary)
+        self.sizingCell.apply(summary: summary, preview: post.linkPreview, primary: primary, secondary: secondary, accent: self.presentationData?.theme.list.itemAccentColor ?? .systemBlue, background: self.presentationData?.theme.list.itemHighlightedBackgroundColor ?? .secondarySystemBackground)
         return self.sizingCell.sizeThatFits(CGSize(width: tableView.bounds.width, height: 0)).height
     }
 
@@ -410,6 +411,7 @@ private final class TellomiDiscoverPostCell: UITableViewCell {
     private let titleLabel = UILabel()
     private let bodyLabel = UILabel()
     private let metaLabel = UILabel()
+    private let linkCard = TellomiDiscoverLinkCardView()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -421,9 +423,11 @@ private final class TellomiDiscoverPostCell: UITableViewCell {
         self.metaLabel.numberOfLines = 2
         self.reportButton.setTitle("…", for: .normal)
         self.reportButton.addTarget(self, action: #selector(self.reportPressed), for: .touchUpInside)
+        self.linkCard.isUserInteractionEnabled = false
         self.contentView.addSubview(self.titleLabel)
         self.contentView.addSubview(self.bodyLabel)
         self.contentView.addSubview(self.metaLabel)
+        self.contentView.addSubview(self.linkCard)
         self.contentView.addSubview(self.reportButton)
     }
 
@@ -431,7 +435,7 @@ private final class TellomiDiscoverPostCell: UITableViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func apply(summary: TellomiDiscoverPostSummary, primary: UIColor, secondary: UIColor) {
+    func apply(summary: TellomiDiscoverPostSummary, preview: TellomiDiscoverLink.Preview?, primary: UIColor, secondary: UIColor, accent: UIColor, background: UIColor) {
         self.titleLabel.text = summary.title
         self.titleLabel.textColor = primary
         self.bodyLabel.text = summary.body
@@ -439,6 +443,12 @@ private final class TellomiDiscoverPostCell: UITableViewCell {
         self.metaLabel.text = summary.meta
         self.metaLabel.textColor = secondary
         self.reportButton.setTitleColor(secondary, for: .normal)
+        self.linkCard.apply(primary: primary, secondary: secondary, accent: accent, background: background)
+        if let preview {
+            self.linkCard.show(preview, opens: false)
+        } else {
+            self.linkCard.hide()
+        }
         self.setNeedsLayout()
     }
 
@@ -457,6 +467,13 @@ private final class TellomiDiscoverPostCell: UITableViewCell {
         self.titleLabel.frame = CGRect(x: side, y: 10, width: width, height: titleSize.height)
         self.bodyLabel.frame = CGRect(x: side, y: self.titleLabel.frame.maxY + 4, width: width, height: bodySize.height)
         self.metaLabel.frame = CGRect(x: side, y: self.bodyLabel.frame.maxY + 4, width: width, height: self.metaLabel.text?.isEmpty == false ? metaSize.height : 0)
+        let metaBottom = self.metaLabel.frame.maxY
+        if self.linkCard.isHidden {
+            self.linkCard.frame = .zero
+        } else {
+            let cardHeight = self.linkCard.sizeThatFits(CGSize(width: width, height: 160)).height
+            self.linkCard.frame = CGRect(x: side, y: metaBottom + 8, width: width, height: cardHeight)
+        }
         self.reportButton.frame = CGRect(x: self.contentView.bounds.width - side - buttonWidth, y: 0, width: buttonWidth, height: self.contentView.bounds.height)
     }
 
@@ -466,6 +483,7 @@ private final class TellomiDiscoverPostCell: UITableViewCell {
         let title = self.titleLabel.sizeThatFits(CGSize(width: width, height: 40)).height
         let body = self.bodyLabel.sizeThatFits(CGSize(width: width, height: 120)).height
         let meta = self.metaLabel.text?.isEmpty == false ? self.metaLabel.sizeThatFits(CGSize(width: width, height: 40)).height : 0
-        return CGSize(width: size.width, height: 10 + title + 4 + body + 4 + meta + 10)
+        let card = self.linkCard.isHidden ? 0 : self.linkCard.sizeThatFits(CGSize(width: width, height: 160)).height + 8
+        return CGSize(width: size.width, height: 10 + title + 4 + body + 4 + meta + card + 10)
     }
 }

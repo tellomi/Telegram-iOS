@@ -159,11 +159,11 @@ private func tellomiDiscoverLocalFailure(_ operation: TellomiDiscoverOperation) 
         return tellomiDiscoverKnownCityCode(city) == nil ? .invalidCity : nil
     case let .cards(identifiers):
         return tellomiDiscoverCardsBody(identifiers) == nil ? .notFound : nil
-    case let .publish(text, visibility, audienceToken, clientNonce, textLimit, city, quoteOf, pollOptions):
+    case let .publish(text, visibility, audienceToken, clientNonce, textLimit, city, quoteOf, pollOptions, linkPreview):
         if let city, !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, tellomiDiscoverKnownCityCode(city) == nil {
             return .invalidCity
         }
-        if tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit, city: city, quoteOf: quoteOf, pollOptions: pollOptions) == nil {
+        if tellomiDiscoverPublishBody(text: text, visibility: visibility, audienceToken: audienceToken, clientNonce: clientNonce, textLimit: textLimit, city: city, quoteOf: quoteOf, pollOptions: pollOptions, linkPreview: linkPreview) == nil {
             return .notPublishable
         }
         return nil
@@ -308,6 +308,11 @@ public struct TellomiDiscoverCopy: Equatable {
     public var videoSelected: String
     public var videoNotUploaded: String
     public var videoReading: String
+    public var mention: String
+    public var mentionHint: String
+    public var mentionInvalid: String
+    public var mentionEmpty: String
+    public var linkPreviewLoading: String
     public var votes: String
     public var notifications: String
     public var notificationsInfo: String
@@ -375,6 +380,11 @@ public struct TellomiDiscoverCopy: Equatable {
             videoSelected: text("Tellomi.Discover.VideoSelected", "Selected · %s", "已选择 · %s", "已選擇 · %s"),
             videoNotUploaded: text("Tellomi.Discover.VideoNotUploaded", "Video upload isn't available yet. Remove it to post the text.", "发现还不能上传视频，移除后可以发布文字。", "發現還不能上傳影片，移除後可以發布文字。"),
             videoReading: text("Tellomi.Discover.VideoReading", "Reading the length…", "正在读取时长…", "正在讀取時長…"),
+            mention: text("Tellomi.Discover.Mention", "Mention", "提及", "提及"),
+            mentionHint: text("Tellomi.Discover.MentionHint", "Write something. Use @ to mention a username.", "写点什么，用 @ 提及用户", "寫點什麼，用 @ 提及使用者"),
+            mentionInvalid: text("Tellomi.Discover.MentionInvalid", "%s is not a valid username, so they won't be notified.", "%s 不是有效用户名，对方收不到提及。", "%s 不是有效使用者名稱，對方收不到提及。"),
+            mentionEmpty: text("Tellomi.Discover.MentionEmpty", "No matching username", "没有匹配的用户名", "沒有符合的使用者名稱"),
+            linkPreviewLoading: text("Tellomi.Discover.LinkPreviewLoading", "Fetching the link preview.", "正在获取链接预览。", "正在取得連結預覽。"),
             votes: text("Tellomi.Discover.Votes", "%d votes", "%d 票", "%d 票"),
             notifications: text("Tellomi.Discover.Notifications", "Discover activity", "发现的互动", "發現的互動"),
             notificationsInfo: text("Tellomi.Discover.NotificationsInfo", "Likes, comments, and reposts. Off stops those pushes.", "点赞、评论和转发。关掉后不再收到这些推送。", "讚、留言和轉發。關掉後不再收到這些推播。")
