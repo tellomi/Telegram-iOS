@@ -90,6 +90,15 @@ public func tellomiRecommendFeedIsPersonalized(_ choice: TellomiRecommendationCh
     return choice.personalized
 }
 
+/// Privacy and Security always shows 「个性化推荐」.
+/// `personalization_toggle_visible` is parsed on the feed config and is not a gate:
+/// the parser stores false both when the key is omitted and when it is false, so
+/// the configs this client already accepts would hide the only control that can
+/// send `personalized=false`.
+public func tellomiPersonalizedRecommendationRowVisible(personalizationToggleVisible _: Bool) -> Bool {
+    return true
+}
+
 /// What happens to the cached Recommend page when the stored switch is read or moved.
 /// The first read does not count as a change: nothing has been fetched under another value yet.
 /// A later change drops that page. Recommend reloads immediately; another tab waits until it is opened.
@@ -265,6 +274,7 @@ public struct TellomiSettingsCopy: Equatable {
     public var addAccount: String
     public var logout: String
     public var openSource: String
+    public var personalizedRecommendationSection: String
     public var personalizedRecommendation: String
     public var personalizedRecommendationFooter: String
     public var modelLabel: String
@@ -318,8 +328,9 @@ public struct TellomiSettingsCopy: Equatable {
             addAccount: text("Tellomi.Settings.AddAccount", "Add Account", "添加账号", "新增帳號"),
             logout: text("Tellomi.Settings.Logout", "Log Out", "退出登录", "登出"),
             openSource: text("Tellomi.Settings.OpenSource", "Open Source Licenses", "开源许可", "開源許可"),
+            personalizedRecommendationSection: text("Tellomi.Settings.PersonalizedRecommendationSection", "Discover", "发现", "發現"),
             personalizedRecommendation: text("Tellomi.Settings.PersonalizedRecommendation", "Personalized Recommendations", "个性化推荐", "個人化推薦"),
-            personalizedRecommendationFooter: text("Tellomi.Settings.PersonalizedRecommendationFooter", "When this is off, Discover recommendations are not based on you.", "关闭后，发现里的推荐不再针对你个人。", "關閉後，發現裡的推薦不再針對你個人。"),
+            personalizedRecommendationFooter: text("Tellomi.Settings.PersonalizedRecommendationFooter", "When this is off, For You is not ranked from your activity.", "关闭后，推荐不再根据你的浏览记录排序。", "關閉後，推薦不再根據你的瀏覽記錄排序。"),
             modelLabel: text("Tellomi.Settings.ModelLabel", "AI model", "AI 模型", "AI 模型"),
             registrationLabel: text("Tellomi.Settings.RegistrationLabel", "Generative AI registration number", "生成式人工智能服务登记编号", "生成式人工智慧服務登記編號"),
             algorithmLabel: text("Tellomi.Settings.AlgorithmLabel", "Algorithm filing number", "算法备案编号", "演算法備案編號"),
