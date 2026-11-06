@@ -121,4 +121,31 @@ final class TellomiSettingsDecisionsTests: XCTestCase {
         XCTAssertEqual(TellomiSettingsURLs.terms, "https://tellomi.cn/legal/terms/")
         XCTAssertEqual(TellomiSettingsURLs.privacy, "https://tellomi.cn/legal/privacy/")
     }
+
+    func testSignInEmailIsNotTheRecoveryOrLoginCodeEmail() {
+        let signedIn = TellomiEmailChannels(
+            signInAddress: "owner@tellomi.cn",
+            nativeLoginEmailPattern: nil,
+            recoveryEmailPattern: "r***@x.com"
+        )
+        XCTAssertEqual(tellomiSettingsEmailAction(signedIn), .showSignInAddress("owner@tellomi.cn"))
+        XCTAssertFalse(tellomiShouldPresentNativeLoginEmailSetup(signedIn))
+
+        let recoveryOnly = TellomiEmailChannels(
+            signInAddress: nil,
+            nativeLoginEmailPattern: "a***@x.com",
+            recoveryEmailPattern: "r***@x.com"
+        )
+        XCTAssertEqual(tellomiSettingsEmailAction(recoveryOnly), .offerNativeLoginEmailSetup)
+        XCTAssertTrue(tellomiShouldPresentNativeLoginEmailSetup(recoveryOnly))
+
+        let blank = TellomiEmailChannels(signInAddress: "  ", nativeLoginEmailPattern: "a***@x.com", recoveryEmailPattern: "r***@x.com")
+        XCTAssertEqual(tellomiSettingsEmailAction(blank), .offerNativeLoginEmailSetup)
+
+        let copy = TellomiSettingsCopy.resolve(languageCode: "zh-Hans")
+        XCTAssertEqual(copy.bindEmail, "绑定邮箱")
+        XCTAssertEqual(copy.signInEmailTitle, "登录邮箱")
+        XCTAssertTrue(copy.signInEmailBody.contains("不是云密码的恢复邮箱"))
+        XCTAssertTrue(copy.signInEmailBody.contains("不会改账号"))
+    }
 }

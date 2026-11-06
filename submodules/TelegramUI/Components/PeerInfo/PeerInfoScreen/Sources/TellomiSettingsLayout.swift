@@ -1,4 +1,5 @@
 import AccountContext
+import AlertUI
 import Display
 import Foundation
 import PresentationDataUtils
@@ -79,7 +80,7 @@ private func tellomiSettingsHomeRow(_ row: TellomiSettingsHomeRow, source: [(Any
         })
     case .bindings:
         return tellomiDisclosure(id: "tellomi.bindings", text: copy.bindings, icon: PresentationResourcesSettings.email, action: {
-            tellomiPresentBindings(source: source, context: context, interaction: interaction, copy: copy)
+            tellomiPresentBindings(source: source, data: data, context: context, interaction: interaction, copy: copy)
         })
     case .privacy:
         if let item = tellomiSettingsDisclosure(source, .advanced, id: 1) {
@@ -154,7 +155,29 @@ private func tellomiSettingsHomeRow(_ row: TellomiSettingsHomeRow, source: [(Any
     }
 }
 
-private func tellomiPresentBindings(source: [(AnyHashable, [PeerInfoScreenItem])], context: AccountContext, interaction: PeerInfoInteraction, copy: TellomiSettingsCopy) {
+func tellomiPresentSignInEmailNotice(context: AccountContext, controller: ViewController?, languageCode: String, pack: [String: String]) {
+    guard let controller else {
+        return
+    }
+    let copy = TellomiSettingsCopy.resolve(languageCode: languageCode, pack: pack)
+    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+    controller.present(textAlertController(context: context, title: copy.signInEmailTitle, text: copy.signInEmailBody, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+}
+
+private func tellomiSignInAddress(data: PeerInfoScreenData?, context: AccountContext) -> String? {
+    let peerId: EnginePeer.Id
+    let phone: String?
+    if case let .user(user) = data?.peer {
+        peerId = user.id
+        phone = user.phone
+    } else {
+        peerId = context.account.peerId
+        phone = nil
+    }
+    return tellomiAccountContact(phone: phone, peerId: peerId).email
+}
+
+private func tellomiPresentBindings(source: [(AnyHashable, [PeerInfoScreenItem])], data: PeerInfoScreenData?, context: AccountContext, interaction: PeerInfoInteraction, copy: TellomiSettingsCopy) {
     var links: [TellomiSettingsLink] = []
     var actions: [String: () -> Void] = [:]
     func add(_ id: String, _ title: String, label: String = "", destructive: Bool = false, _ action: @escaping () -> Void) {
@@ -172,8 +195,19 @@ private func tellomiPresentBindings(source: [(AnyHashable, [PeerInfoScreenItem])
     add("phone", copy.phone) {
         interaction.openSettings(.phoneNumber)
     }
-    add("email", copy.email) {
-        interaction.openSettings(.loginEmail)
+    let signInAddress = tellomiSignInAddress(data: data, context: context)
+    let emailAction = tellomiSettingsEmailAction(TellomiEmailChannels(signInAddress: signInAddress, nativeLoginEmailPattern: nil, recoveryEmailPattern: nil))
+    switch emailAction {
+    case let .showSignInAddress(address):
+        add("email", copy.email, label: address) {
+            let pack = tellomiStringPack(primary: context.sharedContext.currentPresentationData.with { $0 }.strings.primaryComponent.dict, secondary: context.sharedContext.currentPresentationData.with { $0 }.strings.secondaryComponent?.dict)
+            let languageCode = context.sharedContext.currentPresentationData.with { $0 }.strings.primaryComponent.languageCode
+            tellomiPresentSignInEmailNotice(context: context, controller: interaction.getController(), languageCode: languageCode, pack: pack)
+        }
+    case .offerNativeLoginEmailSetup:
+        add("email", copy.bindEmail) {
+            interaction.openSettings(.loginEmail)
+        }
     }
     add("username", copy.username) {
         interaction.openSettings(.username)

@@ -78,7 +78,9 @@ enum TellomiLoginChrome {
 
     /// Light matches the owner colors. Dark inverts the button and the field so
     /// `#111111` is not drawn on a dark page and typed text is not white on `#F2F3F5`.
+    /// Field fill, text, caret, placeholder, and error come from `tellomiLoginFieldColors`.
     static func palette(dark: Bool) -> Palette {
+        let field = tellomiLoginFieldColors(dark: dark)
         if dark {
             return Palette(
                 buttonBackground: UIColor.white,
@@ -86,13 +88,13 @@ enum TellomiLoginChrome {
                 buttonDisabledBackground: UIColor(rgb: 0x3A3A3C),
                 buttonDisabledForeground: UIColor(rgb: 0x8E8E93),
                 link: UIColor.white,
-                error: UIColor(rgb: 0xFF453A),
-                accent: UIColor.white,
+                error: UIColor(rgb: field.error),
+                accent: UIColor(rgb: field.caret),
                 checkbox: UIColor.white,
-                fieldFill: UIColor(rgb: 0x2C2C2E),
-                fieldText: UIColor.white,
+                fieldFill: UIColor(rgb: field.fill),
+                fieldText: UIColor(rgb: field.text),
                 secondaryText: UIColor(rgb: 0x8E8E93),
-                placeholder: UIColor(rgb: 0x8E8E93),
+                placeholder: UIColor(rgb: field.placeholder),
                 rowBorder: UIColor(rgb: 0x3A3A3C),
                 rowBackground: UIColor(rgb: 0x1C1C1E),
                 rowText: UIColor.white
@@ -104,13 +106,13 @@ enum TellomiLoginChrome {
             buttonDisabledBackground: self.buttonDisabledBackground,
             buttonDisabledForeground: self.buttonDisabledForeground,
             link: self.link,
-            error: self.error,
-            accent: self.accent,
+            error: UIColor(rgb: field.error),
+            accent: UIColor(rgb: field.caret),
             checkbox: self.checkbox,
-            fieldFill: self.fieldFill,
-            fieldText: UIColor(rgb: 0x111111),
+            fieldFill: UIColor(rgb: field.fill),
+            fieldText: UIColor(rgb: field.text),
             secondaryText: self.secondaryText,
-            placeholder: self.placeholder,
+            placeholder: UIColor(rgb: field.placeholder),
             rowBorder: self.rowBorder,
             rowBackground: UIColor.white,
             rowText: UIColor(rgb: 0x111111)
