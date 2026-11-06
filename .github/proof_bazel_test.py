@@ -16,81 +16,110 @@ import ci_gate  # noqa: E402
 import proof_bazel  # noqa: E402
 
 TARGET = "//Tests/TellomiFeedProof:TellomiFeedProofTests"
-SAFE_GRAPH = """
-action 'Processing and signing TellomiFeedProofTests'
-  Mnemonic: ProcessAndSign
-  Target: %s
-  Command Line: (exec /bin/bash -c 'cp -p bazel-out/ios_sim_arm64-dbg/bin/unprocessed_archive.zip bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests.zip')
+DOSSIER_PATH = "bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests-intermediates/dossier_arguments"
+# Literal from bazel 9.2 src/test/shell/integration/aquery_test.sh test_file_write.
+# It is base64("hello world"), not a string this test invented.
+OFFICIAL_HELLO_B64 = "aGVsbG8gd29ybGQ="
+_SAFE_CHARS = set("@%-_+:,./")
 
-action 'Generating codesigning dossier for TellomiFeedProofTests'
-  Mnemonic: GenerateCodesigningDossier
-  Target: %s
-  Command Line: (exec external/apple_support/dossier_codesigningtool create @bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests-intermediates/dossier_arguments)
-""" % (TARGET, TARGET)
 
-HIDDEN_SCRIPT = """
-action 'Processing and signing TellomiFeedProofTests'
-  Mnemonic: ProcessAndSign
-  Target: %s
-  Command Line: (exec bazel-out/ios_sim_arm64-dbg/bin/process-and-sign-abc.sh should_sign)
+def shell_escape(text):
+    """Bazel 9.2 ShellEscaper.escapeString for ASCII arguments."""
+    if text == "":
+        return "''"
+    if all(char.isascii() and (char.isalnum() or char in _SAFE_CHARS) for char in text):
+        return text
+    return "'" + text.replace("'", "'\\''") + "'"
 
-action 'Generating codesigning dossier for TellomiFeedProofTests'
-  Mnemonic: GenerateCodesigningDossier
-  Target: %s
-  Command Line: (exec external/apple_support/dossier_codesigningtool create @bazel-out/ios_sim_arm64-dbg/bin/dossier_arguments)
-""" % (TARGET, TARGET)
 
-MNEMONIC_ONLY = """
-action 'Processing and signing TellomiFeedProofTests'
-  Mnemonic: ProcessAndSign
-  Target: %s
-""" % TARGET
+def bazel92_command(argv):
+    """CommandFailureUtils.describeCommand(COMPLETE, prettyPrintArgs=true)."""
+    rendered = " \\\n    ".join(shell_escape(arg) for arg in argv)
+    return (
+        "(exec %s)\n"
+        "# Configuration: cfg123\n"
+        "# Execution platform: @@apple_support~//platforms:macos_arm64"
+    ) % rendered
 
-SIGN_BINARY = SAFE_GRAPH + """
-action 'Signing binary'
-  Mnemonic: SignBinary
-  Target: %s
-  Command Line: (exec /bin/bash -c 'cp in out')
-""" % TARGET
 
-DOSSIER_PROFILE = """
-action 'Generating codesigning dossier for TellomiFeedProofTests'
-  Mnemonic: GenerateCodesigningDossier
-  Target: %s
-  Command Line: (exec tool create @bazel-out/dossier_arguments --provisioning_profile bazel-out/app.mobileprovision)
-""" % TARGET
+def command_field(argv):
+    rendered = bazel92_command(argv)
+    return "  Command Line: " + rendered + "\n"
 
-DOSSIER_IDENTITY = """
-action 'Generating codesigning dossier for TellomiFeedProofTests'
-  Mnemonic: GenerateCodesigningDossier
-  Target: %s
-  Outputs: [bazel-out/TellomiFeedProofTests_dossier.zip]
-  Command Line: (exec tool create @bazel-out/ios_sim_arm64-dbg/bin/dossier_arguments)
 
-action 'Writing file bazel-out/ios_sim_arm64-dbg/bin/dossier_arguments'
-  Mnemonic: FileWrite
-  Outputs: [bazel-out/ios_sim_arm64-dbg/bin/dossier_arguments]
-  Command Line: (exec /bin/bash -c 'printf --output\\n/tmp/out\\n--zip\\n--codesign_identity\\nApple Development: Example > bazel-out/dossier_arguments')
-""" % TARGET
+def file_write_block(path, contents_b64):
+    return (
+        "action 'Writing file %s'\n"
+        "  Mnemonic: FileWrite\n"
+        "  Target: //pkg:bar\n"
+        "  Outputs: [%s]\n"
+        "  IsExecutable: false\n"
+        "  FileWriteContents: [%s]\n"
+    ) % (path, path, contents_b64)
 
-ADHOC_BODY = """
-action 'Processing and signing TellomiFeedProofTests'
-  Mnemonic: ProcessAndSign
-  Command Line: (exec /bin/bash -c 'cp -p in.zip out.zip')
 
-action 'Generating codesigning dossier for TellomiFeedProofTests'
-  Mnemonic: GenerateCodesigningDossier
-  Command Line: (exec tool create @bazel-out/ios_sim_arm64-dbg/bin/dossier_arguments)
+DOSSIER_LINES = [
+    "--output",
+    "bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests_dossier.zip",
+    "--zip",
+    "--codesign_identity",
+    "-",
+]
+DOSSIER_TEXT = "\n".join(DOSSIER_LINES)
+DOSSIER_B64 = __import__("base64").b64encode(DOSSIER_TEXT.encode("utf-8")).decode("ascii")
+COPY_SCRIPT = (
+    "cp -p 'bazel-out/ios_sim_arm64-dbg/bin/unprocessed_archive.zip' "
+    "'bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests.zip'"
+)
 
-action 'Writing file bazel-out/ios_sim_arm64-dbg/bin/dossier_arguments'
-  Mnemonic: FileWrite
-  Outputs: [bazel-out/ios_sim_arm64-dbg/bin/dossier_arguments]
-  Command Line: (exec /bin/bash -c 'printf --output\\n/tmp/out\\n--zip\\n--codesign_identity\\n- > bazel-out/dossier_arguments')
-"""
 
-OPAQUE_BODY = ADHOC_BODY.replace(
-    "printf --output\\n/tmp/out\\n--zip\\n--codesign_identity\\n- > bazel-out/dossier_arguments",
-    "FileWrite",
+def process_block(argv):
+    return (
+        "action 'Processing and signing TellomiFeedProofTests'\n"
+        "  Mnemonic: ProcessAndSign\n"
+        "  Target: %s\n"
+        "  Outputs: [bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests.zip]\n"
+        "%s"
+    ) % (TARGET, command_field(argv))
+
+
+def dossier_block(argv, extra=""):
+    return (
+        "action 'Generating codesigning dossier for TellomiFeedProofTests'\n"
+        "  Mnemonic: GenerateCodesigningDossier\n"
+        "  Target: %s\n"
+        "  Outputs: [bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests_dossier.zip]\n"
+        "%s"
+        "%s"
+    ) % (TARGET, command_field(argv), extra)
+
+
+def graph(*blocks):
+    return "\n\n".join(block.rstrip("\n") for block in blocks) + "\n"
+
+
+SAFE_GRAPH = graph(
+    process_block(["/bin/bash", "-c", COPY_SCRIPT]),
+    dossier_block(["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH]),
+    file_write_block(DOSSIER_PATH, DOSSIER_B64),
+    file_write_block("bazel-out/k8-fastbuild/bin/pkg/bar.count", OFFICIAL_HELLO_B64),
+)
+
+PARAM_GRAPH = graph(
+    process_block(["/bin/bash", "-c", COPY_SCRIPT]),
+    dossier_block(
+        ["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH],
+        "  Params File Content (%s):\n    %s\n" % (DOSSIER_PATH, " \\\n    ".join(DOSSIER_LINES)),
+    ),
+)
+
+HIDDEN_SCRIPT = graph(
+    process_block([
+        "bazel-out/ios_sim_arm64-dbg/bin/process-and-sign-abc.sh",
+        "should_sign",
+    ]),
+    dossier_block(["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH]),
+    file_write_block(DOSSIER_PATH, DOSSIER_B64),
 )
 
 
@@ -99,9 +128,12 @@ def fail(message):
     sys.exit(1)
 
 
-def flags_of(graph_ok=True):
+def flags_of():
     return [
         "--output=text",
+        "--include_commandline",
+        "--include_param_files",
+        "--include_file_write_contents",
         "--announce_rc",
         "--ios_multi_cpus=sim_arm64",
         "--//Telegram:disableProvisioningProfiles",
@@ -122,24 +154,126 @@ def expect_deny(text, flags, label):
     return decision.reasons
 
 
+def first_command_line(text):
+    for line in text.splitlines():
+        if line.startswith("  Command Line:"):
+            return line
+    return ""
+
+
+def without_continuations(text):
+    """What the previous one-line Command Line regex kept."""
+    kept = []
+    skipping = False
+    for line in text.splitlines():
+        if line.startswith("  Command Line:"):
+            kept.append(line)
+            skipping = True
+            continue
+        if skipping:
+            if line.startswith("  ") and not line.startswith("    "):
+                skipping = False
+                kept.append(line)
+            elif line.startswith("action "):
+                skipping = False
+                kept.append(line)
+            continue
+        kept.append(line)
+    return "\n".join(kept) + "\n"
+
+
 def test_graph_boundary():
     flags = flags_of()
-    expect_allow(SAFE_GRAPH, flags, "empty ProcessAndSign plus args-file dossier")
-    expect_allow(ADHOC_BODY, flags, "visible ad-hoc dossier body")
-    expect_allow("", flags, "graph with no signing actions")
+    decoded, error = proof_bazel.decode_file_write_contents("[%s]" % OFFICIAL_HELLO_B64)
+    if error or decoded != "hello world":
+        fail("official FileWriteContents base64 did not decode to hello world: %s %s" % (decoded, error))
+    bad, bad_error = proof_bazel.decode_file_write_contents("[aGVsbG8gd29ybGQ=")
+    if bad is not None or bad_error != "truncated":
+        fail("truncated FileWriteContents was accepted: %s %s" % (bad, bad_error))
 
-    hidden = expect_deny(HIDDEN_SCRIPT, flags, "generated signing script")
+    copy_args, copy_truncated = proof_bazel.split_pretty_command(
+        bazel92_command(["/bin/bash", "-c", COPY_SCRIPT]))
+    if copy_truncated or copy_args != ["/bin/bash", "-c", COPY_SCRIPT]:
+        fail("multi-line cp command did not round-trip: %s truncated=%s" % (copy_args, copy_truncated))
+    sign_args, sign_truncated = proof_bazel.split_pretty_command(bazel92_command([
+        "bazel-out/ios_sim_arm64-dbg/bin/process-and-sign-abc.sh",
+        "should_sign",
+    ]))
+    if sign_truncated or "should_sign" not in sign_args:
+        fail("multi-line should_sign command was not recovered: %s" % sign_args)
+    if "cp -p" in first_command_line(SAFE_GRAPH) or "should_sign" in first_command_line(HIDDEN_SCRIPT):
+        fail("fixture first lines already contain the parameter; this would not catch the one-line parser")
+
+    expect_allow(SAFE_GRAPH, flags, "multi-line cp plus base64 dossier file")
+    expect_allow(PARAM_GRAPH, flags, "multi-line cp plus param file dossier")
+
+    collapsed = without_continuations(SAFE_GRAPH)
+    expect_deny(collapsed, flags, "command line reduced to its first line")
+    expect_deny("", flags, "empty graph")
+    expect_deny(SAFE_GRAPH.rstrip("\n"), flags, "output that does not end in a newline")
+
+    missing_file = graph(
+        process_block(["/bin/bash", "-c", COPY_SCRIPT]),
+        dossier_block(["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH]),
+    )
+    expect_deny(missing_file, flags, "dossier @file with no FileWrite and no param file")
+
+    opaque = graph(
+        process_block(["/bin/bash", "-c", COPY_SCRIPT]),
+        dossier_block(["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH]),
+        "action 'Writing file %s'\n  Mnemonic: FileWrite\n  Outputs: [%s]\n  IsExecutable: false\n" % (
+            DOSSIER_PATH, DOSSIER_PATH),
+    )
+    expect_deny(opaque, flags, "FileWrite without FileWriteContents")
+
+    truncated_b64 = SAFE_GRAPH.replace(
+        "FileWriteContents: [%s]" % DOSSIER_B64,
+        "FileWriteContents: [%s" % DOSSIER_B64,
+    )
+    expect_deny(truncated_b64, flags, "FileWriteContents missing its closing bracket")
+
+    cut = SAFE_GRAPH.replace(
+        bazel92_command(["/bin/bash", "-c", COPY_SCRIPT]),
+        "(exec /bin/bash \\\n    -c \\",
+        1,
+    )
+    expect_deny(cut, flags, "command line cut off before its closing paren")
+
+    hidden = expect_deny(HIDDEN_SCRIPT, flags, "should_sign on a continuation line")
     if not any("should_sign" in reason for reason in hidden):
-        fail("hidden script was not attributed to should_sign: %s" % hidden)
-    if "/usr/bin/codesign" in HIDDEN_SCRIPT or "SignBinary" in HIDDEN_SCRIPT or ".mobileprovision" in HIDDEN_SCRIPT:
-        fail("fixture was supposed to be invisible to the old log grep")
+        fail("continuation should_sign was not named: %s" % hidden)
 
-    expect_deny(MNEMONIC_ONLY, flags, "mnemonic without a command")
-    expect_deny(SIGN_BINARY, flags, "SignBinary")
-    expect_deny(DOSSIER_PROFILE, flags, "dossier provisioning profile")
-    expect_deny(DOSSIER_IDENTITY, flags, "non-adhoc dossier identity")
-    expect_deny(OPAQUE_BODY, flags, "dossier file present without contents")
+    bad_identity = "\n".join(DOSSIER_LINES[:-1] + ["Apple Development: Example"])
+    bad_b64 = __import__("base64").b64encode(bad_identity.encode("utf-8")).decode("ascii")
+    expect_deny(SAFE_GRAPH.replace(DOSSIER_B64, bad_b64, 1), flags, "non-adhoc identity in FileWriteContents")
+
+    profile_lines = DOSSIER_LINES + ["--provisioning_profile", "bazel-out/app.mobileprovision"]
+    profile_graph = graph(
+        process_block(["/bin/bash", "-c", COPY_SCRIPT]),
+        dossier_block(
+            ["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH],
+            "  Params File Content (%s):\n    %s\n" % (DOSSIER_PATH, " \\\n    ".join(profile_lines)),
+        ),
+    )
+    expect_deny(profile_graph, flags, "param file provisioning profile")
+
+    author_single_line = (
+        "action 'Processing and signing TellomiFeedProofTests'\n"
+        "  Mnemonic: ProcessAndSign\n"
+        "  Command Line: (exec /bin/bash -c 'cp -p in.zip out.zip')\n"
+        "\n"
+        "action 'Generating codesigning dossier for TellomiFeedProofTests'\n"
+        "  Mnemonic: GenerateCodesigningDossier\n"
+        "  Command Line: (exec tool create @%s)\n"
+    ) % DOSSIER_PATH
+    expect_deny(author_single_line, flags, "author single-line fixture with no file contents")
+
     expect_deny(SAFE_GRAPH, [flag for flag in flags if flag != proof_bazel.FEATURE], "missing feature")
+    expect_deny(
+        SAFE_GRAPH,
+        [flag for flag in flags if flag != "--include_file_write_contents"],
+        "file write contents not requested",
+    )
     device = [flag for flag in flags if not flag.startswith("--ios_multi_cpus=")]
     device.append("--ios_multi_cpus=arm64")
     expect_deny(SAFE_GRAPH, device, "device cpu")
@@ -182,6 +316,11 @@ def test_wrapper_order(make_argv, real):
         fail("aquery does not include GenerateCodesigningDossier: %s" % query)
     if 'mnemonic("ProcessAndSign"' not in " ".join(query) or 'mnemonic("SignBinary"' not in " ".join(query):
         fail("aquery does not include the signing mnemonics: %s" % query)
+    if 'mnemonic("FileWrite"' not in " ".join(query):
+        fail("aquery does not include FileWrite: %s" % query)
+    for option in ("--include_file_write_contents", "--include_param_files", "--include_commandline"):
+        if option not in query:
+            fail("aquery argv missing %s: %s" % (option, query))
     built = executed[0]
     if built[0] != real or proof_bazel.FEATURE not in built or TARGET not in built:
         fail("executed argv is not the real binary with the feature and target: %s" % built)
