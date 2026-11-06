@@ -367,7 +367,7 @@ def test_wrapper_order(make_argv, real):
 
     def run(argv, check=False, stdout=None, stderr=None, text=False):
         calls.append(list(argv))
-        if "should-fail-aquery" in argv:
+        if any("should-fail-aquery" in arg for arg in argv):
             return Completed(2, "", "aquery exploded")
         if "--deny-script" in argv:
             return Completed(0, HIDDEN_SCRIPT, "")
@@ -430,7 +430,7 @@ def test_wrapper_order(make_argv, real):
     sys.stderr = stderr
     try:
         failed = proof_bazel.wrapper_main(
-            make_argv + ["should-fail-aquery"], real, run=run, execv=execv)
+            make_argv + ["--should-fail-aquery"], real, run=run, execv=execv)
     finally:
         sys.stderr = previous
     failed_log = stderr.getvalue()
@@ -439,21 +439,28 @@ def test_wrapper_order(make_argv, real):
     if "signing actions were not classified" not in failed_log or "aquery exploded" in failed_log:
         fail("aquery failure leaked or skipped the report: %s" % failed_log)
 
-    def blocked(argv, needle, label):
+    def blocked(argv, needle, label, diagnose=False):
         executed[:] = []
+        calls[:] = []
         buf = io.StringIO()
         saved = sys.stderr
         sys.stderr = buf
         try:
-            status = proof_bazel.wrapper_main(argv, real, run=run, execv=execv)
+            status = proof_bazel.wrapper_main(
+                argv, real, run=run, execv=execv,
+                environ={"TELLOMI_PROOF_DIAGNOSTICS": "1" if diagnose else "0"},
+            )
         finally:
             sys.stderr = saved
-        if status == 0 or executed or needle not in buf.getvalue():
-            fail("%s was compiled: %s %s" % (label, status, buf.getvalue()))
+        log = buf.getvalue()
+        if status == 0 or executed or needle not in log:
+            fail("%s was compiled: %s %s" % (label, status, log))
+        if diagnose and "diagnostics-only: build was not executed" not in log:
+            fail("%s diagnostics path built or hid the skip: %s" % (label, log))
 
     blocked(
         ["wrapper", "build", TARGET, "--ios_multi_cpus=arm64"],
-        "device ios cpu",
+        "platform override",
         "device cpu",
     )
     blocked(
@@ -461,6 +468,79 @@ def test_wrapper_order(make_argv, real):
         "FeedScreen unit test",
         "Telegram target",
     )
+    blocked(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "build", TARGET,
+         "--ios_multi_cpus=sim_arm64", "//Telegram:Telegram"],
+        "FeedScreen unit test",
+        "second target",
+    )
+    blocked(
+        ["wrapper", "run", "//Telegram:Telegram"],
+        "not the proof build",
+        "bazel run",
+    )
+    blocked(
+        ["wrapper", "build", TARGET, "--ios_multi_cpus=sim_arm64",
+         "--platforms=//platforms:ios_arm64"],
+        "platform override",
+        "platforms equals form",
+    )
+    blocked(
+        ["wrapper", "build", TARGET, "--platforms", "//platforms:ios_arm64",
+         "--ios_multi_cpus=sim_arm64"],
+        "platform override",
+        "platforms separate value",
+    )
+    blocked(
+        ["wrapper", "build", TARGET, "--ios_multi_cpus=sim_arm64", "--config=device"],
+        "platform override",
+        "config override",
+    )
+    blocked(
+        ["wrapper", "run", "//Telegram:Telegram"],
+        "not the proof build",
+        "diagnostics bazel run",
+        diagnose=True,
+    )
+    blocked(
+        ["wrapper", "build", TARGET, "--ios_multi_cpus=sim_arm64", "//Telegram:Telegram"],
+        "FeedScreen unit test",
+        "diagnostics second target",
+        diagnose=True,
+    )
+    blocked(
+        ["wrapper", "build", TARGET, "--ios_multi_cpus=sim_arm64",
+         "--platforms=//platforms:ios_arm64"],
+        "platform override",
+        "diagnostics platforms",
+        diagnose=True,
+    )
+    blocked(
+        ["wrapper", "build", TARGET, "--ios_multi_cpus=sim_arm64,arm64"],
+        "platform override",
+        "mixed ios cpus",
+    )
+    forwarded = []
+
+    def exec_version(path, argv):
+        forwarded.append(list(argv))
+
+    version = proof_bazel.wrapper_main(
+        ["wrapper", "--version"], real, run=run, execv=exec_version, environ={})
+    if version != 0 or forwarded != [[real, "--version"]]:
+        fail("bazel --version was not forwarded: %s %s" % (version, forwarded))
+    forwarded[:] = []
+    buf = io.StringIO()
+    saved = sys.stderr
+    sys.stderr = buf
+    try:
+        skipped = proof_bazel.wrapper_main(
+            ["wrapper", "--version"], real, run=run, execv=exec_version,
+            environ={"TELLOMI_PROOF_DIAGNOSTICS": "1"})
+    finally:
+        sys.stderr = saved
+    if skipped == 0 or forwarded or "diagnostics-only" not in buf.getvalue():
+        fail("diagnostics --version was executed: %s %s" % (skipped, forwarded))
 
 
 def write_real_bazel(path, version):

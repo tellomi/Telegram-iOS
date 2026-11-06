@@ -968,30 +968,96 @@ def report_signing(text):
     return "".join(lines)
 
 
+# Make.py's proof build (invoke_build, debug_sim_arm64) selects the simulator
+# with --ios_multi_cpus=sim_arm64 and, when set, --watchos_cpus=arm64_32.
+# It does not pass --platforms, --cpu, or --config. Any of those can replace
+# that selection. -c takes its mode as the following argument.
+_PLATFORM_REJECT = frozenset((
+    "--platforms",
+    "--host_platform",
+    "--extra_execution_platforms",
+    "--extra_toolchains",
+    "--cpu",
+    "--host_cpu",
+    "--apple_platform_type",
+    "--ios_cpu",
+    "--macos_cpus",
+    "--tvos_cpus",
+    "--visionos_cpus",
+    "--config",
+    "--experimental_platforms_api",
+))
+_TAKES_SEPARATE_VALUE = _PLATFORM_REJECT | frozenset(("-c", "--compilation_mode"))
+_NOT_PROOF_BUILD = "compile-verify: bazel command is not the proof build\n"
+_NOT_PROOF_TARGET = "compile-verify: target is not the FeedScreen unit test\n"
+_NOT_SIMULATOR = "compile-verify: platform override is not the simulator proof\n"
+
+
 def _compile_allowed(argv):
-    command_at = command_index(argv)
-    target, flags = target_and_flags(argv, command_at)
-    if target != PROOF_TARGET:
-        return "compile-verify: target is not the FeedScreen unit test\n"
-    cpus = _ios_cpus(flags)
-    if "sim_arm64" not in cpus or any(not cpu.startswith("sim_") for cpu in cpus):
-        return "compile-verify: device ios cpu is not a simulator compile\n"
+    """Allow only Make.py's simulator build of the FeedScreen unit test."""
+    if len(argv) < 3:
+        return _NOT_PROOF_BUILD
+    index = 1
+    while index < len(argv) and argv[index].startswith("-"):
+        if not argv[index].startswith("--output_user_root=") or argv[index] == "--output_user_root=":
+            return _NOT_PROOF_BUILD
+        if "\n" in argv[index] or "\r" in argv[index]:
+            return _NOT_PROOF_BUILD
+        index += 1
+    if index >= len(argv) or argv[index] != "build":
+        return _NOT_PROOF_BUILD
+    index += 1
+    positionals = []
+    ios_cpus = []
+    watch_cpus = []
+    while index < len(argv):
+        arg = argv[index]
+        if arg.startswith("-"):
+            name = arg.split("=", 1)[0]
+            if name in _PLATFORM_REJECT:
+                return _NOT_SIMULATOR
+            if name == "--ios_multi_cpus":
+                if not arg.startswith("--ios_multi_cpus="):
+                    return _NOT_SIMULATOR
+                ios_cpus.append(arg.split("=", 1)[1])
+            elif name == "--watchos_cpus":
+                if arg != "--watchos_cpus=arm64_32":
+                    return _NOT_SIMULATOR
+                watch_cpus.append(arg)
+            if "=" not in arg and name in _TAKES_SEPARATE_VALUE:
+                index += 1
+                if index >= len(argv):
+                    return _NOT_PROOF_BUILD
+            index += 1
+            continue
+        positionals.append(arg)
+        index += 1
+    if positionals != [PROOF_TARGET]:
+        return _NOT_PROOF_TARGET
+    if ios_cpus != ["sim_arm64"] or len(watch_cpus) > 1:
+        return _NOT_SIMULATOR
     return None
 
 
 def wrapper_main(argv, real, run=None, execv=None, environ=None):
-    """Report simulator codesign counts, then compile. Other commands are forwarded."""
+    """Report simulator codesign counts, then compile the proof target."""
     run = run or subprocess.run
     execv = execv or os.execv
     diagnose = diagnostics_requested(environ)
-    if command_index(argv) is None:
+    # Make.py reads `bazel --version` before invoke_build. That argv has no
+    # command word. run/test/coverage and any other word are not forwarded.
+    if not any(not arg.startswith("-") for arg in argv[1:]):
+        if diagnose:
+            sys.stderr.write("diagnostics-only: build was not executed\n")
+            return 2
         forwarded = [real] + list(argv[1:])
         execv(forwarded[0], forwarded)
         return 0
-
     blocked = _compile_allowed(argv)
     if blocked:
         sys.stderr.write(blocked)
+        if diagnose:
+            sys.stderr.write("diagnostics-only: build was not executed\n")
         return 1
 
     query = aquery_argv(real, argv)
