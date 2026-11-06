@@ -10,11 +10,9 @@ import TellomiDiscover
 import UIKit
 import ShareWithPeersScreen
 
-/// Text, visibility, and an optional poll or quote. A picked video is not a
-/// field: `POST /v1/feed/posts` has nowhere to put one. Selected images are
-/// tracked beside this request and block send until the upload contract is
-/// confirmed; they are not fields on this value. `@username` stays in
-/// `text`. A public link may add `linkPreview`.
+/// Text, visibility, and an optional poll, quote, or finished image keys.
+/// A picked video is still not a field. `mediaKeys` is set only after every
+/// selected image has a `m/<uuid>` key. No images leaves it nil.
 struct TellomiDiscoverComposeRequest {
     var text: String
     var visibility: TellomiDiscoverVisibility
@@ -23,6 +21,7 @@ struct TellomiDiscoverComposeRequest {
     var quoteOf: String?
     var pollOptions: [String]?
     var linkPreview: TellomiDiscoverLink.Preview?
+    var mediaKeys: [String]?
 }
 
 final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate {
@@ -31,8 +30,21 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     private let quoteOf: String?
     private let quotePreview: String
     private let nonce = UUID().uuidString
-    /// Empty until a confirmed image cap is applied. No images means text publish is unchanged.
-    private let imagePublish = TellomiDiscoverImagePublish()
+    /// Stays closed unless this compose was opened with `media_upload`.
+    private var imagePublish = TellomiDiscoverImagePublish()
+    private let mediaUpload: Bool
+    private let feedConfiguration: TellomiDiscoverConfiguration?
+    private let loader: TellomiDiscoverLoader?
+    private let previews: TellomiDiscoverLocalPreviewBook?
+    private var imageBytes: [String: Data] = [:]
+    private var imageSessions: [String: TellomiDiscoverImageUploadSession] = [:]
+    private var imagePictures: [String: UIImage] = [:]
+    private var imageGeneration: [String: Int] = [:]
+    private var imageFlight: String?
+    private var imageNotice: String?
+    private let imageButton = UIButton(type: .system)
+    private var imageRows: [TellomiDiscoverImageRow] = []
+    private var photoPicker: NSObject?
     private let publish: (TellomiDiscoverComposeRequest, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void
     private let published: () -> Void
     private var presentationData: PresentationData
@@ -79,13 +91,17 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     private var linkSettled = false
     private var linkHolding = false
 
-    init(context: AccountContext, textLimit: Int, quoteOf: String? = nil, quotePreview: String = "", publish: @escaping (TellomiDiscoverComposeRequest, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void) {
+    init(context: AccountContext, textLimit: Int, quoteOf: String? = nil, quotePreview: String = "", publish: @escaping (TellomiDiscoverComposeRequest, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void, mediaUpload: Bool = false, configuration: TellomiDiscoverConfiguration? = nil, loader: TellomiDiscoverLoader? = nil, previews: TellomiDiscoverLocalPreviewBook? = nil) {
         self.context = context
         self.textLimit = textLimit
         self.quoteOf = quoteOf.flatMap(tellomiDiscoverPostId)
         self.quotePreview = quotePreview
         self.publish = publish
         self.published = published
+        self.mediaUpload = mediaUpload
+        self.feedConfiguration = configuration
+        self.loader = loader
+        self.previews = previews
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
         let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict))
@@ -163,6 +179,12 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.videoPreviewView.layer.cornerRadius = 8.0
         self.videoPreviewView.isUserInteractionEnabled = false
         self.videoPreviewView.isHidden = true
+        self.imageButton.contentHorizontalAlignment = .left
+        self.imageButton.addTarget(self, action: #selector(self.imagePressed), for: .touchUpInside)
+        self.imageButton.accessibilityIdentifier = "tellomi.discover.images"
+        if self.imagesEnabled {
+            _ = self.imagePublish.useVerifiedContract()
+        }
         self.displayNode.view.addSubview(self.scrollView)
         self.scrollView.addSubview(self.quoteLabel)
         self.scrollView.addSubview(self.textView)
@@ -177,6 +199,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.scrollView.addSubview(self.videoHintLabel)
         self.scrollView.addSubview(self.videoStatusLabel)
         self.scrollView.addSubview(self.videoPreviewView)
+        self.scrollView.addSubview(self.imageButton)
         self.scrollView.addSubview(self.visibilityButton)
         self.scrollView.addSubview(self.hintLabel)
         if self.quoteOf == nil {
@@ -272,6 +295,22 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
             self.videoPreviewView.image = nil
             self.videoPreviewView.frame = .zero
         }
+        self.imageButton.isHidden = !self.imagesEnabled
+        if self.imageButton.isHidden {
+            self.imageButton.frame = .zero
+        } else {
+            self.imageButton.frame = CGRect(x: side, y: cursor, width: width, height: 36)
+            cursor = self.imageButton.frame.maxY + 4.0
+        }
+        for row in self.imageRows {
+            row.isHidden = !self.imagesEnabled
+            if row.isHidden {
+                row.frame = .zero
+            } else {
+                row.frame = CGRect(x: side, y: cursor, width: width, height: 64.0)
+                cursor = row.frame.maxY + 8.0
+            }
+        }
         self.visibilityButton.frame = CGRect(x: side, y: cursor, width: width, height: 36)
         self.hintLabel.frame = CGRect(x: side, y: self.visibilityButton.frame.maxY + 4, width: width, height: 40)
         let bottom = max(layout.intrinsicInsets.bottom, layout.safeInsets.bottom) + 16.0
@@ -322,7 +361,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         guard !self.sending, let choice = self.choice(), choice.publishable else {
             return
         }
-        if self.imagePublish.posting != .textOnly {
+        if case .blocked = self.imagePublish.posting {
             return
         }
         switch TellomiDiscoverVideo.publishGate(hasVideo: self.videoURL != nil, busy: self.videoBusy, durationMs: self.videoDurationMs) {
@@ -356,17 +395,35 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         }
         self.linkHolding = false
         let preview = (TellomiDiscoverLink.firstUrl(text) == self.linkURL && self.linkSettled) ? self.linkPreview : nil
+        let readyKeys: [String]?
+        switch self.imagePublish.posting {
+        case let .ready(keys):
+            readyKeys = keys
+        case .textOnly, .blocked:
+            readyKeys = nil
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty, readyKeys == nil {
+            return
+        }
+        if text.count > self.textLimit {
+            return
+        }
         self.sending = true
         self.sendError = nil
         self.apply()
-        let request = TellomiDiscoverComposeRequest(text: text, visibility: choice.visibility, userIds: choice.userIds, nonce: self.nonce, quoteOf: self.quoteOf, pollOptions: self.pollOn ? options : nil, linkPreview: preview)
+        let request = TellomiDiscoverComposeRequest(text: text, visibility: choice.visibility, userIds: choice.userIds, nonce: self.nonce, quoteOf: self.quoteOf, pollOptions: self.pollOn ? options : nil, linkPreview: preview, mediaKeys: readyKeys)
         self.publish(request) { [weak self] result in
             guard let self else {
                 return
             }
             self.sending = false
             switch result {
-            case .success:
+            case let .success(decoded):
+                if case let .created(created) = decoded, created.state != "ok" {
+                    let datas = self.imagePublish.items.compactMap { self.imageBytes[$0.localId] }
+                    self.previews?.keep(postId: created.id, images: datas)
+                }
                 self.published()
                 self.navigationController?.popViewController(animated: true)
             case let .failure(error):
@@ -583,6 +640,11 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.addOptionButton.setTitle(copy.pollAdd, for: .normal)
         self.addOptionButton.setTitleColor(self.presentationData.theme.list.itemAccentColor, for: .normal)
         let videoEnabled = !self.videoBusy && !self.sending
+        let imageTitles = self.imageTitles()
+        self.imageButton.setTitle(imageTitles.add, for: .normal)
+        self.imageButton.setTitleColor(self.presentationData.theme.list.itemAccentColor, for: .normal)
+        self.imageButton.isEnabled = self.imagesEnabled && !self.sending && self.imagePublish.items.count < TellomiDiscoverImageContract.maxCount
+        self.syncImageRows(titles: imageTitles)
         self.videoButton.setTitle(self.videoURL == nil ? copy.videoAdd : copy.videoReplace, for: .normal)
         self.videoButton.setTitleColor(self.presentationData.theme.list.itemAccentColor, for: .normal)
         self.videoButton.isEnabled = videoEnabled
@@ -615,6 +677,8 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         let errorText = self.sendError.flatMap { copy.failureText($0) }
         if let errorText {
             self.hintLabel.text = errorText
+        } else if let imageNotice = self.imageNotice {
+            self.hintLabel.text = imageNotice
         } else if let mentionText {
             self.hintLabel.text = mentionText
         } else if self.pollOn, self.pollOptions() == nil {
@@ -622,7 +686,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         } else {
             self.hintLabel.text = copy.reasonText(choice?.reason)
         }
-        self.hintLabel.textColor = mentionText != nil && errorText == nil ? self.presentationData.theme.list.itemDestructiveColor : self.presentationData.theme.list.itemSecondaryTextColor
+        self.hintLabel.textColor = (mentionText != nil || self.imageNotice != nil) && errorText == nil ? self.presentationData.theme.list.itemDestructiveColor : self.presentationData.theme.list.itemSecondaryTextColor
         self.hintLabel.font = Font.regular(13.0)
         self.placeholderLabel.text = copy.mentionHint
         self.placeholderLabel.textColor = self.presentationData.theme.list.itemSecondaryTextColor
@@ -637,7 +701,16 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         ]
         self.paintMentions()
         let pollReady = !self.pollOn || self.pollOptions() != nil
-        let canSend = self.imagePublish.posting == .textOnly && !self.sending && !self.videoBusy && !self.linkHolding && invalid.isEmpty && choice?.publishable == true && pollReady && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= self.textLimit && tellomiDiscoverClientNonce(self.nonce)
+        let readyKeys: [String]?
+        switch self.imagePublish.posting {
+        case let .ready(keys):
+            readyKeys = keys
+        case .textOnly, .blocked:
+            readyKeys = nil
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let textReady = text.count <= self.textLimit && (!trimmed.isEmpty || readyKeys != nil)
+        let canSend = self.imagePublish.posting != .blocked && !self.sending && !self.videoBusy && !self.linkHolding && invalid.isEmpty && choice?.publishable == true && pollReady && textReady && tellomiDiscoverClientNonce(self.nonce)
         let item = UIBarButtonItem(title: copy.publish, style: .done, target: self, action: #selector(self.sendPressed))
         item.isEnabled = canSend
         self.navigationItem.setRightBarButton(item, animated: false)
@@ -965,6 +1038,236 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
             )
             self.push(controller)
         })
+    }
+
+    private var imagesEnabled: Bool {
+        return self.mediaUpload && self.feedConfiguration?.enabled == true && self.feedConfiguration?.baseURL != nil && self.loader != nil
+    }
+
+    private func imageTitles() -> (add: String, cancel: String, retry: String, failed: String, rejected: String, progress: String, uploaded: String) {
+        let code = self.presentationData.strings.primaryComponent.languageCode
+        if code.hasPrefix("zh") {
+            return ("添加图片", "取消", "重试", "上传失败", "这张图不能上传", "上传中", "已上传")
+        }
+        return ("Add photos", "Cancel", "Retry", "Upload failed", "This photo can't be uploaded", "Uploading", "Uploaded")
+    }
+
+    @objc private func imagePressed() {
+        guard self.imagesEnabled, !self.sending else {
+            return
+        }
+        guard #available(iOS 14.0, *) else {
+            return
+        }
+        let remaining = TellomiDiscoverImageContract.maxCount - self.imagePublish.items.count
+        guard remaining > 0 else {
+            return
+        }
+        let picker = TellomiDiscoverPhotoPicker()
+        picker.onData = { [weak self] datas in
+            self?.acceptImages(datas)
+        }
+        self.photoPicker = picker
+        picker.present(from: self, limit: remaining)
+    }
+
+    private func acceptImages(_ datas: [Data]) {
+        let titles = self.imageTitles()
+        var rejected = false
+        for data in datas {
+            guard self.imagePublish.items.count < TellomiDiscoverImageContract.maxCount else {
+                break
+            }
+            guard let prepared = TellomiDiscoverImageEncode.prepared(data) else {
+                rejected = true
+                continue
+            }
+            let localId = UUID().uuidString
+            guard self.imagePublish.select(localId: localId, byteCount: prepared.bytes.count) == nil else {
+                rejected = true
+                continue
+            }
+            guard self.imagePublish.beginUpload(localId: localId) == nil else {
+                _ = self.imagePublish.cancel(localId: localId)
+                continue
+            }
+            self.imageBytes[localId] = prepared.bytes
+            self.imagePictures[localId] = UIImage(data: prepared.bytes)
+            self.imageSessions[localId] = TellomiDiscoverImageUploadSession(length: prepared.bytes.count)
+        }
+        self.imageNotice = rejected ? titles.rejected : nil
+        self.syncImageRows(titles: titles)
+        self.apply()
+        self.relayout()
+        self.pumpImages()
+    }
+
+    private func syncImageRows(titles: (add: String, cancel: String, retry: String, failed: String, rejected: String, progress: String, uploaded: String)) {
+        guard self.isNodeLoaded else {
+            return
+        }
+        while self.imageRows.count < self.imagePublish.items.count {
+            let row = TellomiDiscoverImageRow()
+            self.imageRows.append(row)
+            self.scrollView.addSubview(row)
+        }
+        while self.imageRows.count > self.imagePublish.items.count {
+            self.imageRows.removeLast().removeFromSuperview()
+        }
+        let color = self.presentationData.theme.list.itemSecondaryTextColor
+        let destructive = self.presentationData.theme.list.itemDestructiveColor
+        for (row, item) in zip(self.imageRows, self.imagePublish.items) {
+            let failed: Bool
+            let text: String
+            switch item.phase {
+            case .failed:
+                failed = true
+                text = titles.failed
+            case .uploaded:
+                failed = false
+                text = titles.uploaded
+            case .selected, .uploading:
+                failed = false
+                text = "\(titles.progress) \(item.sent)/\(item.byteCount)"
+            }
+            let localId = item.localId
+            row.onCancel = { [weak self] in
+                self?.cancelImage(localId)
+            }
+            row.onRetry = { [weak self] in
+                self?.retryImage(localId)
+            }
+            row.apply(image: self.imagePictures[item.localId], text: text, failed: failed, cancelTitle: titles.cancel, retryTitle: titles.retry, color: color, destructive: destructive)
+        }
+    }
+
+    private func pumpImages() {
+        guard self.imageFlight == nil else {
+            return
+        }
+        guard let item = self.imagePublish.items.first(where: { item in
+            switch item.phase {
+            case .uploaded, .failed:
+                return false
+            case .selected, .uploading:
+                return self.imageSessions[item.localId] != nil
+            }
+        }) else {
+            return
+        }
+        self.imageFlight = item.localId
+        self.advanceImage(item.localId)
+    }
+
+    private func advanceImage(_ localId: String) {
+        guard var session = self.imageSessions[localId], let bytes = self.imageBytes[localId], let configuration = self.feedConfiguration, let base = configuration.baseURL, let loader = self.loader else {
+            self.imageFlight = nil
+            return
+        }
+        if case let .wait(seconds) = session.step {
+            self.imageSessions[localId] = session
+            self.imageGeneration[localId, default: 0] += 1
+            let generation = self.imageGeneration[localId] ?? 0
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(max(1, seconds))) { [weak self] in
+                guard let self, self.imageGeneration[localId] == generation else {
+                    return
+                }
+                self.imageSessions[localId]?.waited()
+                self.advanceImage(localId)
+            }
+            return
+        }
+        guard let call = session.call(base: base, bytes: bytes) else {
+            self.imageSessions[localId] = session
+            self.finishImage(localId)
+            return
+        }
+        self.imageSessions[localId] = session
+        _ = self.imagePublish.noteSent(localId: localId, sent: session.offset)
+        self.imageGeneration[localId, default: 0] += 1
+        let generation = self.imageGeneration[localId] ?? 0
+        loader.performImage(loggedIn: true, configuration: configuration, call: call) { [weak self] result in
+            guard let self, self.imageGeneration[localId] == generation else {
+                return
+            }
+            var session = self.imageSessions[localId] ?? session
+            switch result {
+            case .failure:
+                session.transportFailed()
+            case let .success(response):
+                session.receive(response, base: base)
+            }
+            self.imageSessions[localId] = session
+            _ = self.imagePublish.noteSent(localId: localId, sent: session.offset)
+            self.syncImageRows(titles: self.imageTitles())
+            self.relayout()
+            self.advanceImage(localId)
+        }
+    }
+
+    private func finishImage(_ localId: String) {
+        let session = self.imageSessions[localId]
+        switch session?.step {
+        case let .done(key):
+            _ = self.imagePublish.complete(localId: localId, key: key)
+        case .cancelled:
+            _ = self.imagePublish.cancel(localId: localId)
+            self.imageBytes[localId] = nil
+            self.imagePictures[localId] = nil
+            self.imageSessions[localId] = nil
+        case .voided, .failed:
+            _ = self.imagePublish.fail(localId: localId)
+        default:
+            _ = self.imagePublish.fail(localId: localId)
+        }
+        if self.imageFlight == localId {
+            self.imageFlight = nil
+        }
+        self.syncImageRows(titles: self.imageTitles())
+        self.apply()
+        self.relayout()
+        self.pumpImages()
+    }
+
+    private func cancelImage(_ localId: String) {
+        guard var session = self.imageSessions[localId] else {
+            _ = self.imagePublish.cancel(localId: localId)
+            self.imageBytes[localId] = nil
+            self.imagePictures[localId] = nil
+            self.syncImageRows(titles: self.imageTitles())
+            self.apply()
+            self.relayout()
+            return
+        }
+        session.cancel()
+        self.imageSessions[localId] = session
+        self.imageGeneration[localId, default: 0] += 1
+        if session.step == .cancelled {
+            if self.imageFlight == localId {
+                self.imageFlight = nil
+            }
+            self.finishImage(localId)
+            return
+        }
+        if self.imageFlight == nil || self.imageFlight == localId {
+            self.imageFlight = localId
+            self.advanceImage(localId)
+        }
+    }
+
+    private func retryImage(_ localId: String) {
+        guard var session = self.imageSessions[localId] else {
+            return
+        }
+        session.retry()
+        self.imageSessions[localId] = session
+        _ = self.imagePublish.retry(localId: localId)
+        self.syncImageRows(titles: self.imageTitles())
+        if self.imageFlight == nil {
+            self.imageFlight = localId
+            self.advanceImage(localId)
+        }
+        self.apply()
     }
 }
 

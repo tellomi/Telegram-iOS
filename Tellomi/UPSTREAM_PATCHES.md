@@ -925,9 +925,19 @@ Master CI on `969315d5df` failed `//submodules/ChatListUI:ChatListUI` while buil
 | `submodules/ChatListUI/Sources/Node/ChatListNodeLocation.swift` | The scroll position keeps the engine index. The view tracker still receives the unwrapped `ChatListIndex`. |
 | `submodules/ChatListUI/Sources/Node/ChatListViewTransition.swift` | Both scroll comparisons use the engine index directly. |
 
-## Discover image selection
+## Discover image publish
 
-D-10 multi-image publish is not wired to `POST /v1/feed/posts`. `content-engine` was not readable from this checkout, and `TellomiDiscoverEngineConfig` has no image count or byte cap, so no upload URL, header, or JSON key was added. `TellomiDiscoverImagePublish` records a local selection only after a caller supplies confirmed limits. It stores no file URL, no bytes, and no credential. Cancel removes the item. A key is stored only when `complete(localId:key:)` is given one. Until every selected image has a key, `posting` is `.blocked`. When they all have keys, `posting` is `.heldUntilWireConfirmed` and the compose screen still does not send: the text body is unchanged and must not be published as a stand-in for the images. No upstream file is edited.
+D-10 multi-image publish now follows the content-engine contract verified at `99fb6ce` on 2026-11-06. No upstream file is edited.
+
+Limits, from that contract and not from the Android client: `media_keys` accepts at most 10 keys, in order, and `OPTIONS /v1/feed/media/uploads` advertises `Tus-Max-Size: 20971520`. The picker stays closed unless `GET /v1/capabilities` includes `media_upload`. A post with no images still sends the previous text, quote, and poll body and does not wait on an upload.
+
+Upload is tus 1.0.0. `OPTIONS` is sent without the discover credential. `POST`, `PATCH`, `HEAD`, and `DELETE` use the existing Bearer credential and only after the URL is checked as this feed origin's `/v1/feed/media/uploads` path. `Location` on another host, an `http` URL, a URL with a user, or a path that escapes the upload prefix is refused and the credential is not attached. JPEG, PNG, and WebP are uploaded as picked when the edge is at most 12000 and the pixel count is at most 50000000. HEIC is transcoded to JPEG without copying source properties, which drops location metadata. `415` voids the upload. `409` reads the offset with `HEAD` and resumes. `429` waits for `Retry-After` (60 when the header is missing). `DELETE` cancels an upload that is not attached to a post.
+
+`POST /v1/feed/posts` adds `media_keys`. Text may be empty when keys are present. `client_nonce` is unchanged across retries. `operation_id` is not sent: `write_idempotency` is recognized, and this contract does not define a value for that field. `400 invalid_media` fails the whole post and does not rotate the nonce. `401 credential_expired` is the existing unauthorized refresh.
+
+Visibility is not rewritten. This client still sends `public`, `contacts`, `close_friends`, `include`, and `exclude`. The server enum is `public`, `friends`, `include`, `exclude`, and `only_me`. `contacts` and `close_friends` are sent as those strings and work only when `ENGINE_DISCOVER_RELATIONS` is on. They are not mapped to `friends` or `only_me`. `include` and `exclude` still require `audience`.
+
+Before review, cards are not `ok`. The author's pending post has no `media_keys` in the card, so the compose screen keeps the local bytes on the post id and the detail shows that preview. After review, `media[]` is `{type:image,key,w,h}` and an optional `url`. A present https `url` is used. Otherwise `feed/config` `media_base_url` is joined with the key. No public host is invented. Video is still not uploaded.
 
 | File | Change |
 | --- | --- |

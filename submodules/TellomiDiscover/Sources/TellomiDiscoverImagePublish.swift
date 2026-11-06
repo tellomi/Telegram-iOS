@@ -1,17 +1,16 @@
 import Foundation
 
-/// Local image selection for a Discover post (D-10), before any upload request exists.
+/// Local image selection for a Discover post.
 ///
-/// `GET /v1/feed/config` as this client parses it (`TellomiDiscoverEngineConfig`) has no image
-/// count or byte cap. Limits are applied only after `confirm(maxCount:maxBytesEach:)` is given
-/// numbers from a confirmed server config. This value stores no file URL, no image bytes, and
-/// no credential. Cancel drops the selection. A finished upload key is recorded only when the
-/// caller passes one in; this type does not invent a wire field or an HTTP response.
+/// The caps come from the 2026-11-06 content-engine contract (`99fb6ce`): `media_keys` allows
+/// 10 keys, and `Tus-Max-Size` / the per-image cap is 20971520 bytes. `useVerifiedContract()`
+/// applies those two numbers. Until it is called, selection stays closed, which is also how
+/// the compose screen behaves when `media_upload` is absent.
 ///
-/// `posting` is `.textOnly` when nothing is selected, so an existing text, quote, poll, or
-/// visibility publish is unchanged. Selected images block send until every one has a key, and
-/// even then the post stays held: the upload route's field names are not confirmed, so the
-/// text body must not be sent as if the images were attached.
+/// This value stores no file URL, no image bytes, and no credential. Bytes and the tus session
+/// live beside it. `posting` is `.textOnly` when nothing is selected, so a text, quote, or poll
+/// post is unchanged. Selected images block send until every one is `.uploaded`, then `.ready`
+/// carries the keys in selection order for `media_keys`.
 public struct TellomiDiscoverImagePublish: Equatable {
     public enum LimitPolicy: Equatable {
         case unconfirmed
@@ -28,11 +27,13 @@ public struct TellomiDiscoverImagePublish: Equatable {
     public struct Item: Equatable {
         public var localId: String
         public var byteCount: Int
+        public var sent: Int
         public var phase: Phase
 
-        public init(localId: String, byteCount: Int, phase: Phase) {
+        public init(localId: String, byteCount: Int, sent: Int = 0, phase: Phase) {
             self.localId = localId
             self.byteCount = byteCount
+            self.sent = sent
             self.phase = phase
         }
     }
@@ -48,15 +49,15 @@ public struct TellomiDiscoverImagePublish: Equatable {
         case missing
         case notUploading
         case emptyKey
+        case invalidKey
         case notFailed
     }
 
     public enum Posting: Equatable {
         case textOnly
         case blocked
-        /// Keys are present, in selection order. The post is not sendable until the engine
-        /// contract names the field that carries them.
-        case heldUntilWireConfirmed([String])
+        /// Upload keys in selection order. These are the `media_keys` to send.
+        case ready([String])
     }
 
     public private(set) var limits: LimitPolicy
@@ -79,7 +80,13 @@ public struct TellomiDiscoverImagePublish: Equatable {
             }
             keys.append(key)
         }
-        return .heldUntilWireConfirmed(keys)
+        return .ready(keys)
+    }
+
+    /// Applies the verified 10-image and 20971520-byte caps. Does not open selection when the
+    /// caller has not been told that `media_upload` is on; the compose screen gates that.
+    public mutating func useVerifiedContract() -> Refusal? {
+        return self.confirm(maxCount: TellomiDiscoverImageContract.maxCount, maxBytesEach: TellomiDiscoverImageContract.maxBytes)
     }
 
     public mutating func confirm(maxCount: Int, maxBytesEach: Int) -> Refusal? {
@@ -126,6 +133,7 @@ public struct TellomiDiscoverImagePublish: Equatable {
         }
         switch self.items[index].phase {
         case .selected, .failed:
+            self.items[index].sent = 0
             self.items[index].phase = .uploading
             return nil
         case .uploading, .uploaded:
@@ -141,6 +149,20 @@ public struct TellomiDiscoverImagePublish: Equatable {
             return .notUploading
         }
         self.items[index].phase = .failed
+        return nil
+    }
+
+    public mutating func noteSent(localId: String, sent: Int) -> Refusal? {
+        guard let index = self.index(of: localId) else {
+            return .missing
+        }
+        guard case .uploading = self.items[index].phase else {
+            return .notUploading
+        }
+        guard sent >= 0, sent <= self.items[index].byteCount else {
+            return .byteCountInvalid
+        }
+        self.items[index].sent = sent
         return nil
     }
 
@@ -160,15 +182,19 @@ public struct TellomiDiscoverImagePublish: Equatable {
         guard case .failed = self.items[index].phase else {
             return .notFailed
         }
+        self.items[index].sent = 0
         self.items[index].phase = .uploading
         return nil
     }
 
-    /// `key` is whatever a confirmed upload response supplied. An empty key is refused.
+    /// `key` must be the `Media-Key` from a finished upload (`m/` and a UUID).
     public mutating func complete(localId: String, key: String) -> Refusal? {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return .emptyKey
+        }
+        guard let key = tellomiDiscoverMediaKey(trimmed) else {
+            return .invalidKey
         }
         guard let index = self.index(of: localId) else {
             return .missing
@@ -176,7 +202,8 @@ public struct TellomiDiscoverImagePublish: Equatable {
         guard case .uploading = self.items[index].phase else {
             return .notUploading
         }
-        self.items[index].phase = .uploaded(key: trimmed)
+        self.items[index].sent = self.items[index].byteCount
+        self.items[index].phase = .uploaded(key: key)
         return nil
     }
 

@@ -15,6 +15,9 @@ final class TellomiDiscoverPostController: ViewController {
     private let loader: TellomiDiscoverLoader
     private let configuration: TellomiDiscoverConfiguration
     private let loggedIn: Bool
+    private let mediaUpload: Bool
+    private let mediaBaseURL: URL?
+    private let previews: TellomiDiscoverLocalPreviewBook?
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
     private var audienceDisposable: Disposable?
@@ -22,16 +25,27 @@ final class TellomiDiscoverPostController: ViewController {
     private let linkCard = TellomiDiscoverLinkCardView()
     private var commentRows: [TellomiDiscoverCommentRow] = []
     private var pollButtons: [UIButton] = []
+    private var imageViews: [UIImageView] = []
+    private var imageTasks: [URLSessionDataTask] = []
+    private let imageSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        return URLSession(configuration: configuration)
+    }()
     private var post: TellomiDiscoverPost?
     private var failed = false
     private var started = false
 
-    init(context: AccountContext, postId: String, loader: TellomiDiscoverLoader, configuration: TellomiDiscoverConfiguration, loggedIn: Bool) {
+    init(context: AccountContext, postId: String, loader: TellomiDiscoverLoader, configuration: TellomiDiscoverConfiguration, loggedIn: Bool, mediaUpload: Bool = false, mediaBaseURL: URL? = nil, previews: TellomiDiscoverLocalPreviewBook? = nil) {
         self.context = context
         self.postId = postId
         self.loader = loader
         self.configuration = configuration
         self.loggedIn = loggedIn
+        self.mediaUpload = mediaUpload
+        self.mediaBaseURL = mediaBaseURL
+        self.previews = previews
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
         let copy = TellomiTabCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict))
@@ -58,6 +72,9 @@ final class TellomiDiscoverPostController: ViewController {
     deinit {
         self.presentationDataDisposable?.dispose()
         self.audienceDisposable?.dispose()
+        for task in self.imageTasks {
+            task.cancel()
+        }
     }
 
     override func loadDisplayNode() {
@@ -77,6 +94,17 @@ final class TellomiDiscoverPostController: ViewController {
         let size = self.textNode.updateLayout(CGSize(width: width, height: 4000))
         transition.updateFrame(node: self.textNode, frame: CGRect(x: 16, y: top, width: size.width, height: size.height))
         var commentY = self.textNode.frame.maxY + 12.0
+        for imageView in self.imageViews {
+            let imageWidth = min(width, 280.0)
+            let imageHeight: CGFloat
+            if let image = imageView.image, image.size.width > 1, image.size.height > 1 {
+                imageHeight = min(320.0, imageWidth * image.size.height / image.size.width)
+            } else {
+                imageHeight = 160.0
+            }
+            imageView.frame = CGRect(x: 16.0, y: commentY, width: imageWidth, height: imageHeight)
+            commentY = imageView.frame.maxY + 8.0
+        }
         if self.linkCard.isHidden {
             self.linkCard.frame = .zero
         } else {
@@ -121,7 +149,7 @@ final class TellomiDiscoverPostController: ViewController {
                 self?.audienceDisposable?.dispose()
                 self?.audienceDisposable = disposable
             }, completion: completion)
-        }, published: {})
+        }, published: {}, mediaUpload: self.mediaUpload, configuration: self.configuration, loader: self.loader, previews: self.previews)
         self.push(controller)
     }
 
@@ -162,6 +190,7 @@ final class TellomiDiscoverPostController: ViewController {
             case let .success(.cards(cards)):
                 self.post = cards.first.map(tellomiDiscoverDisplayPost)
                 self.failed = self.post == nil || self.post?.unavailable == true
+                self.installImages()
             default:
                 self.failed = true
             }
@@ -244,6 +273,61 @@ final class TellomiDiscoverPostController: ViewController {
             self.displayNode.view.addSubview(row)
             return row
         }
+    }
+
+    private func installImages() {
+        for task in self.imageTasks {
+            task.cancel()
+        }
+        self.imageTasks = []
+        for view in self.imageViews {
+            view.removeFromSuperview()
+        }
+        self.imageViews = []
+        guard self.isNodeLoaded, let post = self.post else {
+            return
+        }
+        let remote = post.images.compactMap { tellomiDiscoverImageURL(image: $0, mediaBaseURL: self.mediaBaseURL) }
+        let local = self.previews?.images(for: self.postId) ?? []
+        let source = tellomiDiscoverImagePreviewSource(cardState: post.unavailable ? "unavailable" : "ok", remoteURLs: remote, hasLocalBytes: !local.isEmpty)
+        switch source {
+        case .remote:
+            self.previews?.drop(postId: self.postId)
+            for url in remote {
+                let view = self.makeImageView(image: nil)
+                let task = self.imageSession.dataTask(with: url) { [weak self, weak view] data, response, _ in
+                    guard let http = response as? HTTPURLResponse, http.statusCode == 200, let data, let image = UIImage(data: data) else {
+                        return
+                    }
+                    DispatchQueue.main.async {
+                        view?.image = image
+                        guard let self, let layout = self.currentlyAppliedLayout else {
+                            return
+                        }
+                        self.containerLayoutUpdated(layout, transition: .immediate)
+                    }
+                }
+                task.resume()
+                self.imageTasks.append(task)
+            }
+        case .local:
+            for data in local {
+                _ = self.makeImageView(image: UIImage(data: data))
+            }
+        case .none:
+            break
+        }
+    }
+
+    private func makeImageView(image: UIImage?) -> UIImageView {
+        let view = UIImageView(image: image)
+        view.contentMode = .scaleAspectFill
+        view.clipsToBounds = true
+        view.layer.cornerRadius = 8.0
+        view.backgroundColor = self.presentationData.theme.list.itemSecondaryTextColor.withAlphaComponent(0.12)
+        self.displayNode.view.addSubview(view)
+        self.imageViews.append(view)
+        return view
     }
 }
 

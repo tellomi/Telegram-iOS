@@ -54,12 +54,21 @@ private final class TellomiDiscoverHTTPS {
         var request = URLRequest(url: call.url)
         request.httpMethod = call.method
         request.httpBody = call.body
-        if call.authorizes {
-            request.setValue("Bearer \(call.token)", forHTTPHeaderField: "Authorization")
+        if let body = call.body, body.count > 1_000_000 {
+            request.timeoutInterval = 120
         }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let contentType = call.contentType {
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        }
+        for (name, value) in call.extraHeaders {
+            if name.caseInsensitiveCompare("Authorization") == .orderedSame {
+                continue
+            }
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+        if call.authorizes {
+            request.setValue("Bearer \(call.token)", forHTTPHeaderField: "Authorization")
         }
         let task = self.session.dataTask(with: request) { data, response, error in
             let result: Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>
@@ -70,7 +79,13 @@ private final class TellomiDiscoverHTTPS {
                 if body.count > 2_000_000 {
                     result = .failure(.unreadable)
                 } else {
-                    result = .success(TellomiDiscoverHTTPResult(status: http.statusCode, body: body))
+                    var headers: [String: String] = [:]
+                    for (key, value) in http.allHeaderFields {
+                        if let name = key as? String, let text = value as? String {
+                            headers[name] = text
+                        }
+                    }
+                    result = .success(TellomiDiscoverHTTPResult(status: http.statusCode, body: body, headers: headers))
                 }
             } else {
                 result = .failure(.unavailable)

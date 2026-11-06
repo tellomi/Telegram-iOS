@@ -34,14 +34,15 @@ final class TellomiDiscoverImagePublishTests: XCTestCase {
         XCTAssertEqual(images.retry(localId: "b"), .notFailed)
         XCTAssertNil(images.retry(localId: "a"))
         XCTAssertEqual(images.complete(localId: "a", key: " "), .emptyKey)
-        XCTAssertNil(images.complete(localId: "a", key: "key-a"))
+        XCTAssertEqual(images.complete(localId: "a", key: "key-a"), .invalidKey)
+        XCTAssertNil(images.complete(localId: "a", key: "m/11111111-1111-4111-8111-111111111111"))
         XCTAssertEqual(images.posting, .blocked)
         XCTAssertNil(images.cancel(localId: "b"))
         XCTAssertFalse(images.items.contains(where: { $0.localId == "b" }))
-        guard case let .heldUntilWireConfirmed(keys) = images.posting else {
-            return XCTFail("expected held keys")
+        guard case let .ready(keys) = images.posting else {
+            return XCTFail("expected ready keys")
         }
-        XCTAssertEqual(keys, ["key-a"])
+        XCTAssertEqual(keys, ["m/11111111-1111-4111-8111-111111111111"])
     }
 
     func testRetryKeepsThePostNonce() {
@@ -87,27 +88,31 @@ final class TellomiDiscoverImagePublishTests: XCTestCase {
         XCTAssertNil(pollObject?["quote_of"])
     }
 
-    func testHeldKeysAreNotWrittenIntoTheTextBody() {
+    func testReadyKeysArePostedInOrderAndTextOnlyStaysBare() {
         var images = TellomiDiscoverImagePublish()
-        XCTAssertNil(images.confirm(maxCount: 1, maxBytesEach: 50))
-        XCTAssertNil(images.select(localId: "a", byteCount: 10))
+        XCTAssertNil(images.useVerifiedContract())
+        XCTAssertEqual(TellomiDiscoverImageContract.maxCount, 10)
+        XCTAssertEqual(TellomiDiscoverImageContract.maxBytes, 20_971_520)
+        XCTAssertNil(images.select(localId: "a", byteCount: TellomiDiscoverImageContract.maxBytes))
+        XCTAssertEqual(images.select(localId: "big", byteCount: TellomiDiscoverImageContract.maxBytes + 1), .overBytes)
         XCTAssertNil(images.beginUpload(localId: "a"))
-        XCTAssertNil(images.complete(localId: "a", key: "uploaded-key"))
-        guard case let .heldUntilWireConfirmed(keys) = images.posting else {
-            return XCTFail("expected hold")
+        XCTAssertNil(images.complete(localId: "a", key: "m/11111111-1111-4111-8111-111111111111"))
+        guard case let .ready(keys) = images.posting else {
+            return XCTFail("expected ready keys")
         }
-        XCTAssertEqual(keys, ["uploaded-key"])
-        let body = tellomiDiscoverPublishBody(
-            text: "hello",
-            visibility: .everyone,
-            audienceToken: nil,
-            clientNonce: self.nonce,
-            textLimit: 500
-        )
-        let object = try? JSONSerialization.jsonObject(with: body ?? Data()) as? [String: Any]
-        XCTAssertNil(object?["media_keys"])
-        XCTAssertNil(object?["media"])
-        XCTAssertEqual(object?["text"] as? String, "hello")
+        XCTAssertEqual(keys, ["m/11111111-1111-4111-8111-111111111111"])
+        let bare = tellomiDiscoverPublishBody(text: "hello", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500)
+        let bareObject = try? JSONSerialization.jsonObject(with: bare ?? Data()) as? [String: Any]
+        XCTAssertNil(bareObject?["media_keys"])
+        XCTAssertNil(bareObject?["operation_id"])
+        let posted = tellomiDiscoverPublishBody(text: "  ", visibility: .contacts, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, mediaKeys: keys)
+        let object = try? JSONSerialization.jsonObject(with: posted ?? Data()) as? [String: Any]
+        XCTAssertEqual(object?["text"] as? String, "")
+        XCTAssertEqual(object?["visibility"] as? String, "contacts")
+        XCTAssertEqual(object?["media_keys"] as? [String], keys)
+        XCTAssertNil(object?["operation_id"])
+        XCTAssertNotEqual(TellomiDiscoverVisibility.contacts.rawValue, "friends")
+        XCTAssertNotEqual(TellomiDiscoverVisibility.closeFriends.rawValue, "only_me")
     }
 
     #if os(Linux)
@@ -118,7 +123,7 @@ final class TellomiDiscoverImagePublishTests: XCTestCase {
             ("testIncompleteUploadBlocksPublishAndCancelDropsIt", testIncompleteUploadBlocksPublishAndCancelDropsIt),
             ("testRetryKeepsThePostNonce", testRetryKeepsThePostNonce),
             ("testTextQuotePollBodyIsUnchangedWhenNoImagesAreSelected", testTextQuotePollBodyIsUnchangedWhenNoImagesAreSelected),
-            ("testHeldKeysAreNotWrittenIntoTheTextBody", testHeldKeysAreNotWrittenIntoTheTextBody)
+            ("testReadyKeysArePostedInOrderAndTextOnlyStaysBare", testReadyKeysArePostedInOrderAndTextOnlyStaysBare)
         ]
     }
     #endif

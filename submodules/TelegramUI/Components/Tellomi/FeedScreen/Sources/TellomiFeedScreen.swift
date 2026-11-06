@@ -38,6 +38,9 @@ public final class TellomiFeedScreen: ViewController {
     private var engineVisible: Bool?
     private var engineConfigLoaded = false
     private var textLimit = tellomiDiscoverPostTextLimit
+    private var mediaUpload = false
+    private var mediaBaseURL: URL?
+    private let localPreviews = TellomiDiscoverLocalPreviewBook()
     private var loading = false
     private var loadingMore = false
     private var feedGeneration = 0
@@ -290,7 +293,7 @@ public final class TellomiFeedScreen: ViewController {
                     self.pendingPostId = nil
                     self.postPresentAttempts = 0
                     self.postPresentRetryQueued = false
-                    let controller = TellomiDiscoverPostController(context: self.context, postId: id, loader: self.loader, configuration: configuration, loggedIn: loggedIn)
+                    let controller = TellomiDiscoverPostController(context: self.context, postId: id, loader: self.loader, configuration: configuration, loggedIn: loggedIn, mediaUpload: self.mediaUpload, mediaBaseURL: self.mediaBaseURL, previews: self.localPreviews)
                     self.push(controller)
                 } else if !self.postPresentRetryQueued, self.postPresentAttempts < self.postPresentAttemptLimit {
                     self.postPresentAttempts += 1
@@ -535,6 +538,7 @@ public final class TellomiFeedScreen: ViewController {
             case let .success(.capabilities(value)):
                 self.sawCapabilities = true
                 self.engineHasFeed = value.features.contains("feed")
+                self.mediaUpload = tellomiDiscoverFeatureEnabled(value, TellomiDiscoverImageContract.mediaUpload)
                 self.advance(reset: reset, generation: generation, kind: kind, cursor: cursor, configuration: configuration)
             case let .success(.status(visible)):
                 self.engineVisible = visible
@@ -542,6 +546,7 @@ public final class TellomiFeedScreen: ViewController {
             case let .success(.engineConfig(value)):
                 self.engineConfigLoaded = true
                 self.textLimit = value.postTextChars
+                self.mediaBaseURL = value.mediaBaseURL
                 self.tabs = tellomiDiscoverHomeTabs()
                 if !self.tabs.contains(self.kind) {
                     self.kind = self.tabs[0]
@@ -684,7 +689,7 @@ public final class TellomiFeedScreen: ViewController {
             }
             self.posts[self.kind] = nil
             self.sync(reload: true)
-        })
+        }, mediaUpload: self.mediaUpload, configuration: configuration, loader: self.loader, previews: self.localPreviews)
         self.push(controller)
     }
 }
