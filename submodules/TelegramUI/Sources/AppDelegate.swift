@@ -1300,6 +1300,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             })
             |> mapToSignal { context -> Signal<(AccountContext, CallListSettings)?, NoError> in
                 return sharedApplicationContext.sharedContext.accountManager.transaction { transaction -> CallListSettings? in
+                    tellomiCaptureLaunchTabs(transaction)
                     return transaction.getSharedData(ApplicationSpecificSharedDataKeys.callListSettings)?.get(CallListSettings.self)
                 }
                 |> reduceLeft(value: nil) { current, updated -> CallListSettings? in

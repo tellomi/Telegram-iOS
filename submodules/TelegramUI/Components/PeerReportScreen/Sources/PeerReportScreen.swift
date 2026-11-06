@@ -208,7 +208,7 @@ public func presentPeerReportOptions(
     }
 }
 
-public func peerReportOptionsController(context: AccountContext, subject: PeerReportSubject, options: [PeerReportOption] = [.spam, .violence, .pornography, .childAbuse, .copyright, .other], passthrough: Bool, present: @escaping (ViewController, Any?) -> Void, push: @escaping (ViewController) -> Void, completion: @escaping (ReportReason?, Bool) -> Void) -> ViewController {
+public func peerReportOptionsController(context: AccountContext, subject: PeerReportSubject, options: [PeerReportOption] = [.spam, .violence, .pornography, .childAbuse, .copyright, .other], passthrough: Bool, present: @escaping (ViewController, Any?) -> Void, push: @escaping (ViewController) -> Void, completion: @escaping (ReportReason?, Bool) -> Void, submitLocally: ((ReportReason, String) -> Void)? = nil) -> ViewController {
     let presentationData = context.sharedContext.currentPresentationData.with { $0 }
     let controller = ActionSheetController(theme: ActionSheetControllerTheme(presentationData: presentationData))
         
@@ -269,6 +269,11 @@ public func peerReportOptionsController(context: AccountContext, subject: PeerRe
                 }
                 
                 let action: (String) -> Void = { message in
+                    if let submitLocally {
+                        submitLocally(reportReason, message)
+                        completion(nil, true)
+                        return
+                    }
                     if passthrough {
                         completion(reportReason, true)
                     } else {

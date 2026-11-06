@@ -696,7 +696,12 @@ public extension EngineChatList {
                     items.append(item)
                 }
             case .HoleEntry:
-                isLoading = true
+                // The hole is the end of the loaded page (older dialogs still
+                // fetching). Dialogs collected before it stay on screen. Replacing
+                // them with an empty loading list clamps the scroll offset to the top.
+                if items.isEmpty {
+                    isLoading = true
+                }
                 break loop
             }
         }

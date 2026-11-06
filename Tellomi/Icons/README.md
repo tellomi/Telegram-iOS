@@ -2,6 +2,8 @@
 
 `mapping.csv` is the list of asset-catalog imagesets replaced with MingCute.
 `line` reads `MingCute/svg/regular`, `fill` reads `MingCute/svg/filled`.
+A name starting with `semantic/` is a composed glyph in `semantic/`
+(a MingCute drawing plus a slash, a lock, or letters).
 The app tints the PDF at runtime, so each file is black on a clear page and
 keeps the imageset's point size. An empty canvas column fits the glyph into
 the original ink box. `WxH` is a new imageset. `match:<asset>` copies that
@@ -12,11 +14,17 @@ Regenerate after editing the csv:
 
 ```sh
 python3 Tellomi/Icons/generate_icons.py
+python3 Tellomi/Icons/check_sizes.py
 ```
 
-Needs `pdftoppm` (poppler), plus the Python packages `cairosvg`, `pypdf`, and `Pillow`.
-Measure the existing art before replacing it. Running the script again measures
-the PDFs it just wrote.
+Needs the Python packages `cairosvg`, `pypdf`, and `Pillow`. `pdftoppm` (poppler)
+is used when an upstream icon is remeasured. `upstream_ink.json` is the ink
+box of each icon from before the MingCute replacement, so running the
+generator again does not measure the PDF it just wrote.
+
+`check_sizes.py` fails when a replaced icon's long ink side is under 0.9 of
+that upstream box. `Make.py build` and `Make.py test` run it. An explicit
+`WxH` canvas with no upstream icon is not compared.
 
 The main tab bar uses the line image at rest and the fill image when selected,
 and scales from 0.86 to 1. The `Tab*` Lottie files those tabs and the attach

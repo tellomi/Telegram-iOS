@@ -14,6 +14,7 @@ import TelegramStringFormatting
 import PeerNameColorItem
 import WalletContext
 import AuthorizationUI
+import TelegramUIPreferences
 
 enum SettingsSection: Int, CaseIterable {
     case edit
@@ -83,9 +84,11 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     }
     
     if let settings = data.globalSettings {
-        if settings.premiumGracePeriod {
-            items[.phone]!.append(PeerInfoScreenInfoItem(id: 0, title: "Your access to Telegram Premium will expire soon!", text: .markdown("Unfortunately, your latest payment didn't come through. To keep your access to exclusive features, please renew the subscription."), isWarning: true, linkAction: nil))
-            items[.phone]!.append(PeerInfoScreenActionItem(id: 1, text: "Restore Subscription", action: {
+        let premiumEnabled = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).premiumEnabled
+        if settings.premiumGracePeriod, premiumEnabled {
+            let graceCopy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
+            items[.phone]!.append(PeerInfoScreenInfoItem(id: 0, title: graceCopy.premiumGraceTitle, text: .markdown(graceCopy.premiumGraceText), isWarning: true, linkAction: nil))
+            items[.phone]!.append(PeerInfoScreenActionItem(id: 1, text: graceCopy.premiumGraceAction, action: {
                 interaction.openSettings(.premiumManagement)
             }))
         } else if settings.suggestPhoneNumberConfirmation, case let .user(peer) = data.peer {
@@ -276,6 +279,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 4, label: .text(languageName.isEmpty ? presentationData.strings.Localization_LanguageName : languageName), text: presentationData.strings.Settings_AppLanguage, icon: PresentationResourcesSettings.language, action: {
         interaction.openSettings(.language)
     }))
+    tellomiAppendNavigationSettingsEntry(items: &items, context: context, presentationData: presentationData, interaction: interaction)
     
     let featureGate = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
     if featureGate.premiumEnabled {
@@ -349,6 +353,10 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     }))
     items[.support]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.Settings_Tips, icon: PresentationResourcesSettings.tips, action: {
         interaction.openSettings(.tips)
+    }))
+    let openSourceLicensesTitle = presentationData.strings.primaryComponent.languageCode.lowercased().hasPrefix("zh") ? "开源许可" : "Open Source Licenses"
+    items[.support]!.append(PeerInfoScreenDisclosureItem(id: 3, text: openSourceLicensesTitle, icon: PresentationResourcesSettings.faq, action: {
+        interaction.openSettings(.openSourceLicenses)
     }))
     
     var result: [(AnyHashable, [PeerInfoScreenItem])] = []

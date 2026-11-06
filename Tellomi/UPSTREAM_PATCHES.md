@@ -550,7 +550,7 @@ The nickname screen and the two-step screen again use Telegram's authorization l
 
 Phone, email, and code screens still differ from upstream. Those differences are listed in the pull request. A cleared unauthorized state no longer replaces the code screen with the welcome carousel while that login attempt is still current.
 
-Gallery and Location in the attach tray are the same 30×30 MingCute line icons as File and Poll. They had been fitted into the old ink box and drew smaller.
+Gallery and Location in the attach tray were given the same 30×30 canvas as File and Poll, because fitting them into the old ink box drew them smaller. That canvas is removed by the icon-size fix below. File and Poll still use the 30×30 canvas: they had no upstream icon.
 
 `DeviceLocationManager` asks for `kCLLocationAccuracyBest` and `requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocation")`. `DeviceAccess.authorizeAccess` asks through `LocationManager.requestPreciseLocationIfReduced()` (the helper is on that wrapper, not on `CLLocationManager`). `Info.plist` / `InfoBazel.plist` carry `NSLocationTemporaryUsageDescriptionDictionary`. The current-location row sends `accuracy_radius` from `CLLocation.horizontalAccuracy`. Apple Maps is still given WGS-84; MapKit applies the China offset. 高德 uses `dev=1`, 百度 `coord_type=wgs84`, 腾讯 is converted to GCJ-02 in `TellomiMapOpenIn`.
 
@@ -599,3 +599,294 @@ The list is built on a background queue and cached. The phone screen starts that
 | `submodules/CountrySelectionUI/Sources/TellomiCountryListPreparation.swift` | New. Background build and cache. Same pinyin index and the same sort as the controller had. |
 | `submodules/CountrySelectionUI/Sources/AuthorizationSequenceCountrySelectionControllerNode.swift` | Init uses the cache. A miss does not sort on the main thread. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | Starts the build when the phone screen loads, and again after `help.getCountriesList`. `tellomiWarmCountryList` is public so that module can call it. |
+
+## Bottom navigation (M2)
+
+Fresh install shows Discover, Chats, and Settings (D-5). Calls and Contacts start hidden. Chats and Settings cannot be hidden (D-7). The app opens on Chats (D-8). There is no migration. `ios_killswitch_disable_tellomi_tabs` = `1` puts the upstream tab order back. The Calls nil-default below is not behind that switch: a missing `CallListSettings` hides Calls either way. `getContactsController` only returns a controller that already exists; it does not push. `openContacts` pushes a contacts page when that tab is hidden. A `tell.cc/m#<id>` link is handled only while the Tellomi bar is on. The kill switch returns it to the normal opener. A tap in a chat resolves that address before the external opener: the path `/m` is the username `m`, so Discover stayed hidden and the post never opened (D-57). `resolveUrlImpl` now returns that address as an external URL when the bar is on, before autologin can rewrite the fragment, and the existing opener turns Discover back on and opens the post. If the feed screen is not in a navigation stack yet (the chat is still closing), the post stays pending and is presented again for about a second.
+
+The Calls tab already hides from a long-press on its icon (`CallListController.tabBarItemContextAction`, `Calls_HideCallsTab`). The calls list opened from Settings still has the Show Calls Tab switch (`showSettings` on `.navigation`). Both write `CallListSettings`. New Message uses `ContactSelectionController`, not the Contacts tab, so hiding Contacts leaves that list in place.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUIPreferences/Sources/CallListSettings.swift` | `showTab` is false when `_showTab` is nil (one line). An explicit true or false is unchanged. |
+| `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | `ApplicationSpecificSharedDataKeyValues.tellomiTabSettings = 100`, stored with `applicationSpecificSharedDataKey` (the stored id is 1100). Upstream's highest shared-data id here is 22. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabSettings.swift` | New. `showFeedTab` defaults true, `showContactsTab` defaults false. Tab order and the kill switch. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | New. Tab copy, the `tell.cc/m#` post id, and the two rules the root controller calls. A post link is not consumed when the kill switch is on. The contacts getter never pushes. `tellomiFeedPostLinkEscapesPeerResolution` is the chat-tap rule: that address must not become the user `m`. |
+| `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | Host tests for that copy, the post-link kill switch, the contacts lookup, and the chat-tap rule. |
+| `submodules/UrlHandling/Sources/UrlHandling.swift` | `resolveUrlImpl` returns a post link as an external URL when the bar is on, before autologin. The external opener already reopens Discover (D-57). `/m/<slug>` is unchanged. |
+| `submodules/TelegramUI/Sources/AppDelegate.swift` | The existing calls-settings transaction also calls `tellomiCaptureLaunchTabs` (one line) so the first tab bar matches the saved record. |
+| `submodules/TelegramUI/Sources/ApplicationContext.swift` | `tellomiStartTabObservation` / `tellomiStopTabObservation`, same shape as the calls-tab subscription at the lines above it. |
+| `submodules/TelegramUI/Sources/TelegramRootController.swift` | `addRootControllers` and `updateRootControllers` call `tellomiAppendRootTabs`. When that returns false the original appends run. `getContactsController` looks up a contacts page and does not push. `openContacts` pushes one when the tab is hidden. |
+| `submodules/TelegramUI/Sources/OpenUrl.swift` | `continueHandling` returns early on `tell.cc/m#<id>` (`tellomiHandleFeedPostLink`). The kill switch makes that function return false, so the link is not swallowed. A `/m/<slug>` path is still a message link. |
+| `submodules/TelegramUI/Sources/TellomiBottomNavigation.swift` | New. Order, observation, the hidden-contacts push from `openContacts`, and re-enabling Discover for a post link (D-57). The observation compares `TellomiTabSettings`. A `(Bool, Bool)` does not satisfy `Equatable`, so `distinctUntilChanged` does not accept it. |
+| `submodules/ContactListUI/Sources/ContactsController.swift` | One call, `tellomiAppendHideContactsTabItem`, on the existing tab-icon long-press. |
+| `submodules/ContactListUI/Sources/TellomiContactsTabMenu.swift` | New. Hide Contacts, same menu as Hide Calls. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | One call, `tellomiAppendNavigationSettingsEntry`, after Language. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/TellomiNavigationSettingsEntry.swift` | New. Settings row that pushes the navigation page. |
+| `submodules/SettingsUI/Sources/TellomiNavigationSettingsController.swift` | New. Discover, Calls, and Contacts switches. Chats and Settings are on and disabled (D-7). Calls uses `CallListSettings`, so the old Show Calls Tab switch still works. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | New module `TellomiFeedScreen`. Empty Discover tab (D-37). Not `NewsScreen`. Long-press hides it (D-38). `TellomiFeedScreenNode` imports `TelegramUIPreferences` so it can read `TellomiTabCopy`. Opening a post from a link retries for about a second when the screen is not in a navigation stack yet. |
+| `submodules/TelegramUI/BUILD` | Depends on that module. |
+
+## DC addresses from help.getConfig (M7 / D-33)
+
+`Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Network/TellomiDcAddress.swift` | New. `tellomiAcceptDcAddress` and `tellomiAcceptedDatacenterAddresses`. |
+| `submodules/TelegramCore/Sources/Network/TellomiDcOptionInputs.swift` | New. Reads `Api.DcOption` into that filter. |
+| `submodules/TelegramCore/Sources/State/ManagedConfigurationUpdates.swift` | The signed-in `help.getConfig` path writes only the addresses the filter keeps. |
+| `submodules/TelegramCore/Sources/State/Serialization.swift` | `requestDatacenterAddress` (datacenter discovery) uses the same filter. |
+| `submodules/TelegramCore/Tests/TellomiDcAddressTests.swift` | The literals from Android `check_dc_address.cpp`, plus empty, hostname-only, mixed, and duplicate cases. |
+
+## Discover feed (M3 / C-M3a)
+
+The Discover tab stays on the M2 empty state until app config `tellomi_discover_feed_enabled` is true. A missing key is off. Logged-out sessions do not call `discover.getEngineCredential` and do not call content-engine. The credential is `discover.getEngineCredential#a80a7f76` (teamgram #152), not Signal-Server. Neither call is in the generated Telegram schema; `TelegramApi` boxes the constructor, and `TelegramCore` sends it on the logged-in account. Feed routes follow content-engine's client API: `GET /v1/capabilities` (no credential), `GET /v1/feed/status`, `GET /v1/feed/config`, `GET /v1/feed/recommend` and `/following` (ids only), then `POST /v1/feed/cards`. A text post is `POST /v1/feed/posts` with `kind`, `text`, `visibility` (`public`, `contacts`, or `close_friends`), and `client_nonce`. `include` and `exclude` call `discover.getAudienceToken#dc5213c2` (`kind` plus `user_ids`, 1–500, not the caller) and put the returned JWT in `audience.audience_token`. The token lasts 10 minutes; the client fetches another before `expires`. `DISCOVER_DISABLED`, `AUDIENCE_INVALID`, `USER_ID_INVALID`, and `USER_IS_BLOCKED` stay on the client. The home bar is always 推荐 / 关注 / 同城, including when `GET /v1/feed/config` omits `nearby` (see Discover nearby tab). `GET /v1/feed/nearby?city=<code>&cursor=` loads it, ten posts a page, newest first; the card body still comes from `POST /v1/feed/cards`. Unknown tab names are ignored.
+
+Visibility is Stories' `EngineStoryPrivacy` and `ShareWithPeersScreen` (editing, so the story screenshot / pin rows stay hidden). Everyone, contacts, and close friends post without an audience token. Close friends still go through `contacts.editCloseFriends`. Selected people (`include`) and exclusion lists (`exclude`) call `discover.getAudienceToken` with the cloud-user id, then post that JWT unchanged. A list that is empty, longer than 500, contains the caller, a duplicate, or a non-user is not sent. A post may include `city`, a `<country>:<slug>` code such as `cn:chengdu`. It is omitted when the user has not chosen one, and it is not edited after send. A bad code is `400 invalid_city` and is not sent. Hong Kong, Macau, and Taiwan use the `cn:` prefix (`cn:hong-kong`, `cn:macau`, `cn:taipei`). The code comes from `CLPlacemark.locality` or the manual city list. Location permission is requested the first time the nearby tab is opened, with When In Use and kilometer accuracy, because `DeviceLocationManager` asks for Always and full accuracy. A denial stays on the list. Street, state, latitude, and longitude are not query parameters.
+
+The bottom bar is on master (Telegram-iOS #60).
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiDiscover/` | New. Flag, credential bytes, feed and post URLs, city and Stories visibility mapping, JSON parse, loader. Host tests in `TellomiDiscoverTests`. |
+| `submodules/TelegramApi/Sources/TellomiDiscoverCredentialRPC.swift` | New. Builds `discover.getEngineCredential` and the boxed `discover.getAudienceToken` query. The schema file is unchanged. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDiscoverCredential.swift` | New. Sends both on `Account.network`. Audience errors map to `DISCOVER_DISABLED`, `AUDIENCE_INVALID`, `USER_ID_INVALID`, and `USER_IS_BLOCKED`. |
+| `submodules/TelegramCore/BUILD` | Depends on `TellomiDiscover`. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | Recommend, Following, and Nearby, post detail, text compose, and the Stories privacy screen. The M2 empty state remains when the flag is off. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/BUILD` | Depends on `TellomiDiscover`, `Geocoding`, and `ShareWithPeersScreen`. Cloud user ids go through `EnginePeer.Id.tellomiCloudUserId`. |
+
+## Public username minimum length
+
+Teamgram #182 accepts a public username of 4 characters. Upstream iOS already rejected a name shorter than 4 in `_internal_checkAddressNameFormat` (2022-11-08, both the final length check and a name that ends in `_`). The bundled English strings, and the Create Bot field's own minimum, still said 5. Settings ▸ Username, a channel public link, and a group public link all call `validateAddressNameInteractive`, which uses that one check. A sticker-set short name uses it too. A theme link stays 5–64; that gate is `EditThemeController`'s own `slug.count < 5` and is not this rule. Login and the session are unchanged. `zh-Hans` and `zh-Hant` do not ship these keys; a downloaded language pack can still say 5 until that pack is updated.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Peers/AddressNames.swift` | `addressNameMinimumLength` is 4. Both comparisons use it. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Username, channel, group, and Create Bot copy that said 5 characters now says 4. Both copies of `Group.Username.InvalidTooShort` are updated. |
+| `submodules/TelegramUI/Components/CreateBotScreen/Sources/CreateBotUsername.swift` | `minLength` is 4, the same minimum, counted on the full username including the `bot` suffix. |
+| `submodules/TelegramCore/Tests/AddressNameFormatTests.swift` | 4 characters pass. 3 characters, including one that ends in `_`, are `.tooShort`. |
+| `submodules/TelegramUI/Components/CreateBotScreen/Tests/CreateBotUsernameTests.swift` | `abot` (4) passes. `bot` (3) does not. |
+
+## Chat wallpaper and accent colors
+
+`account.getWallPapers` stays empty. Wallpapers are bundled. The default chat background is a pattern on a gradient: light `tm_doodle_light` is `#EFE7DD` with the doodle at 12% (dark strokes); dark `tm_doodle_dark` is `#0B141A` → `#16232B` with the doodle at 8% (light strokes, negative intensity). The wallpaper grid injects the 10 built-in entries when the server list is empty. The color grid keeps one solid, `#F0F2F5` in light and `#101418` in dark. A wallpaper stored in `themeSpecificChatWallpapers` is a choice and is left as stored, including pure black and the previous solids `#F2F2F2` and `#000000`: those values cannot be told apart from a color the user picked. Only an account with no saved wallpaper for that theme, or the historical `.builtin` token (the built-in default, not a chosen color), reads the new doodle. Night mode does not swap a saved wallpaper for the night doodle. Incoming bubbles are `#FFFFFF` / `#202C33`. The bubble shadow is the same 0.5 pt spec on every wallpaper, not only a solid color: merged bubbles stay 0 pt apart, and the outline plus that shadow are what separates them. Stroke colors are the ones the theme already had. Date and service capsules use the custom-wallpaper fill; `tm_` patterns ask for blur even when the intensity is negative. The accent swatches are the 12 hex values, default `#3390EC`. A builtin theme with no saved accent uses that blue. Pattern tiles are Lucide (ISC), Tabler Icons (MIT), and Hero Patterns (CC BY 4.0, Steve Schoger). Settings ▸ Open Source Licenses names them. Login and the session are unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiWallpapers/` | Color table, wallpaper catalog, bubble colors, shadow spec, license text. Host tests in `TellomiWallpapersTests`. |
+| `Tellomi/Wallpapers/` | `WallpaperCatalog.json`, the SVG tiles, `generate_patterns.py`, `LICENSES.md`, `test_catalog.py`. |
+| `submodules/TelegramUI/Resources/tm_{doodle,dots,waves}.tgv` | Gzipped SVG the pattern renderer already accepts. |
+| `submodules/TelegramPresentationData/Sources/DefaultDayPresentationTheme.swift` | `tellomiDefaultWallpaper`, stock list, solid presets, bubble shadow. `.builtin` still becomes the doodle. A saved color does not. Day classic's suggested wallpaper is the light doodle. |
+| `submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift`, `DefaultDarkTintedPresentationTheme.swift` | Default wallpaper is the dark doodle. Dark incoming fill is `#202C33`. |
+| `submodules/TelegramPresentationData/Sources/PresentationData.swift` | The doodle is used when that theme has no saved wallpaper. A saved wallpaper, including black, stays, including when night mode turns on. |
+| `submodules/TelegramPresentationData/Sources/MakePresentationTheme.swift` | A builtin theme with no accent uses `#3390EC`. |
+| `submodules/TelegramUI/Components/Settings/WallpaperGridScreen/` | Empty server list gets the 10 built-ins. Color presets are the one solid. |
+| `submodules/TelegramUI/Components/TelegramAccountAuxiliaryMethods/` | `tm_doodle`, `tm_dots`, and `tm_waves` are read from the app bundle. |
+| `submodules/SettingsUI/Sources/Themes/ThemeColorPresets.swift`, `ThemePickerController.swift` | The accent row is the 12 colors. |
+| `submodules/SettingsUI/Sources/TellomiOpenSourceLicensesController.swift` | The license page. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/` | Settings row that opens it. |
+| `submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/` | Draws the bubble shadow whenever the chat has a wallpaper. |
+| `submodules/TellomiWallpapers/` `TellomiReactionCapsules` | Reaction capsule backgrounds. Day Classic outgoing is green `#3FC33B` (12% / solid). Day outgoing is white (12% / solid). Night incoming is white at 7%, night outgoing is white at 10% (12% once an accent is applied) and solid white when selected. The tinted theme's selected incoming capsule follows the accent. The accent itself stays `#3390EC`. |
+
+## Icon ink size
+
+`Tellomi/Icons/generate_icons.py` used to place MingCute's whole 24×24 viewBox inside the original ink box, using the shorter side of that box. The viewBox already has padding, so the glyph was shrunk twice. Of the icons that had an upstream PDF, 69 measured under 0.8 of the old long side (pin 0.57, back 0.44).
+
+The generator now crops each MingCute path to its own ink, scales it uniformly so the long side equals the upstream long side, and centers it on the upstream ink. MingCute outlines are filled paths, so that scale is also the stroke compensation: the outline weight changes with the glyph. `upstream_ink.json` holds the pre-replacement boxes (commit `599d6869aa^`), which is what a later run reads. `Chat/Input/Text/SendIcon` stays the up arrow from the send-mark change and is not in the mapping, so a regenerate does not draw the paper plane again. `IconForwardSend` is the right-pointing forward arrow; see "Icon meaning" below. Login screens are unchanged.
+
+`Tellomi/Icons/check_sizes.py` fails when a replaced icon's long ink side is under 0.9 of that upstream box. `Make.py build` and `Make.py test` run it. An explicit `WxH` canvas with no upstream icon is not compared.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/Icons/generate_icons.py` | Fit the MingCute ink to the upstream ink. |
+| `Tellomi/Icons/upstream_ink.json` | Page size and ink box from before the replacement. |
+| `Tellomi/Icons/pdf_ink.py`, `check_sizes.py` | Path ink, and the 0.9 check. |
+| `Tellomi/Icons/mapping.csv` | Gallery and Location use the upstream ink again. `SendIcon` is not generated. |
+| `build-system/Make/IconSizeCheck.py`, `Make.py` | The check runs with the Postbox import check. |
+| `submodules/TelegramUI/Images.xcassets` | The regenerated imagesets. |
+
+## Icon meaning
+
+The MingCute swap kept the old ink box and changed the drawing. These rows pointed at a glyph with a different meaning. Each one is either another MingCute file, a MingCute drawing with a slash, a lock, or letters added under `Tellomi/Icons/semantic/`, or the upstream PDF put back. `generate_icons.py` still scales them with `upstream_ink.json`. `check_sizes.py` passed (204 compared). Login screens are unchanged.
+
+Left as they were, on purpose:
+
+- Sticker and the settings GIF stay `sticker` and `film` in `mapping.csv`. #68 did not point those rows at a different glyph. The buttons and badges read the face and the GIF letters from the imagesets in the next section.
+- `Chat/Input/Text/IconVideo` stays `video-camera`. The round record button stays the camcorder. The play-in-a-frame glyph was `Chat/Attach Menu/Video` and `Item List/Icons/Video`; those are the camcorder now.
+- `Chat/Input/Text/SendIcon` stays the up arrow and is not generated.
+- Location was already MingCute's map pin (a teardrop with a hole). It is not the crosshair (`target`). The three location imagesets are unchanged.
+
+Reverted to the upstream PDF, because the MingCute camcorder's viewfinder reads as a play triangle:
+
+- `Chat/Context Menu/VideoCall` (`ic_menuvideocall.pdf`). It is still a template image.
+
+`MingCute/svg/regular/clock.svg` was MingCute's icon named clock, which is a map pin with a check. The file is now MingCute `time`, a clock face. `Item List/Icons/Clock` and `Chat/Context Menu/Schedule` both use it.
+
+Other substitutions: forward arrows are `share-forward` (the hook points right), including `IconForwardSend`, which is no longer the same up arrow as Send. Unpin is `pin-2` plus a slash. The stealth eye is `eye-off`; the locked one adds a padlock. Mute for notifications is a bell, and "mute for" is that bell plus a Z. Business is a storefront, devices are a phone and a tablet, cellular is signal bars, stories is the dotted ring, Stars is a star inside a circle, data is a cylinder, select-all is a checklist, read-all is an inbox plus one check, mark-as-read is a bubble plus one check. Share is the box with an arrow. Topics is a bulleted list. Proxy is a shield with two arrows. The account-switch chevron points up and down. Poll is a bar chart. Report is a circle with an exclamation point. Members is two people, the group icon stays three. Trending stickers use the flame, not the drop-shaped `flame` glyph. AI tools are the letters AI.
+
+`Tellomi/Icons/test_icon_pairs.py` fails if pin and unpin, Eye and EyeLocked, Read and ReadAll and SelectAll, Business and a channel, or Devices and Cellular resolve to the same SVG.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/Icons/mapping.csv` | The rows above. `SendIcon` is still absent. |
+| `Tellomi/Icons/generate_icons.py` | `semantic/` names read from `Tellomi/Icons/semantic`. |
+| `Tellomi/Icons/semantic/` | Slash, lock, letters, and the other composed glyphs. |
+| `Tellomi/Icons/MingCute/svg/` | The additional MingCute files, and `clock.svg` replaced with `time`. |
+| `Tellomi/Icons/test_icon_pairs.py` | The pair check. |
+| `Chat/Context Menu/VideoCall.imageset` | Upstream camera PDF. |
+| `Images.xcassets` | The regenerated imagesets whose source changed. |
+
+## Sticker and GIF glyphs
+
+MingCute's `sticker` is a blank note with a folded corner, and `film` is a film strip with no letters. The composer sticker button, the attach-menu sticker, the sticker rows in context menus, the settings sticker badge, and the settings GIF badge used those two. The emoji keyboard's own sticker and GIF tabs were never in `mapping.csv` and already show a face and the letters GIF. #68 left `AccessoryIconStickers`, `Chat/Attach Menu/Sticker`, `Chat/Context Menu/Sticker`, `Item List/Icons/Sticker`, and `Item List/Icons/Gif` mapped to `sticker` and `film`. It did not substitute another drawing. Those call sites use the face and the GIF letters below instead of those mapped files.
+
+The round video button stays `Chat/Input/Text/IconVideo`, the MingCute camcorder (`video-camera`). It is not the play-in-a-square `video` glyph. Chat-list sent and read marks are still drawn in `generateStatusCheckImage`: one check when the message is sent, and a second stroke only when it is read. The composer send arrow is `actionControlForegroundColor` (white in day) on `actionControlFillColor` (the accent, default `#3390EC`). The media-picker send disc is `#111111` with the arrow tinted white. This change does not edit `generate_icons.py` or `mapping.csv`. The face and GIF imagesets are not rows in the mapping, so a size pass does not rewrite them. The other files in `Tellomi/Icons/semantic/` are #68's compositions.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/Icons/semantic/sticker.svg` | MingCute note outline plus two eyes and a smile. |
+| `Tellomi/Icons/semantic/gif.svg` | Rounded rectangle with the letters GIF. |
+| `Tellomi/Icons/draw_semantic_icons.py` | Writes the three sticker page sizes and the GIF page. Not `mapping.csv`. |
+| `Chat/Input/Text/TellomiSticker` | 24pt. Composer button and context menus. |
+| `Chat/Attach Menu/TellomiSticker`, `Item List/Icons/TellomiSticker` | 30pt. Attach menu, settings badges, Premium stickers. |
+| `Item List/Icons/TellomiGif` | 30pt. Settings GIF badge. |
+| `Tellomi/Icons/test_semantic_icons.py` | Face, GIF letters, call sites, camcorder, drawn checks, send contrast. |
+
+## Discover copy, Discover reports, sign-up avatar
+
+Discover and the tab bar read `Tellomi.Discover.*` from the active language pack (`presentationData.strings` primary, then secondary). A missing key falls back to traditional Chinese for `zh-Hant` / `zh-TW` / `zh-HK` / `zh-MO`, simplified Chinese for other `zh*`, and English otherwise. City names use `Tellomi.Discover.City.<country>_<slug>` (the code's `:` and `-` are `_`, so `cn:hong-kong` is `Tellomi.Discover.City.cn_hong_kong`). The English, simplified, and traditional strings are in the three `Localizable.strings` files. The server langpack is unchanged.
+
+A post and a comment have a "…" menu whose Report row opens Telegram's report sheet (`peerReportOptionsController`). The sheet's official ids are `spam`, `violence`, `pornography`, `child`, `drugs`, `personal`, and `other`. Other still asks for a comment. That choice is `POST /v1/feed/reports` with `target_type`, `post_id`, `option`, `reason` (the same id), `detail`, and `comment_id` when the target is a comment. It does not call `messages.report`. A logged-out session does not build the request. Success uses the existing report toast.
+
+`photos.uploadProfilePhoto` keeps its RPC code. If that upload fails during sign-up, the account is still stored and the alert is `头像上传失败（500 …）` with the real code and text. Retry uploads the photo again and does not call `auth.signUp`. The same alert is used when a profile photo upload fails. Login and the session are otherwise unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverStrings.swift` | Pack lookup and count/id formatting. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverLoader.swift`, `TellomiDiscoverCity.swift` | Copy and city names take the pack. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | Tab copy takes the pack. `tellomiStringPack` merges primary over secondary. |
+| `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | The new keys. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverReport.swift`, `TellomiDiscoverFeed.swift`, `TellomiDiscoverParse.swift` | Report body, `POST /v1/feed/reports`, comment rows on a card. |
+| `submodules/TelegramUI/Components/PeerReportScreen/Sources/PeerReportScreen.swift` | Optional `submitLocally` so the sheet does not call the report RPC. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | "…" on a post and a comment. The feed list has the same button. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Peers/PeerPhotoUpdater.swift` | `UploadPeerPhotoError.server` keeps the RPC code and text. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiSignUpAvatar.swift`, `Sources/Authorization.swift` | A failed avatar upload still creates the account. Retry does not sign up again. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | The alert and the retry button. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/TellomiAvatarUploadFailure.swift` | The same alert on the profile photo screen. |
+| Tests | `TellomiDiscoverFeedTests`, `TellomiTabNavigationDecisionsTests`, `TellomiSignUpAvatarTests`. |
+
+## Settings home (M1)
+
+The settings tab is still `PeerInfoScreen` in settings mode. The home list, the header card, and the About / bindings / more pages are Tellomi types. Upstream keeps the old `settingsItems` builder so badges, session counts, and feature gates stay there; the screen asks `tellomiSettingsHomeItems` instead.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings mode calls `tellomiSettingsHomeItems`. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | The Premium grace banner is hidden unless Premium is enabled, and its copy is no longer hard-coded English. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift` | In settings, the resting header is the card from `tellomiSettingsHeaderCardMetrics`: avatar on the left, name and ID beside it, Edit on the right. The ID line is `tellomiSettingsIdentityLine` (phone, or else the full email, then `@username`). |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/TellomiNavigationSettingsEntry.swift` | `tellomiPushSettingsPage` is the shared push used by the home rows. |
+| `submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift` | Adds the personalized-recommendation switch in a Discover section after the privacy block and before auto-archive. The value is `TellomiRecommendationSettings`. |
+| `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | Account preference key `tellomiRecommendationSettings` (id 100). |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreen.swift` | The recommend request sends `personalized=false` when the switch is off, and reloads that tab when the switch changes. |
+| `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | `Tellomi.Settings.*`. |
+
+New files, not in the table above: `TellomiSettingsDecisions.swift`, `TellomiRecommendationSettings.swift`, `TellomiSettingsLayout.swift`, `TellomiSettingsHeaderCard.swift`, `TellomiSettingsPages.swift`. Tips and Apple Watch are not on the home or the More page. Saved messages, recent calls, chat folders, power saving, and open-source licenses are on More. A configured proxy stays on the General group. Help Center opens `https://tellomi.cn/help`. About Tellomi is the only place that shows the model name and the two filing numbers. That page subscribes to `help.getAppConfig` (`EngineData.Item.Configuration.App`). A non-empty string replaces the local fallback: `tellomi_ai_model_name` (default 「通义千问 Qwen」), `tellomi_generative_ai_registration_number`, and `tellomi_algorithm_filing_number` (both default 「待公示」 / Pending). Teamgram `pkg/about` publishes the registration number as `tellomi_ai_registration_number`; that key is used when the longer one is missing or blank, and the longer one wins when both are set. A missing key, a blank string, or a non-string keeps the fallback. Discover profile photo and bio stay the existing Privacy & Security rows (`privacyKeyProfilePhoto`, `privacyKeyAbout`). The personalized-recommendation switch is its own Discover section on that screen, not a second photo or bio row.
+
+## Discover polls, forwards, and notification switch (M3)
+
+The feed client already posted text, listed recommend / following / nearby, and showed quote-deleted copy. It did not create or vote in a poll, did not offer the four forward actions, and Notifications had no Discover switch.
+
+| File | Change |
+| --- | --- |
+| `submodules/SettingsUI/Sources/Notifications/NotificationsAndSoundsController.swift` | Adds the Discover activity switch and its footer after message categories. Off writes the local preference and `account.updateNotifySettings` for user 777005 (`mute_until = Int32.max`). On writes `mute_until = 0`. Opening the screen reads that peer's settings once, unless the switch was already moved. Reset all notifications turns the switch back on and clears the mute. |
+| `submodules/SettingsUI/BUILD` | Depends on `TellomiDiscover` for the switch copy. |
+| `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | Account preference id 101, `tellomiDiscoverNotificationSettings`. |
+| `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | Poll, forward, and notification keys. |
+
+The push filter is the one already in teamgram `pkg/push`: muting user 777005 (`@faxian`) suppresses like, comment, reply, mention, follow, and repost pushes. Private-chat mute does not. The in-app notification list (`GET /v1/feed/me/notifications`) is still not a screen.
+
+## Document hash before upload (ADR-0082)
+
+Before the byte upload of a GIF, an ordinary document, or a video no larger than 100 MiB, the client hashes the exact bytes it would upload and calls `messages.getDocumentByHash` (`#b1f2061f`, sha256 + size + mime). A reusable document (non-zero id, dc id > 0, same size and mime) is sent as `inputMediaDocument` and the bytes are not uploaded. `documentEmpty`, an RPC error, a short read, a size mismatch, or an incomplete local file falls through to the existing multipart upload. Secret chats are not probed: the uploaded bytes are ciphertext. Voice, music, round video, and stickers are not probed, matching TDLib's `allow_get_by_hash` (animations and documents only). Videos above 100 MiB start uploading immediately; the server still deduplicates those bytes after the upload. A forced re-upload skips the probe so a rejected file reference does not reuse the same document.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHash.swift` | New. Which files are probed, the video size cap, and what counts as a reusable document. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHashUpload.swift` | New. SHA-256 of the local bytes and the RPC, with fail-open. |
+| `submodules/TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift` | Chat send probes before `multipartUpload`. A hit reuses the document, including a video cover when one is attached. |
+| `submodules/TelegramCore/Sources/PendingMessages/UploadMediaToCloud.swift` | Composer pre-upload uses the same probe. |
+| `submodules/TelegramCore/Sources/PendingMessages/StandaloneUploadedMedia.swift` | Share-sheet file and video upload uses the same probe. |
+| `submodules/TelegramCore/Sources/PendingMessages/StandaloneSendMessage.swift` | In-memory file send uses the same probe. |
+| `submodules/TelegramCore/Tests/TellomiDocumentByHashTests.swift` | Role selection, the video cap, attribute mapping, the reusable-document check, and the SHA-256 vector. |
+
+## Document hash kill switch (ADR-0083 B1 / D4)
+
+Extends the section above. The #82 send sites stay as they are: a GIF, an ordinary document (including a file sent as `image/jpeg` or `image/png`), or a video no larger than 100 MiB still calls `messages.getDocumentByHash` before the byte upload. Secret chats, voice, music, round video, stickers, videos above 100 MiB, and a forced re-upload still skip it. Compressed photos stay on `uploadedMediaImageContent` / `inputMediaUploadedPhoto`. This RPC returns a document, and those bytes are a generated JPEG, so that path is not hooked. A later photo lookup needs an RPC that returns `InputPhoto`.
+
+Account 0 `mainconfig` on Android is `MessagesController.getGlobalMainSettings()`, key `tellomi_get_document_by_hash`, boolean, default true (`getBoolean(key, true)`). iOS reads the same key from the sending account's persisted `help.getAppConfig` (`AppConfiguration` under `PreferencesKeys.appConfiguration`), which is where that JSON boolean is stored. A missing key, `true`, or a non-boolean keeps the lookup. `false` makes `tellomiLookupExistingDocument` return before SHA-256 and before the RPC, and the caller runs the existing upload. The value is read on each send. There is no new user-visible copy.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHash.swift` | `tellomi_get_document_by_hash`, default on. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHashUpload.swift` | A disabled switch returns before the hash and `messages.getDocumentByHash`. |
+| `submodules/TelegramCore/Sources/PendingMessages/StandaloneSendMessage.swift` | The in-memory file lookup takes the same postbox so it can read the key. |
+| `submodules/TelegramCore/Tests/TellomiDocumentByHashTests.swift` | Default on. `false`, and a forced-off override, return the miss without running the lookup. |
+
+## Download file hashes (ADR-0083 B2)
+
+After a full plaintext `upload.getFile` download is about to become the finished file, the client calls `upload.getFileHashes#9156982a` (`location:InputFileLocation`, `offset:long`). Parts are SHA-256 of 128 KiB, the same split as `upload.getCdnFileHashes` / teamgram `cdn.PartHashes` (teamgram #215, `59922c63`). `offset` drops parts that start before it. The last part is shorter. A later page is requested when the returned parts do not cover the file.
+
+A miss (empty vector), an RPC error, or 12 seconds without a result after the file is ready to finish leaves the file in place. A part whose bytes differ, or a confirmed end shorter than the file, deletes the partial file and fails the download. CDN downloads already check ciphertext hashes. Web files, legacy `inputFileLocation`, secret-chat decryption, and a download that never fills the file (a prefix, a video preload, a file already on disk) do not call this method. iOS does not encrypt the media cache, so that skip stays false. `messages.getDocumentByHash` is unchanged. The schema already names the long-offset method; nothing generated is edited.
+
+Account 0 `mainconfig` on Android is `MessagesController.getGlobalMainSettings()`, key `tellomi_get_file_hashes`, boolean, default true. iOS reads the same key from the account's persisted `help.getAppConfig` (`AppConfiguration`), the same place B1 reads `tellomi_get_document_by_hash`. A missing key, `true`, or a non-boolean runs the check. `false` does not send the RPC. The value is read when the file is ready to finish.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashes.swift` | Part rules, fail-open, and the kill switch. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashDownload.swift` | The long-offset RPC, paging, and the commit decision. |
+| `submodules/TelegramCore/Sources/Network/MultipartFetch.swift` | Notes the location and CDN, and observes a plaintext download. |
+| `submodules/TelegramCore/Sources/Network/FetchV2.swift` | Notes the location, a CDN redirect, and a fallback to the datacenter. |
+| `submodules/Postbox/Sources/MediaBox.swift` | `beforeCompleteCommit`, read when a partial file would be linked. |
+| `submodules/Postbox/Sources/MediaBoxFileContextV2Impl.swift` | Holds that link. A refusal deletes the partial and fails the fetch. |
+| `submodules/TelegramCore/Tests/TellomiFileHashesTests.swift` | 128 KiB parts, mismatch versus miss, the switch, legacy location. |
+| `submodules/Postbox/Tests/MediaBoxFileContextV2FileHashGateTests.swift` | The link waits. Allow keeps the file. Refuse deletes it and fails the fetch. |
+
+## Discover nearby tab (D-11 / D-12)
+
+The Discover bar always shows 推荐, 关注, and 同城, in that order. `GET /v1/feed/config` may omit `nearby`; the tab stays. An unknown config name is still not added.
+
+The first open of 同城 with no saved city asks for When In Use at kilometer accuracy. The coordinate is used once for reverse geocoding and then dropped. Only `CLPlacemark.locality` can become a catalog code such as `cn:chengdu`. A street, a province, or a coordinate does not. If permission is denied, or geocoding returns nothing, the city list stays up and the user picks by hand. Nothing is stored until they pick. Picking does not require permission.
+
+Publishing still uses `POST /v1/feed/posts` and the existing `city` field. The value is that catalog code. There is no latitude, longitude, or address field. The line above the feed (`Posting in Chengdu` / `发布到 成都`) is the city the next post will carry. `这条不标注城市` clears the saved city so the next body omits `city`. The compose screen is unchanged, so it does not collide with the mention and link-preview composers.
+
+`GET /v1/feed/nearby?city=` is the nearby read. `content-engine` was not readable from this tree. A 404, 405, or 501 on that route is shown as 「同城暂时还不能刷新」, not as a generic load failure. `404` with `feed_hidden` stays hidden. An empty 200 is 「这个城市还没有帖子」. The client does not invent another path. Simplified Chinese is what zh-Hans and zh-Hant (including zh-TW and zh-HK) both read for these new lines. A separate traditional translation is not added.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverNearby.swift` | Home tabs, the publish city code, the compose line, and the missing-route check. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverLoader.swift` | A missing nearby route is `nearbyUnavailable`, not a generic load failure. English and simplified Chinese for those lines. zh-Hant uses the same simplified sentences. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreen.swift` | The three tabs stay fixed. The first coarse-location ask, the city list, the line above the feed, and the degraded empty state. Publish still passes the saved catalog code. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreenNode.swift` | Draws the city line, the change-city action, and the "no city" row. The compose controller is not edited. |
+| `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | The same lines. zh-Hant keeps this simplified pack for them. |
+| `submodules/TellomiDiscover/Tests/TellomiDiscoverNearbyTests.swift` | City normalize, tab order, the nearby query, and the publish keys. |
+
+## Personalized recommendations (D-58)
+
+Privacy and Security has a Discover section (「发现」) after the privacy block and before auto-archive, the same place as Android #87 (`5063c69e`). The section is a header, the 「个性化推荐」 switch, and a footer. A missing account preference is on. The value is `TellomiRecommendationSettings` under account preference id 100, the iOS equivalent of Android `mainconfig` key `tellomi_discover_personalized`: per account, local, default on. English, simplified, and traditional strings are `Tellomi.Settings.PersonalizedRecommendationSection`, `PersonalizedRecommendation`, and `PersonalizedRecommendationFooter`. The footer matches Android: 「关闭后，推荐不再根据你的浏览记录排序。」
+
+The row is always shown. `GET /v1/feed/config` still parses `personalization_toggle_visible`, and `tellomiPersonalizedRecommendationRowVisible` ignores it. The parser stores false both when the key is omitted and when it is false, so gating on it would hide the only control that can send `personalized=false` for configs this client already accepts. teamgram's `tellomi_personalized_recommend_default` is the same kind of hide signal and is not read here. teamgram does not store the per-user choice and does not rank the feed.
+
+The recommend request:
+
+| Switch | Request |
+| --- | --- |
+| On, or no stored value | `GET /v1/feed/recommend` (no query) |
+| Off | `GET /v1/feed/recommend?personalized=false` |
+| On again | The query is omitted again |
+
+Following and nearby ignore the switch (`tellomiDiscoverFeedRequestPersonalized`). The first read of the preference does not throw away a page. A later change drops `posts[.recommend]` and its cursor immediately. If Recommend is the open tab, that tab reloads in the same turn and shows the empty list while the new page loads. The feed generation moves first, so an older in-flight page cannot write itself back. Another tab keeps what it is showing; Recommend fetches again the next time it opens. The Discover screen does not request Recommend until that preference has been read once, so a stored off applies to the first request.
+
+`recommend_mode` is still parsed and does not decide the switch or the query. The example payload in the feed tests uses `recommend_mode=editorial_chronological` and `personalization_toggle_visible=false`.
+
+**Engine gap.** content-engine is private (`tellomi/content-engine`); this checkout cannot read it. iOS and Android already send `personalized=false`. Nothing in teamgram applies that query. Until content-engine treats `personalized=false` as an order that is not based on the person and treats a missing query as the personalized order, turning the switch off changes the request and clears the cached page, and the returned order can stay the same. This change does not edit content-engine or the Android repo.

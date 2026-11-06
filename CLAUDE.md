@@ -1,3 +1,5 @@
+先读 [`AGENTS.md`](AGENTS.md)。与本文冲突时以 AGENTS.md 为准。
+
 # CLAUDE.md
 
 This file provides guidance to AI assistants when working with code in this repository.

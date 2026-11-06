@@ -483,7 +483,7 @@ final class ThemeGridControllerNode: ASDisplayNode {
                         return false
                     }
                 }) {
-                    sortedWallpapers[builtinIndex] = tellomiDefaultSolidWallpaper(dark: presentationData.theme.overallDarkAppearance)
+                    sortedWallpapers[builtinIndex] = tellomiDefaultWallpaper(dark: presentationData.theme.overallDarkAppearance)
                 }
                 
                 for wallpaper in sortedWallpapers {
@@ -652,6 +652,15 @@ final class ThemeGridControllerNode: ASDisplayNode {
                         $0.wallpaper.isBasicallyEqual(to: wallpaper)
                     }) {
                         wallpapers.append(Wallpaper(wallpaper: wallpaper, isLocal: false))
+                    }
+                }
+                if remoteWallpapers.isEmpty {
+                    for wallpaper in tellomiStockWallpapers() {
+                        if !wallpapers.contains(where: {
+                            $0.wallpaper.isBasicallyEqual(to: wallpaper)
+                        }) {
+                            wallpapers.append(Wallpaper(wallpaper: wallpaper, isLocal: false))
+                        }
                     }
                 }
 

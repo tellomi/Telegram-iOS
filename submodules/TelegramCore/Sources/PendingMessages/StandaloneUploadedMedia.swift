@@ -110,6 +110,21 @@ public func standaloneUploadedImage(postbox: Postbox, network: Network, peerId: 
 }
 
 public func standaloneUploadedFile(postbox: Postbox, network: Network, peerId: PeerId, text: String, source: MultipartUploadSource, thumbnailData: Data? = nil, mimeType: String, attributes: [TelegramMediaFileAttribute], hintFileIsLarge: Bool) -> Signal<StandaloneUploadMediaEvent, StandaloneUploadMediaError> {
+    if peerId.namespace == Namespaces.Peer.SecretChat {
+        return standaloneUploadedFileUploading(postbox: postbox, network: network, peerId: peerId, text: text, source: source, thumbnailData: thumbnailData, mimeType: mimeType, attributes: attributes, hintFileIsLarge: hintFileIsLarge)
+    }
+    return tellomiLookupExistingDocument(network: network, postbox: postbox, source: source, mimeType: mimeType, attributes: attributes, encrypted: false)
+    |> mapToSignalPromotingError { document -> Signal<StandaloneUploadMediaEvent, StandaloneUploadMediaError> in
+        guard let document, let media = telegramMediaFileFromApiDocument(document, altDocuments: nil), media.resource is CloudDocumentMediaResource else {
+            return standaloneUploadedFileUploading(postbox: postbox, network: network, peerId: peerId, text: text, source: source, thumbnailData: thumbnailData, mimeType: mimeType, attributes: attributes, hintFileIsLarge: hintFileIsLarge)
+        }
+        tellomiStoreReusedDocumentData(postbox: postbox, source: source, cloud: media)
+        return .single(.progress(1.0))
+        |> then(.single(.result(.media(.standalone(media: media)))))
+    }
+}
+
+private func standaloneUploadedFileUploading(postbox: Postbox, network: Network, peerId: PeerId, text: String, source: MultipartUploadSource, thumbnailData: Data? = nil, mimeType: String, attributes: [TelegramMediaFileAttribute], hintFileIsLarge: Bool) -> Signal<StandaloneUploadMediaEvent, StandaloneUploadMediaError> {
     let upload = multipartUpload(network: network, postbox: postbox, source: source, encrypt: peerId.namespace == Namespaces.Peer.SecretChat, tag: TelegramMediaResourceFetchTag(statsCategory: statsCategoryForFileWithAttributes(attributes), userContentType: nil), hintFileSize: nil, hintFileIsLarge: hintFileIsLarge, forceNoBigParts: false)
     |> mapError { _ -> StandaloneUploadMediaError in return .generic }
     

@@ -1938,7 +1938,7 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         
         if data.messageActions.options.contains(.viewStickerPack) {
             actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.StickerPack_ViewPack, icon: { theme in
-                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.actionSheet.primaryTextColor)
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.actionSheet.primaryTextColor)
             }, action: { _, f in
                 let _ = controllerInteraction.openMessage(message, OpenMessageParams(mode: .default))
                 f(.dismissWithoutContent)

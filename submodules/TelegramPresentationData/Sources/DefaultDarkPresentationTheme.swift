@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import TelegramCore
 import TelegramUIPreferences
+import TellomiWallpapers
 
 public let defaultDarkPresentationTheme = makeDefaultDarkPresentationTheme(preview: false)
 public let defaultDarkColorPresentationTheme = customizeDefaultDarkPresentationTheme(theme: defaultDarkPresentationTheme, editing: false, title: nil, accentColor: UIColor(rgb: 0xffffff), backgroundColors: [], bubbleColors: [0x2c2c2e, 0x2c2c2e], animateBubbleColors: false, wallpaper: nil, baseColor: nil)
@@ -191,7 +192,7 @@ public func customizeDefaultDarkPresentationTheme(theme: PresentationTheme, edit
             incoming: chat.message.incoming.withUpdated(
                 bubble: chat.message.outgoing.bubble.withUpdated(
                     withWallpaper: chat.message.incoming.bubble.withWallpaper.withUpdated(
-                        reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
+                        reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
                         reactionInactiveForeground: UIColor(rgb: 0xffffff),
                         reactionActiveBackground: accentColor,
                         reactionActiveForeground: monochrome ? UIColor(rgb: 0x000000) : UIColor(rgb: 0xffffff),
@@ -199,7 +200,7 @@ public func customizeDefaultDarkPresentationTheme(theme: PresentationTheme, edit
                         reactionActiveMediaPlaceholder: UIColor(rgb: 0xffffff, alpha: 0.1)
                     ),
                     withoutWallpaper: chat.message.incoming.bubble.withoutWallpaper.withUpdated(
-                        reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
+                        reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
                         reactionInactiveForeground: UIColor(rgb: 0xffffff),
                         reactionActiveBackground: accentColor,
                         reactionActiveForeground: monochrome ? UIColor(rgb: 0x000000) : UIColor(rgb: 0xffffff),
@@ -235,9 +236,9 @@ public func customizeDefaultDarkPresentationTheme(theme: PresentationTheme, edit
                         fill: outgoingBubbleFillColors,
                         highlightedFill: highlightedBubbleFillColor,
                         stroke: .clear,
-                        reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.12),
+                        reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkAccentedOutgoingInactive),
                         reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                        reactionActiveBackground: UIColor(rgb: 0xffffff),
+                        reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkActive),
                         reactionActiveForeground: UIColor(rgb: 0x000000, alpha: 0.0),
                         reactionInactiveMediaPlaceholder: UIColor(rgb: 0xffffff, alpha: 0.1),
                         reactionActiveMediaPlaceholder: UIColor(rgb: 0xffffff, alpha: 0.1)
@@ -246,9 +247,9 @@ public func customizeDefaultDarkPresentationTheme(theme: PresentationTheme, edit
                         fill: outgoingBubbleFillColors,
                         highlightedFill: highlightedBubbleFillColor,
                         stroke: .clear,
-                        reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.12),
+                        reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkAccentedOutgoingInactive),
                         reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                        reactionActiveBackground: UIColor(rgb: 0xffffff),
+                        reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkActive),
                         reactionActiveForeground: UIColor(rgb: 0x000000, alpha: 0.0),
                         reactionInactiveMediaPlaceholder: UIColor(rgb: 0xffffff, alpha: 0.1),
                         reactionActiveMediaPlaceholder: UIColor(rgb: 0xffffff, alpha: 0.1)
@@ -271,7 +272,7 @@ public func customizeDefaultDarkPresentationTheme(theme: PresentationTheme, edit
             ),
             freeform: chat.message.freeform.withUpdated(
                 withWallpaper: chat.message.freeform.withWallpaper.withUpdated(
-                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
+                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
                     reactionInactiveForeground: UIColor(rgb: 0xffffff),
                     reactionActiveBackground: accentColor,
                     reactionActiveForeground: monochrome ? UIColor(rgb: 0x000000) : UIColor(rgb: 0xffffff),
@@ -279,7 +280,7 @@ public func customizeDefaultDarkPresentationTheme(theme: PresentationTheme, edit
                     reactionActiveMediaPlaceholder: UIColor(rgb: 0xffffff, alpha: 0.1)
                 ),
                 withoutWallpaper: chat.message.freeform.withoutWallpaper.withUpdated(
-                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
+                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
                     reactionInactiveForeground: UIColor(rgb: 0xffffff),
                     reactionActiveBackground: accentColor,
                     reactionActiveForeground: monochrome ? UIColor(rgb: 0x000000) : UIColor(rgb: 0xffffff),
@@ -517,19 +518,17 @@ public func makeDefaultDarkPresentationTheme(extendingThemeReference: Presentati
         storySeenColors: PresentationThemeGradientColors(topColor: UIColor(rgb: 0x48484A), bottomColor: UIColor(rgb: 0x48484A))
     )
 
-    let incomingBubbleAlpha: CGFloat = 0.9
-    
     let message = PresentationThemeChatMessage(
         incoming: PresentationThemePartedColors(
             bubble: PresentationThemeBubbleColor(
                 withWallpaper: PresentationThemeBubbleColorComponents(
-                    fill: [UIColor(rgb: 0x1D1D1D, alpha: incomingBubbleAlpha)],
+                    fill: [UIColor(rgb: TellomiBubbleColors.incomingDark)],
                     highlightedFill: UIColor(rgb: 0xffffff, alpha: 0.35),
                     stroke: .clear,
-                    shadow: nil,
-                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
+                    shadow: tellomiSolidWallpaperBubbleShadow,
+                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
                     reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                    reactionActiveBackground: UIColor(rgb: 0xffffff, alpha: 1.0),
+                    reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkActive),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xD3720A, alpha: 0.2),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xFFD738),
@@ -539,13 +538,13 @@ public func makeDefaultDarkPresentationTheme(extendingThemeReference: Presentati
                     reactionActiveMediaPlaceholder: UIColor(rgb: 0x000000, alpha: 0.1)
                 ),
                 withoutWallpaper: PresentationThemeBubbleColorComponents(
-                    fill: [UIColor(rgb: 0x1D1D1D, alpha: incomingBubbleAlpha)],
+                    fill: [UIColor(rgb: TellomiBubbleColors.incomingDark)],
                     highlightedFill: UIColor(rgb: 0xffffff, alpha: 0.35),
                     stroke: .clear,
-                    shadow: nil,
-                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
+                    shadow: tellomiSolidWallpaperBubbleShadow,
+                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
                     reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                    reactionActiveBackground: UIColor(rgb: 0xffffff, alpha: 1.0),
+                    reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkActive),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xD3720A, alpha: 0.2),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xFFD738),
@@ -564,10 +563,10 @@ public func makeDefaultDarkPresentationTheme(extendingThemeReference: Presentati
                     fill: [UIColor(rgb: 0x2c2c2e)],
                     highlightedFill: UIColor(rgb: 0x3a3a3c),
                     stroke: .clear,
-                    shadow: nil,
-                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.1),
+                    shadow: tellomiSolidWallpaperBubbleShadow,
+                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkOutgoingInactive),
                     reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                    reactionActiveBackground: UIColor(rgb: 0xffffff, alpha: 1.0),
+                    reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkActive),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xD3720A, alpha: 0.2),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xFFD738),
@@ -580,10 +579,10 @@ public func makeDefaultDarkPresentationTheme(extendingThemeReference: Presentati
                     fill: [UIColor(rgb: 0x2c2c2e)],
                     highlightedFill: UIColor(rgb: 0x3a3a3c),
                     stroke: .clear,
-                    shadow: nil,
-                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.1),
+                    shadow: tellomiSolidWallpaperBubbleShadow,
+                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkOutgoingInactive),
                     reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                    reactionActiveBackground: UIColor(rgb: 0xffffff, alpha: 1.0),
+                    reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkActive),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xD3720A, alpha: 0.2),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xFFD738),
@@ -599,10 +598,10 @@ public func makeDefaultDarkPresentationTheme(extendingThemeReference: Presentati
                 fill: [UIColor(rgb: 0x1f1f1f)],
                 highlightedFill: UIColor(rgb: 0x2a2a2a),
                 stroke: UIColor(rgb: 0x1f1f1f),
-                shadow: nil,
-                reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
+                shadow: tellomiSolidWallpaperBubbleShadow,
+                reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
                 reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                reactionActiveBackground: UIColor(rgb: 0xffffff, alpha: 1.0),
+                reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkActive),
                 reactionActiveForeground: .clear,
                 reactionStarsInactiveBackground: UIColor(rgb: 0xD3720A, alpha: 0.2),
                 reactionStarsInactiveForeground: UIColor(rgb: 0xFFD738),
@@ -615,10 +614,10 @@ public func makeDefaultDarkPresentationTheme(extendingThemeReference: Presentati
                 fill: [UIColor(rgb: 0x1f1f1f)],
                 highlightedFill: UIColor(rgb: 0x2a2a2a),
                 stroke: UIColor(rgb: 0x1f1f1f),
-                shadow: nil,
-                reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
+                shadow: tellomiSolidWallpaperBubbleShadow,
+                reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
                 reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                reactionActiveBackground: UIColor(rgb: 0xffffff, alpha: 1.0),
+                reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkActive),
                 reactionActiveForeground: .clear,
                 reactionStarsInactiveBackground: UIColor(rgb: 0xD3720A, alpha: 0.2),
                 reactionStarsInactiveForeground: UIColor(rgb: 0xFFD738),
@@ -728,7 +727,7 @@ public func makeDefaultDarkPresentationTheme(extendingThemeReference: Presentati
     )
 
     let chat = PresentationThemeChat(
-        defaultWallpaper: tellomiDefaultSolidWallpaper(dark: true),
+        defaultWallpaper: tellomiDefaultWallpaper(dark: true),
         animateMessageColors: false,
         message: message,
         serviceMessage: serviceMessage,

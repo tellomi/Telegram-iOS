@@ -348,7 +348,8 @@ private enum MultipartFetchSource {
                                 return .fail(.revalidateMediaReference)
                             case .revalidate:
                                 return .fail(.revalidateMediaReference)
-                            case let .location(parsedLocation):                            
+                            case let .location(parsedLocation):
+                                tellomiFileHashNoteLocation(resourceKey: resource.id.stringRepresentation, location: parsedLocation)
                                 return download.request(Api.functions.upload.getFile(flags: 0, location: parsedLocation, offset: offset, limit: Int32(limit)), tag: tag, continueInBackground: continueInBackground, expectedResponseSize: Int32(limit), onFloodWaitError: { error in
                                     onFloodWaitError(error)
                                 })
@@ -950,6 +951,7 @@ private final class MultipartFetchManager {
                             }
                         }
                     case let .switchToCdn(id, token, key, iv, partHashes):
+                        tellomiFileHashNoteTransport(resourceKey: strongSelf.resource.id.stringRepresentation, cdn: true)
                         switch strongSelf.source {
                             case let .master(location, download):
                                 strongSelf.partAlignment = dataHashLength
@@ -1132,8 +1134,9 @@ func multipartFetch(
     continueInBackground: Bool = false,
     useMainConnection: Bool = false
 ) -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError> {
+    let fetch: Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError>
     if network.useExperimentalFeatures, let _ = resource as? TelegramCloudMediaResource {
-        return multipartFetchV2(
+        fetch = multipartFetchV2(
             accountPeerId: accountPeerId,
             postbox: postbox,
             network: network,
@@ -1148,8 +1151,8 @@ func multipartFetch(
             continueInBackground: continueInBackground,
             useMainConnection: useMainConnection
         )
-    }
-    return multipartFetchV1(
+    } else {
+        fetch = multipartFetchV1(
         accountPeerId: accountPeerId,
         postbox: postbox,
         network: network,
@@ -1164,5 +1167,17 @@ func multipartFetch(
         decryptedSize: decryptedSize,
         continueInBackground: continueInBackground,
         useMainConnection: useMainConnection
+        )
+    }
+    return tellomiGatePlaintextFileDownload(
+        mediaBox: postbox.mediaBox,
+        postbox: postbox,
+        network: network,
+        resource: resource,
+        datacenterId: datacenterId,
+        parameters: parameters,
+        webFile: resource is MediaResourceWithWebFileReference,
+        secretEncrypted: encryptionKey != nil,
+        fetch: fetch
     )
 }

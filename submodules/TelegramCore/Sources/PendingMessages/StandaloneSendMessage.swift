@@ -850,6 +850,22 @@ private func uploadedImage(account: Account, data: Data) -> Signal<UploadMediaEv
 }
 
 private func uploadedFile(account: Account, data: Data, mimeType: String, attributes: [TelegramMediaFileAttribute]) -> Signal<UploadMediaEvent, PendingMessageUploadError> {
+    let traits = tellomiDocumentByHashTraits(mimeType: mimeType, attributes: attributes, encrypted: false)
+    let bytes = uploadedFileBytes(account: account, data: data, mimeType: mimeType, attributes: attributes)
+    guard case .lookup = tellomiDocumentByHashDecision(traits) else {
+        return bytes
+    }
+    return tellomiLookupExistingDocument(network: account.network, postbox: account.postbox, data: data, mimeType: mimeType, attributes: attributes, encrypted: false)
+    |> mapToSignalPromotingError { document -> Signal<UploadMediaEvent, PendingMessageUploadError> in
+        guard let document, let inputDocument = tellomiInputDocument(from: document) else {
+            return bytes
+        }
+        return .single(.progress(1.0))
+        |> then(.single(.result(Api.InputMedia.inputMediaDocument(.init(flags: 0, id: inputDocument, videoCover: nil, videoTimestamp: nil, ttlSeconds: nil, query: nil)))))
+    }
+}
+
+private func uploadedFileBytes(account: Account, data: Data, mimeType: String, attributes: [TelegramMediaFileAttribute]) -> Signal<UploadMediaEvent, PendingMessageUploadError> {
     return multipartUpload(network: account.network, postbox: account.postbox, source: .data(data), encrypt: false, tag: TelegramMediaResourceFetchTag(statsCategory: statsCategoryForFileWithAttributes(attributes), userContentType: nil), hintFileSize: Int64(data.count), hintFileIsLarge: false, forceNoBigParts: false)
         |> mapError { _ -> PendingMessageUploadError in return .generic }
         |> map { next -> UploadMediaEvent in

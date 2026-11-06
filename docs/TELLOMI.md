@@ -46,7 +46,7 @@ With `disable_telegram_backup_discovery` true, `initializedNetwork` does not ins
 
 `decrypt_TL_data` in `MTEncryption.m` still contains Telegram's key for decoding those DNS records. Nothing calls it while discovery is off.
 
-The seed is the first connection only. A logged-in client replaces it with the non-empty `dc_options` from `help.getConfig` and stores that list in the keychain. The next launch uses the stored list. Nothing writes the seed back over it. See [`docs/dc-addresses.md`](dc-addresses.md) (M7 / D-33). Production `teamgramd/bin/config.json` currently ships `"dc_options": []`, so installed clients stay on the seed until that list is filled and `bff` is restarted.
+The seed is the first connection only. A logged-in client replaces it with the `dc_options` from `help.getConfig` that pass `inet_pton` (an IPv4 or IPv6 literal, port 1–65535, family matching the `ipv6` flag) and stores that list in the keychain. A hostname, an empty list, or a datacenter whose options were all rejected does not replace the seed or the last saved list. The next launch uses the stored list. Nothing writes the seed back over it. See [`docs/dc-addresses.md`](dc-addresses.md) (M7 / D-33). Production `teamgramd/bin/config.json` currently ships `"dc_options": []`, so installed clients stay on the seed until that list is filled with IP literals and `bff` is restarted.
 
 ## App name, bundle id, API credentials
 
