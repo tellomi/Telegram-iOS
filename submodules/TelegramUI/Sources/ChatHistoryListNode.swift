@@ -2267,6 +2267,14 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                     applyHole()
                     return
                 }
+                // A navigation around a message that is still inside a hole arrives empty and loading.
+                // Applying it deletes the rows on screen; the list then anchors the replacement at
+                // index 0 (the newest edge). Keep the current rows until a view that actually has them.
+                if view.isLoading && view.entries.isEmpty {
+                    if let previousEntries = previousView.with({ $0 })?.0.originalView.entries, !previousEntries.isEmpty {
+                        return
+                    }
+                }
                 
                 initialData = data
                 var updatedScrollPosition = scrollPosition

@@ -955,3 +955,23 @@ The actions are the upstream ones. On the main list, the leading side is read/un
 | `submodules/ChatListUI/Sources/Node/ChatListItem.swift` | Comment on the nil lookup. The MingCute names are unchanged. |
 | `Tellomi/Icons/test_chat_list_swipe.py` | Catalog name, circle-versus-capsule, actions, and the upstream gesture thresholds. |
 | `build-system/Make/ChatListSwipeCheck.py`, `Make.py` | `build` and `test` run that check next to the icon-size check. |
+
+## Chat history scroll
+
+Scrolling a chat into older messages, then waiting for the next history fetch, could replace the rows on screen with nothing. The list anchors an empty-to-full replace at index 0. Index 0 is the newest message, so the chat jumps back to the edge it was opened on.
+
+A history navigation (`ChatHistoryLocation.Navigation`, used when the visible edge asks for another page and when a hole fill re-anchors on the visible message) subscribes to `aroundMessageHistoryView`. A message that is stored but still inside a hole produces an empty loading view (`MessageHistoryViewAnchorWhileLoadingTests`). `.Scroll` keeps that frame as `.Loading`. `.Navigation` published it as the first `.UpdateVisible` snapshot. `ChatHistoryListNode` applies that snapshot, deleting every row. `CoreVirtualListView` treats a collection with no surviving identity as a full replace and anchors it at index 0 (`isNoOverlapSwap`). The messages that arrive with the fill are then laid out from that edge.
+
+The empty loading snapshot is no longer the anchored frame. `first` stays unset until a view has entries, and while a non-empty history is already on screen the node drops an empty loading view instead of applying it. A finished empty chat (`isLoading == false`) still clears.
+
+A ranged `messages.getHistory` fill also closed the hole from the returned ids through the request boundary even when every returned id sat outside the requested `min_id`/`max_id` window. That page is what teamgram returns for a private chat or basic group: `GetOffsetIdBackwardHistoryMessages` takes `minId` and `maxId` and does not use them (`app/service/biz/message/internal/dao/history.go`; the SQL is `user_message_box_id < offset` plus `LIMIT`). Closing across that gap marks the messages on screen as contiguous. The fill now closes only the part of the old span that lies inside the request and that the returned ids actually meet. An empty result still closes the whole requested window. The around-id fill is unchanged.
+
+This is not the chat-list hole in #71. `ChatListView` used to drop every dialog at a hole. Message history already clips around a hole instead of doing that. The jump here is the empty navigation snapshot, plus a ranged fill that closes a window the response did not cover.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Sources/ChatHistoryViewForLocation.swift` | An empty loading navigation view does not consume the first anchored frame. |
+| `submodules/TelegramUI/Sources/ChatHistoryListNode.swift` | An empty loading view does not replace a history that already has rows. |
+| `submodules/TelegramCore/Sources/State/RangeHoleFillRange.swift` | Ranged hole close, clipped to the request, refused when the page misses it. |
+| `submodules/TelegramCore/Sources/State/Holes.swift` | The range branch uses that result and leaves the hole when it is nil. |
+| `submodules/TelegramCore/Tests/RangeHoleFillRangeTests.swift` | Older page, newer page, outside page, partial overlap, empty. |
