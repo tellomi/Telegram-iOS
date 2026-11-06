@@ -130,6 +130,7 @@ public final class TellomiDiscoverLoader {
 
     private func issue(ticket: Int, configuration: TellomiDiscoverConfiguration, operation: TellomiDiscoverOperation, retryUnauthorized: Bool, completion: @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) {
         guard ticket == self.generation else {
+            completion(.failure(.signedOut))
             return
         }
         guard let baseURL = configuration.baseURL else {
@@ -148,6 +149,7 @@ public final class TellomiDiscoverLoader {
         if current == nil || tellomiDiscoverCredentialNeedsRefresh(expires: current?.expires ?? 0, now: self.now()) {
             self.fetchCredential { [weak self] result in
                 guard let self, ticket == self.generation else {
+                    completion(.failure(.signedOut))
                     return
                 }
                 switch result {
@@ -271,6 +273,7 @@ public final class TellomiDiscoverLoader {
         }
         self.http(call) { [weak self] result in
             guard let self, ticket == self.generation else {
+                completion(.failure(.signedOut))
                 return
             }
             switch result {

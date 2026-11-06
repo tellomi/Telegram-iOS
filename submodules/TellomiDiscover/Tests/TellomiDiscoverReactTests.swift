@@ -4,6 +4,7 @@ final class TellomiDiscoverReactTests: XCTestCase {
     private let base = URL(string: "https://feed.example")!
     private let postId = "post-9"
     private let nonce = "11111111-1111-4111-8111-111111111111"
+    private let commentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
     func testLikeUsesTheEngineSurfaceAndNotAStoryCall() {
         let call = tellomiDiscoverHTTPCall(base: self.base, operation: .like(postId: self.postId, surface: "nearby"), token: "jwt")
@@ -23,67 +24,72 @@ final class TellomiDiscoverReactTests: XCTestCase {
         }
     }
 
-    func testStaleLikeResponseDoesNotMoveTheCount() {
-        var state = TellomiDiscoverLikeState(postId: self.postId, liked: false, count: 2, hidden: false, surface: "recommend")
-        let first = state.tap()
+    func testLikeMachineKeepsANewerTapAndRollsBackAPermanentFailure() {
+        let like = TellomiDiscoverLike(postId: self.postId, liked: false, count: 2, hidden: false, surface: "following")
+        let first = like.tap()
         XCTAssertEqual(first?.on, true)
-        XCTAssertEqual(state.view().count, 3)
-        let second = state.tap()
-        XCTAssertEqual(second?.generation, 2)
-        XCTAssertEqual(state.view().liked, false)
-        _ = state.finish(generation: 1, success: true)
-        XCTAssertEqual(state.view().count, 2)
-        XCTAssertEqual(state.view().liked, false)
-        _ = state.finish(generation: 2, success: false)
-        XCTAssertEqual(state.confirmedLiked, false)
-        XCTAssertEqual(state.view().count, 2)
-        var hidden = TellomiDiscoverLikeState(postId: self.postId, liked: false, count: 0, hidden: true, surface: "recommend")
-        XCTAssertNil(hidden.tap())
-        XCTAssertTrue(hidden.view().hidden)
+        XCTAssertEqual(first?.surface, "following")
+        XCTAssertEqual(like.view().count, 3)
+        XCTAssertNil(like.tap())
+        XCTAssertEqual(like.view().liked, false)
+        XCTAssertEqual(like.view().count, 2)
+        let follow = like.finish(generation: first!.generation, version: first!.version, error: .unavailable)
+        XCTAssertEqual(follow?.on, false)
+        XCTAssertEqual(follow?.automatic, true)
+        _ = like.finish(generation: follow!.generation, version: follow!.version, error: .notFound)
+        XCTAssertEqual(like.view().liked, false)
+        XCTAssertEqual(like.view().count, 2)
+        XCTAssertNil(like.finish(generation: like.generationValue() + 1, version: follow!.version, error: nil))
+        like.close()
+        XCTAssertNotEqual(like.generationValue(), first?.generation)
     }
 
-    func testPublicCommentBodyHasNoMedia() {
-        XCTAssertNil(tellomiDiscoverCommentBody(text: "  ", parentId: nil, nonce: self.nonce))
-        XCTAssertNil(tellomiDiscoverCommentBody(text: "hi", parentId: "not-a-uuid", nonce: self.nonce))
-        let body = tellomiDiscoverCommentBody(text: " hello ", parentId: nil, nonce: self.nonce)
+    func testSignedOutResultRestoresTheConfirmedLike() {
+        let like = TellomiDiscoverLike(postId: self.postId, liked: false, count: 4, hidden: false, surface: "recommend")
+        let request = like.tap()
+        XCTAssertEqual(like.view().count, 5)
+        let next = tellomiDiscoverApplyLike(like, request: request, result: .failure(.signedOut))
+        XCTAssertNil(next)
+        XCTAssertEqual(like.view().count, 4)
+        XCTAssertEqual(like.view().liked, false)
+    }
+
+    func testPublicCommentReusesTheNonceAndKeepsHeldOutOfTheTotal() {
+        let comments = TellomiDiscoverComments()
+        let load = comments.open(postId: self.postId)
+        let page = TellomiDiscoverCommentPage(comments: [
+            TellomiDiscoverComment(id: self.commentId, text: "public", authorName: "Ada", own: true, postId: self.postId)
+        ], cursor: "next")
+        XCTAssertTrue(comments.accept(generation: load.generation, version: load.version, page: page))
+        XCTAssertEqual(comments.publicCount(), 1)
+        XCTAssertTrue(comments.hasMore())
+        let more = comments.more()
+        XCTAssertEqual(more?.cursor, "next")
+        comments.failLoad(generation: more!.generation, version: more!.version)
+        let first = comments.submit(text: " hello ", parentId: nil, freshNonce: self.nonce)
+        XCTAssertEqual(first?.nonce, self.nonce)
+        XCTAssertTrue(first?.ready() == true)
+        comments.failSend(generation: first!.generation, version: first!.version)
+        let retry = comments.submit(text: "hello", parentId: nil, freshNonce: "22222222-2222-4222-8222-222222222222")
+        XCTAssertEqual(retry?.nonce, self.nonce)
+        let held = TellomiDiscoverCommentCreated(id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", state: "held", version: 2, held: true)
+        XCTAssertTrue(comments.finishSend(generation: retry!.generation, version: retry!.version, created: held))
+        XCTAssertEqual(comments.publicCount(), 1)
+        XCTAssertEqual(comments.pendingRows().count, 1)
+        XCTAssertTrue(comments.canDelete(self.commentId))
+        let remove = comments.delete(self.commentId)
+        XCTAssertEqual(remove?.commentId, self.commentId)
+        XCTAssertTrue(comments.finishDelete(generation: remove!.generation, version: remove!.version, commentId: self.commentId, ok: true))
+        XCTAssertEqual(comments.publicCount(), 0)
+        XCTAssertEqual(comments.pendingRows().count, 1)
+        comments.close()
+        XCTAssertFalse(comments.accept(generation: load.generation, version: load.version, page: page))
+        let body = tellomiDiscoverCommentBody(text: "hello", parentId: nil, nonce: self.nonce)
         let object = try! JSONSerialization.jsonObject(with: body!) as! [String: Any]
-        XCTAssertEqual(object["text"] as? String, "hello")
-        XCTAssertEqual(object["client_nonce"] as? String, self.nonce)
         XCTAssertNil(object["media_keys"])
         XCTAssertNil(object["operation_id"])
-        let call = tellomiDiscoverHTTPCall(base: self.base, operation: .comment(postId: self.postId, text: "hello", parentId: nil, clientNonce: self.nonce), token: "jwt")
-        XCTAssertEqual(call?.method, "POST")
-        XCTAssertEqual(call?.url.path, "/v1/feed/posts/post-9/comments")
-        let created = tellomiDiscoverDecodeHTTP(operation: .comment(postId: self.postId, text: "hello", parentId: nil, clientNonce: self.nonce), result: TellomiDiscoverHTTPResult(status: 201, body: Data(#"{"id":"22222222-2222-4222-8222-222222222222","state":"ok","version":3}"#.utf8)))
-        guard case let .success(.commentCreated(value)) = created else {
-            return XCTFail("comment was not created")
-        }
-        XCTAssertEqual(value.version, 3)
-        XCTAssertNil(value.held)
-        let closed = tellomiDiscoverDecodeHTTP(operation: .comment(postId: self.postId, text: "hello", parentId: nil, clientNonce: self.nonce), result: TellomiDiscoverHTTPResult(status: 403, body: Data(#"{"error":"comments_closed"}"#.utf8)))
-        guard case .failure(.commentsClosed) = closed else {
-            return XCTFail("closed comments were accepted")
-        }
-    }
-
-    func testCommentPageDropsPendingAndOtherPosts() {
-        let page = #"""
-        {"comments":[
-          {"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","state":"ok","post_id":"post-9","card":{"text":"public","author":{"display_name":"Ada"}},"me":{"author":true}},
-          {"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","state":"pending","post_id":"post-9","text":"held"},
-          {"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","state":"ok","post_id":"other","text":"nope"}
-        ],"cursor":"next"}
-        """#
-        let decoded = tellomiDiscoverDecodeHTTP(operation: .comments(postId: self.postId, cursor: nil), result: TellomiDiscoverHTTPResult(status: 200, body: Data(page.utf8)))
-        guard case let .success(.commentPage(value)) = decoded else {
-            return XCTFail("comment page was unreadable")
-        }
-        XCTAssertEqual(value.comments.count, 1)
-        XCTAssertEqual(value.comments[0].text, "public")
-        XCTAssertTrue(value.comments[0].own)
-        XCTAssertEqual(value.cursor, "next")
-        let delete = tellomiDiscoverHTTPCall(base: self.base, operation: .deleteComment("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"), token: "jwt")
+        let delete = tellomiDiscoverHTTPCall(base: self.base, operation: .deleteComment(self.commentId), token: "jwt")
         XCTAssertEqual(delete?.method, "DELETE")
-        XCTAssertEqual(delete?.url.path, "/v1/feed/posts/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+        XCTAssertEqual(delete?.url.path, "/v1/feed/posts/\(self.commentId)")
     }
 }

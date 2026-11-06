@@ -65,14 +65,16 @@ public struct TellomiDiscoverComment: Equatable {
     public var state: String
     public var own: Bool
     public var parentId: String?
+    public var postId: String?
 
-    public init(id: String, text: String, authorName: String, state: String = "ok", own: Bool = false, parentId: String? = nil) {
+    public init(id: String, text: String, authorName: String, state: String = "ok", own: Bool = false, parentId: String? = nil, postId: String? = nil) {
         self.id = id
         self.text = text
         self.authorName = authorName
         self.state = state
         self.own = own
         self.parentId = parentId
+        self.postId = postId
     }
 }
 
@@ -384,9 +386,9 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
         reposted: boolValue(me?["reposted"]) ?? false,
         poll: parsePoll(labels: body?["poll"], tally: entry["poll"]),
         linkPreview: storedLinkPreview(card: body, entry: entry),
+        images: parseImages(body?["media"]),
         liked: boolValue(me?["liked"]) ?? false,
-        likesHidden: boolValue(stats?["likes_hidden"]) ?? false,
-        images: parseImages(body?["media"])
+        likesHidden: boolValue(stats?["likes_hidden"]) ?? false
     )
 }
 
@@ -508,7 +510,7 @@ private func parsePublicComment(_ entry: [String: TellomiJSON], expectedPost: St
     let name = stringValue(author?["display_name"]) ?? ""
     let own = boolValue(objectValue(entry["me"])?["author"]) ?? false
     let parent = stringValue(entry["parent_id"])
-    return TellomiDiscoverComment(id: id, text: text, authorName: name, state: stringValue(entry["state"]) ?? "ok", own: own, parentId: parent)
+    return TellomiDiscoverComment(id: id, text: text, authorName: name, state: stringValue(entry["state"]) ?? "ok", own: own, parentId: parent, postId: stringValue(entry["post_id"]).flatMap(tellomiDiscoverPostId))
 }
 
 public func tellomiDiscoverParseVote(_ data: Data) -> TellomiDiscoverVoteTally? {

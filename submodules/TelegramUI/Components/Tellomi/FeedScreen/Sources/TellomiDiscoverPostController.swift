@@ -29,7 +29,10 @@ final class TellomiDiscoverPostController: ViewController {
     private var pollButtons: [UIButton] = []
     private let likeButton = UIButton(type: .system)
     private let commentField = UITextField()
-    private var likeState: TellomiDiscoverLikeState?
+    private let surface: String
+    private var like: TellomiDiscoverLike?
+    private let comments = TellomiDiscoverComments()
+    private let moreCommentsButton = UIButton(type: .system)
     private var imageViews: [UIImageView] = []
     private var imageTasks: [URLSessionDataTask] = []
     private let imageSession: URLSession = {
@@ -42,9 +45,10 @@ final class TellomiDiscoverPostController: ViewController {
     private var failed = false
     private var started = false
 
-    init(context: AccountContext, postId: String, loader: TellomiDiscoverLoader, configuration: TellomiDiscoverConfiguration, loggedIn: Bool, mediaUpload: Bool = false, mediaBaseURL: URL? = nil, previews: TellomiDiscoverLocalPreviewBook? = nil, previewAccount: String = "") {
+    init(context: AccountContext, postId: String, loader: TellomiDiscoverLoader, configuration: TellomiDiscoverConfiguration, loggedIn: Bool, surface: String = "recommend", mediaUpload: Bool = false, mediaBaseURL: URL? = nil, previews: TellomiDiscoverLocalPreviewBook? = nil, previewAccount: String = "") {
         self.context = context
         self.postId = postId
+        self.surface = tellomiDiscoverLikeSurface(surface)
         self.loader = loader
         self.configuration = configuration
         self.loggedIn = loggedIn
@@ -76,6 +80,8 @@ final class TellomiDiscoverPostController: ViewController {
     }
 
     deinit {
+        self.like?.close()
+        self.comments.close()
         self.presentationDataDisposable?.dispose()
         self.audienceDisposable?.dispose()
         for task in self.imageTasks {
@@ -104,6 +110,9 @@ final class TellomiDiscoverPostController: ViewController {
         self.commentField.addTarget(self, action: #selector(self.commentReturned), for: .editingDidEndOnExit)
         self.scrollView.addSubview(self.likeButton)
         self.scrollView.addSubview(self.commentField)
+        self.moreCommentsButton.accessibilityIdentifier = "tellomi.discover.comments.more"
+        self.moreCommentsButton.addTarget(self, action: #selector(self.moreCommentsPressed), for: .touchUpInside)
+        self.scrollView.addSubview(self.moreCommentsButton)
         self.apply()
         self.loadIfAllowed()
     }
@@ -139,6 +148,9 @@ final class TellomiDiscoverPostController: ViewController {
         if showsReact {
             pieces.append(.comment(44))
             pieces.append(.comment(36))
+            if self.comments.hasMore() {
+                pieces.append(.comment(36))
+            }
         }
         var commentHeights: [CGFloat] = []
         for row in self.commentRows {
@@ -186,11 +198,22 @@ final class TellomiDiscoverPostController: ViewController {
             self.commentField.isHidden = false
             self.commentField.frame = CGRect(x: fieldFrame.x, y: fieldFrame.y, width: fieldFrame.width, height: fieldFrame.height)
             index += 1
+            if self.comments.hasMore(), index < placed.frames.count {
+                let moreFrame = placed.frames[index]
+                self.moreCommentsButton.isHidden = false
+                self.moreCommentsButton.frame = CGRect(x: moreFrame.x, y: moreFrame.y, width: moreFrame.width, height: moreFrame.height)
+                index += 1
+            } else {
+                self.moreCommentsButton.isHidden = true
+                self.moreCommentsButton.frame = .zero
+            }
         } else {
             self.likeButton.isHidden = true
             self.likeButton.frame = .zero
             self.commentField.isHidden = true
             self.commentField.frame = .zero
+            self.moreCommentsButton.isHidden = true
+            self.moreCommentsButton.frame = .zero
         }
         for (row, commentHeight) in zip(self.commentRows, commentHeights) {
             guard index < placed.frames.count else {
@@ -271,6 +294,9 @@ final class TellomiDiscoverPostController: ViewController {
                 self.post = cards.first.map(tellomiDiscoverDisplayPost)
                 self.failed = self.post == nil || self.post?.unavailable == true
                 self.installImages()
+                if self.loggedIn, self.post != nil {
+                    self.openComments()
+                }
             default:
                 self.failed = true
             }
@@ -303,12 +329,15 @@ final class TellomiDiscoverPostController: ViewController {
             self.linkCard.hide()
         }
         self.installPoll(self.post?.poll, copy: copy)
-        self.installComments(self.post?.comments ?? [], color: self.presentationData.theme.list.itemPrimaryTextColor)
+        let rows = self.comments.visibleRows() + self.comments.pendingRows()
+        self.installComments(rows.isEmpty ? (self.post?.comments ?? []) : rows, color: self.presentationData.theme.list.itemPrimaryTextColor)
         if let post = self.post {
-            if self.likeState?.postId != post.id {
-                self.likeState = TellomiDiscoverLikeState(postId: post.id, liked: post.liked, count: post.likeCount, hidden: post.likesHidden, surface: "recommend")
+            if self.like == nil || self.like?.postId != post.id {
+                self.like = TellomiDiscoverLike(postId: post.id, liked: post.liked, count: post.likeCount, hidden: post.likesHidden, surface: self.surface)
+            } else {
+                self.like?.bind(postId: post.id, liked: post.liked, count: post.likeCount, likesHidden: post.likesHidden, surface: self.surface)
             }
-            let view = self.likeState?.view()
+            let view = self.like?.view()
             let title: String
             if view?.hidden == true {
                 title = copy.likes.replacingOccurrences(of: "%d", with: "")
@@ -319,57 +348,105 @@ final class TellomiDiscoverPostController: ViewController {
             self.likeButton.setTitleColor(self.presentationData.theme.list.itemAccentColor, for: .normal)
             self.commentField.textColor = self.presentationData.theme.list.itemPrimaryTextColor
             self.commentField.attributedPlaceholder = NSAttributedString(string: copy.comments.replacingOccurrences(of: "%d", with: "").trimmingCharacters(in: .whitespaces), attributes: [NSAttributedString.Key.foregroundColor: self.presentationData.theme.list.itemSecondaryTextColor])
+            self.moreCommentsButton.setTitle(copy.comments, for: .normal)
         }
     }
 
     @objc private func likePressed() {
-        guard var state = self.likeState, let request = state.tap() else {
+        guard let like = self.like, let request = like.tap() else {
             return
         }
-        self.likeState = state
         self.apply()
+        self.sendLike(request)
+    }
+
+    private func sendLike(_ request: TellomiDiscoverLikeRequest) {
+        guard let like = self.like else {
+            return
+        }
         let operation: TellomiDiscoverOperation = request.on ? .like(postId: request.postId, surface: request.surface) : .unlike(postId: request.postId, surface: request.surface)
         self.loader.run(loggedIn: true, configuration: self.configuration, operation: operation) { [weak self] result in
-            guard let self, var state = self.likeState else {
+            guard let self, let like = self.like else {
                 return
             }
-            let success: Bool
-            if case .success(.acknowledged) = result {
-                success = true
-            } else {
-                success = false
+            if let next = tellomiDiscoverApplyLike(like, request: request, result: result) {
+                self.sendLike(next)
             }
-            _ = state.finish(generation: request.generation, success: success)
-            if var post = self.post, success {
-                post.liked = state.confirmedLiked
-                post.likeCount = state.confirmedCount
+            if var post = self.post {
+                post.liked = like.view().liked
+                post.likeCount = like.view().count
                 self.post = post
             }
-            self.likeState = state
             self.apply()
         }
     }
 
     @objc private func commentReturned() {
-        let text = self.commentField.text ?? ""
-        let nonce = UUID().uuidString
-        guard tellomiDiscoverCommentBody(text: text, parentId: nil, nonce: nonce) != nil else {
+        guard let send = self.comments.submit(text: self.commentField.text ?? "", parentId: nil, freshNonce: UUID().uuidString), send.ready(), let nonce = send.nonce, let text = send.text else {
             return
         }
-        self.loader.run(loggedIn: true, configuration: self.configuration, operation: .comment(postId: self.postId, text: text, parentId: nil, clientNonce: nonce)) { [weak self] result in
-            guard let self, case .success(.commentCreated) = result else {
+        self.loader.run(loggedIn: true, configuration: self.configuration, operation: .comment(postId: self.postId, text: text, parentId: send.parentId, clientNonce: nonce)) { [weak self] result in
+            guard let self else {
                 return
             }
-            self.commentField.text = nil
-            self.loader.run(loggedIn: true, configuration: self.configuration, operation: .comments(postId: self.postId, cursor: nil)) { [weak self] page in
-                guard let self, case let .success(.commentPage(value)) = page, var post = self.post else {
-                    return
+            if case let .success(.commentCreated(created)) = result, self.comments.finishSend(generation: send.generation, version: send.version, created: created) {
+                self.commentField.text = nil
+                if var post = self.post, created.state == "ok" {
+                    post.commentCount += 1
+                    self.post = post
                 }
-                post.comments = value.comments
-                post.commentCount = value.comments.count
-                self.post = post
-                self.apply()
+            } else {
+                self.comments.failSend(generation: send.generation, version: send.version)
             }
+            self.apply()
+        }
+    }
+
+    @objc private func moreCommentsPressed() {
+        guard let load = self.comments.more() else {
+            return
+        }
+        self.loadComments(load)
+    }
+
+    func openComments() {
+        let load = self.comments.open(postId: self.postId)
+        self.loadComments(load)
+    }
+
+    private func loadComments(_ load: TellomiDiscoverCommentLoad) {
+        self.loader.run(loggedIn: true, configuration: self.configuration, operation: .comments(postId: load.postId, cursor: load.cursor)) { [weak self] result in
+            guard let self else {
+                return
+            }
+            if case let .success(.commentPage(page)) = result {
+                _ = self.comments.accept(generation: load.generation, version: load.version, page: page)
+            } else {
+                self.comments.failLoad(generation: load.generation, version: load.version)
+            }
+            self.apply()
+        }
+    }
+
+    func deleteComment(_ commentId: String) {
+        guard let request = self.comments.delete(commentId) else {
+            return
+        }
+        self.loader.run(loggedIn: true, configuration: self.configuration, operation: .deleteComment(request.commentId)) { [weak self] result in
+            guard let self else {
+                return
+            }
+            let ok: Bool
+            if case .success(.acknowledged) = result {
+                ok = true
+            } else {
+                ok = false
+            }
+            if self.comments.finishDelete(generation: request.generation, version: request.version, commentId: request.commentId, ok: ok), ok, var post = self.post {
+                post.commentCount = max(0, post.commentCount - 1)
+                self.post = post
+            }
+            self.apply()
         }
     }
 
@@ -416,6 +493,13 @@ final class TellomiDiscoverPostController: ViewController {
                     return
                 }
                 tellomiPresentDiscoverReport(host: self, context: self.context, loggedIn: self.loggedIn, configuration: self.configuration, loader: self.loader, target: .comment(postId: self.postId, commentId: comment.id))
+            }
+            if self.comments.canDelete(comment.id) {
+                row.deleteButton.isHidden = false
+                row.deleteButton.accessibilityIdentifier = "tellomi.discover.delete.comment.\(comment.id)"
+                row.onDelete = { [weak self] in
+                    self?.deleteComment(comment.id)
+                }
             }
             self.scrollView.addSubview(row)
             return row
@@ -480,7 +564,9 @@ final class TellomiDiscoverPostController: ViewController {
 
 private final class TellomiDiscoverCommentRow: UIView {
     var onReport: (() -> Void)?
+    var onDelete: (() -> Void)?
     let reportButton = UIButton(type: .system)
+    let deleteButton = UIButton(type: .system)
     private let label = UILabel()
 
     init(comment: TellomiDiscoverComment, color: UIColor) {
@@ -499,8 +585,12 @@ private final class TellomiDiscoverCommentRow: UIView {
         self.label.numberOfLines = 0
         self.reportButton.setTitle("…", for: .normal)
         self.reportButton.addTarget(self, action: #selector(self.reportPressed), for: .touchUpInside)
+        self.deleteButton.setTitle("×", for: .normal)
+        self.deleteButton.isHidden = true
+        self.deleteButton.addTarget(self, action: #selector(self.deletePressed), for: .touchUpInside)
         self.addSubview(self.label)
         self.addSubview(self.reportButton)
+        self.addSubview(self.deleteButton)
     }
 
     required init?(coder: NSCoder) {
@@ -509,15 +599,21 @@ private final class TellomiDiscoverCommentRow: UIView {
 
     func layout(width: CGFloat) -> CGFloat {
         let buttonWidth: CGFloat = 44.0
-        let textWidth = max(1, width - buttonWidth)
+        let buttons: CGFloat = self.deleteButton.isHidden ? buttonWidth : buttonWidth * 2
+        let textWidth = max(1, width - buttons)
         let textSize = self.label.sizeThatFits(CGSize(width: textWidth, height: 400))
         let height = max(44.0, textSize.height)
         self.label.frame = CGRect(x: 0, y: 0, width: textWidth, height: height)
-        self.reportButton.frame = CGRect(x: textWidth, y: 0, width: buttonWidth, height: height)
+        self.deleteButton.frame = CGRect(x: textWidth, y: 0, width: self.deleteButton.isHidden ? 0 : buttonWidth, height: height)
+        self.reportButton.frame = CGRect(x: textWidth + (self.deleteButton.isHidden ? 0 : buttonWidth), y: 0, width: buttonWidth, height: height)
         return height
     }
 
     @objc private func reportPressed() {
         self.onReport?()
+    }
+
+    @objc private func deletePressed() {
+        self.onDelete?()
     }
 }
