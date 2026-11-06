@@ -189,15 +189,19 @@ jobs:
           if [[ ! -d build-input/configuration-repository ]]; then
             echo "configuration repository is absent on this clean checkout"
           fi
-          override=()
+          # macOS /bin/bash is 3.2. With set -u, "${empty[@]}" is an unbound
+          # variable (run 42270455404). Keep the required arguments in the
+          # array so the expansion is never empty, and append the override
+          # only when it is set.
+          configure_args=(
+            --bazel "${RUNNER_TEMP}/tellomi-proof-bazel"
+            --configuration "build-system/appstore-configuration.json"
+            --bazel-user-root "/private/var/tmp/_bazel_proof"
+          )
           if [[ "${MAKE_XCODE_FLAGS:-}" == *overrideXcodeVersion* ]]; then
-            override+=(--override-xcode)
+            configure_args+=(--override-xcode)
           fi
-          python3 ../proof-tools/.github/proof_configure.py \
-            --bazel "${RUNNER_TEMP}/tellomi-proof-bazel" \
-            --configuration "build-system/appstore-configuration.json" \
-            --bazel-user-root "/private/var/tmp/_bazel_proof" \
-            "${override[@]}"
+          python3 ../proof-tools/.github/proof_configure.py "${configure_args[@]}"
           test -f build-input/configuration-repository/variables.bzl
           test -f build-input/configuration-repository/MODULE.bazel
 
@@ -220,18 +224,27 @@ jobs:
         run: |
           set -euo pipefail
           set -o pipefail
-          python3 -u build-system/Make/Make.py \
-            --bazel "${PROOF_BAZEL}" \
-            --bazelUserRoot="/private/var/tmp/_bazel_proof" \
-            ${MAKE_XCODE_FLAGS:-} \
-            build \
-            --configurationPath="build-system/appstore-configuration.json" \
-            --xcodeManagedCodesigning \
-            --disableProvisioningProfiles \
-            --configuration=debug_sim_arm64 \
-            --buildNumber=1 \
-            --showActions \
-            --target="//Tests/TellomiFeedProof:TellomiFeedProofTests" \
+          # Same Bash 3.2 rule as the configure step: the array always holds
+          # the required Make.py arguments, and --overrideXcodeVersion is
+          # appended only when Select Xcode set it.
+          make_args=(
+            --bazel "${PROOF_BAZEL}"
+            --bazelUserRoot="/private/var/tmp/_bazel_proof"
+          )
+          if [[ "${MAKE_XCODE_FLAGS:-}" == *overrideXcodeVersion* ]]; then
+            make_args+=(--overrideXcodeVersion)
+          fi
+          make_args+=(
+            build
+            --configurationPath="build-system/appstore-configuration.json"
+            --xcodeManagedCodesigning
+            --disableProvisioningProfiles
+            --configuration=debug_sim_arm64
+            --buildNumber=1
+            --showActions
+            --target="//Tests/TellomiFeedProof:TellomiFeedProofTests"
+          )
+          python3 -u build-system/Make/Make.py "${make_args[@]}" \
             2>&1 | tee /tmp/proof-build.log
           bash ../proof-tools/.github/proof-compile-guard.sh sdk-log /tmp/proof-build.log
           bash ../proof-tools/.github/proof-compile-guard.sh no-app-ipa "bazel-bin/Telegram/Telegram.ipa"

@@ -47,9 +47,12 @@ checkout_children() {
   done < <(git -C "$root" config -f .gitmodules --get-regexp '^submodule\..*\.path$' || true)
   local fail=0
   local pid
-  for pid in "${pids[@]}"; do
-    wait "$pid" || fail=1
-  done
+  # Bash 3.2 with set -u rejects "${pids[@]}" when no submodule was started.
+  if [[ ${#pids[@]} -gt 0 ]]; then
+    for pid in "${pids[@]}"; do
+      wait "$pid" || fail=1
+    done
+  fi
   if [[ "$fail" != 0 ]]; then
     echo "submodule checkout failed" >&2
     exit 1
