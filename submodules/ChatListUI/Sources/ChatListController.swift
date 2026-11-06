@@ -2580,6 +2580,28 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         }
                         if let navigationController = strongSelf.navigationController as? NavigationController {
                             let blocking = currentValues.contains(.setupLoginEmailBlocking)
+                            let peerId = strongSelf.context.account.peerId
+                            let _ = (strongSelf.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+                            |> deliverOnMainQueue).start(next: { [weak self] peer in
+                                guard let strongSelf = self, let navigationController = strongSelf.navigationController as? NavigationController else {
+                                    return
+                                }
+                                let phone: String?
+                                if case let .user(user) = peer {
+                                    phone = user.phone
+                                } else {
+                                    phone = nil
+                                }
+                                // Local sign-in address only. A recovery pattern or login_email_pattern
+                                // does not count, and this does not write either one or dismiss the suggestion.
+                                let channels = TellomiEmailChannels(
+                                    signInAddress: tellomiAccountContact(phone: phone, peerId: peerId).email,
+                                    nativeLoginEmailPattern: nil,
+                                    recoveryEmailPattern: nil
+                                )
+                                if !tellomiShouldPresentNativeLoginEmailSetup(channels) {
+                                    return
+                                }
                             let controller = strongSelf.context.sharedContext.makeLoginEmailSetupController(context: strongSelf.context, blocking: blocking, emailPattern: nil, canAutoDismissIfNeeded: true, navigationController: navigationController, completion: {
                                 let _ = context.engine.notices.dismissServerProvidedSuggestion(suggestion: blocking ? ServerProvidedSuggestion.setupLoginEmailBlocking.id : ServerProvidedSuggestion.setupLoginEmail.id).startStandalone()
                             }, dismiss: {
@@ -2593,6 +2615,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                                 controller.navigationPresentation = .flatModal
                             }
                             navigationController.pushViewController(controller)
+                            })
                         }
                     })
                     return

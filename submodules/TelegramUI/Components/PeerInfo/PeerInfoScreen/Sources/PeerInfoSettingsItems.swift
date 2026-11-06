@@ -486,7 +486,8 @@ func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, conte
         }
         if let email = contact.email, !email.isEmpty {
             items[.info]!.append(PeerInfoScreenDisclosureItem(id: 30, label: .text(email), text: accountCopy.email, icon: PresentationResourcesSettings.email, action: {
-                interaction.openSettings(.loginEmail)
+                let pack = tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)
+                tellomiPresentSignInEmailNotice(context: context, controller: interaction.getController(), languageCode: presentationData.strings.primaryComponent.languageCode, pack: pack)
             }))
         }
         if contact.phone == nil {

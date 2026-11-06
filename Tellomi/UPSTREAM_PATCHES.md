@@ -999,3 +999,22 @@ The ranged-hole close that refused a page whose ids sat outside the request was 
 | `submodules/TelegramUI/Sources/ChatHistoryListNode.swift` | Uses that decision. Each history subscription has a generation. |
 | `submodules/TelegramUI/Tests/ChatHistoryEmptyLoadingDecisionTests.swift` | Same load, chat switch, empty previous, finished empty chat, stale subscription. |
 | `submodules/TelegramUI/BUILD` | Host test `ChatHistoryEmptyLoadingDecisionTests`. |
+
+## Email sign-in versus native login email, and dark login fields
+
+A Tellomi email account signs in with that address in `auth.sendCode` / `auth.signIn` / `auth.signUp` `phone_number`. The device remembers it because `user` has no sign-in email field. That address is not `account.password.login_email_pattern` and not the cloud-password recovery email (`email_unconfirmed_pattern` / `account.passwordSettings.email`).
+
+Settings → 账号与绑定 and the profile email row used to open `loginEmailSetupController`, which calls `account.sendVerifyEmailCode` / `account.verifyEmail` with `emailVerifyPurposeLoginChange`. That is the native login-code email. Completing it does not change the `phone_number` the account signs in with, and it does not change existing sessions. A recovery address was never written. The row now shows the stored sign-in address and explains that. It does not send those RPCs. A phone account with no sign-in address still opens the native screen, titled 绑定邮箱. `SETUP_LOGIN_EMAIL` is not presented when a sign-in address is already known. The suggestion is not dismissed, and the recovery email is not marked set.
+
+The email code field called `applyField` without the dark flag, so the fill stayed `#F2F3F5` while dark mode set the digits to white. The nickname field assigned the value with `itemPlaceholderTextColor`, which is `#4d4d4d` in the default dark theme, on the dark fill `#2C2C2E`. Both pairs are below 3:1. Field fill, text, caret, placeholder, and error now come from `tellomiLoginFieldColors`. The name screen follows a system appearance change with the rest of the login flow.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiLoginFieldColors.swift` | Shared field colors and the contrast helpers. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Palette field colors read that helper. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | Email code fill follows dark. Digits, caret, placeholder, and error use the palette. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpController.swift`, `AuthorizationSequenceSignUpControllerNode.swift`, `AuthorizationSequenceController.swift` | Nickname text is the field color, not the placeholder gray. Appearance changes reach this screen. |
+| `submodules/TelegramUIPreferences/Sources/TellomiSettingsDecisions.swift` | Sign-in address versus native login email versus recovery email. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/TellomiSettingsLayout.swift`, `PeerInfoSettingsItems.swift` | A known sign-in address is shown. Tapping it does not start login-email setup. |
+| `submodules/ChatListUI/Sources/ChatListController.swift` | Skips the native setup screen when that address exists. Does not dismiss the suggestion. |
+| `submodules/AuthorizationUI/Tests/TellomiLoginFieldColorsTests.swift`, `submodules/TelegramUIPreferences/Tests/TellomiSettingsDecisionsTests.swift` | Contrast and the email-channel decision. |

@@ -50,6 +50,43 @@ public func tellomiSettingsHomeLayout(includeNavigation: Bool) -> [(TellomiSetti
 
 /// D-39. Phone when there is one, otherwise the email, then `@username`.
 /// The owner's settings card shows the address in full.
+/// The three email channels on one account. Only `signInAddress` is the Tellomi login.
+/// `nativeLoginEmailPattern` is `account.password.login_email_pattern`.
+/// `recoveryEmailPattern` is the cloud-password recovery address. Neither one is the account.
+public struct TellomiEmailChannels: Equatable {
+    public var signInAddress: String?
+    public var nativeLoginEmailPattern: String?
+    public var recoveryEmailPattern: String?
+
+    public init(signInAddress: String?, nativeLoginEmailPattern: String? = nil, recoveryEmailPattern: String? = nil) {
+        self.signInAddress = signInAddress
+        self.nativeLoginEmailPattern = nativeLoginEmailPattern
+        self.recoveryEmailPattern = recoveryEmailPattern
+    }
+}
+
+public enum TellomiSettingsEmailAction: Equatable {
+    /// Already used to sign in. Do not open native login-email setup and do not call `account.verifyEmail`.
+    case showSignInAddress(String)
+    /// No Tellomi sign-in address. The existing native login-email screen stays available.
+    case offerNativeLoginEmailSetup
+}
+
+public func tellomiSettingsEmailAction(_ channels: TellomiEmailChannels) -> TellomiSettingsEmailAction {
+    let address = channels.signInAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !address.isEmpty {
+        return .showSignInAddress(address)
+    }
+    return .offerNativeLoginEmailSetup
+}
+
+public func tellomiShouldPresentNativeLoginEmailSetup(_ channels: TellomiEmailChannels) -> Bool {
+    if case .offerNativeLoginEmailSetup = tellomiSettingsEmailAction(channels) {
+        return true
+    }
+    return false
+}
+
 public func tellomiSettingsIdentityLine(formattedPhone: String?, email: String?, username: String?) -> String {
     var parts: [String] = []
     let phone = formattedPhone?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -188,6 +225,11 @@ public struct TellomiSettingsCopy: Equatable {
     public var about: String
     public var phone: String
     public var email: String
+    /// Phone account with no Tellomi sign-in address. Opens the native login-email screen.
+    public var bindEmail: String
+    /// Shown when the account already signs in with an email. Not a recovery-email change.
+    public var signInEmailTitle: String
+    public var signInEmailBody: String
     public var username: String
     public var addAccount: String
     public var logout: String
@@ -242,6 +284,9 @@ public struct TellomiSettingsCopy: Equatable {
             about: text("Tellomi.Settings.About", "About Tellomi", "关于 Tellomi", "關於 Tellomi"),
             phone: text("Tellomi.Settings.Phone", "Phone", "手机号", "手機號碼"),
             email: text("Tellomi.Settings.Email", "Email", "邮箱", "電子郵件"),
+            bindEmail: text("Tellomi.Settings.BindEmail", "Link an email", "绑定邮箱", "綁定電子郵件"),
+            signInEmailTitle: text("Tellomi.Settings.SignInEmailTitle", "Sign-in email", "登录邮箱", "登入電子郵件"),
+            signInEmailBody: text("Tellomi.Settings.SignInEmailBody", "This address already signs in to this account. It is not the cloud-password recovery email, and this screen does not change the account or link another address.", "这是登录这个账号的邮箱，不是云密码的恢复邮箱。这里不会改账号，也不会再要求绑定一次。", "這是登入這個帳號的電子郵件，不是雲端密碼的救援信箱。這裡不會改帳號，也不會再要求綁定一次。"),
             username: text("Tellomi.Settings.Username", "Username", "用户名", "使用者名稱"),
             addAccount: text("Tellomi.Settings.AddAccount", "Add Account", "添加账号", "新增帳號"),
             logout: text("Tellomi.Settings.Logout", "Log Out", "退出登录", "登出"),
