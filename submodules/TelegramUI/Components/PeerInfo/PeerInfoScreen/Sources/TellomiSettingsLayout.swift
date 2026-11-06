@@ -128,11 +128,11 @@ private func tellomiSettingsHomeRow(_ row: TellomiSettingsHomeRow, source: [(Any
             return tellomiRelocatedDisclosure(item, id: "tellomi.navigation")
         }
         let title = TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)).navigationTitle
-        return tellomiDisclosure(id: "tellomi.navigation", text: title, icon: PresentationResourcesSettings.appearance, action: {
+        return tellomiDisclosure(id: "tellomi.navigation", text: title, icon: PresentationResourcesSettings.topics, action: {
             tellomiPushSettingsPage(interaction: interaction, controller: tellomiNavigationSettingsController(context: context))
         })
     case .more:
-        return tellomiDisclosure(id: "tellomi.more", text: copy.more, icon: PresentationResourcesSettings.dataAndStorage, action: {
+        return tellomiDisclosure(id: "tellomi.more", text: copy.more, icon: PresentationResourcesSettings.more, action: {
             tellomiPresentMore(source: source, context: context, presentationData: presentationData, interaction: interaction, copy: copy)
         })
     case .helpCenter:
@@ -140,15 +140,15 @@ private func tellomiSettingsHomeRow(_ row: TellomiSettingsHomeRow, source: [(Any
             tellomiOpenSettingsURL(context: context, interaction: interaction, url: TellomiSettingsURLs.helpCenter)
         })
     case .support:
-        return tellomiDisclosure(id: "tellomi.support", text: copy.support, icon: PresentationResourcesSettings.support, action: {
+        return tellomiDisclosure(id: "tellomi.support", text: copy.support, icon: PresentationResourcesSettings.messages, action: {
             tellomiOpenSupportChat(context: context, interaction: interaction)
         })
     case .legal:
-        return tellomiDisclosure(id: "tellomi.legal", text: copy.legal, icon: PresentationResourcesSettings.faq, action: {
+        return tellomiDisclosure(id: "tellomi.legal", text: copy.legal, icon: PresentationResourcesSettings.files, action: {
             tellomiPresentLegal(context: context, interaction: interaction, copy: copy)
         })
     case .about:
-        return tellomiDisclosure(id: "tellomi.about", text: copy.about, icon: PresentationResourcesSettings.faq, action: {
+        return tellomiDisclosure(id: "tellomi.about", text: copy.about, icon: PresentationResourcesSettings.info, action: {
             tellomiPushSettingsPage(interaction: interaction, controller: tellomiAboutController(context: context))
         })
     }

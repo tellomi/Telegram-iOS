@@ -778,20 +778,24 @@ A post and a comment have a "…" menu whose Report row opens Telegram's report 
 
 ## Settings home (M1)
 
-The settings tab is still `PeerInfoScreen` in settings mode. The home list, the header card, and the About / bindings / more pages are Tellomi types. Upstream keeps the old `settingsItems` builder so badges, session counts, and feature gates stay there; the screen asks `tellomiSettingsHomeItems` instead.
+The settings tab is still `PeerInfoScreen` in settings mode. The home list and the About / bindings / more pages are Tellomi types. The header is Telegram's collapsing profile header (centered avatar, name under it, one Edit in the navigation bar). Upstream keeps the old `settingsItems` builder so badges, session counts, and feature gates stay there; the screen asks `tellomiSettingsHomeItems` instead.
 
 | File | Change |
 | --- | --- |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings mode calls `tellomiSettingsHomeItems`. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | The Premium grace banner is hidden unless Premium is enabled, and its copy is no longer hard-coded English. |
-| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift` | In settings, the resting header is the card from `tellomiSettingsHeaderCardMetrics`: avatar on the left, name and ID beside it, Edit on the right. The ID line is `tellomiSettingsIdentityLine` (phone, or else the full email, then `@username`). |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift` | Settings keeps Telegram's collapsing header. The subtitle is `tellomiSettingsIdentityLine` (phone, or else the full email, then `@username`). There is no second Edit and no profile card. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/TellomiNavigationSettingsEntry.swift` | `tellomiPushSettingsPage` is the shared push used by the home rows. |
 | `submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift` | Adds the personalized-recommendation switch in a Discover section after the privacy block and before auto-archive. The value is `TellomiRecommendationSettings`. |
 | `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | Account preference key `tellomiRecommendationSettings` (id 100). |
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreen.swift` | The recommend request sends `personalized=false` when the switch is off, and reloads that tab when the switch changes. |
 | `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | `Tellomi.Settings.*`. |
 
-New files, not in the table above: `TellomiSettingsDecisions.swift`, `TellomiRecommendationSettings.swift`, `TellomiSettingsLayout.swift`, `TellomiSettingsHeaderCard.swift`, `TellomiSettingsPages.swift`. Tips and Apple Watch are not on the home or the More page. Saved messages, recent calls, chat folders, power saving, and open-source licenses are on More. A configured proxy stays on the General group. Help Center opens `https://tellomi.cn/help`. About Tellomi is the only place that shows the model name and the two filing numbers. That page subscribes to `help.getAppConfig` (`EngineData.Item.Configuration.App`). A non-empty string replaces the local fallback: `tellomi_ai_model_name` (default 「通义千问 Qwen」), `tellomi_generative_ai_registration_number`, and `tellomi_algorithm_filing_number` (both default 「待公示」 / Pending). Teamgram `pkg/about` publishes the registration number as `tellomi_ai_registration_number`; that key is used when the longer one is missing or blank, and the longer one wins when both are set. A missing key, a blank string, or a non-string keeps the fallback. Discover profile photo and bio stay the existing Privacy & Security rows (`privacyKeyProfilePhoto`, `privacyKeyAbout`). The personalized-recommendation switch is its own Discover section on that screen, not a second photo or bio row.
+New files, not in the table above: `TellomiSettingsDecisions.swift`, `TellomiRecommendationSettings.swift`, `TellomiSettingsLayout.swift`, `TellomiSettingsPages.swift`. Tips and Apple Watch are not on the home or the More page. Saved messages, recent calls, chat folders, power saving, and open-source licenses are on More. A configured proxy stays on the General group. Help Center opens `https://tellomi.cn/help`. About Tellomi shows the version row only. `TellomiAboutDisclosure` still reads `help.getAppConfig` keys (`tellomi_ai_model_name`, `tellomi_generative_ai_registration_number` or `tellomi_ai_registration_number`, `tellomi_algorithm_filing_number`) and still falls back to 「通义千问 Qwen」 and 「待公示」 / Pending, but that block is not drawn. Discover profile photo and bio stay the existing Privacy & Security rows (`privacyKeyProfilePhoto`, `privacyKeyAbout`). The personalized-recommendation switch is its own Discover section on that screen, not a second photo or bio row.
+
+Help-center rows use different settings glyphs: Help Center is the question mark, Support is the chat icon, Terms and Privacy is the file icon, About is the info icon. Navigation uses the topics glyph (not Appearance). More uses the dots glyph (not Data & Storage).
+
+The Discover tab uses `Chat List/Tabs/IconDiscover` and `IconDiscoverFilled`, a compass drawn on the same 30 pt page and ink box as Settings. Line is resting, fill is selected. It is not a hand-drawn 28 pt image.
 
 ## Discover polls, forwards, and notification switch (M3)
 

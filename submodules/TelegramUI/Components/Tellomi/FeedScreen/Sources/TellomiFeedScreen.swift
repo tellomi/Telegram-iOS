@@ -278,8 +278,8 @@ public final class TellomiFeedScreen: ViewController {
         self.title = legacy.feed
         self.navigationItem.title = legacy.feed
         self.tabBarItem.title = legacy.feed
-        self.tabBarItem.image = tellomiFeedTabIcon(filled: false)
-        self.tabBarItem.selectedImage = tellomiFeedTabIcon(filled: true)
+        self.tabBarItem.image = UIImage(bundleImageName: "Chat List/Tabs/IconDiscover")
+        self.tabBarItem.selectedImage = UIImage(bundleImageName: "Chat List/Tabs/IconDiscoverFilled")
         self.tabBarItem.animationName = nil
         self.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationData: self.presentationData), transition: .immediate)
 
@@ -706,35 +706,6 @@ private func tellomiDiscoverConfigField(_ value: JSONElement?) -> TellomiDiscove
         return .number(value.doubleValue)
     }
     return .missing
-}
-
-private func tellomiFeedTabIcon(filled: Bool) -> UIImage? {
-    let side: CGFloat = 28.0
-    UIGraphicsBeginImageContextWithOptions(CGSize(width: side, height: side), false, 0.0)
-    defer {
-        UIGraphicsEndImageContext()
-    }
-    let circle = UIBezierPath(ovalIn: CGRect(x: 2.5, y: 2.5, width: 23.0, height: 23.0))
-    circle.lineWidth = 1.6
-    UIColor.black.setStroke()
-    circle.stroke()
-
-    let needle = UIBezierPath()
-    needle.move(to: CGPoint(x: 14.0, y: 7.0))
-    needle.addLine(to: CGPoint(x: 18.5, y: 16.5))
-    needle.addLine(to: CGPoint(x: 14.0, y: 21.0))
-    needle.addLine(to: CGPoint(x: 9.5, y: 16.5))
-    needle.close()
-    UIColor.black.setFill()
-    UIColor.black.setStroke()
-    if filled {
-        needle.fill()
-    } else {
-        needle.lineWidth = 1.4
-        needle.stroke()
-    }
-    UIBezierPath(ovalIn: CGRect(x: 12.4, y: 12.4, width: 3.2, height: 3.2)).fill()
-    return UIGraphicsGetImageFromCurrentImageContext()?.withRenderingMode(.alwaysTemplate)
 }
 
 private final class TellomiFeedTabBarContextReferenceContentSource: ContextReferenceContentSource {
