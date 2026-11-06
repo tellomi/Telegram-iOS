@@ -516,10 +516,246 @@ def evaluate_graph(text, flags):
     return Decision(not unique, unique)
 
 
-def wrapper_main(argv, real, run=None, execv=None):
+_TEXT_LIMIT = 4000
+_LIST_LIMIT = 40
+_SECRET_RE = re.compile(
+    r"(?i)(bearer\s+\S+|ghp_[A-Za-z0-9]+|github_pat_\S+|AKIA[0-9A-Z]{16}"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"
+    r"|-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----)"
+)
+
+
+def diagnostics_requested(environ=None):
+    """Explicit diagnostics mode. Default off. Never changes the allow decision."""
+    environ = os.environ if environ is None else environ
+    return environ.get("TELLOMI_PROOF_DIAGNOSTICS") == "1"
+
+
+def redact(text):
+    """Drop credentials, provisioning blobs, and machine-local prefixes."""
+    if text is None:
+        return ""
+    text = _SECRET_RE.sub("${redacted}", text)
+    text = re.sub(r"/Users/[^/\s'\"]+", "${HOME}", text)
+    text = re.sub(r"/private/var/folders/\S+", "${TMP}", text)
+    text = re.sub(r"/private/var/tmp/\S+", "${TMP}", text)
+    text = re.sub(r"\S+\.mobileprovision", "${redacted-provisioning}", text)
+    text = re.sub(r"\S+\.(?:p12|pem)\b", "${redacted-key}", text)
+    text = re.sub(
+        r"Apple (?:Development|Distribution|iPhone Developer):[^\n'\"]*",
+        "${redacted-identity}",
+        text,
+    )
+    return text
+
+
+def _clip(text, limit):
+    text = redact(text)
+    if len(text) <= limit:
+        return text, False
+    return text[:limit] + "\n[truncated %d of %d bytes]" % (len(text) - limit, len(text)), True
+
+
+def _artifact_paths(document):
+    fragments = {}
+    for fragment in document.get("pathFragments") or []:
+        if isinstance(fragment, dict) and isinstance(fragment.get("id"), int):
+            fragments[fragment["id"]] = fragment
+    paths = {}
+    for artifact in document.get("artifacts") or []:
+        if not isinstance(artifact, dict):
+            continue
+        identifier = artifact.get("id")
+        fragment_id = artifact.get("pathFragmentId")
+        if not isinstance(identifier, int) or not isinstance(fragment_id, int):
+            continue
+        path = _fragment_path(fragments, fragment_id, set())
+        if path is not None:
+            paths[identifier] = path
+    return paths
+
+
+def _walk_inputs(document, paths, dep_ids, cap):
+    depsets = {}
+    for depset in document.get("depSetOfFiles") or []:
+        if isinstance(depset, dict) and isinstance(depset.get("id"), int):
+            depsets[depset["id"]] = depset
+    found = []
+    truncated = False
+    seen = set()
+    stack = list(dep_ids or [])
+    while stack:
+        dep_id = stack.pop()
+        if dep_id in seen:
+            continue
+        seen.add(dep_id)
+        depset = depsets.get(dep_id)
+        if depset is None:
+            truncated = True
+            continue
+        for artifact_id in depset.get("directArtifactIds") or []:
+            path = paths.get(artifact_id)
+            if path is None:
+                truncated = True
+                continue
+            if len(found) >= cap:
+                truncated = True
+                return found, truncated
+            found.append(path)
+        stack.extend(depset.get("transitiveDepSetIds") or [])
+    return found, truncated
+
+
+def project_aquery(text):
+    """Whitelist projection for the Actions log. Not a raw or complete graph."""
+    lines = [
+        "diagnostics: whitelist projection; not a raw action graph",
+    ]
+    truncated = False
+    if text is None or text.strip() == "":
+        lines.append("diagnostics: aquery document was not parsed; not a complete graph")
+        lines.append("documentBytes: 0")
+        return "\n".join(lines) + "\n"
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError:
+        lines.append("diagnostics: aquery document was not parsed; not a complete graph")
+        lines.append("documentBytes: %d" % len(text))
+        return "\n".join(lines) + "\n"
+    if not isinstance(document, dict):
+        lines.append("diagnostics: aquery document was not parsed; not a complete graph")
+        return "\n".join(lines) + "\n"
+    actions = document.get("actions")
+    if not isinstance(actions, list):
+        lines.append("diagnostics: aquery document was not parsed; not a complete graph")
+        return "\n".join(lines) + "\n"
+    paths = _artifact_paths(document)
+    labels = {}
+    for target in document.get("targets") or []:
+        if isinstance(target, dict) and isinstance(target.get("id"), int):
+            labels[target["id"]] = target.get("label") or ""
+    producers = {}
+    counts = {}
+    for raw in actions:
+        if not isinstance(raw, dict):
+            continue
+        mnemonic = raw.get("mnemonic") or ""
+        counts[mnemonic] = counts.get(mnemonic, 0) + 1
+        for output_id in raw.get("outputIds") or []:
+            path = paths.get(output_id)
+            if path:
+                producers[path] = mnemonic
+    lines.append("actions: %d" % len(actions))
+    lines.append("mnemonics: " + ", ".join(
+        "%s=%d" % (name, counts[name]) for name in sorted(counts)
+    ))
+    shown = 0
+    for raw in actions:
+        if not isinstance(raw, dict):
+            continue
+        if shown >= _LIST_LIMIT:
+            truncated = True
+            lines.append("actions listed: truncated at %d" % _LIST_LIMIT)
+            break
+        shown += 1
+        mnemonic = raw.get("mnemonic") or ""
+        outputs = [paths.get(item, "?") for item in raw.get("outputIds") or []]
+        inputs, inputs_cut = _walk_inputs(document, paths, raw.get("inputDepSetIds") or [], _LIST_LIMIT)
+        if inputs_cut:
+            truncated = True
+        target = labels.get(raw.get("targetId"), "")
+        lines.append("action %d mnemonic=%s target=%s" % (shown, redact(mnemonic), redact(target)))
+        lines.append("  outputs: " + ", ".join(redact(path) for path in outputs))
+        lines.append("  inputs: " + ", ".join(redact(path) for path in inputs) + (
+            " [inputs truncated]" if inputs_cut else ""))
+        env_count = len(raw.get("environmentVariables") or [])
+        lines.append("  environmentVariables: omitted (%d)" % env_count)
+        if "executionInfo" in raw:
+            lines.append("  executionInfo: omitted")
+        arguments = raw.get("arguments") or []
+        if isinstance(arguments, list):
+            kept = []
+            for argument in arguments[:_LIST_LIMIT]:
+                if not isinstance(argument, str):
+                    truncated = True
+                    continue
+                shown_arg, cut = _clip(argument, 500)
+                truncated = truncated or cut
+                kept.append(shown_arg)
+            if len(arguments) > _LIST_LIMIT:
+                truncated = True
+                lines.append("  arguments: truncated %d" % len(arguments))
+            lines.append("  arguments: " + " | ".join(kept))
+        template = raw.get("templateContent")
+        if isinstance(template, str):
+            shown_template, cut = _clip(template, _TEXT_LIMIT)
+            truncated = truncated or cut
+            lines.append("  templateContent: " + shown_template.replace("\n", "\n  "))
+            if template.startswith("ARTIFACT: "):
+                producer_path = template[len("ARTIFACT: "):]
+                producer = producers.get(producer_path)
+                if producer:
+                    lines.append("  templateProducer: %s %s" % (producer, redact(producer_path)))
+                else:
+                    lines.append("  templateProducer: not in this aquery result %s" % redact(producer_path))
+                    truncated = True
+        substitutions = raw.get("substitutions") or []
+        if isinstance(substitutions, list) and substitutions:
+            for pair in substitutions[:_LIST_LIMIT]:
+                if not isinstance(pair, dict):
+                    truncated = True
+                    continue
+                key = redact(str(pair.get("key", "")))
+                value, cut = _clip(str(pair.get("value", "")), 200)
+                truncated = truncated or cut
+                lines.append("  substitution: %s=%s" % (key, value.replace("\n", "\\n")))
+            if len(substitutions) > _LIST_LIMIT:
+                truncated = True
+        for param in raw.get("paramFiles") or []:
+            if not isinstance(param, dict):
+                truncated = True
+                continue
+            param_args = param.get("arguments") or []
+            shown_args = []
+            if isinstance(param_args, list):
+                for argument in param_args[:_LIST_LIMIT]:
+                    shown_arg, cut = _clip(str(argument), 200)
+                    truncated = truncated or cut
+                    shown_args.append(shown_arg)
+                if len(param_args) > _LIST_LIMIT:
+                    truncated = True
+            lines.append("  paramFile: %s %s" % (redact(str(param.get("execPath", ""))), " | ".join(shown_args)))
+        if "fileContents" in raw:
+            body = raw.get("fileContents")
+            interesting = any("dossier_arguments" in path for path in outputs)
+            if interesting and isinstance(body, str):
+                shown_body, cut = _clip(body, _TEXT_LIMIT)
+                truncated = truncated or cut
+                lines.append("  fileContents: " + shown_body.replace("\n", "\n  "))
+            else:
+                size = len(body) if isinstance(body, str) else -1
+                lines.append("  fileContents: omitted (%s bytes)" % size)
+    if truncated:
+        lines.append("diagnostics: truncated fields are incomplete; not a complete graph")
+    return "\n".join(lines) + "\n"
+
+
+def project_aquery_failure(stderr):
+    shown, cut = _clip(stderr or "", _TEXT_LIMIT)
+    lines = [
+        "diagnostics: aquery failed; not a complete graph",
+        "stderr: " + shown.replace("\n", "\n"),
+    ]
+    if cut:
+        lines.append("diagnostics: truncated fields are incomplete; not a complete graph")
+    return "\n".join(lines) + "\n"
+
+
+def wrapper_main(argv, real, run=None, execv=None, environ=None):
     """Gate build/test, then exec the real binary. Other commands are forwarded."""
     run = run or subprocess.run
     execv = execv or os.execv
+    diagnose = diagnostics_requested(environ)
     if command_index(argv) is None:
         forwarded = [real] + list(argv[1:])
         execv(forwarded[0], forwarded)
@@ -527,9 +763,8 @@ def wrapper_main(argv, real, run=None, execv=None):
 
     query = aquery_argv(real, argv)
     completed = run(query, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    output = (completed.stdout or "") + "\n" + (completed.stderr or "")
     if completed.returncode != 0:
-        sys.stderr.write(output)
+        sys.stderr.write(project_aquery_failure(completed.stderr))
         sys.stderr.write("aquery failed; build was not executed\n")
         return completed.returncode or 1
 
@@ -543,6 +778,15 @@ def wrapper_main(argv, real, run=None, execv=None):
         flags.append(arg)
     flags = flags[:-1]
     decision = evaluate_graph(completed.stdout or "", flags)
+    if diagnose or not decision.allow:
+        sys.stderr.write(project_aquery(completed.stdout or ""))
+    if diagnose:
+        sys.stderr.write("diagnostics-only: build was not executed\n")
+        if not decision.allow:
+            sys.stderr.write("refusing to execute bazel; signing boundary failed before any build action\n")
+            for reason in decision.reasons:
+                sys.stderr.write("signing-boundary: %s\n" % reason)
+        return 2
     if not decision.allow:
         sys.stderr.write("refusing to execute bazel; signing boundary failed before any build action\n")
         for reason in decision.reasons:
