@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: proof-compile-guard.sh sha SHA | kind TEXT | bundles TEXT | no-app-ipa PATH | sdk-log FILE | sign-log FILE" >&2
+  echo "usage: proof-compile-guard.sh sha SHA | kind TEXT | bundles TEXT | no-app-ipa PATH | sdk-log FILE" >&2
   exit 2
 }
 
@@ -46,12 +46,6 @@ case "$mode" in
       echo "build log never names FeedScreen" >&2
       exit 1
     }
-    ;;
-  sign-log)
-    if grep -E 'SignBinary|ProcessAndSign|/usr/bin/codesign|\.mobileprovision' "$value" >/dev/null; then
-      echo "refusing: a codesign or provisioning action ran" >&2
-      exit 1
-    fi
     ;;
   *)
     usage

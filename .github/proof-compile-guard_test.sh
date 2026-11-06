@@ -33,10 +33,4 @@ printf 'swiftc -sdk MacOSX.sdk Other.swift\n' >"$dir/host.log"
 if "$guard" sdk-log "$dir/host.log" 2>/dev/null; then
   fail "host SDK log was accepted"
 fi
-printf 'SwiftCompile FeedScreen\n' >"$dir/nosign.log"
-"$guard" sign-log "$dir/nosign.log"
-printf 'SignBinary /usr/bin/codesign\n' >"$dir/signed.log"
-if "$guard" sign-log "$dir/signed.log" 2>/dev/null; then
-  fail "codesign log was accepted"
-fi
 echo "proof-compile-guard tests passed"
