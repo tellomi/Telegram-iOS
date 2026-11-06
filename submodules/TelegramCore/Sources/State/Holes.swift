@@ -1071,7 +1071,7 @@ func fetchMessageHistoryHole(accountPeerId: PeerId, source: FetchMessageHistoryH
                                 storedVersions.byId[id] = stored.stableVersion
                             }
                         }
-                        var filledRange: ClosedRange<MessageId.Id>?
+                        var filledRange: ClosedRange<MessageId.Id>
                         var strictFilledIndices: IndexSet
                         let ids = storeMessages.compactMap { message -> MessageId.Id? in
                             switch message.id {
@@ -1160,52 +1160,48 @@ func fetchMessageHistoryHole(accountPeerId: PeerId, source: FetchMessageHistoryH
                                     }
                                 }
                             case let .range(start, end):
-                                let loadingNewer = start.id <= end.id
-                                if let closed = rangeHoleFilledRange(boundaryId: start.id, returnedIds: ids, requested: minMaxRange, loadingNewer: loadingNewer) {
-                                    filledRange = closed
-                                    var maxStrictIndex = closed.upperBound
+                                if start.id <= end.id {
+                                    let minBound = start.id
+                                    let maxBound = messageRange.upperBound
+                                    filledRange = min(minBound, maxBound) ... max(minBound, maxBound)
+                                    
+                                    var maxStrictIndex = max(minBound, maxBound)
                                     maxStrictIndex = min(maxStrictIndex, messageRange.upperBound)
-                                    let strictLower = min(closed.lowerBound, maxStrictIndex)
-                                    strictFilledIndices = IndexSet(integersIn: Int(strictLower) ... Int(maxStrictIndex))
+                                    strictFilledIndices = IndexSet(integersIn: Int(min(minBound, maxBound)) ... Int(maxStrictIndex))
                                 } else {
-                                    // The page does not meet the requested window. Keep the hole so
-                                    // the messages already on screen stay a loaded slice.
-                                    filledRange = nil
-                                    strictFilledIndices = IndexSet()
+                                    let minBound = messageRange.lowerBound
+                                    let maxBound = start.id
+                                    filledRange = min(minBound, maxBound) ... max(minBound, maxBound)
+                                    
+                                    var maxStrictIndex = max(minBound, maxBound)
+                                    maxStrictIndex = min(maxStrictIndex, messageRange.upperBound)
+                                    strictFilledIndices = IndexSet(integersIn: Int(min(minBound, maxBound)) ... Int(maxStrictIndex))
                                 }
                             }
                         }
                         
-                        if let filledRange {
-                            switch peerInput {
-                            case let .direct(peerId, threadId):
-                                transaction.removeHole(peerId: peerId, threadId: threadId, namespace: namespace, space: space, range: filledRange)
-                            case .threadFromChannel:
-                                break
-                            }
-                            
-                            // A fill that reached the top of a channel's history knows that history is
-                            // contiguous up to its newest id: the poll's next too-long answer seeds its gap
-                            // hole from this value, and a stale one re-covered a range the fill had closed
-                            // (measured 2026-10-13). Only an existing state is advanced; a state is never
-                            // made up here, because its pts is the poll's to set.
-                            if case let .direct(peerId, threadId) = peerInput, threadId == nil, case .everywhere = space, namespace == Namespaces.Message.Cloud, peerId.namespace == Namespaces.Peer.CloudChannel, filledRange.upperBound == Int32.max - 1, let maxId = ids.max() {
-                                if let current = transaction.getPeerChatState(peerId) as? ChannelState, (current.synchronizedUntilMessageId ?? 0) < maxId {
-                                    transaction.setPeerChatState(peerId, state: current.withUpdatedSynchronizedUntilMessageId(maxId))
-                                }
+                        switch peerInput {
+                        case let .direct(peerId, threadId):
+                            transaction.removeHole(peerId: peerId, threadId: threadId, namespace: namespace, space: space, range: filledRange)
+                        case .threadFromChannel:
+                            break
+                        }
+                        
+                        // A fill that reached the top of a channel's history knows that history is
+                        // contiguous up to its newest id: the poll's next too-long answer seeds its gap
+                        // hole from this value, and a stale one re-covered a range the fill had closed
+                        // (measured 2026-10-13). Only an existing state is advanced; a state is never
+                        // made up here, because its pts is the poll's to set.
+                        if case let .direct(peerId, threadId) = peerInput, threadId == nil, case .everywhere = space, namespace == Namespaces.Message.Cloud, peerId.namespace == Namespaces.Peer.CloudChannel, filledRange.upperBound == Int32.max - 1, let maxId = ids.max() {
+                            if let current = transaction.getPeerChatState(peerId) as? ChannelState, (current.synchronizedUntilMessageId ?? 0) < maxId {
+                                transaction.setPeerChatState(peerId, state: current.withUpdatedSynchronizedUntilMessageId(maxId))
                             }
                         }
                         
                         updatePeers(transaction: transaction, accountPeerId: accountPeerId, peers: parsedPeers)
                         
-                        let removedIndices: IndexSet
-                        if let filledRange {
-                            removedIndices = IndexSet(integersIn: Int(filledRange.lowerBound) ... Int(filledRange.upperBound))
-                        } else {
-                            removedIndices = IndexSet()
-                        }
                         return FetchMessageHistoryHoleResult(
-                            removedIndices: removedIndices,
+                            removedIndices: IndexSet(integersIn: Int(filledRange.lowerBound) ... Int(filledRange.upperBound)),
                             strictRemovedIndices: strictFilledIndices,
                             actualPeerId: storeMessages.first?.id.peerId,
                             actualThreadId: storeMessages.first?.threadId,

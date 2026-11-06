@@ -958,20 +958,18 @@ The actions are the upstream ones. On the main list, the leading side is read/un
 
 ## Chat history scroll
 
-Scrolling a chat into older messages, then waiting for the next history fetch, could replace the rows on screen with nothing. The list anchors an empty-to-full replace at index 0. Index 0 is the newest message, so the chat jumps back to the edge it was opened on.
+Scrolling into older messages, then waiting for the next history fetch, could replace the rows on screen with nothing. The list anchors an empty-to-full replace at index 0. Index 0 is the newest message, so the chat jumps back to the edge it was opened on.
 
-A history navigation (`ChatHistoryLocation.Navigation`, used when the visible edge asks for another page and when a hole fill re-anchors on the visible message) subscribes to `aroundMessageHistoryView`. A message that is stored but still inside a hole produces an empty loading view (`MessageHistoryViewAnchorWhileLoadingTests`). `.Scroll` keeps that frame as `.Loading`. `.Navigation` published it as the first `.UpdateVisible` snapshot. `ChatHistoryListNode` applies that snapshot, deleting every row. `CoreVirtualListView` treats a collection with no surviving identity as a full replace and anchors it at index 0 (`isNoOverlapSwap`). The messages that arrive with the fill are then laid out from that edge.
+A history navigation (`ChatHistoryLocation.Navigation`, the visible edge asking for another page, and `applyHole` re-anchoring on the visible message) subscribes to `aroundMessageHistoryView`. A message that is stored but still inside a hole produces an empty loading view. `.Scroll` keeps that frame as `.Loading`. `.Navigation` published it as the first `.UpdateVisible` snapshot. `ChatHistoryListNode` applied that snapshot and deleted every row. `CoreVirtualListView` anchors a collection with no surviving identity at index 0.
 
-The empty loading snapshot is no longer the anchored frame. `first` stays unset until a view has entries, and while a non-empty history is already on screen the node drops an empty loading view instead of applying it. A finished empty chat (`isLoading == false`) still clears.
+The empty loading snapshot is no longer that anchored frame. `first` stays unset until a view has entries. The node keeps the rows already on screen only when the snapshot belongs to the same load that displayed them (`historyEmptyLoadingDecision`). `beginChatHistoryTransitions` — including `updateChatLocation` — bumps `historyLoadGeneration` before the new subscription emits, and a snapshot from an older subscription is dropped. A newer load applies the empty frame, so the previous chat's messages are not left up. A finished empty chat (`isLoading == false`) still clears.
 
-A ranged `messages.getHistory` fill also closed the hole from the returned ids through the request boundary even when every returned id sat outside the requested `min_id`/`max_id` window. That page is what teamgram returns for a private chat or basic group: `GetOffsetIdBackwardHistoryMessages` takes `minId` and `maxId` and does not use them (`app/service/biz/message/internal/dao/history.go`; the SQL is `user_message_box_id < offset` plus `LIMIT`). Closing across that gap marks the messages on screen as contiguous. The fill now closes only the part of the old span that lies inside the request and that the returned ids actually meet. An empty result still closes the whole requested window. The around-id fill is unchanged.
-
-This is not the chat-list hole in #71. `ChatListView` used to drop every dialog at a hole. Message history already clips around a hole instead of doing that. The jump here is the empty navigation snapshot, plus a ranged fill that closes a window the response did not cover.
+The ranged-hole close that refused a page whose ids sat outside the request was removed. Refusing the close left the hole in place while `addMessages` still stored the page, and the hole is requested again after the completed entry expires. That does not converge. `Holes.swift` is back to the upstream range close.
 
 | File | Change |
 | --- | --- |
 | `submodules/TelegramUI/Sources/ChatHistoryViewForLocation.swift` | An empty loading navigation view does not consume the first anchored frame. |
-| `submodules/TelegramUI/Sources/ChatHistoryListNode.swift` | An empty loading view does not replace a history that already has rows. |
-| `submodules/TelegramCore/Sources/State/RangeHoleFillRange.swift` | Ranged hole close, clipped to the request, refused when the page misses it. |
-| `submodules/TelegramCore/Sources/State/Holes.swift` | The range branch uses that result and leaves the hole when it is nil. |
-| `submodules/TelegramCore/Tests/RangeHoleFillRangeTests.swift` | Older page, newer page, outside page, partial overlap, empty. |
+| `submodules/TelegramUI/Sources/ChatHistoryEmptyLoadingDecision.swift` | Same-load empty frame keeps the rows. A new load applies it. |
+| `submodules/TelegramUI/Sources/ChatHistoryListNode.swift` | Uses that decision. Each history subscription has a generation. |
+| `submodules/TelegramUI/Tests/ChatHistoryEmptyLoadingDecisionTests.swift` | Same load, chat switch, empty previous, finished empty chat, stale subscription. |
+| `submodules/TelegramUI/BUILD` | Host test `ChatHistoryEmptyLoadingDecisionTests`. |
