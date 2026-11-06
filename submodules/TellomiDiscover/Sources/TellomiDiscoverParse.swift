@@ -26,7 +26,7 @@ public struct TellomiDiscoverPost: Equatable {
     public var images: [TellomiDiscoverImageMedia]
     public var moderation: TellomiDiscoverCardModeration
 
-    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil, images: [TellomiDiscoverImageMedia] = [], moderation: TellomiDiscoverCardModeration = .published) {
+    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil, images: [TellomiDiscoverImageMedia] = [], moderation: TellomiDiscoverCardModeration = .published, liked: Bool = false, likesHidden: Bool = false) {
         self.id = id
         self.text = text
         self.authorName = authorName
@@ -50,18 +50,29 @@ public struct TellomiDiscoverPost: Equatable {
         self.linkPreview = linkPreview
         self.images = images
         self.moderation = moderation
+        self.liked = liked
+        self.likesHidden = likesHidden
     }
+
+    public var liked: Bool
+    public var likesHidden: Bool
 }
 
 public struct TellomiDiscoverComment: Equatable {
     public var id: String
     public var text: String
     public var authorName: String
+    public var state: String
+    public var own: Bool
+    public var parentId: String?
 
-    public init(id: String, text: String, authorName: String) {
+    public init(id: String, text: String, authorName: String, state: String = "ok", own: Bool = false, parentId: String? = nil) {
         self.id = id
         self.text = text
         self.authorName = authorName
+        self.state = state
+        self.own = own
+        self.parentId = parentId
     }
 }
 
@@ -144,8 +155,10 @@ public struct TellomiDiscoverCard: Equatable {
     public var poll: TellomiDiscoverPoll?
     public var linkPreview: TellomiDiscoverLink.Preview?
     public var images: [TellomiDiscoverImageMedia]
+    public var liked: Bool
+    public var likesHidden: Bool
 
-    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil, images: [TellomiDiscoverImageMedia] = []) {
+    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil, images: [TellomiDiscoverImageMedia] = [], liked: Bool = false, likesHidden: Bool = false) {
         self.id = id
         self.state = state
         self.version = version
@@ -171,6 +184,8 @@ public struct TellomiDiscoverCard: Equatable {
         self.poll = poll
         self.linkPreview = linkPreview
         self.images = images
+        self.liked = liked
+        self.likesHidden = likesHidden
     }
 }
 
@@ -324,7 +339,9 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         poll: card.poll,
         linkPreview: card.linkPreview,
         images: card.images,
-        moderation: tellomiDiscoverCardModeration(card.state)
+        moderation: tellomiDiscoverCardModeration(card.state),
+        liked: card.liked,
+        likesHidden: card.likesHidden
     )
 }
 
@@ -367,6 +384,8 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
         reposted: boolValue(me?["reposted"]) ?? false,
         poll: parsePoll(labels: body?["poll"], tally: entry["poll"]),
         linkPreview: storedLinkPreview(card: body, entry: entry),
+        liked: boolValue(me?["liked"]) ?? false,
+        likesHidden: boolValue(stats?["likes_hidden"]) ?? false,
         images: parseImages(body?["media"])
     )
 }
@@ -419,6 +438,77 @@ private func parsePoll(labels: TellomiJSON?, tally: TellomiJSON?) -> TellomiDisc
     }
     let voted = votedRaw.filter { options.indices.contains($0) }
     return TellomiDiscoverPoll(options: options, voted: voted)
+}
+
+public func tellomiDiscoverParseCommentCreated(_ data: Data) -> TellomiDiscoverCommentCreated? {
+    guard let object = objectValue(TellomiJSON.parse(data)) else {
+        return nil
+    }
+    guard let id = stringValue(object["id"]).flatMap(tellomiDiscoverPostId), let state = stringValue(object["state"]), !state.isEmpty, let version = intValue(object["version"]) else {
+        return nil
+    }
+    var held: Bool?
+    if object.keys.contains("held") {
+        guard let value = boolValue(object["held"]) else {
+            return nil
+        }
+        held = value
+    }
+    return TellomiDiscoverCommentCreated(id: id, state: state, version: version, held: held)
+}
+
+public func tellomiDiscoverParseCommentPage(_ data: Data, postId: String) -> TellomiDiscoverCommentPage? {
+    guard let object = objectValue(TellomiJSON.parse(data)), let values = object["comments"], case let .array(items) = values else {
+        return nil
+    }
+    if items.count > tellomiDiscoverCommentPageLimit {
+        return nil
+    }
+    var cursor: String?
+    if object.keys.contains("cursor") {
+        guard let raw = stringValue(object["cursor"]) else {
+            return nil
+        }
+        cursor = raw.isEmpty ? nil : raw
+    }
+    let expected = tellomiDiscoverPostId(postId)
+    var comments: [TellomiDiscoverComment] = []
+    for item in items {
+        guard let entry = objectValue(item) else {
+            return nil
+        }
+        guard let comment = parsePublicComment(entry, expectedPost: expected) else {
+            continue
+        }
+        comments.append(comment)
+    }
+    return TellomiDiscoverCommentPage(comments: comments, cursor: cursor)
+}
+
+private func parsePublicComment(_ entry: [String: TellomiJSON], expectedPost: String?) -> TellomiDiscoverComment? {
+    guard let id = stringValue(entry["id"]).flatMap(tellomiDiscoverPostId) else {
+        return nil
+    }
+    if let state = stringValue(entry["state"]), state != "ok" {
+        return nil
+    }
+    if let rawPost = stringValue(entry["post_id"]) {
+        guard let post = tellomiDiscoverPostId(rawPost), expectedPost == nil || expectedPost == post else {
+            return nil
+        }
+    }
+    if entry.keys.contains("parent_id") {
+        guard let parent = stringValue(entry["parent_id"]), tellomiDiscoverClientNonce(parent) else {
+            return nil
+        }
+    }
+    let card = objectValue(entry["card"])
+    let author = objectValue(card?["author"])
+    let text = stringValue(card?["text"]) ?? stringValue(entry["text"]) ?? ""
+    let name = stringValue(author?["display_name"]) ?? ""
+    let own = boolValue(objectValue(entry["me"])?["author"]) ?? false
+    let parent = stringValue(entry["parent_id"])
+    return TellomiDiscoverComment(id: id, text: text, authorName: name, state: stringValue(entry["state"]) ?? "ok", own: own, parentId: parent)
 }
 
 public func tellomiDiscoverParseVote(_ data: Data) -> TellomiDiscoverVoteTally? {

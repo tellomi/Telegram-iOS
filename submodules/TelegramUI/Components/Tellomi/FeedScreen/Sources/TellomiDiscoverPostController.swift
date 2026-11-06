@@ -27,6 +27,9 @@ final class TellomiDiscoverPostController: ViewController {
     private let linkCard = TellomiDiscoverLinkCardView()
     private var commentRows: [TellomiDiscoverCommentRow] = []
     private var pollButtons: [UIButton] = []
+    private let likeButton = UIButton(type: .system)
+    private let commentField = UITextField()
+    private var likeState: TellomiDiscoverLikeState?
     private var imageViews: [UIImageView] = []
     private var imageTasks: [URLSessionDataTask] = []
     private let imageSession: URLSession = {
@@ -92,6 +95,15 @@ final class TellomiDiscoverPostController: ViewController {
         self.displayNode.view.addSubview(self.scrollView)
         self.scrollView.addSubview(self.textNode.view)
         self.scrollView.addSubview(self.linkCard)
+        self.likeButton.contentHorizontalAlignment = .left
+        self.likeButton.addTarget(self, action: #selector(self.likePressed), for: .touchUpInside)
+        self.likeButton.accessibilityIdentifier = "tellomi.discover.like"
+        self.commentField.accessibilityIdentifier = "tellomi.discover.comment"
+        self.commentField.returnKeyType = .send
+        self.commentField.autocorrectionType = .no
+        self.commentField.addTarget(self, action: #selector(self.commentReturned), for: .editingDidEndOnExit)
+        self.scrollView.addSubview(self.likeButton)
+        self.scrollView.addSubview(self.commentField)
         self.apply()
         self.loadIfAllowed()
     }
@@ -122,6 +134,11 @@ final class TellomiDiscoverPostController: ViewController {
         }
         for _ in self.pollButtons {
             pieces.append(.poll(40))
+        }
+        let showsReact = self.loggedIn && self.post != nil
+        if showsReact {
+            pieces.append(.comment(44))
+            pieces.append(.comment(36))
         }
         var commentHeights: [CGFloat] = []
         for row in self.commentRows {
@@ -159,6 +176,21 @@ final class TellomiDiscoverPostController: ViewController {
             let frame = placed.frames[index]
             button.frame = CGRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
             index += 1
+        }
+        if showsReact, index + 1 < placed.frames.count {
+            let likeFrame = placed.frames[index]
+            self.likeButton.isHidden = false
+            self.likeButton.frame = CGRect(x: likeFrame.x, y: likeFrame.y, width: likeFrame.width, height: likeFrame.height)
+            index += 1
+            let fieldFrame = placed.frames[index]
+            self.commentField.isHidden = false
+            self.commentField.frame = CGRect(x: fieldFrame.x, y: fieldFrame.y, width: fieldFrame.width, height: fieldFrame.height)
+            index += 1
+        } else {
+            self.likeButton.isHidden = true
+            self.likeButton.frame = .zero
+            self.commentField.isHidden = true
+            self.commentField.frame = .zero
         }
         for (row, commentHeight) in zip(self.commentRows, commentHeights) {
             guard index < placed.frames.count else {
@@ -272,6 +304,73 @@ final class TellomiDiscoverPostController: ViewController {
         }
         self.installPoll(self.post?.poll, copy: copy)
         self.installComments(self.post?.comments ?? [], color: self.presentationData.theme.list.itemPrimaryTextColor)
+        if let post = self.post {
+            if self.likeState?.postId != post.id {
+                self.likeState = TellomiDiscoverLikeState(postId: post.id, liked: post.liked, count: post.likeCount, hidden: post.likesHidden, surface: "recommend")
+            }
+            let view = self.likeState?.view()
+            let title: String
+            if view?.hidden == true {
+                title = copy.likes.replacingOccurrences(of: "%d", with: "")
+            } else {
+                title = tellomiFormatInteger(copy.likes, view?.count ?? post.likeCount)
+            }
+            self.likeButton.setTitle((view?.liked == true ? "✓ " : "") + title, for: .normal)
+            self.likeButton.setTitleColor(self.presentationData.theme.list.itemAccentColor, for: .normal)
+            self.commentField.textColor = self.presentationData.theme.list.itemPrimaryTextColor
+            self.commentField.attributedPlaceholder = NSAttributedString(string: copy.comments.replacingOccurrences(of: "%d", with: "").trimmingCharacters(in: .whitespaces), attributes: [NSAttributedString.Key.foregroundColor: self.presentationData.theme.list.itemSecondaryTextColor])
+        }
+    }
+
+    @objc private func likePressed() {
+        guard var state = self.likeState, let request = state.tap() else {
+            return
+        }
+        self.likeState = state
+        self.apply()
+        let operation: TellomiDiscoverOperation = request.on ? .like(postId: request.postId, surface: request.surface) : .unlike(postId: request.postId, surface: request.surface)
+        self.loader.run(loggedIn: true, configuration: self.configuration, operation: operation) { [weak self] result in
+            guard let self, var state = self.likeState else {
+                return
+            }
+            let success: Bool
+            if case .success(.acknowledged) = result {
+                success = true
+            } else {
+                success = false
+            }
+            _ = state.finish(generation: request.generation, success: success)
+            if var post = self.post, success {
+                post.liked = state.confirmedLiked
+                post.likeCount = state.confirmedCount
+                self.post = post
+            }
+            self.likeState = state
+            self.apply()
+        }
+    }
+
+    @objc private func commentReturned() {
+        let text = self.commentField.text ?? ""
+        let nonce = UUID().uuidString
+        guard tellomiDiscoverCommentBody(text: text, parentId: nil, nonce: nonce) != nil else {
+            return
+        }
+        self.loader.run(loggedIn: true, configuration: self.configuration, operation: .comment(postId: self.postId, text: text, parentId: nil, clientNonce: nonce)) { [weak self] result in
+            guard let self, case .success(.commentCreated) = result else {
+                return
+            }
+            self.commentField.text = nil
+            self.loader.run(loggedIn: true, configuration: self.configuration, operation: .comments(postId: self.postId, cursor: nil)) { [weak self] page in
+                guard let self, case let .success(.commentPage(value)) = page, var post = self.post else {
+                    return
+                }
+                post.comments = value.comments
+                post.commentCount = value.comments.count
+                self.post = post
+                self.apply()
+            }
+        }
     }
 
     private func installPoll(_ poll: TellomiDiscoverPoll?, copy: TellomiDiscoverCopy) {
