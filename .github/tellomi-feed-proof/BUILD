@@ -20,7 +20,10 @@ swift_library(
 ios_test_runner(
     name = "TellomiFeedProofRunner",
     device_type = "iPhone 17",
-    os_version = "26.5",
+    # The proof image is Xcode 27.1. Run 42294527624 stopped in
+    # CreateNewSimulator: os 26.5 is not installed. Installed runtimes were
+    # 27.0, 27.1, and 27.2. No test method ran.
+    os_version = "27.1",
 )
 
 ios_unit_test(
