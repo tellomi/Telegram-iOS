@@ -7,8 +7,8 @@ import UIKit
 /// JPEG, PNG, and WebP keep their compressed pixels. Location metadata is removed first.
 /// HEIC/HEIF is written as JPEG without the source properties, so location and the old
 /// orientation tag are not copied; ImageIO applies the orientation to the pixels.
-enum TellomiDiscoverImageEncode {
-    static func prepared(_ data: Data) -> (bytes: Data, width: Int, height: Int)? {
+public enum TellomiDiscoverImageEncode {
+    public static func prepared(_ data: Data) -> (bytes: Data, width: Int, height: Int)? {
         switch tellomiDiscoverInspectImage(data) {
         case .upload:
             guard let stripped = tellomiDiscoverStripImageLocation(data), case let .upload(_, width, height) = tellomiDiscoverInspectImage(stripped), !tellomiDiscoverImageHasLocation(stripped) else {

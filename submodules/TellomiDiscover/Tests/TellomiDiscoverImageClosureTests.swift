@@ -3,12 +3,91 @@ import XCTest
 import FoundationNetworking
 #endif
 
-private final class TellomiRedirectHost: @unchecked Sendable {
-    var value: String?
-    var error: String?
+private final class TellomiLateRedirectState: @unchecked Sendable {
+    let lock = NSLock()
+    var onStop: (() -> Void)?
+    var attempted = false
 }
 
-final class TellomiDiscoverImageClosureTests: XCTestCase {
+private final class TellomiLateRedirectProtocol: URLProtocol, @unchecked Sendable {
+    static let state = TellomiLateRedirectState()
+
+    static func reset() {
+        self.state.lock.lock()
+        self.state.attempted = false
+        self.state.onStop = nil
+        self.state.lock.unlock()
+    }
+
+    static var didAttemptRedirectAfterStop: Bool {
+        self.state.lock.lock()
+        defer { self.state.lock.unlock() }
+        return self.state.attempted
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        return true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        return request
+    }
+
+    override func startLoading() {
+    }
+
+    override func stopLoading() {
+        let response = HTTPURLResponse(url: URL(string: "https://evil.example/steal")!, statusCode: 302, httpVersion: "HTTP/1.1", headerFields: ["Location": "https://evil.example/steal"])!
+        self.client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: response.url!), redirectResponse: response)
+        Self.state.lock.lock()
+        Self.state.attempted = true
+        let notify = Self.state.onStop
+        Self.state.lock.unlock()
+        notify?()
+    }
+}
+
+private final class TellomiRedirectHost: @unchecked Sendable {
+    private let lock = NSLock()
+    var value: String?
+    var error: String?
+    private var callCount = 0
+    private var successes = 0
+
+    func note(response: URLResponse?, error: Error?) {
+        self.lock.lock()
+        self.callCount += 1
+        self.value = response?.url?.host
+        self.error = (error as NSError?)?.code == NSURLErrorCancelled ? "cancelled" : error?.localizedDescription
+        self.lock.unlock()
+    }
+
+    func noteTransport(_ result: Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) {
+        self.lock.lock()
+        self.callCount += 1
+        if case .success = result {
+            self.successes += 1
+        }
+        if case .failure(let error) = result {
+            self.error = String(describing: error)
+        }
+        self.lock.unlock()
+    }
+
+    var calls: Int {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.callCount
+    }
+
+    var successCount: Int {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.successes
+    }
+}
+
+final class TellomiDiscoverImageClosureTests: XCTestCase, @unchecked Sendable {
     private let base = URL(string: "https://feed.example")!
     private var redirectProcess: Process?
     private let location = URL(string: "https://feed.example/v1/feed/media/uploads/upload-1")!
@@ -201,8 +280,7 @@ final class TellomiDiscoverImageClosureTests: XCTestCase {
         let expectation = expectation(description: "redirect")
         let host = TellomiRedirectHost()
         let task = session.dataTask(with: URL(string: "http://127.0.0.1:\(port)/v1/feed/media/uploads")!) { _, response, error in
-            host.value = response?.url?.host
-            host.error = error?.localizedDescription
+            host.note(response: response, error: error)
             expectation.fulfill()
         }
         task.resume()
@@ -212,6 +290,53 @@ final class TellomiDiscoverImageClosureTests: XCTestCase {
         session.invalidateAndCancel()
         self.redirectProcess?.terminate()
     }
+
+    /// `tellomiDiscoverBeginTransport` is what `TellomiDiscoverHTTPS.start` calls.
+    /// http never opens a task. The slot closes once, so a second completion is dropped.
+    /// Linux corelibs URLProtocol aborts if a test injects a 302, so the late
+    /// redirect itself is Darwin-only and is not claimed here.
+    func testProductionTransportRefusesHTTPAndClosesTheSlot() {
+        let refused = expectation(description: "http refused")
+        let host = TellomiRedirectHost()
+        let http = TellomiDiscoverHTTPCall(method: "POST", url: URL(string: "http://127.0.0.1/v1/feed/media/uploads")!, body: nil, token: "jwt", authorizes: true, contentType: nil)
+        let ignored = tellomiDiscoverBeginTransport(call: http, session: URLSession.shared) { result in
+            host.noteTransport(result)
+            refused.fulfill()
+        }
+        ignored()
+        wait(for: [refused], timeout: 1)
+        XCTAssertEqual(host.calls, 1)
+        XCTAssertEqual(host.successCount, 0)
+        let slot = TellomiDiscoverTransportSlot()
+        XCTAssertTrue(slot.close())
+        XCTAssertFalse(slot.close())
+    }
+
+#if !os(Linux)
+    /// Darwin URLSession only. Do not compile this on Linux: corelibs fatals on a 302.
+    func testProductionTransportDropsLateRedirectOnDarwin() {
+        TellomiLateRedirectProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TellomiLateRedirectProtocol.self]
+        let gate = TellomiDiscoverRedirectGate()
+        let session = URLSession(configuration: configuration, delegate: gate, delegateQueue: nil)
+        let secure = TellomiDiscoverHTTPCall(method: "POST", url: URL(string: "https://feed.example/v1/feed/media/uploads")!, body: nil, token: "jwt", authorizes: true, contentType: nil)
+        let late = TellomiRedirectHost()
+        let cancel = tellomiDiscoverBeginTransport(call: secure, session: session) { result in
+            late.noteTransport(result)
+        }
+        let stopped = expectation(description: "stopped")
+        TellomiLateRedirectProtocol.state.onStop = {
+            stopped.fulfill()
+        }
+        cancel()
+        wait(for: [stopped], timeout: 2)
+        Thread.sleep(forTimeInterval: 0.2)
+        XCTAssertEqual(late.successCount, 0)
+        XCTAssertTrue(TellomiLateRedirectProtocol.didAttemptRedirectAfterStop)
+        session.invalidateAndCancel()
+    }
+#endif
 
     func testSignedOutDetailCannotReopenTheLoader() {
         var calls = 0
@@ -283,6 +408,7 @@ final class TellomiDiscoverImageClosureTests: XCTestCase {
             ("testCloseBackgroundAndLostCreateDoNotKeepBytesOrInventALocation", testCloseBackgroundAndLostCreateDoNotKeepBytesOrInventALocation),
             ("testSignOutStopsImageRequestsAndRedirectKeepsBearerOnTheOrigin", testSignOutStopsImageRequestsAndRedirectKeepsBearerOnTheOrigin),
             ("testRedirectGateIsTheURLSessionDelegate", testRedirectGateIsTheURLSessionDelegate),
+            ("testProductionTransportRefusesHTTPAndClosesTheSlot", testProductionTransportRefusesHTTPAndClosesTheSlot),
             ("testSignedOutDetailCannotReopenTheLoader", testSignedOutDetailCannotReopenTheLoader),
             ("testCyclicAndDeepExifIsRejected", testCyclicAndDeepExifIsRejected)
         ]
@@ -319,6 +445,10 @@ except Exception:
 c.sendall(b"HTTP/1.1 302 Found\\r\\nLocation: \(location)\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n")
 c.close()
 """
+        return self.launchRedirect(script)
+    }
+
+    private func launchRedirect(_ script: String) -> UInt16 {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         process.arguments = ["-c", script]
