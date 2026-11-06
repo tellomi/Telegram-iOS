@@ -10,6 +10,8 @@ Chat List/Tabs/IconSettings,settings-3,line,
 Chat List/Tabs/IconSettingsFilled,settings-3,fill,match:Chat List/Tabs/IconSettings
 Chat List/Tabs/IconNews,news,line,
 Chat List/Tabs/IconNewsFilled,news,fill,match:Chat List/Tabs/IconNews
+Chat List/Tabs/IconDiscover,semantic/compass,line,match:Chat List/Tabs/IconSettings
+Chat List/Tabs/IconDiscoverFilled,semantic/compass,fill,match:Chat List/Tabs/IconSettings
 Chat List/Tabs/IconCamera,camera-2,line,
 Chat List/Tabs/IconCameraFilled,camera-2,fill,match:Chat List/Tabs/IconCamera
 # Chat input bar.

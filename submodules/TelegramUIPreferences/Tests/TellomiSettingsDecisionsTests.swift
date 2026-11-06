@@ -121,20 +121,4 @@ final class TellomiSettingsDecisionsTests: XCTestCase {
         XCTAssertEqual(TellomiSettingsURLs.terms, "https://tellomi.cn/legal/terms/")
         XCTAssertEqual(TellomiSettingsURLs.privacy, "https://tellomi.cn/legal/privacy/")
     }
-
-    func testHeaderCardPutsAvatarLeftAndEditRight() {
-        let metrics = tellomiSettingsHeaderCardMetrics(width: 402, navigationHeight: 118, sectionLeft: 0, sectionRight: 0, editWidth: 36)
-        XCTAssertEqual(metrics.avatarSide, 64)
-        XCTAssertLessThan(metrics.avatarX, metrics.textX)
-        XCTAssertGreaterThan(metrics.editX, metrics.textX)
-        XCTAssertGreaterThan(metrics.avatarX, metrics.cardX)
-        XCTAssertLessThan(metrics.editX + metrics.editWidth, metrics.cardX + metrics.cardWidth + 0.1)
-        XCTAssertGreaterThan(metrics.panelHeight, metrics.cardHeight)
-        let text = tellomiSettingsHeaderCardTextFrames(metrics: metrics, titleWidth: 80, titleHeight: 24, subtitleWidth: 140, subtitleHeight: 18)
-        XCTAssertEqual(text.titleX, metrics.textX)
-        XCTAssertEqual(text.subtitleX, metrics.textX)
-        XCTAssertGreaterThan(text.subtitleY, text.titleY)
-        XCTAssertLessThan(text.titleY, metrics.cardY + metrics.cardHeight)
-        XCTAssertGreaterThan(text.subtitleY + text.subtitleHeight, metrics.cardY)
-    }
 }

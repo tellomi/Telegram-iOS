@@ -318,6 +318,8 @@ public struct PresentationResourcesSettings {
     
     public static let support = renderSettingsIcon(name: "Item List/Icons/Support", backgroundColors: [colorOrange])
     public static let faq = renderSettingsIcon(name: "Item List/Icons/Faq", backgroundColors: [colorLightBlue])
+    public static let info = renderSettingsIcon(name: "Navigation/Info", backgroundColors: [colorGray])
+    public static let more = renderSettingsIcon(name: "Chat/Context Menu/More", scaleFactor: 1.15, backgroundColors: [colorLightBlue])
     public static let tips = renderSettingsIcon(name: "Item List/Icons/Tips", backgroundColors: [UIColor(rgb: 0xffcc02)])
         
     public static let changePhoneNumber = renderSettingsIcon(name: "Item List/Icons/ChangePhone", backgroundColors: [colorPurple])

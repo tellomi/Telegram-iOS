@@ -3,7 +3,6 @@ import Display
 import Foundation
 import ItemListUI
 import SwiftSignalKit
-import TelegramCore
 import TelegramPresentationData
 import TelegramUIPreferences
 import UIKit
@@ -91,43 +90,19 @@ public func tellomiSettingsLinksController(context: AccountContext, title: Strin
 
 private enum TellomiAboutEntry: ItemListNodeEntry {
     case version(String, String)
-    case facts(String)
-    case footer(String)
 
     var section: ItemListSectionId {
-        switch self {
-        case .version:
-            return 0
-        case .facts:
-            return 1
-        case .footer:
-            return 2
-        }
+        return 0
     }
 
     var stableId: Int32 {
-        switch self {
-        case .version:
-            return 0
-        case .facts:
-            return 1
-        case .footer:
-            return 2
-        }
+        return 0
     }
 
     static func ==(lhs: TellomiAboutEntry, rhs: TellomiAboutEntry) -> Bool {
         switch lhs {
         case let .version(title, value):
             if case let .version(rhsTitle, rhsValue) = rhs, title == rhsTitle, value == rhsValue {
-                return true
-            }
-        case let .facts(text):
-            if case let .facts(rhsText) = rhs, text == rhsText {
-                return true
-            }
-        case let .footer(text):
-            if case let .footer(rhsText) = rhs, text == rhsText {
                 return true
             }
         }
@@ -142,29 +117,8 @@ private enum TellomiAboutEntry: ItemListNodeEntry {
         switch self {
         case let .version(title, value):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
-        case let .facts(text):
-            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
-        case let .footer(text):
-            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         }
     }
-}
-
-/// String fields from `help.getAppConfig` (`EngineData.Item.Configuration.App`).
-/// `TellomiAboutDisclosure` reads `tellomi_ai_model_name`,
-/// `tellomi_generative_ai_registration_number` (or `tellomi_ai_registration_number`),
-/// and `tellomi_algorithm_filing_number`. Other types stay out so a number cannot replace the placeholder.
-private func tellomiAboutConfiguration(_ data: JSON?) -> [String: Any]? {
-    guard case let .dictionary(dictionary)? = data else {
-        return nil
-    }
-    var result: [String: Any] = [:]
-    for (key, value) in dictionary {
-        if case let .string(string) = value {
-            result[key] = string
-        }
-    }
-    return result
 }
 
 private func tellomiAboutVersionLabel() -> String {
@@ -182,22 +136,15 @@ private func tellomiAboutVersionLabel() -> String {
 }
 
 public func tellomiAboutController(context: AccountContext) -> ViewController {
-    let signal = combineLatest(
-        context.sharedContext.presentationData,
-        context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.App())
-    )
+    let signal = context.sharedContext.presentationData
     |> deliverOnMainQueue
-    |> map { presentationData, configuration -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let copy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
-        let facts = TellomiAboutDisclosure.facts(configuration: tellomiAboutConfiguration(configuration.data), numberPlaceholder: copy.numberPlaceholder)
-        let body = tellomiAboutDisclosureText(modelLabel: copy.modelLabel, registrationLabel: copy.registrationLabel, algorithmLabel: copy.algorithmLabel, facts: facts)
         var entries: [TellomiAboutEntry] = []
         let version = tellomiAboutVersionLabel()
         if !version.isEmpty {
             entries.append(.version(copy.version, version))
         }
-        entries.append(.facts(body))
-        entries.append(.footer(copy.aboutFooter))
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(copy.about), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
         return (controllerState, (listState, ()))
