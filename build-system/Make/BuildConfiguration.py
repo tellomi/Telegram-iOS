@@ -38,7 +38,7 @@ class BuildConfiguration:
         self.enable_icloud = enable_icloud
         self.app_name = app_name
 
-    def write_to_variables_file(self, bazel_path, use_xcode_managed_codesigning, aps_environment, path):
+    def write_to_variables_file(self, bazel_path, use_xcode_managed_codesigning, aps_environment, path, communication_notifications=False):
         string = ''
         string += 'telegram_bazel_path = "{}"\n'.format(bazel_path)
         string += 'telegram_use_xcode_managed_codesigning = {}\n'.format('True' if use_xcode_managed_codesigning else 'False')
@@ -54,6 +54,7 @@ class BuildConfiguration:
         string += 'telegram_app_specific_url_scheme = "{}"\n'.format(self.app_specific_url_scheme)
         string += 'telegram_premium_iap_product_id = "{}"\n'.format(self.premium_iap_product_id)
         string += 'telegram_aps_environment = "{}"\n'.format(aps_environment)
+        string += 'telegram_communication_notifications = {}\n'.format('True' if communication_notifications else 'False')
         string += 'telegram_enable_siri = {}\n'.format(self.enable_siri)
         string += 'telegram_enable_icloud = {}\n'.format(self.enable_icloud)
         string += 'telegram_enable_watch = True\n'
@@ -204,7 +205,8 @@ def copy_profiles_from_directory(source_path, destination_path, team_id, bundle_
                     print('Warning: skipping provisioning profile at {} with bundle_id {} (base_name {})'.format(file_path, profile_name, profile_base_name))
 
 
-def resolve_aps_environment_from_directory(source_path, team_id, bundle_id):
+def main_profile_from_directory(source_path, team_id, bundle_id):
+    """Return (path, entitlements) for the main app profile, or None."""
     for file_name in os.listdir(source_path):
         file_path = source_path + '/' + file_name
         if os.path.isfile(file_path):
@@ -222,16 +224,39 @@ def resolve_aps_environment_from_directory(source_path, team_id, bundle_id):
             ], decode=False, stderr_to_stdout=False, check_result=True)
 
             profile_dict = plistlib.loads(profile_data)
-            profile_name = profile_dict['Entitlements']['application-identifier']
+            entitlements = profile_dict['Entitlements']
+            profile_name = entitlements['application-identifier']
 
             if profile_name.startswith(team_id + '.' + bundle_id):
                 profile_base_name = profile_name[len(team_id + '.' + bundle_id):]
                 if profile_base_name == '':
-                    if 'aps-environment' not in profile_dict['Entitlements']:
-                        print('Provisioning profile at {} does not include an aps-environment entitlement'.format(file_path))
-                        sys.exit(1)
-                    return profile_dict['Entitlements']['aps-environment']
+                    return file_path, entitlements
     return None
+
+
+def resolve_aps_environment_from_directory(source_path, team_id, bundle_id):
+    found = main_profile_from_directory(source_path, team_id, bundle_id)
+    if found is None:
+        return None
+    file_path, entitlements = found
+    if 'aps-environment' not in entitlements:
+        print('Provisioning profile at {} does not include an aps-environment entitlement'.format(file_path))
+        sys.exit(1)
+    return entitlements['aps-environment']
+
+
+def resolve_communication_notifications_from_directory(source_path, team_id, bundle_id):
+    """True when the main profile grants communication notifications.
+
+    None when no main profile is present. False when the profile is present
+    and does not grant the entitlement: the binary must not request a key the
+    profile does not allow, or codesign rejects the app.
+    """
+    found = main_profile_from_directory(source_path, team_id, bundle_id)
+    if found is None:
+        return None
+    _, entitlements = found
+    return entitlements.get('com.apple.developer.usernotifications.communication') is True
 
 
 def copy_certificates_from_directory(source_path, destination_path):
@@ -253,6 +278,9 @@ class CodesigningSource:
         raise Exception('Not implemented')
 
     def resolve_aps_environment(self):
+        raise Exception('Not implemented')
+
+    def resolve_communication_notifications(self):
         raise Exception('Not implemented')
 
     def use_xcode_managed_codesigning(self):
@@ -296,6 +324,10 @@ class GitCodesigningSource(CodesigningSource):
         source_path = self.working_dir + '/decrypted/profiles/{}'.format(self.codesigning_type)
         return resolve_aps_environment_from_directory(source_path=source_path, team_id=self.team_id, bundle_id=self.bundle_id)
 
+    def resolve_communication_notifications(self):
+        source_path = self.working_dir + '/decrypted/profiles/{}'.format(self.codesigning_type)
+        return resolve_communication_notifications_from_directory(source_path=source_path, team_id=self.team_id, bundle_id=self.bundle_id)
+
     def use_xcode_managed_codesigning(self):
         return False
 
@@ -327,6 +359,9 @@ class DirectoryCodesigningSource(CodesigningSource):
     def resolve_aps_environment(self):
         return resolve_aps_environment_from_directory(source_path=self.directory_path + '/profiles', team_id=self.team_id, bundle_id=self.bundle_id)
 
+    def resolve_communication_notifications(self):
+        return resolve_communication_notifications_from_directory(source_path=self.directory_path + '/profiles', team_id=self.team_id, bundle_id=self.bundle_id)
+
     def use_xcode_managed_codesigning(self):
         return False
 
@@ -346,6 +381,9 @@ class XcodeManagedCodesigningSource(CodesigningSource):
 
     def resolve_aps_environment(self):
         return ""
+
+    def resolve_communication_notifications(self):
+        return None
 
     def use_xcode_managed_codesigning(self):
         return True

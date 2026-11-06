@@ -277,7 +277,15 @@ def capability_settings(capability, group):
     return []
 
 
-def ensure_capability(client, bundle_resource_id, capability, group):
+COMMUNICATION_NOTIFICATIONS_CAPABILITY = "USERNOTIFICATIONS_COMMUNICATION"
+COMMUNICATION_NOTIFICATIONS_ENTITLEMENT = "com.apple.developer.usernotifications.communication"
+
+
+def profile_includes_communication_notifications(entitlements):
+    return entitlements.get(COMMUNICATION_NOTIFICATIONS_ENTITLEMENT) is True
+
+
+def ensure_capability(client, bundle_resource_id, capability, group, optional=False):
     settings = capability_settings(capability, group)
     body = {
         "data": {
@@ -295,8 +303,13 @@ def ensure_capability(client, bundle_resource_id, capability, group):
         client.request("POST", "/v1/bundleIdCapabilities", body)
         print("enabled {} ".format(capability))
     except ApiError as error:
-        if error.status == 409:
+        detail = str(error).lower()
+        # A 409 whose text rejects the capability type is not "already on".
+        if error.status == 409 and "not a valid" not in detail:
             print("{} already enabled".format(capability))
+            return
+        if optional:
+            print("warning: could not enable {}: {}".format(capability, error), file=sys.stderr)
             return
         raise
 
@@ -718,7 +731,13 @@ def prepare(args):
             ids[identifier] = resource_id
             for capability in capabilities:
                 print("capability {} on {}".format(capability, identifier))
-                ensure_capability(client, resource_id, capability, group)
+                ensure_capability(
+                    client,
+                    resource_id,
+                    capability,
+                    group,
+                    optional=(capability == COMMUNICATION_NOTIFICATIONS_CAPABILITY),
+                )
         cert_dir = pathlib.Path(args.cert_dir)
         supplied_serial = install_supplied_p12(cert_dir)
         if supplied_serial:
@@ -753,6 +772,18 @@ def prepare(args):
             require_profile_certificate(destination, profile_serial)
             if identifier == bundle_id:
                 main_profile = destination
+                if profile_includes_communication_notifications(profile_plist(destination).get("Entitlements") or {}):
+                    print("communication notifications entitlement present")
+                else:
+                    print(
+                        "warning: {} has no {}. iOS will keep the app icon on the lock screen "
+                        "instead of the sender avatar until Communication Notifications is enabled "
+                        "on the App ID and this profile is created again.".format(
+                            destination.name,
+                            COMMUNICATION_NOTIFICATIONS_ENTITLEMENT,
+                        ),
+                        file=sys.stderr,
+                    )
         team_id = team_id_from_profile(main_profile)
         write_configuration(args.configuration, pathlib.Path(args.configuration_out), team_id)
         ensure_app_record(client, ids[bundle_id], app_name)
@@ -788,6 +819,15 @@ def self_test():
         siri = [item for item in signing_targets() if item[0] == ".SiriIntents"]
         if len(siri) != 1 or "SIRIKIT" not in siri[0][3]:
             raise SystemExit("SiriIntents must enable SiriKit")
+        main = [item for item in signing_targets() if item[0] == ""]
+        if len(main) != 1 or COMMUNICATION_NOTIFICATIONS_CAPABILITY not in main[0][3]:
+            raise SystemExit("main app must enable USERNOTIFICATIONS_COMMUNICATION")
+        if not profile_includes_communication_notifications({COMMUNICATION_NOTIFICATIONS_ENTITLEMENT: True}):
+            raise SystemExit("communication entitlement check failed")
+        if profile_includes_communication_notifications({}):
+            raise SystemExit("missing communication entitlement was accepted")
+        if profile_includes_communication_notifications({COMMUNICATION_NOTIFICATIONS_ENTITLEMENT: False}):
+            raise SystemExit("false communication entitlement was accepted")
         if API_TIMEOUT_SECONDS != 120 or API_ATTEMPTS != 5:
             raise SystemExit("App Store Connect retry policy changed")
 

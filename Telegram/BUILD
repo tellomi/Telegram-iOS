@@ -57,6 +57,7 @@ load(
     "telegram_app_name",
     "telegram_app_specific_url_scheme",
     "telegram_aps_environment",
+    "telegram_communication_notifications",
     "telegram_team_id",
     "telegram_enable_icloud",
     "telegram_enable_siri",
@@ -570,7 +571,13 @@ official_communication_notifications_fragment = """
 <key>com.apple.developer.usernotifications.communication</key>
 <true/>
 """
-communication_notifications_fragment = official_communication_notifications_fragment if telegram_bundle_id in official_bundle_ids else ""
+# This entitlement is what makes iOS draw the sender avatar on the lock screen
+# and in Notification Center (the notification service's INSendMessageIntent).
+# It is a normal Communication Notifications capability, not a Telegram-only
+# grant. Tellomi signs it when the provisioning profile contains it, and on
+# unsigned simulator builds. A profile that predates the capability omits it
+# so codesign still succeeds. CarPlay and unrestricted VoIP stay official-only.
+communication_notifications_fragment = official_communication_notifications_fragment if (telegram_bundle_id in official_bundle_ids or telegram_communication_notifications) else ""
 
 official_notification_filtering_fragment = """
 <key>com.apple.developer.usernotifications.filtering</key>
