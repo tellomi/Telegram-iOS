@@ -70,7 +70,10 @@ jobs:
     runs-on: ${{ fromJSON(github.event.inputs.runner || '"xcode-27"') }}
     timeout-minutes: 180
     env:
-      ALLOW_XCODE_MISMATCH: ${{ github.event.inputs.allow_xcode_mismatch && 'true' || 'false' }}
+      # github.event.inputs are strings, and the string "false" is truthy.
+      # Run 42269196095 had Xcode 27.1 matching versions.json and still showed
+      # ALLOW_XCODE_MISMATCH=true. The typed inputs context keeps the default off.
+      ALLOW_XCODE_MISMATCH: ${{ inputs.allow_xcode_mismatch == true && 'true' || 'false' }}
       COMPILE_SHA: ${{ github.event.inputs.compile_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +84,7 @@ jobs:
           sparse-checkout: |
             .github/proof-compile-guard.sh
             .github/proof_bazel.py
+            .github/proof_configure.py
             .github/tellomi-feed-proof
           sparse-checkout-cone-mode: false
           persist-credentials: false
@@ -161,20 +165,6 @@ jobs:
           cp ../proof-tools/.github/tellomi-feed-proof/BUILD Tests/TellomiFeedProof/BUILD
           cp ../proof-tools/.github/tellomi-feed-proof/Proof.swift Tests/TellomiFeedProof/Proof.swift
 
-      - name: Require an ios_unit_test and no Telegram app
-        working-directory: src
-        run: |
-          set -euo pipefail
-          proof="//Tests/TellomiFeedProof:TellomiFeedProofTests"
-          kind="$("$BAZEL_BIN" query --output=label_kind "$proof")"
-          echo "target kind: ${kind}"
-          bash ../proof-tools/.github/proof-compile-guard.sh kind "$kind"
-          feed="$("$BAZEL_BIN" query "deps(${proof})")"
-          echo "$feed" | grep -F '//submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen' >/dev/null
-          bundles="$("$BAZEL_BIN" query "kind('ios_application', deps(${proof}))")"
-          echo "ios_application deps: ${bundles:-<none>}"
-          bash ../proof-tools/.github/proof-compile-guard.sh bundles "$bundles"
-
       - name: Point Make.py at an explicit Bazel outside build-input
         working-directory: src
         run: |
@@ -188,6 +178,42 @@ jobs:
           echo "PROOF_BAZEL=${RUNNER_TEMP}/tellomi-proof-bazel" >> "$GITHUB_ENV"
           test -x "${BAZEL_BIN}"
           test -x "${RUNNER_TEMP}/tellomi-proof-bazel"
+
+      - name: Write the configuration repository Make.py uses
+        working-directory: src
+        run: |
+          set -euo pipefail
+          # bazel query loads MODULE.bazel before Make.py build() runs.
+          # resolve_configuration is the only writer of this repository.
+          # Query uses that tree; the later build calls the same function again.
+          if [[ ! -d build-input/configuration-repository ]]; then
+            echo "configuration repository is absent on this clean checkout"
+          fi
+          override=()
+          if [[ "${MAKE_XCODE_FLAGS:-}" == *overrideXcodeVersion* ]]; then
+            override+=(--override-xcode)
+          fi
+          python3 ../proof-tools/.github/proof_configure.py \
+            --bazel "${RUNNER_TEMP}/tellomi-proof-bazel" \
+            --configuration "build-system/appstore-configuration.json" \
+            --bazel-user-root "/private/var/tmp/_bazel_proof" \
+            "${override[@]}"
+          test -f build-input/configuration-repository/variables.bzl
+          test -f build-input/configuration-repository/MODULE.bazel
+
+      - name: Require an ios_unit_test and no Telegram app
+        working-directory: src
+        run: |
+          set -euo pipefail
+          proof="//Tests/TellomiFeedProof:TellomiFeedProofTests"
+          kind="$("$BAZEL_BIN" query --output=label_kind "$proof")"
+          echo "target kind: ${kind}"
+          bash ../proof-tools/.github/proof-compile-guard.sh kind "$kind"
+          feed="$("$BAZEL_BIN" query "deps(${proof})")"
+          echo "$feed" | grep -F '//submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen' >/dev/null
+          bundles="$("$BAZEL_BIN" query "kind('ios_application', deps(${proof}))")"
+          echo "ios_application deps: ${bundles:-<none>}"
+          bash ../proof-tools/.github/proof-compile-guard.sh bundles "$bundles"
 
       - name: Compile FeedScreen via the iOS unit test
         working-directory: src
