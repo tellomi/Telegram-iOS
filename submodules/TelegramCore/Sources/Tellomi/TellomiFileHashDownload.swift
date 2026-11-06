@@ -248,7 +248,7 @@ private enum TellomiFileHashPageError: Error {
 
 private func tellomiRequestFileHashPage(network: Network, datacenterId: Int, location: Api.InputFileLocation, offset: Int64) -> Signal<[TellomiFileHashPart], TellomiFileHashPageError> {
     return network.download(datacenterId: datacenterId, isMedia: true, tag: nil)
-    |> mapToSignal { download -> Signal<[TellomiFileHashPart], TellomiFileHashPageError> in
+    |> mapToSignalPromotingError { download -> Signal<[TellomiFileHashPart], TellomiFileHashPageError> in
         return download.requestWithAdditionalData(
             Api.functions.upload.getFileHashes(location: location, offset: offset),
             automaticFloodWait: false,

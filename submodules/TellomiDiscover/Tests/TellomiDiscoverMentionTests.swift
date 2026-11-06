@@ -49,6 +49,22 @@ final class TellomiDiscoverMentionTests: XCTestCase {
         XCTAssertEqual(at?.text, "@abcd ")
     }
 
+    func testMentionPersonKeepsTheComposeCandidate() {
+        let person = TellomiDiscoverMention.mentionPerson(username: "Alice", firstName: " 李 ", lastName: " 雷 ", isUser: true, isDeleted: false, isSelf: false)
+        XCTAssertEqual(person, TellomiDiscoverMention.Person(username: "Alice", name: "李 雷"))
+        let prefixed = TellomiDiscoverMention.mentionPerson(username: "@bobby", firstName: "Bob", lastName: nil, isUser: true, isDeleted: false, isSelf: false)
+        XCTAssertEqual(prefixed?.username, "bobby")
+        XCTAssertEqual(prefixed?.name, "Bob")
+        XCTAssertEqual(TellomiDiscoverMention.mentionPerson(username: "cara", firstName: nil, lastName: " 娜 ", isUser: true, isDeleted: false, isSelf: false)?.name, "娜")
+        XCTAssertEqual(TellomiDiscoverMention.mentionPerson(username: "dana", firstName: "  ", lastName: " ", isUser: true, isDeleted: false, isSelf: false)?.name, "")
+        XCTAssertNil(TellomiDiscoverMention.mentionPerson(username: "alice", firstName: "自己", lastName: nil, isUser: true, isDeleted: false, isSelf: true))
+        XCTAssertNil(TellomiDiscoverMention.mentionPerson(username: "groupname", firstName: nil, lastName: nil, isUser: false, isDeleted: false, isSelf: false))
+        XCTAssertNil(TellomiDiscoverMention.mentionPerson(username: "gone", firstName: "已", lastName: "删", isUser: true, isDeleted: true, isSelf: false))
+        XCTAssertNil(TellomiDiscoverMention.mentionPerson(username: "ab", firstName: "短", lastName: nil, isUser: true, isDeleted: false, isSelf: false))
+        XCTAssertNil(TellomiDiscoverMention.mentionPerson(username: nil, firstName: "无", lastName: nil, isUser: true, isDeleted: false, isSelf: false))
+        XCTAssertNil(TellomiDiscoverMention.mentionPerson(username: "_abcd", firstName: "线", lastName: nil, isUser: true, isDeleted: false, isSelf: false))
+    }
+
     func testSuggestionsUseLocalUsernames() {
         let people = [
             TellomiDiscoverMention.Person(username: "Alice", name: "李雷"),

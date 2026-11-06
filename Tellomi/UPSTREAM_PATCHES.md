@@ -813,7 +813,7 @@ Before the byte upload of a GIF, an ordinary document, or a video no larger than
 | File | Change |
 | --- | --- |
 | `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHash.swift` | New. Which files are probed, the video size cap, and what counts as a reusable document. |
-| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHashUpload.swift` | New. SHA-256 of the local bytes and the RPC, with fail-open. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHashUpload.swift` | New. SHA-256 of the local bytes and the RPC, with fail-open. The fail-open log is `error.errorDescription ?? ""`: the property is an unannotated Objective-C string, so a bare interpolation does not type-check. A present description is logged as written. The RPC error still returns no document. |
 | `submodules/TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift` | Chat send probes before `multipartUpload`. A hit reuses the document, including a video cover when one is attached. |
 | `submodules/TelegramCore/Sources/PendingMessages/UploadMediaToCloud.swift` | Composer pre-upload uses the same probe. |
 | `submodules/TelegramCore/Sources/PendingMessages/StandaloneUploadedMedia.swift` | Share-sheet file and video upload uses the same probe. |
@@ -843,13 +843,13 @@ Account 0 `mainconfig` on Android is `MessagesController.getGlobalMainSettings()
 
 | File | Change |
 | --- | --- |
-| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashes.swift` | Part rules, fail-open, and the kill switch. |
-| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashDownload.swift` | The long-offset RPC, paging, and the commit decision. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashes.swift` | Part rules, fail-open, and the kill switch. `tellomiGetFileHashesConstructor` is `Int32(bitPattern: 0x9156982a)`, the same spelling as other constructor ids above `Int32.max`. The bits stay `upload.getFileHashes#9156982a`. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashDownload.swift` | The long-offset RPC, paging, and the commit decision. `network.download` is `Signal<Download, NoError>`, so the page request uses `mapToSignalPromotingError`. The inner `upload.getFileHashes` error is still `TellomiFileHashPageError.rpc`, and that error still fail-opens. |
 | `submodules/TelegramCore/Sources/Network/MultipartFetch.swift` | Notes the location and CDN, and observes a plaintext download. |
 | `submodules/TelegramCore/Sources/Network/FetchV2.swift` | Notes the location, a CDN redirect, and a fallback to the datacenter. |
 | `submodules/Postbox/Sources/MediaBox.swift` | `beforeCompleteCommit`, read when a partial file would be linked. |
 | `submodules/Postbox/Sources/MediaBoxFileContextV2Impl.swift` | Holds that link. A refusal deletes the partial and fails the fetch. |
-| `submodules/TelegramCore/Tests/TellomiFileHashesTests.swift` | 128 KiB parts, mismatch versus miss, the switch, legacy location. |
+| `submodules/TelegramCore/Tests/TellomiFileHashesTests.swift` | 128 KiB parts, mismatch versus miss, the switch, legacy location. The constructor check compares the unsigned bits with `0x9156982a`. |
 | `submodules/Postbox/Tests/MediaBoxFileContextV2FileHashGateTests.swift` | The link waits. Allow keeps the file. Refuse deletes it and fails the fetch. |
 
 ## Discover nearby tab (D-11 / D-12)
@@ -890,3 +890,33 @@ Following and nearby ignore the switch (`tellomiDiscoverFeedRequestPersonalized`
 `recommend_mode` is still parsed and does not decide the switch or the query. The example payload in the feed tests uses `recommend_mode=editorial_chronological` and `personalization_toggle_visible=false`.
 
 **Engine gap.** content-engine is private (`tellomi/content-engine`); this checkout cannot read it. iOS and Android already send `personalized=false`. Nothing in teamgram applies that query. Until content-engine treats `personalized=false` as an order that is not based on the person and treats a missing query as the personalized order, turning the switch off changes the request and clears the cached page, and the returned order can stay the same. This change does not edit content-engine or the Android repo.
+
+## Discover mention candidates
+
+Compose `@` suggestions are still the local contacts plus every peer in any chat-list group. The screen used to read that set with `account.postbox.transaction` (`getContactPeerIds` and `chatListGetAllPeerIds()`). A release build rejects that file: `PostboxImportCheck` runs before `Make.py` compiles, and the file is not on `AllowedImporters.txt` or `AllowedPostboxAccess.txt`. The read is now `TelegramEngine.Contacts.peersFromContactsAndChatList`, one local transaction inside TelegramCore. It is not `messages.chatListPeers`, which stops at a count and goes through the view tracker. A missing peer record is still skipped. The account, a non-user, a deleted user, and a name that fails `validUsername` are still left out of the list. That choice is `TellomiDiscoverMention.mentionPerson`, including the trimmed first-and-last display name. A leading `@` on the input is stored without it; `addressName` does not have one. A mention is still only characters inside `text` on `POST /v1/feed/posts`. The allowlists are not extended. `FeedScreen` no longer depends on `//submodules/Postbox` (that package is not in Postbox's `clients` group).
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Contacts/TelegramEngineContacts.swift` | `peersFromContactsAndChatList`. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverComposeController.swift` | Loads the list through that method and `mentionPerson`. Drops `import Postbox`. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/BUILD` | Drops the Postbox dependency. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverMention.swift` | `mentionPerson`. |
+| `submodules/TellomiDiscover/Tests/TellomiDiscoverMentionTests.swift` | Self, non-users, deleted users, invalid names, and the display name. |
+
+## Discover feed compile
+
+Master CI on `8aee720666` failed `//submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen` while building `//Telegram:Telegram`. The share menu called `tellomiStringPack` without importing `TelegramUIPreferences`. The compose bar's `#selector(self.composePressed)` was ambiguous with `composePressed(quoteOf:quotePreview:)`. That quote path is `presentCompose(quoteOf:quotePreview:)`. The bar button still calls `composePressed()`. The file-hash constructor id is unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverShareMenu.swift` | Imports `TelegramUIPreferences` so `tellomiStringPack` is in scope. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreen.swift` | Quote compose is `presentCompose`. The selector names only the bar-button method. |
+
+## Chat list index compile
+
+Master CI on `969315d5df` failed `//submodules/ChatListUI:ChatListUI` while building `//Telegram:Telegram`. `ChatListNodeViewScrollPosition` carries `EngineChatList.Item.Index`. The scroll location shadowed that value with the inner `ChatListIndex` and passed the inner value into the scroll position. The transition then wrapped the engine index in `.chatList`, which expects `ChatListIndex`. `aroundChatListView` still takes the inner `ChatListIndex`. A peer entry's sort index is already `.index` of the engine index, so the scroll comparison uses that same value. The Discover feed compile fix is unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/ChatListUI/Sources/Node/ChatListNodeLocation.swift` | The scroll position keeps the engine index. The view tracker still receives the unwrapped `ChatListIndex`. |
+| `submodules/ChatListUI/Sources/Node/ChatListViewTransition.swift` | Both scroll comparisons use the engine index directly. |

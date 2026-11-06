@@ -207,6 +207,29 @@ public enum TellomiDiscoverMention {
         return Insertion(text: builder, caret: caret)
     }
 
+    /// One local user the compose screen may offer. The account, a non-user, a deleted user,
+    /// or a name that fails `validUsername` is not offered. `username` may start with `@`;
+    /// the stored name does not. The display name is the trimmed first and last name.
+    public static func mentionPerson(
+        username: String?,
+        firstName: String?,
+        lastName: String?,
+        isUser: Bool,
+        isDeleted: Bool,
+        isSelf: Bool
+    ) -> Person? {
+        if isSelf || !isUser || isDeleted {
+            return nil
+        }
+        guard var name = username, self.validUsername(name) else {
+            return nil
+        }
+        if name.hasPrefix("@") {
+            name.removeFirst()
+        }
+        return Person(username: name, name: self.displayName(firstName: firstName, lastName: lastName))
+    }
+
     public static func suggestions(_ people: [Person]?, prefix: String?, limit: Int) -> [Person] {
         let cap = limit > 0 ? limit : self.suggestionLimit
         let needle = (prefix ?? "").lowercased()
@@ -259,6 +282,18 @@ public enum TellomiDiscoverMention {
             return formatted
         }
         return "@" + formatted
+    }
+
+    private static func displayName(firstName: String?, lastName: String?) -> String {
+        let first = firstName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let last = lastName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !first.isEmpty && !last.isEmpty {
+            return first + " " + last
+        }
+        if !first.isEmpty {
+            return first
+        }
+        return last
     }
 
     private static func tokenEnd(_ text: NSString, _ at: Int) -> Int {
