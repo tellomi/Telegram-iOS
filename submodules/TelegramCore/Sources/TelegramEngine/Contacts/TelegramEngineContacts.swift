@@ -150,5 +150,24 @@ public extension TelegramEngine {
                 }
             }
         }
+
+        /// Contacts, plus every peer in any chat-list group, from one local transaction.
+        /// The account itself is included. Nothing is requested from the network.
+        public func peersFromContactsAndChatList() -> Signal<[EnginePeer], NoError> {
+            return self.account.postbox.transaction { transaction -> [EnginePeer] in
+                var ids = transaction.getContactPeerIds()
+                for id in transaction.chatListGetAllPeerIds() {
+                    ids.insert(id)
+                }
+                var peers: [EnginePeer] = []
+                peers.reserveCapacity(ids.count)
+                for id in ids {
+                    if let peer = transaction.getPeer(id) {
+                        peers.append(EnginePeer(peer))
+                    }
+                }
+                return peers
+            }
+        }
     }
 }
