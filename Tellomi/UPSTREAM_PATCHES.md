@@ -902,3 +902,12 @@ Compose `@` suggestions are still the local contacts plus every peer in any chat
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/BUILD` | Drops the Postbox dependency. |
 | `submodules/TellomiDiscover/Sources/TellomiDiscoverMention.swift` | `mentionPerson`. |
 | `submodules/TellomiDiscover/Tests/TellomiDiscoverMentionTests.swift` | Self, non-users, deleted users, invalid names, and the display name. |
+
+## Discover feed compile
+
+Master CI on `8aee720666` failed `//submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen` while building `//Telegram:Telegram`. The share menu called `tellomiStringPack` without importing `TelegramUIPreferences`. The compose bar's `#selector(self.composePressed)` was ambiguous with `composePressed(quoteOf:quotePreview:)`. That quote path is `presentCompose(quoteOf:quotePreview:)`. The bar button still calls `composePressed()`. The file-hash constructor id is unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverShareMenu.swift` | Imports `TelegramUIPreferences` so `tellomiStringPack` is in scope. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreen.swift` | Quote compose is `presentCompose`. The selector names only the bar-button method. |
