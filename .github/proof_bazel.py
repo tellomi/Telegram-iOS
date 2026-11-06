@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Explicit Bazel path for the proof compile.
+"""Compile verification for the FeedScreen ios_unit_test.
 
 Make.py selects a binary in two ways (build-system/Make/Make.py):
 
@@ -11,11 +11,17 @@ Make.py selects a binary in two ways (build-system/Make/Make.py):
 locate_bazel hashes build-input/bazel-<version>-<arch> against versions.json
 and deletes a mismatch before downloading the release binary. A wrapper placed
 at that path, without --bazel, is removed and never executed. --bazel is the
-supported path. --bazelArguments is parsed and never applied, so the feature
-is added by this wrapper after Make.py has built its argv and before the real
-binary runs.
+supported path. This wrapper does not inject apple.skip_codesign_simulator_bundles.
+rules_apple may ad-hoc sign the simulator test bundle. The aquery counts of
+SignBinary, ProcessAndSign, and GenerateCodesigningDossier are printed, and
+the build then runs. Those counts are not a claim that the compile is unsigned.
+diagnostics_only still exits before the build. A device cpu or any target other
+than the FeedScreen unit test does not run.
 
-The gate uses Bazel 9.2 --output=jsonproto (JsonFormat.printer of
+evaluate_graph still classifies a jsonproto for the existing tests. wrapper_main
+does not use that classification to skip the compile.
+
+The classifier uses Bazel 9.2 --output=jsonproto (JsonFormat.printer of
 ActionGraphContainer). TemplateExpand.template_content is one string, so the
 blank lines, shebang, and # copyright lines in rules_apple templates stay
 inside the field. A text dump of that same string ends the action at the
@@ -53,7 +59,9 @@ import subprocess
 import sys
 
 FEATURE = "--features=apple.skip_codesign_simulator_bundles"
+PROOF_TARGET = "//Tests/TellomiFeedProof:TellomiFeedProofTests"
 GATED_COMMANDS = ("build", "test")
+_SIGNING_MNEMONICS = ("SignBinary", "ProcessAndSign", "GenerateCodesigningDossier")
 AQUERY_STRIP = ("--subcommands",)
 AQUERY_OPTIONS = (
     "--output=jsonproto",
@@ -123,8 +131,6 @@ def aquery_argv(real, make_argv):
     startup = list(make_argv[1:command_at])
     target, flags = target_and_flags(make_argv, command_at)
     flags = [flag for flag in flags if flag not in AQUERY_STRIP]
-    if FEATURE not in flags:
-        flags.append(FEATURE)
     # Bazel 9.2 AqueryProcessor.buildActionFilters only walks one nested
     # function chain. A top-level union is a binary operator, so every
     # mnemonic() in it is dropped and the output is unfiltered. A bare label
@@ -141,10 +147,7 @@ def aquery_argv(real, make_argv):
 
 
 def exec_argv(real, make_argv):
-    rest = list(make_argv[1:])
-    if FEATURE not in rest:
-        rest.append(FEATURE)
-    return [real] + rest
+    return [real] + list(make_argv[1:])
 
 
 def _fragment_path(fragments, fragment_id, seen):
@@ -945,48 +948,133 @@ def log_reason(reason):
     return "signing-boundary: omitted sha256:%s len:%d" % (ident["sha256"], ident["len"])
 
 
+def report_signing(text):
+    """Fixed sentences and counts. No paths, arguments, or file bodies."""
+    actions, errors = load_actions(text)
+    if errors:
+        return "compile-verify: signing actions were not classified\n"
+    counts = {name: 0 for name in _SIGNING_MNEMONICS}
+    for action in actions:
+        if action.mnemonic in counts:
+            counts[action.mnemonic] += 1
+    lines = [
+        "compile-verify: %s actions: %d\n" % (name, counts[name])
+        for name in _SIGNING_MNEMONICS
+    ]
+    lines.append(
+        "compile-verify: queried-graph codesign counts are above; "
+        "this compile is not claimed unsigned\n"
+    )
+    return "".join(lines)
+
+
+# Make.py's proof build (invoke_build, debug_sim_arm64) selects the simulator
+# with --ios_multi_cpus=sim_arm64 and, when set, --watchos_cpus=arm64_32.
+# It does not pass --platforms, --cpu, or --config. Any of those can replace
+# that selection. -c takes its mode as the following argument.
+_PLATFORM_REJECT = frozenset((
+    "--platforms",
+    "--host_platform",
+    "--extra_execution_platforms",
+    "--extra_toolchains",
+    "--cpu",
+    "--host_cpu",
+    "--apple_platform_type",
+    "--ios_cpu",
+    "--macos_cpus",
+    "--tvos_cpus",
+    "--visionos_cpus",
+    "--config",
+    "--experimental_platforms_api",
+))
+_TAKES_SEPARATE_VALUE = _PLATFORM_REJECT | frozenset(("-c", "--compilation_mode"))
+_NOT_PROOF_BUILD = "compile-verify: bazel command is not the proof build\n"
+_NOT_PROOF_TARGET = "compile-verify: target is not the FeedScreen unit test\n"
+_NOT_SIMULATOR = "compile-verify: platform override is not the simulator proof\n"
+
+
+def _compile_allowed(argv):
+    """Allow only Make.py's simulator build of the FeedScreen unit test."""
+    if len(argv) < 3:
+        return _NOT_PROOF_BUILD
+    index = 1
+    while index < len(argv) and argv[index].startswith("-"):
+        if not argv[index].startswith("--output_user_root=") or argv[index] == "--output_user_root=":
+            return _NOT_PROOF_BUILD
+        if "\n" in argv[index] or "\r" in argv[index]:
+            return _NOT_PROOF_BUILD
+        index += 1
+    if index >= len(argv) or argv[index] != "build":
+        return _NOT_PROOF_BUILD
+    index += 1
+    positionals = []
+    ios_cpus = []
+    watch_cpus = []
+    while index < len(argv):
+        arg = argv[index]
+        if arg.startswith("-"):
+            name = arg.split("=", 1)[0]
+            if name in _PLATFORM_REJECT:
+                return _NOT_SIMULATOR
+            if name == "--ios_multi_cpus":
+                if not arg.startswith("--ios_multi_cpus="):
+                    return _NOT_SIMULATOR
+                ios_cpus.append(arg.split("=", 1)[1])
+            elif name == "--watchos_cpus":
+                if arg != "--watchos_cpus=arm64_32":
+                    return _NOT_SIMULATOR
+                watch_cpus.append(arg)
+            if "=" not in arg and name in _TAKES_SEPARATE_VALUE:
+                index += 1
+                if index >= len(argv):
+                    return _NOT_PROOF_BUILD
+            index += 1
+            continue
+        positionals.append(arg)
+        index += 1
+    if positionals != [PROOF_TARGET]:
+        return _NOT_PROOF_TARGET
+    if ios_cpus != ["sim_arm64"] or len(watch_cpus) > 1:
+        return _NOT_SIMULATOR
+    return None
+
+
 def wrapper_main(argv, real, run=None, execv=None, environ=None):
-    """Gate build/test, then exec the real binary. Other commands are forwarded."""
+    """Report simulator codesign counts, then compile the proof target."""
     run = run or subprocess.run
     execv = execv or os.execv
     diagnose = diagnostics_requested(environ)
-    if command_index(argv) is None:
+    # Make.py reads `bazel --version` before invoke_build. That argv has no
+    # command word. run/test/coverage and any other word are not forwarded.
+    if not any(not arg.startswith("-") for arg in argv[1:]):
+        if diagnose:
+            sys.stderr.write("diagnostics-only: build was not executed\n")
+            return 2
         forwarded = [real] + list(argv[1:])
         execv(forwarded[0], forwarded)
         return 0
+    blocked = _compile_allowed(argv)
+    if blocked:
+        sys.stderr.write(blocked)
+        if diagnose:
+            sys.stderr.write("diagnostics-only: build was not executed\n")
+        return 1
 
     query = aquery_argv(real, argv)
     completed = run(query, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    if completed.returncode != 0:
-        if diagnose:
+    if diagnose:
+        if completed.returncode != 0:
             sys.stderr.write(project_aquery_failure(completed.stderr))
-        sys.stderr.write("aquery failed; build was not executed\n")
-        return completed.returncode or 1
-
-    flags = []
-    seen_aquery = False
-    for arg in query[1:]:
-        if not seen_aquery:
-            if arg == "aquery":
-                seen_aquery = True
-            continue
-        flags.append(arg)
-    flags = flags[:-1]
-    decision = evaluate_graph(completed.stdout or "", flags)
-    if diagnose:
-        sys.stderr.write(project_aquery(completed.stdout or ""))
-    if diagnose:
+            sys.stderr.write("compile-verify: signing actions were not classified\n")
+        else:
+            sys.stderr.write(project_aquery(completed.stdout or ""))
+            sys.stderr.write(report_signing(completed.stdout or ""))
         sys.stderr.write("diagnostics-only: build was not executed\n")
-        if not decision.allow:
-            sys.stderr.write("refusing to execute bazel; signing boundary failed before any build action\n")
-            for reason in decision.reasons:
-                sys.stderr.write(log_reason(reason) + "\n")
         return 2
-    if not decision.allow:
-        sys.stderr.write("refusing to execute bazel; signing boundary failed before any build action\n")
-        for reason in decision.reasons:
-            sys.stderr.write(log_reason(reason) + "\n")
-        return 1
+    if completed.returncode != 0:
+        sys.stderr.write("compile-verify: signing actions were not classified\n")
+    else:
+        sys.stderr.write(report_signing(completed.stdout or ""))
 
     executed = exec_argv(real, argv)
     execv(executed[0], executed)

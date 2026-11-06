@@ -11,31 +11,25 @@
 # copied into the compile_sha tree from this branch. That target depends on
 # //submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen.
 #
-# rules_apple 485016eb codesigning_support.bzl skips simulator codesign when
-# --features=apple.skip_codesign_simulator_bundles is set, before the
-# ios_unit_test exception that otherwise forces signing. Make.py parses
-# --bazelArguments and never applies it. Passing --bazel <wrapper> is the
-# supported binary path: locate_bazel is skipped, so it cannot hash-delete
-# the wrapper. The wrapper lives outside build-input/. Before exec it aqueries
-# Bazel 9.2 jsonproto with --include_param_files and
-# --include_file_write_contents. Template bodies stay inside templateContent,
-# including blank lines and copyright comments, and ARTIFACT: links are
-# expanded before the signing check. The unsigned debug path's ProcessAndSign
-# is cp -p and returns before expand_template, so that template is not
-# required. A script that is executed still needs its expanded body. An empty,
-# truncated, or incomplete graph is not treated as unsigned. A build log grep
-# is not that boundary.
+# This job is a compile of that unit test. rules_apple may ad-hoc sign the
+# simulator bundle; the wrapper does not inject apple.skip_codesign_simulator_bundles
+# and does not describe the result as unsigned. Before the build it prints only
+# the counts of SignBinary, ProcessAndSign, and GenerateCodesigningDossier.
+# Passing --bazel <wrapper> is the supported binary path: locate_bazel is
+# skipped, so it cannot hash-delete the wrapper. The wrapper lives outside
+# build-input/. diagnostics_only still exits before the build.
 # CODE_SIGNING_ALLOWED is not passed. It is an Xcode setting.
 #
 # versions.json requires Xcode 27.1 and macOS 27. The job fails if sw_vers
 # or xcodebuild do not match. It does not skip the compile.
 #
-# A push to master runs this unsigned compile when the push changes a file
-# outside .github. A .github-only push does not start it. workflow_dispatch
-# still takes an explicit compile_sha, so the workflow commit and the
-# business commit stay separate. No //Telegram:Telegram, no IPA copy, no
-# upload, no Release. A test bundle under bazel-bin/Tests may exist.
-# bazel-bin/Telegram/Telegram.ipa fails the job.
+# A push to master runs this compile when the push changes a file outside
+# .github. A .github-only push does not start it. workflow_dispatch still
+# takes an explicit compile_sha, so the workflow commit and the business
+# commit stay separate. No //Telegram:Telegram, no IPA copy, no upload, no
+# Release. A test bundle under bazel-bin/Tests may exist.
+# bazel-bin/Telegram/Telegram.ipa fails the job. Packaging and GitHub Release
+# stay on the manual package_release input of build.yml.
 
 name: Proof compile
 

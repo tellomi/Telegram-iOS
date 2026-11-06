@@ -174,47 +174,46 @@ def test_regex_shaped_secrets_stay_fingerprints():
 def test_diagnostics_never_executes():
     allowed = proof_bazel_test.SAFE_GRAPH
     refused = json.dumps(sample_document())
-    for document, aquery_code, diagnose in (
-        (allowed, 0, True),
-        (refused, 0, True),
-        (allowed, 3, True),
-        (refused, 0, False),
+    for document, aquery_code in (
+        (allowed, 0),
+        (refused, 0),
+        (allowed, 3),
     ):
-        status, executed, log, calls = _run(document, aquery_code, diagnose, SECRET + BOMB)
+        status, executed, log, calls = _run(document, aquery_code, True, SECRET + BOMB)
         assert_log_safe(log)
         if executed:
-            fail("build was executed diagnose=%s aquery=%s" % (diagnose, aquery_code))
-        if not calls or calls[0][calls[0].index("aquery") + 1:].count("build"):
-            pass
+            fail("diagnostics executed a build aquery=%s" % aquery_code)
         if "aquery" not in calls[0]:
             fail("aquery was not requested")
-        if diagnose and aquery_code == 0 and "diagnostics-only: build was not executed" not in log:
+        if aquery_code == 0 and "diagnostics-only: build was not executed" not in log:
             fail("diagnostics mode did not record that the build was skipped")
         if aquery_code != 0 and "not a complete graph" not in log:
             fail("failed aquery was treated as a complete graph")
         if status == 0:
-            fail("diagnostics or refusal returned success")
+            fail("diagnostics returned success")
     status, executed, log, _calls = _run(allowed, 0, False)
     if status != 0 or not executed:
-        fail("default allow path no longer builds: %s %s" % (status, executed))
-    if "diagnostics-only" in log or log.startswith("diag ") or "\ndiag " in log:
-        fail("default allow path logged a projection")
+        fail("compile path no longer builds: %s %s" % (status, executed))
+    if "diagnostics-only" in log or "diag " in log:
+        fail("compile path logged a projection")
+    if "not claimed unsigned" not in log:
+        fail("compile path claimed a signing result it did not count")
     status, executed, refused_log, _calls = _run(refused, 0, False)
-    if executed or "diag " in refused_log:
-        fail("default refusal logged a projection or executed: %s" % refused_log)
-    if "signing-boundary:" not in refused_log:
-        fail("default refusal dropped the existing gate reasons")
+    if not executed or "diag " in refused_log or "refusing to execute bazel" in refused_log:
+        fail("a graph the old gate refused did not compile: %s" % refused_log)
     status, executed, failed_log, _calls = _run(allowed, 3, False, SECRET + BOMB)
     assert_log_safe(failed_log)
-    if executed or "diag " in failed_log:
-        fail("default aquery failure logged stderr or executed")
+    if not executed or "diag " in failed_log or "aquery exploded" in failed_log:
+        fail("aquery failure blocked the compile or leaked stderr")
+    if "signing actions were not classified" not in failed_log:
+        fail("aquery failure did not say signing was unclassified")
     workflow = open(
         __import__("os").path.join(__import__("os").path.dirname(__file__), "workflows", "proof-compile.yml"),
         encoding="utf-8",
     ).read()
     if "inputs.diagnostics_only == true" not in workflow or "default: false" not in workflow:
         fail("diagnostics input is not default-off")
-    print("diagnostics never execute a build; default allow path still would")
+    print("diagnostics never execute a build; compile path still does")
 
 
 def main():
