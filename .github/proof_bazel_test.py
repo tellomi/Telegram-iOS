@@ -520,6 +520,45 @@ def test_wrapper_order(make_argv, real):
         "platform override",
         "mixed ios cpus",
     )
+    blocked(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "test", "//Telegram:Telegram",
+         "--ios_multi_cpus=sim_arm64"],
+        "FeedScreen unit test",
+        "other test target",
+    )
+    blocked(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "test",
+         "//submodules/TellomiDiscover:TellomiDiscoverTests", "--ios_multi_cpus=arm64"],
+        "platform override",
+        "host test with a device cpu",
+        diagnose=True,
+    )
+
+    def allowed(argv, label):
+        executed[:] = []
+        calls[:] = []
+        status = proof_bazel.wrapper_main(argv, real, run=run, execv=execv, environ={})
+        if status != 0 or len(executed) != 1 or executed[0][executed[0].index("test")] != "test":
+            fail("%s was not executed through the wrapper: %s %s" % (label, status, executed))
+
+    allowed(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "test",
+         "//submodules/TellomiDiscover:TellomiDiscoverTests", "--test_output=errors", "--announce_rc"],
+        "host discover test",
+    )
+    allowed(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "test", TARGET,
+         "--test_output=errors", "--announce_rc", "--//Telegram:disableProvisioningProfiles",
+         "-c", "dbg", "--ios_multi_cpus=sim_arm64"],
+        "simulator proof test",
+    )
+    blocked(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "test", TARGET,
+         "--ios_multi_cpus=sim_arm64"],
+        "test was not executed",
+        "diagnostics simulator test",
+        diagnose=True,
+    )
     forwarded = []
 
     def exec_version(path, argv):

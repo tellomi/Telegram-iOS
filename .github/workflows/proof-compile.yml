@@ -11,9 +11,13 @@
 # copied into the compile_sha tree from this branch. That target depends on
 # //submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen.
 #
-# This job compiles that unit test, runs the host Discover tests, then runs
-# the unit test on the simulator. The simulator run may ad-hoc sign the test
-# runner. It does not copy or upload an IPA.
+# After a normal compile, the same wrapper runs two tests: the host
+# TellomiDiscoverTests target, then the proof unit test on the simulator.
+# diagnostics_only skips both and does not build. The simulator test may
+# ad-hoc sign its runner. It does not copy or upload an IPA.
+# The host URLSession test covers tellomiDiscoverBeginTransport, which is the
+# function the app transport calls: http is refused, and cancel closes the
+# task before a late redirect can succeed. It does not boot PhotosUI.
 # rules_apple may ad-hoc sign the
 # simulator bundle; the wrapper does not inject apple.skip_codesign_simulator_bundles
 # and does not describe the result as unsigned. Before the build it prints only
@@ -253,19 +257,22 @@ jobs:
           bash ../proof-tools/.github/proof-compile-guard.sh no-app-ipa "bazel-bin/Telegram/Telegram.ipa"
 
       - name: Run Discover host tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.diagnostics_only != true }}
         working-directory: src
         run: |
           set -euo pipefail
-          # Host swift_test. Darwin URLSession runs here. This is not the
-          # proof wrapper and it does not sign or package the Telegram app.
-          "$BAZEL_BIN" --output_user_root=/private/var/tmp/_bazel_proof test //submodules/TellomiDiscover:TellomiDiscoverTests --test_output=errors --announce_rc
+          # Same wrapper as the compile. Host swift_test only: no ios cpu, no
+          # device platform, no IPA. diagnostics_only never reaches this step,
+          # and the wrapper also refuses to exec a test in that mode.
+          "$PROOF_BAZEL" --output_user_root=/private/var/tmp/_bazel_proof test //submodules/TellomiDiscover:TellomiDiscoverTests --test_output=errors --announce_rc
           bash ../proof-tools/.github/proof-compile-guard.sh no-app-ipa "bazel-bin/Telegram/Telegram.ipa"
 
       - name: Run the FeedScreen simulator test
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.diagnostics_only != true }}
         working-directory: src
         run: |
           set -euo pipefail
-          # Same simulator cpu as the compile. The test runner may be ad-hoc
-          # signed. The explicit target is the proof unit test, not Telegram.
-          "$BAZEL_BIN" --output_user_root=/private/var/tmp/_bazel_proof test //Tests/TellomiFeedProof:TellomiFeedProofTests --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64
+          # Same wrapper and simulator cpu as the compile. The test runner may
+          # be ad-hoc signed. The only target is the proof unit test.
+          "$PROOF_BAZEL" --output_user_root=/private/var/tmp/_bazel_proof test //Tests/TellomiFeedProof:TellomiFeedProofTests --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64
           bash ../proof-tools/.github/proof-compile-guard.sh no-app-ipa "bazel-bin/Telegram/Telegram.ipa"
