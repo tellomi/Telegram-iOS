@@ -843,13 +843,13 @@ Account 0 `mainconfig` on Android is `MessagesController.getGlobalMainSettings()
 
 | File | Change |
 | --- | --- |
-| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashes.swift` | Part rules, fail-open, and the kill switch. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashes.swift` | Part rules, fail-open, and the kill switch. `tellomiGetFileHashesConstructor` is `Int32(bitPattern: 0x9156982a)`, the same spelling as other constructor ids above `Int32.max`. The bits stay `upload.getFileHashes#9156982a`. |
 | `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashDownload.swift` | The long-offset RPC, paging, and the commit decision. `network.download` is `Signal<Download, NoError>`, so the page request uses `mapToSignalPromotingError`. The inner `upload.getFileHashes` error is still `TellomiFileHashPageError.rpc`, and that error still fail-opens. |
 | `submodules/TelegramCore/Sources/Network/MultipartFetch.swift` | Notes the location and CDN, and observes a plaintext download. |
 | `submodules/TelegramCore/Sources/Network/FetchV2.swift` | Notes the location, a CDN redirect, and a fallback to the datacenter. |
 | `submodules/Postbox/Sources/MediaBox.swift` | `beforeCompleteCommit`, read when a partial file would be linked. |
 | `submodules/Postbox/Sources/MediaBoxFileContextV2Impl.swift` | Holds that link. A refusal deletes the partial and fails the fetch. |
-| `submodules/TelegramCore/Tests/TellomiFileHashesTests.swift` | 128 KiB parts, mismatch versus miss, the switch, legacy location. |
+| `submodules/TelegramCore/Tests/TellomiFileHashesTests.swift` | 128 KiB parts, mismatch versus miss, the switch, legacy location. The constructor check compares the unsigned bits with `0x9156982a`. |
 | `submodules/Postbox/Tests/MediaBoxFileContextV2FileHashGateTests.swift` | The link waits. Allow keeps the file. Refuse deletes it and fails the fetch. |
 
 ## Discover nearby tab (D-11 / D-12)

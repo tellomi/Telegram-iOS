@@ -41,7 +41,7 @@ struct TellomiFileHashPart: Equatable {
 }
 
 /// `upload.getFileHashes#9156982a location:InputFileLocation offset:long`.
-let tellomiGetFileHashesConstructor: Int32 = 0x9156982a
+let tellomiGetFileHashesConstructor: Int32 = Int32(bitPattern: 0x9156982a)
 
 /// SHA-256 part size shared with `upload.getCdnFileHashes`.
 let tellomiFileHashPartBytes: Int = 128 * 1024

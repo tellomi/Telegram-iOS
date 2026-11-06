@@ -5,7 +5,7 @@ import TelegramApi
 
 final class TellomiFileHashesTests: XCTestCase {
     func testConstructorIsTheCurrentLongOffsetMethod() {
-        XCTAssertEqual(tellomiGetFileHashesConstructor, 0x9156982a)
+        XCTAssertEqual(UInt32(bitPattern: tellomiGetFileHashesConstructor), 0x9156982a)
         XCTAssertEqual(tellomiFileHashPartBytes, 128 * 1024)
         XCTAssertEqual(tellomiFileHashFailOpenSeconds, 12)
         XCTAssertNotEqual(tellomiGetFileHashesKey, tellomiGetDocumentByHashKey)
