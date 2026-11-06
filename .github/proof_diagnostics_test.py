@@ -142,6 +142,35 @@ def _run(document, code, diagnose, err=""):
     return status, executed, stderr.getvalue(), calls
 
 
+def test_regex_shaped_secrets_stay_fingerprints():
+    mnemonic = "GhpSupersecretvalue"
+    label = "//pkg:ghp_supersecretvalue"
+    key = "%ghp_supersecretvalue%"
+    projected = proof_bazel.project_aquery(json.dumps({
+        "pathFragments": [],
+        "artifacts": [],
+        "targets": [{"id": 1, "label": label}],
+        "actions": [{
+            "mnemonic": mnemonic,
+            "targetId": 1,
+            "outputIds": [],
+            "substitutions": [{"key": key, "value": ""}],
+        }],
+    }))
+    for secret in (mnemonic, label, key):
+        if secret in projected:
+            fail("regex-shaped secret was shown: %s" % secret)
+    token = proof_bazel.project_token(mnemonic, "mnemonic")
+    if token.get("shown") or token["sha256"] not in projected:
+        fail("unknown mnemonic was not kept as a hash")
+    reason = proof_bazel.log_reason("unknown action " + mnemonic)
+    if mnemonic in reason or token["sha256"] not in reason:
+        fail("default unknown reason leaked the mnemonic: %s" % reason)
+    if proof_bazel.log_reason("unknown action TestRunner") != "signing-boundary: unknown action TestRunner":
+        fail("known mnemonic reason was fingerprinted")
+    print("regex-shaped secrets stayed fingerprints")
+
+
 def test_diagnostics_never_executes():
     allowed = proof_bazel_test.SAFE_GRAPH
     refused = json.dumps(sample_document())
@@ -190,6 +219,7 @@ def test_diagnostics_never_executes():
 
 def main():
     test_projection_fingerprints_unknown_text()
+    test_regex_shaped_secrets_stay_fingerprints()
     test_diagnostics_never_executes()
     print("proof diagnostics tests passed")
 

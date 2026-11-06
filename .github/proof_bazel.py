@@ -518,9 +518,51 @@ def evaluate_graph(text, flags):
 
 
 _LIST_LIMIT = 40
-_MNEMONIC_RE = re.compile(r"^[A-Z][A-Za-z0-9]{0,40}$")
-_LABEL_RE = re.compile(r"^//[A-Za-z0-9.+/-]*:[A-Za-z0-9.+_-]+$")
-_PLACEHOLDER_KEY_RE = re.compile(r"^%(?:\([A-Za-z_][A-Za-z0-9_]*\)s|[a-z][a-z0-9_]+%)$")
+# Finite literals from Bazel 9.2 test actions seen on run 42272704009,
+# rules_apple 485016eb signing mnemonics, and this proof's BUILD targets.
+# Anything else is fingerprinted. A regex is not an allowlist.
+_MNEMONICS = frozenset((
+    "FileWrite",
+    "GenerateCodesigningDossier",
+    "ProcessAndSign",
+    "RepoMappingManifest",
+    "RunfilesTree",
+    "SignBinary",
+    "SourceSymlinkManifest",
+    "SymlinkTree",
+    "TemplateExpand",
+    "TestRunner",
+))
+_LABELS = frozenset((
+    "//Tests/TellomiFeedProof:TellomiFeedProofRunner",
+    "//Tests/TellomiFeedProof:TellomiFeedProofTests",
+    "//Tests/TellomiFeedProof:TellomiFeedProofTestsLib",
+    "//submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen",
+))
+_PLACEHOLDER_KEYS = frozenset((
+    "%(create_simulator_action_binary)s",
+    "%(device_type)s",
+    "%(os_version)s",
+    "%(post_action_binary)s",
+    "%(post_action_determines_exit_code)s",
+    "%(pre_action_binary)s",
+    "%(sdk_version)s",
+    "%(test_bundle_path)s",
+    "%(test_coverage_manifest)s",
+    "%(test_env)s",
+    "%(test_env_inherit)s",
+    "%(test_filter)s",
+    "%(test_host_path)s",
+    "%(test_type)s",
+    "%(testrunner_binary)s",
+    "%ipa_post_processor%",
+    "%output_path%",
+    "%should_compress%",
+    "%should_verify%",
+    "%signing_command_lines%",
+    "%unprocessed_archive_path%",
+    "%work_dir%",
+))
 _EXACT_TOKENS = frozenset((
     "-",
     "-c",
@@ -559,11 +601,11 @@ def fingerprint(text):
 
 def project_token(text, kind):
     """Return a log value. Unknown strings are fingerprints, never copied."""
-    if kind == "mnemonic" and _MNEMONIC_RE.match(text):
+    if kind == "mnemonic" and text in _MNEMONICS:
         return {"type": "mnemonic", "shown": True, "text": text}
-    if kind == "label" and _LABEL_RE.match(text) and "\n" not in text and "\r" not in text:
+    if kind == "label" and text in _LABELS:
         return {"type": "label", "shown": True, "text": text}
-    if kind == "key" and _PLACEHOLDER_KEY_RE.match(text):
+    if kind == "key" and text in _PLACEHOLDER_KEYS:
         return {"type": "placeholder", "shown": True, "text": text}
     if kind == "token" and text in _EXACT_TOKENS:
         return {"type": "token", "shown": True, "text": text}
@@ -721,7 +763,8 @@ def project_aquery(text):
         "kind": "summary",
         "actions": len(actions),
         "mnemonics": {
-            (name if _MNEMONIC_RE.match(name) else fingerprint(name)["sha256"]): counts[name]
+            (project_token(name, "mnemonic")["text"] if project_token(name, "mnemonic").get("shown")
+             else project_token(name, "mnemonic")["sha256"]): counts[name]
             for name in sorted(counts)
         },
     }]
@@ -812,18 +855,14 @@ def project_aquery_failure(stderr):
     }])
 
 
-_SAFE_REASON = re.compile(
-    r"^(?:unknown action [A-Z][A-Za-z0-9]*"
-    r"|template body contains (?:/usr/bin/codesign|provisioning profile|entitlement or inferred identity|should_sign)"
-    r"|ProcessAndSign script contains (?:/usr/bin/codesign|provisioning profile|entitlement or inferred identity|should_sign)"
-    r"|FileWrite contains (?:/usr/bin/codesign|provisioning profile|entitlement or inferred identity|should_sign)"
-    r"|aquery was not asked for --[a-z_]+"
-    r"|device ios cpu in [a-z0-9_]+(?:,[a-z0-9_]+)*)$"
-)
-
-
 def log_reason(reason):
-    """Print a gate reason only when it is our own sentence, not graph text."""
+    """Print a gate reason only when every word is a fixed literal."""
+    prefix = "unknown action "
+    if reason.startswith(prefix) and "\n" not in reason and "\r" not in reason:
+        token = project_token(reason[len(prefix):], "mnemonic")
+        if token.get("shown"):
+            return "signing-boundary: unknown action " + token["text"]
+        return "signing-boundary: unknown action sha256:%s len:%d" % (token["sha256"], token["len"])
     if "\n" not in reason and "\r" not in reason and (
         reason in {
             "skip_codesign feature is not on the aquery command",
@@ -879,8 +918,22 @@ def log_reason(reason):
             "ProcessAndSign is absent",
             "GenerateCodesigningDossier is absent",
             "expanded template still has an unresolved placeholder",
+            "template body contains /usr/bin/codesign",
+            "template body contains provisioning profile",
+            "template body contains entitlement or inferred identity",
+            "template body contains should_sign",
+            "ProcessAndSign script contains /usr/bin/codesign",
+            "ProcessAndSign script contains provisioning profile",
+            "ProcessAndSign script contains entitlement or inferred identity",
+            "ProcessAndSign script contains should_sign",
+            "FileWrite contains /usr/bin/codesign",
+            "FileWrite contains provisioning profile",
+            "FileWrite contains entitlement or inferred identity",
+            "FileWrite contains should_sign",
+            "aquery was not asked for --include_file_write_contents",
+            "aquery was not asked for --include_param_files",
+            "device ios cpu in sim_arm64",
         }
-        or _SAFE_REASON.match(reason)
     ):
         return "signing-boundary: " + reason
     ident = fingerprint(reason)
