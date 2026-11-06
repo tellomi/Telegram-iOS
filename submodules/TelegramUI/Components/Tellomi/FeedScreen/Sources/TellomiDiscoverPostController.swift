@@ -362,7 +362,7 @@ final class TellomiDiscoverPostController: ViewController {
     }
 
     private func sendLike(_ request: TellomiDiscoverLikeRequest) {
-        guard let like = self.like else {
+        guard self.like != nil else {
             return
         }
         let operation: TellomiDiscoverOperation = request.on ? .like(postId: request.postId, surface: request.surface) : .unlike(postId: request.postId, surface: request.surface)
