@@ -15,36 +15,31 @@ supported path. --bazelArguments is parsed and never applied, so the feature
 is added by this wrapper after Make.py has built its argv and before the real
 binary runs.
 
-The wrapper runs `aquery` with the same flags plus
---features=apple.skip_codesign_simulator_bundles, and refuses to exec the
-build unless that graph's signing parameters are inside the boundary below.
-rules_apple 485016eb codesigning_support.bzl:
+The gate uses Bazel 9.2 --output=jsonproto (JsonFormat.printer of
+ActionGraphContainer). TemplateExpand.template_content is one string, so the
+blank lines, shebang, and # copyright lines in rules_apple templates stay
+inside the field. A text dump of that same string ends the action at the
+first blank line and then treats # Copyright as a new record.
 
-- _should_sign_simulator_bundles returns False when the feature is set, before
-  ios_unit_test's skip_simulator_signing_allowed=False would force signing.
-- ProcessAndSign with no work is still mnemonic ProcessAndSign and runs
-  `cp -p` (the empty action around line 679). A later log grep of the mnemonic
-  cannot tell that apart from signing.
-- Real signing is a generated process-and-sign script. The action argument is
-  `should_sign`; /usr/bin/codesign is inside the script, not the mnemonic line.
-- GenerateCodesigningDossier is unconditional for test bundles
-  (apple_test_bundle_support.bzl). Its identity is written to dossier_arguments.
-  Simulator builds use the ad-hoc pseudo-identity "-". A provisioning profile
-  is not embedded when that identity is used. Device builds can carry a real
-  identity and entitlements.
+rules_apple 485016eb:
+- ios_test_runner and the unit-test executable are expand_template actions.
+  The executable's template is a derived artifact, so getTemplateContent
+  returns "ARTIFACT: <exec path>" and the body is the earlier expansion.
+- process_and_sign.sh.template is expanded for every bundle. Signing commands
+  are the %signing_command_lines% substitution. The template body itself has
+  no /usr/bin/codesign. A body that hardcodes that path still signs when the
+  substitution is empty.
+- Empty ProcessAndSign is /bin/bash -c "cp -p ...". should_sign runs the
+  generated script.
+- GenerateCodesigningDossier writes dossier_arguments with actions.write.
+  Simulator identity is the ad-hoc "-". A profile is not embedded for it.
 
-The gate asks Bazel 9.2 for the text graph with --include_param_files and
---include_file_write_contents. Command Line is pretty-printed across lines
-(CommandFailureUtils, prettyPrintArgs). FileWrite contents are one base64
-field, FileWriteContents, not a command. An empty graph, a truncated field,
-or a referenced args file whose contents are absent is not a safe graph.
-GenerateCodesigningDossier with the ad-hoc identity "-" and no profile is
-dossier generation. ProcessAndSign signs only when its arguments include
-should_sign or its script does; the empty action is the multi-line cp -p.
+The executed text of a template is the body after substitutions, following
+ARTIFACT: links. An empty graph, a truncated document, a missing body, or an
+unresolved placeholder is not evidence that the action is unsigned.
 """
 import argparse
-import base64
-import binascii
+import json
 import os
 import re
 import stat
@@ -53,36 +48,29 @@ import sys
 
 FEATURE = "--features=apple.skip_codesign_simulator_bundles"
 GATED_COMMANDS = ("build", "test")
-# Execution-only. It is not part of the analyzed graph and aquery rejects it.
 AQUERY_STRIP = ("--subcommands",)
-
-# A field is indented two spaces. Continuation lines are indented further,
-# which is how Bazel 9.2 prints every argument after the first.
-_FIELD_RE = re.compile(r"^  (?! )([^:]+): ?(.*)$")
-_COMMAND_TRAILER_RE = re.compile(r"\n# (?:Configuration|Execution platform|Runner):")
-_FILE_CONTENTS_RE = re.compile(r"^\[([A-Za-z0-9+/=]*)\]$")
-
 AQUERY_OPTIONS = (
-    "--output=text",
+    "--output=jsonproto",
     "--include_commandline",
     "--include_param_files",
     "--include_file_write_contents",
 )
+_PLACEHOLDER_RE = re.compile(r"%\([A-Za-z0-9_]+\)s|%[A-Za-z0-9_]+%")
+_COPY_RE = re.compile(r"^cp -p (?:'[^']+'|\S+) (?:'[^']+'|\S+)$")
+_RUNNER_COPYRIGHT = "# Copyright 2018 The Bazel Authors"
 
 
 class Action(object):
     def __init__(self):
         self.mnemonic = ""
-        self.outputs = []
-        self.command = ""
         self.arguments = []
-        self.command_truncated = False
+        self.outputs = []
         self.params = {}
-        self.param_truncated = False
         self.file_contents = None
-        self.file_contents_error = None
+        self.saw_file_contents = False
+        self.template_content = None
         self.substitutions = {}
-        self.substitutions_truncated = False
+        self.expanded = None
 
 
 class Decision(object):
@@ -148,227 +136,203 @@ def exec_argv(real, make_argv):
     return [real] + rest
 
 
-def unescape_shell_arg(arg):
-    """Undo Bazel ShellEscaper strong quotes. Unclosed quotes stay unchanged."""
-    if not arg.startswith("'"):
-        if " " in arg or "\t" in arg:
-            return None
-        return arg
-    out = []
-    index = 1
-    while index < len(arg):
-        if arg.startswith("'\\''", index):
-            out.append("'")
-            index += 4
-            continue
-        if arg[index] == "'":
-            if index != len(arg) - 1:
-                return None
-            return "".join(out)
-        out.append(arg[index])
-        index += 1
-    return None
+def _fragment_path(fragments, fragment_id, seen):
+    if fragment_id in seen or fragment_id not in fragments:
+        return None
+    fragment = fragments[fragment_id]
+    label = fragment.get("label")
+    if not isinstance(label, str) or label == "":
+        return None
+    parent = fragment.get("parentId") or 0
+    if not parent:
+        return label
+    prefix = _fragment_path(fragments, parent, seen | {fragment_id})
+    if prefix is None:
+        return None
+    return prefix + "/" + label
 
 
-def split_pretty_command(value):
-    """Split a Bazel 9.2 pretty-printed Command Line into argv.
-
-    prettyPrintArgs puts the executable on the first line and every later
-    argument after ' \\\\\\n    '. A single line that still contains spaces is
-    not that format. Returns (arguments, truncated).
-    """
-    body = _COMMAND_TRAILER_RE.split(value, maxsplit=1)[0].strip()
-    if not body.startswith("(exec ") or not body.endswith(")"):
-        return [], True
-    inner = body[len("(exec "):-1]
-    if inner.endswith("\\"):
-        return [], True
-    pieces = inner.split(" \\\n    ")
-    arguments = []
-    for piece in pieces:
-        decoded = unescape_shell_arg(piece)
-        if decoded is None:
-            return [], True
-        arguments.append(decoded)
-    return arguments, False
-
-
-def decode_file_write_contents(value):
-    """Decode FileWriteContents: [base64]. Official fixture is hello world."""
-    match = _FILE_CONTENTS_RE.match(value.strip())
-    if match is None:
-        return None, "truncated"
-    try:
-        raw = base64.b64decode(match.group(1), validate=True)
-    except binascii.Error:
-        return None, "not base64"
-    try:
-        return raw.decode("utf-8"), None
-    except UnicodeDecodeError:
-        return None, "not utf-8"
-
-
-def parse_param_lines(lines):
-    """Recover arguments from Params File Content continuation lines.
-
-    Bazel joins ParameterFileWriteAction arguments with ' \\\\\\n    '.
-    Every line but the last therefore ends in ' \\\\', and a trailing
-    backslash means the file was cut off.
-    """
-    raw = []
-    for line in lines:
-        if not line.startswith("    "):
-            return None
-        raw.append(line[4:])
-    if not raw:
+def _as_dict_list(value):
+    if value is None:
         return []
-    if raw[-1].endswith("\\"):
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
         return None
-    if any(not part.endswith(" \\") for part in raw[:-1]):
-        return None
-    return "\n".join(raw).split(" \\\n")
+    return value
 
 
-def _bracket_list(value):
-    value = value.strip()
-    if not (value.startswith("[") and value.endswith("]")):
-        return None
-    inner = value[1:-1].strip()
-    if not inner:
-        return []
-    return [part.strip() for part in inner.split(",")]
-
-
-def _parse_substitutions(lines):
-    substitutions = {}
-    pending_key = None
-    pending = []
-    for line in lines:
-        if line == "  ]":
-            if pending_key is not None:
-                return None
-            return substitutions
-        if pending_key is None:
-            match = re.match(r"^    \{([^:{}]+): (.*)$", line)
-            if match is None:
-                return None
-            pending_key = match.group(1)
-            pending = [match.group(2)]
-            if pending[-1].endswith("}"):
-                substitutions[pending_key] = pending[-1][:-1]
-                pending_key = None
-                pending = []
-            continue
-        if line.endswith("}"):
-            pending.append(line[:-1])
-            substitutions[pending_key] = "\n".join(pending)
-            pending_key = None
-            pending = []
-        else:
-            pending.append(line)
-    return None
-
-
-def parse_actions(text):
-    """Parse Bazel 9.2 --output=text. Returns (actions, errors)."""
-    if text is None:
-        text = ""
-    errors = []
-    if text.strip() == "":
+def load_actions(text):
+    """Parse a Bazel 9.2 aquery jsonproto document."""
+    if text is None or text.strip() == "":
         return [], ["empty action graph"]
-    if not text.endswith("\n"):
-        errors.append("truncated aquery output")
-    lines = text.splitlines()
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError:
+        return [], ["truncated or invalid jsonproto"]
+    if not isinstance(document, dict):
+        return [], ["jsonproto is not an object"]
+    raw_actions = _as_dict_list(document.get("actions"))
+    raw_artifacts = _as_dict_list(document.get("artifacts"))
+    raw_fragments = _as_dict_list(document.get("pathFragments"))
+    if raw_actions is None or raw_artifacts is None or raw_fragments is None:
+        return [], ["jsonproto fields are not the Bazel 9.2 container shape"]
+    if not raw_actions:
+        return [], ["empty action graph"]
+
+    fragments = {}
+    for fragment in raw_fragments:
+        identifier = fragment.get("id")
+        if not isinstance(identifier, int):
+            return [], ["path fragment id is missing"]
+        if identifier in fragments:
+            return [], ["duplicate path fragment id"]
+        fragments[identifier] = fragment
+    artifacts = {}
+    for artifact in raw_artifacts:
+        identifier = artifact.get("id")
+        fragment_id = artifact.get("pathFragmentId")
+        if not isinstance(identifier, int) or not isinstance(fragment_id, int):
+            return [], ["artifact path is missing"]
+        if identifier in artifacts:
+            return [], ["duplicate artifact id"]
+        path = _fragment_path(fragments, fragment_id, set())
+        if path is None:
+            return [], ["artifact path fragment is truncated or cyclic"]
+        artifacts[identifier] = path
+
     actions = []
-    index = 0
-    while index < len(lines):
-        line = lines[index]
-        if not line.startswith("action "):
-            if line.strip():
-                errors.append("unexpected aquery line")
-                return actions, errors
-            index += 1
-            continue
+    for raw in raw_actions:
         action = Action()
-        index += 1
-        while index < len(lines) and lines[index] != "" and not lines[index].startswith("action "):
-            match = _FIELD_RE.match(lines[index])
-            if match is None:
-                errors.append("truncated action field")
-                return actions, errors
-            key = match.group(1)
-            rest = match.group(2)
-            index += 1
-            if key == "Mnemonic":
-                action.mnemonic = rest.strip()
-            elif key == "Outputs":
-                outputs = _bracket_list(rest)
-                if outputs is None:
-                    errors.append("truncated Outputs list")
-                    return actions, errors
-                action.outputs = outputs
-            elif key == "Command Line":
-                chunks = [rest]
-                while index < len(lines):
-                    nxt = lines[index]
-                    if nxt == "" or nxt.startswith("action ") or _FIELD_RE.match(nxt):
-                        break
-                    chunks.append(nxt)
-                    index += 1
-                action.command = "\n".join(chunks)
-                action.arguments, action.command_truncated = split_pretty_command(action.command)
-            elif key.startswith("Params File Content ("):
-                path = key[len("Params File Content ("):-1]
-                body = []
-                while index < len(lines) and lines[index].startswith("    "):
-                    body.append(lines[index])
-                    index += 1
-                parsed = parse_param_lines(body)
-                if parsed is None:
-                    action.param_truncated = True
-                else:
-                    action.params[path] = parsed
-            elif key == "FileWriteContents":
-                decoded, error = decode_file_write_contents(rest)
-                action.file_contents = decoded
-                action.file_contents_error = error
-            elif key == "Substitutions":
-                body = []
-                while index < len(lines) and lines[index] != "":
-                    body.append(lines[index])
-                    index += 1
-                    if body[-1] == "  ]":
-                        break
-                parsed = _parse_substitutions(body)
-                if parsed is None:
-                    action.substitutions_truncated = True
-                else:
-                    action.substitutions = parsed
-            # Other fields (Target, Configuration, Inputs, IsExecutable, ...)
-            # are kept only as evidence the block continued. Their values are
-            # not a signing boundary by themselves.
+        mnemonic = raw.get("mnemonic")
+        if not isinstance(mnemonic, str) or mnemonic == "":
+            return [], ["action has no mnemonic"]
+        action.mnemonic = mnemonic
+        arguments = raw.get("arguments", [])
+        if not isinstance(arguments, list) or any(not isinstance(item, str) for item in arguments):
+            return [], ["action arguments are not a string list"]
+        action.arguments = arguments
+        output_ids = raw.get("outputIds", [])
+        if not isinstance(output_ids, list):
+            return [], ["action outputs are truncated"]
+        for output_id in output_ids:
+            if output_id not in artifacts:
+                return [], ["action output artifact is missing"]
+            action.outputs.append(artifacts[output_id])
+        if "fileContents" in raw:
+            if not isinstance(raw["fileContents"], str):
+                return [], ["fileContents is not a string"]
+            action.file_contents = raw["fileContents"]
+            action.saw_file_contents = True
+        if "templateContent" in raw:
+            if not isinstance(raw["templateContent"], str):
+                return [], ["templateContent is not a string"]
+            action.template_content = raw["templateContent"]
+        substitutions = raw.get("substitutions", [])
+        if not isinstance(substitutions, list):
+            return [], ["substitutions are truncated"]
+        for pair in substitutions:
+            if not isinstance(pair, dict):
+                return [], ["substitution is not a key/value"]
+            key = pair.get("key")
+            value = pair.get("value", "")
+            if not isinstance(key, str) or key == "" or not isinstance(value, str):
+                return [], ["substitution key or value is not a string"]
+            if key in action.substitutions:
+                return [], ["duplicate substitution key"]
+            action.substitutions[key] = value
+        for param in raw.get("paramFiles", []):
+            if not isinstance(param, dict):
+                return [], ["param file is truncated"]
+            path = param.get("execPath")
+            param_args = param.get("arguments")
+            if not isinstance(path, str) or not isinstance(param_args, list):
+                return [], ["param file is truncated"]
+            if any(not isinstance(item, str) for item in param_args):
+                return [], ["param file arguments are not strings"]
+            if path in action.params:
+                return [], ["duplicate param file"]
+            action.params[path] = param_args
         actions.append(action)
-        if index < len(lines) and lines[index] == "":
-            index += 1
-    return actions, errors
+    return actions, []
+
+
+def expand_template(template, substitutions):
+    """One-pass Bazel expand_template. Overlapping keys are ambiguous."""
+    keys = list(substitutions)
+    for left in keys:
+        for right in keys:
+            if left != right and (left in right or right in left):
+                return None
+    if not keys:
+        return template
+    ordered = sorted(keys, key=len, reverse=True)
+    pattern = re.compile("|".join(re.escape(key) for key in ordered))
+    return pattern.sub(lambda match: substitutions[match.group(0)], template)
+
+
+def resolve_templates(actions):
+    """Fill action.expanded. Follow ARTIFACT: links from getTemplateContent."""
+    errors = []
+    pending = [action for action in actions if action.mnemonic == "TemplateExpand"]
+    produced = {}
+    progressed = True
+    while pending and progressed:
+        progressed = False
+        remaining = []
+        for action in pending:
+            content = action.template_content
+            if content is None:
+                errors.append("TemplateExpand templateContent is missing")
+                progressed = True
+                continue
+            if content.startswith("ERROR: "):
+                errors.append("TemplateExpand template failed to load")
+                progressed = True
+                continue
+            if content.startswith("ARTIFACT: "):
+                path = content[len("ARTIFACT: "):]
+                if path not in produced:
+                    remaining.append(action)
+                    continue
+                content = produced[path]
+            expanded = expand_template(content, action.substitutions)
+            if expanded is None:
+                errors.append("template substitutions overlap; expansion is ambiguous")
+                progressed = True
+                continue
+            # JsonFormat.printer omits empty strings. rules_apple always sets
+            # %signing_command_lines%, and an empty value means the script
+            # does not sign. Any other leftover placeholder is unresolved.
+            if "%signing_command_lines%" not in action.substitutions:
+                expanded = expanded.replace("%signing_command_lines%", "")
+            action.expanded = expanded
+            if not action.outputs:
+                errors.append("TemplateExpand output path is missing")
+            for path in action.outputs:
+                if path in produced and produced[path] != expanded:
+                    errors.append("two templates write %s" % path)
+                produced[path] = expanded
+            progressed = True
+        pending = remaining
+    if pending:
+        errors.append("derived template body is not visible")
+    return errors
 
 
 def _signing_marker(text):
     if text is None:
         return None
     if "/usr/bin/codesign" in text or "codesign_allocate" in text:
-        return "codesign tool"
+        return "/usr/bin/codesign"
     if ".mobileprovision" in text or "--provisioning_profile" in text:
         return "provisioning profile"
     if "--entitlements_file" in text or "--infer_identity" in text:
         return "entitlement or inferred identity"
-    if re.search(r"(^|\s)should_sign($|\s)", text):
+    if re.search(r"(^|[\s'\"])should_sign($|[\s'\"])", text):
         return "should_sign"
     return None
 
 
 def dossier_lines_safe(lines):
-    """True when these are an ad-hoc dossier and not a bundle signature."""
     if not lines:
         return "dossier arguments are empty"
     marker = _signing_marker("\n".join(lines))
@@ -392,43 +356,24 @@ def dossier_lines_safe(lines):
 
 
 def _empty_copy(arguments):
-    if len(arguments) != 3:
+    if arguments == ["should_sign"] or "should_sign" in arguments:
         return False
-    if arguments[1] != "-c":
+    if len(arguments) != 3 or arguments[1] != "-c":
         return False
     if not (arguments[0] == "bash" or arguments[0].endswith("/bash")):
         return False
-    script = arguments[2]
-    return re.match(r"^cp -p (?:'[^']+'|\S+) (?:'[^']+'|\S+)$", script) is not None
-
-
-def _referenced_paths(arguments):
-    paths = []
-    for argument in arguments:
-        if argument.startswith("@"):
-            paths.append(argument[1:])
-        elif argument.endswith(".sh"):
-            paths.append(argument)
-    return paths
+    return _COPY_RE.match(arguments[2]) is not None
 
 
 def _contents_for(path, action, actions):
-    """Visible text of a referenced param or script.
-
-    Returns (text, conflict). text is None when nothing in the graph shows
-    the contents. conflict is true when two visible sources disagree.
-    """
     found = []
     if path in action.params:
         found.append("\n".join(action.params[path]))
     for other in actions:
-        if path not in other.outputs:
-            continue
-        if other.file_contents is not None:
+        if path in other.outputs and other.file_contents is not None:
             found.append(other.file_contents)
-        signing = other.substitutions.get("%signing_command_lines%")
-        if signing is not None:
-            found.append(signing)
+        if path in other.outputs and other.expanded is not None:
+            found.append(other.expanded)
     if not found:
         return None, False
     normalized = [item.rstrip("\n") for item in found]
@@ -437,11 +382,38 @@ def _contents_for(path, action, actions):
     return normalized[0], False
 
 
+def _artifact_refs(actions):
+    refs = set()
+    for action in actions:
+        content = action.template_content or ""
+        if content.startswith("ARTIFACT: "):
+            refs.add(content[len("ARTIFACT: "):])
+    return refs
+
+
+def _runner_source(action):
+    content = action.template_content or ""
+    return (
+        content.startswith("#!/bin/bash\n")
+        and "\n\n# Copyright" in "\n" + content
+        and _RUNNER_COPYRIGHT in content
+        and "%(test_bundle_path)s" in content
+    )
+
+
+def _process_source(action):
+    return "%signing_command_lines%" in (action.template_content or "") and (
+        "readonly OUTPUT_PATH=%output_path%" in (action.template_content or "")
+    )
+
+
 def evaluate_graph(text, flags):
     """Return whether this configured graph may be executed."""
     reasons = []
     if FEATURE not in flags:
         reasons.append("skip_codesign feature is not on the aquery command")
+    if "--output=jsonproto" not in flags:
+        reasons.append("aquery output is not jsonproto")
     for option in ("--include_file_write_contents", "--include_param_files"):
         if option not in flags:
             reasons.append("aquery was not asked for %s" % option)
@@ -451,62 +423,43 @@ def evaluate_graph(text, flags):
     if any(not cpu.startswith("sim_") for cpu in cpus):
         reasons.append("device ios cpu in %s" % ",".join(cpus))
 
-    actions, parse_errors = parse_actions(text)
+    actions, parse_errors = load_actions(text)
     reasons.extend(parse_errors)
-    if not actions and "empty action graph" not in reasons:
-        reasons.append("empty action graph is not evidence that signing is absent")
+    reasons.extend(resolve_templates(actions))
+    referenced_templates = _artifact_refs(actions)
 
+    saw_runner = False
+    saw_runner_executable = False
+    saw_process_template = False
     for action in actions:
-        if not action.mnemonic:
-            reasons.append("action has no mnemonic")
-            continue
-        if action.command_truncated:
-            reasons.append("%s command line is truncated or not Bazel 9.2 pretty-print" % (
-                action.mnemonic or "action"))
-        if action.param_truncated:
-            reasons.append("param file contents are truncated")
-        if action.substitutions_truncated:
-            reasons.append("template substitutions are truncated")
-        if action.file_contents_error:
-            reasons.append("FileWriteContents is %s" % action.file_contents_error)
-        if action.mnemonic == "FileWrite" and action.file_contents is None and not action.file_contents_error:
-            reasons.append("FileWrite has no FileWriteContents; actions.write is invisible without it")
-        marker = _signing_marker(action.command)
-        if marker and action.mnemonic not in ("GenerateCodesigningDossier",):
-            reasons.append("%s on %s" % (marker, action.mnemonic or "action"))
-        if action.file_contents is not None and action.mnemonic == "FileWrite":
-            # Unrelated writes are audited. A signing marker in them is not safe.
-            # The dossier file itself is judged by dossier_lines_safe below.
-            pass
+        if action.mnemonic == "FileWrite" and not action.saw_file_contents:
+            reasons.append("FileWrite fileContents is missing")
         if action.mnemonic == "SignBinary":
             reasons.append("SignBinary is a signing action")
         elif action.mnemonic == "ProcessAndSign":
-            if action.command_truncated or not action.arguments:
+            if not action.arguments:
                 reasons.append("ProcessAndSign arguments are not visible")
             elif "should_sign" in action.arguments:
-                reasons.append(
-                    "ProcessAndSign should_sign; codesign runs inside the generated script"
-                )
+                reasons.append("ProcessAndSign should_sign; the generated script signs")
             elif _empty_copy(action.arguments):
                 pass
             else:
-                script_paths = [arg for arg in action.arguments if arg.endswith(".sh")]
-                if not script_paths:
+                scripts = [arg for arg in action.arguments if arg.endswith(".sh")]
+                if not scripts:
                     reasons.append("ProcessAndSign is not the empty cp -p action")
-                else:
-                    for script_path in script_paths:
-                        body, conflict = _contents_for(script_path, action, actions)
-                        if conflict:
-                            reasons.append("ProcessAndSign script sources disagree")
-                        elif body is None:
-                            reasons.append("ProcessAndSign script contents are not in the graph")
-                        elif body.strip():
-                            reasons.append("ProcessAndSign script contains signing commands")
+                for script in scripts:
+                    body, conflict = _contents_for(script, action, actions)
+                    if conflict:
+                        reasons.append("ProcessAndSign script sources disagree")
+                    elif body is None:
+                        reasons.append("ProcessAndSign script contents are not in the graph")
+                    else:
+                        marker = _signing_marker(body)
+                        if marker:
+                            reasons.append("ProcessAndSign script contains %s" % marker)
         elif action.mnemonic == "GenerateCodesigningDossier":
-            if action.command_truncated or not action.arguments:
+            if len(action.arguments) < 3 or action.arguments[1] != "create":
                 reasons.append("GenerateCodesigningDossier arguments are not visible")
-            elif len(action.arguments) < 3 or action.arguments[1] != "create":
-                reasons.append("GenerateCodesigningDossier is not the create action")
             else:
                 referenced = [arg[1:] for arg in action.arguments if arg.startswith("@")]
                 if len(referenced) != 1:
@@ -516,35 +469,51 @@ def evaluate_graph(text, flags):
                     if conflict:
                         reasons.append("dossier argument sources disagree")
                     elif body is None:
-                        reasons.append(
-                            "dossier_arguments contents are not in the graph; "
-                            "actions.write is invisible unless FileWriteContents or a param file is present"
-                        )
+                        reasons.append("dossier_arguments contents are not in the graph")
                     else:
                         problem = dossier_lines_safe(body.splitlines())
                         if problem:
                             reasons.append(problem)
         elif action.mnemonic == "TemplateExpand":
-            for key, value in action.substitutions.items():
-                found = _signing_marker(key + " " + value)
-                if found and not (key == "%signing_command_lines%" and value.strip() == ""):
-                    reasons.append("template substitution has %s" % found)
+            if _runner_source(action):
+                saw_runner = True
+            if _process_source(action):
+                saw_process_template = True
+            if (action.template_content or "").startswith("ARTIFACT: "):
+                produced = (action.template_content or "")[len("ARTIFACT: "):]
+                producer = next((
+                    other for other in actions
+                    if produced in other.outputs and _runner_source(other)
+                ), None)
+                if producer is not None and action.expanded is not None:
+                    saw_runner_executable = True
+            if action.expanded is None:
+                continue
+            marker = _signing_marker(action.expanded)
+            if marker:
+                reasons.append("template body contains %s" % marker)
+            final = not any(path in referenced_templates for path in action.outputs)
+            if final and _PLACEHOLDER_RE.search(action.expanded):
+                reasons.append("expanded template still has an unresolved placeholder")
         elif action.mnemonic == "FileWrite":
             if action.file_contents is not None:
-                found = _signing_marker(action.file_contents)
-                referenced = False
-                for other in actions:
-                    if any(arg[1:] in action.outputs for arg in other.arguments if arg.startswith("@")):
-                        referenced = True
-                if found and not referenced:
-                    reasons.append("FileWrite contains %s" % found)
-        elif action.mnemonic:
-            reasons.append("unknown action %s; refusing without a signing classification" % action.mnemonic)
+                marker = _signing_marker(action.file_contents)
+                if marker:
+                    reasons.append("FileWrite contains %s" % marker)
+        else:
+            reasons.append("unknown action %s" % action.mnemonic)
 
+    if not saw_runner or not saw_runner_executable:
+        reasons.append(
+            "ios_test_runner expand_template chain is missing; "
+            "the unit-test executable template was not audited"
+        )
+    if not saw_process_template:
+        reasons.append("process_and_sign template is missing")
     if not any(action.mnemonic == "ProcessAndSign" for action in actions):
-        reasons.append("ProcessAndSign is absent, so the bundle action was not audited")
+        reasons.append("ProcessAndSign is absent")
     if not any(action.mnemonic == "GenerateCodesigningDossier" for action in actions):
-        reasons.append("GenerateCodesigningDossier is absent, so its arguments were not audited")
+        reasons.append("GenerateCodesigningDossier is absent")
 
     unique = []
     for reason in reasons:

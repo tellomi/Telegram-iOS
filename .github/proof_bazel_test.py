@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Simulate Make.py lookup and the proof Bazel argv, then the signing boundary."""
+"""Simulate Make.py lookup and the jsonproto signing gate."""
 import json
 import os
+import re
 import shutil
 import stat
 import sys
@@ -16,48 +17,27 @@ import ci_gate  # noqa: E402
 import proof_bazel  # noqa: E402
 
 TARGET = "//Tests/TellomiFeedProof:TellomiFeedProofTests"
-DOSSIER_PATH = "bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests-intermediates/dossier_arguments"
-# Literal from bazel 9.2 src/test/shell/integration/aquery_test.sh test_file_write.
-# It is base64("hello world"), not a string this test invented.
-OFFICIAL_HELLO_B64 = "aGVsbG8gd29ybGQ="
-_SAFE_CHARS = set("@%-_+:,./")
-
-
-def shell_escape(text):
-    """Bazel 9.2 ShellEscaper.escapeString for ASCII arguments."""
-    if text == "":
-        return "''"
-    if all(char.isascii() and (char.isalnum() or char in _SAFE_CHARS) for char in text):
-        return text
-    return "'" + text.replace("'", "'\\''") + "'"
-
-
-def bazel92_command(argv):
-    """CommandFailureUtils.describeCommand(COMPLETE, prettyPrintArgs=true)."""
-    rendered = " \\\n    ".join(shell_escape(arg) for arg in argv)
-    return (
-        "(exec %s)\n"
-        "# Configuration: cfg123\n"
-        "# Execution platform: @@apple_support~//platforms:macos_arm64"
-    ) % rendered
-
-
-def command_field(argv):
-    rendered = bazel92_command(argv)
-    return "  Command Line: " + rendered + "\n"
-
-
-def file_write_block(path, contents_b64):
-    return (
-        "action 'Writing file %s'\n"
-        "  Mnemonic: FileWrite\n"
-        "  Target: //pkg:bar\n"
-        "  Outputs: [%s]\n"
-        "  IsExecutable: false\n"
-        "  FileWriteContents: [%s]\n"
-    ) % (path, path, contents_b64)
-
-
+FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "proof-fixtures")
+RUNNER_TEMPLATE = open(
+    os.path.join(FIXTURE_DIR, "ios_test_runner.template.sh"), encoding="utf-8").read()
+PROCESS_TEMPLATE = open(
+    os.path.join(FIXTURE_DIR, "process_and_sign.sh.template"), encoding="utf-8").read()
+DOSSIER_PATH = (
+    "bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests-intermediates/dossier_arguments"
+)
+RUNNER_OUT = "bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofRunner.sh"
+EXECUTABLE = "bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests"
+SIGN_SCRIPT = "bazel-out/ios_sim_arm64-dbg/bin/process-and-sign-abc.sh"
+RUNNER_FIRST = {
+    "%(create_simulator_action_binary)s",
+    "%(device_type)s",
+    "%(os_version)s",
+    "%(post_action_binary)s",
+    "%(post_action_determines_exit_code)s",
+    "%(pre_action_binary)s",
+    "%(sdk_version)s",
+    "%(testrunner_binary)s",
+}
 DOSSIER_LINES = [
     "--output",
     "bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests_dossier.zip",
@@ -65,62 +45,7 @@ DOSSIER_LINES = [
     "--codesign_identity",
     "-",
 ]
-DOSSIER_TEXT = "\n".join(DOSSIER_LINES)
-DOSSIER_B64 = __import__("base64").b64encode(DOSSIER_TEXT.encode("utf-8")).decode("ascii")
-COPY_SCRIPT = (
-    "cp -p 'bazel-out/ios_sim_arm64-dbg/bin/unprocessed_archive.zip' "
-    "'bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests.zip'"
-)
-
-
-def process_block(argv):
-    return (
-        "action 'Processing and signing TellomiFeedProofTests'\n"
-        "  Mnemonic: ProcessAndSign\n"
-        "  Target: %s\n"
-        "  Outputs: [bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests.zip]\n"
-        "%s"
-    ) % (TARGET, command_field(argv))
-
-
-def dossier_block(argv, extra=""):
-    return (
-        "action 'Generating codesigning dossier for TellomiFeedProofTests'\n"
-        "  Mnemonic: GenerateCodesigningDossier\n"
-        "  Target: %s\n"
-        "  Outputs: [bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests_dossier.zip]\n"
-        "%s"
-        "%s"
-    ) % (TARGET, command_field(argv), extra)
-
-
-def graph(*blocks):
-    return "\n\n".join(block.rstrip("\n") for block in blocks) + "\n"
-
-
-SAFE_GRAPH = graph(
-    process_block(["/bin/bash", "-c", COPY_SCRIPT]),
-    dossier_block(["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH]),
-    file_write_block(DOSSIER_PATH, DOSSIER_B64),
-    file_write_block("bazel-out/k8-fastbuild/bin/pkg/bar.count", OFFICIAL_HELLO_B64),
-)
-
-PARAM_GRAPH = graph(
-    process_block(["/bin/bash", "-c", COPY_SCRIPT]),
-    dossier_block(
-        ["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH],
-        "  Params File Content (%s):\n    %s\n" % (DOSSIER_PATH, " \\\n    ".join(DOSSIER_LINES)),
-    ),
-)
-
-HIDDEN_SCRIPT = graph(
-    process_block([
-        "bazel-out/ios_sim_arm64-dbg/bin/process-and-sign-abc.sh",
-        "should_sign",
-    ]),
-    dossier_block(["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH]),
-    file_write_block(DOSSIER_PATH, DOSSIER_B64),
-)
+_PLACEHOLDER_RE = re.compile(r"%\([A-Za-z0-9_]+\)s|%[A-Za-z0-9_]+%")
 
 
 def fail(message):
@@ -128,9 +53,158 @@ def fail(message):
     sys.exit(1)
 
 
+def placeholders(text):
+    return set(_PLACEHOLDER_RE.findall(text))
+
+
+class Builder(object):
+    """Minimal Bazel 9.2 ActionGraphContainer JSON."""
+
+    def __init__(self):
+        self.next_id = 1
+        self.fragments = []
+        self.fragment_ids = {}
+        self.artifacts = []
+        self.actions = []
+
+    def fragment(self, path):
+        last = None
+        built = ""
+        for part in path.split("/"):
+            built = part if not built else built + "/" + part
+            if built not in self.fragment_ids:
+                identifier = self.next_id
+                self.next_id += 1
+                entry = {"id": identifier, "label": part}
+                if last is not None:
+                    entry["parentId"] = last
+                self.fragments.append(entry)
+                self.fragment_ids[built] = identifier
+            last = self.fragment_ids[built]
+        return last
+
+    def artifact(self, path):
+        identifier = self.next_id
+        self.next_id += 1
+        self.artifacts.append({"id": identifier, "pathFragmentId": self.fragment(path)})
+        return identifier
+
+    def add(self, mnemonic, outputs, arguments=None, template=None, substitutions=None,
+            file_contents=None, write_contents=False, param_files=None):
+        identifiers = [self.artifact(path) for path in outputs]
+        action = {
+            "mnemonic": mnemonic,
+            "targetId": 1,
+            "outputIds": identifiers,
+            "primaryOutputId": identifiers[0],
+        }
+        if arguments is not None:
+            action["arguments"] = arguments
+        if template is not None:
+            action["templateContent"] = template
+        if substitutions:
+            action["substitutions"] = substitutions
+        if write_contents:
+            action["fileContents"] = file_contents
+        if param_files:
+            action["paramFiles"] = param_files
+        self.actions.append(action)
+
+    def dumps(self):
+        return json.dumps({
+            "artifacts": self.artifacts,
+            "actions": self.actions,
+            "pathFragments": self.fragments,
+            "targets": [{"id": 1, "label": TARGET}],
+        })
+
+
+def pairs(keys, values=None):
+    values = values or {}
+    return [{"key": key, "value": values.get(key, "filled")} for key in sorted(keys)]
+
+
+def safe_document(process_text=None, signing_value="", omit_keys=(),
+                  process_arguments=None, dossier_text=None, dossier_params=None,
+                  include_dossier_write=True, artifact_path=None):
+    process_text = PROCESS_TEMPLATE if process_text is None else process_text
+    builder = Builder()
+    if include_dossier_write:
+        builder.add(
+            "FileWrite",
+            [DOSSIER_PATH],
+            file_contents="\n".join(DOSSIER_LINES) if dossier_text is None else dossier_text,
+            write_contents=True,
+        )
+    dossier_arguments = [
+        "external/apple_support/bin/dossier_codesigningtool",
+        "create",
+        "@" + DOSSIER_PATH,
+    ]
+    param_files = None
+    if dossier_params is not None:
+        param_files = [{"execPath": DOSSIER_PATH, "arguments": dossier_params}]
+    builder.add(
+        "GenerateCodesigningDossier",
+        ["bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests_dossier.zip"],
+        arguments=dossier_arguments,
+        param_files=param_files,
+    )
+    builder.add(
+        "ProcessAndSign",
+        ["bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests.zip"],
+        arguments=process_arguments or [
+            "/bin/bash",
+            "-c",
+            "cp -p 'bazel-out/ios_sim_arm64-dbg/bin/unprocessed_archive.zip' "
+            "'bazel-out/ios_sim_arm64-dbg/bin/TellomiFeedProofTests.zip'",
+        ],
+    )
+    runner_keys = placeholders(RUNNER_TEMPLATE)
+    first = runner_keys & RUNNER_FIRST
+    second = runner_keys - RUNNER_FIRST
+    builder.add(
+        "TemplateExpand",
+        [RUNNER_OUT],
+        template=RUNNER_TEMPLATE,
+        substitutions=pairs(first),
+    )
+    builder.add(
+        "TemplateExpand",
+        [EXECUTABLE],
+        template="ARTIFACT: " + (artifact_path or RUNNER_OUT),
+        substitutions=pairs(second),
+    )
+    sign_keys = placeholders(process_text)
+    sign_values = {key: "filled" for key in sign_keys}
+    if "%signing_command_lines%" in sign_keys:
+        sign_values["%signing_command_lines%"] = signing_value
+    sign_pairs = [item for item in pairs(sign_keys, sign_values) if item["key"] not in omit_keys]
+    builder.add(
+        "TemplateExpand",
+        [SIGN_SCRIPT],
+        template=process_text,
+        substitutions=sign_pairs,
+    )
+    return builder.dumps()
+
+
+SAFE_GRAPH = safe_document()
+HARDCODED_TEMPLATE = PROCESS_TEMPLATE.replace(
+    "%signing_command_lines%",
+    "/usr/bin/codesign --force --sign - \"$WORK_DIR\"\n%signing_command_lines%",
+    1,
+)
+HARDCODED_GRAPH = safe_document(
+    process_text=HARDCODED_TEMPLATE,
+    process_arguments=[SIGN_SCRIPT],
+)
+HIDDEN_SCRIPT = HARDCODED_GRAPH
+
+
 def flags_of():
     return [
-        "--output=text",
+        "--output=jsonproto",
         "--include_commandline",
         "--include_param_files",
         "--include_file_write_contents",
@@ -154,125 +228,103 @@ def expect_deny(text, flags, label):
     return decision.reasons
 
 
-def first_command_line(text):
-    for line in text.splitlines():
-        if line.startswith("  Command Line:"):
-            return line
-    return ""
-
-
-def without_continuations(text):
-    """What the previous one-line Command Line regex kept."""
-    kept = []
-    skipping = False
-    for line in text.splitlines():
-        if line.startswith("  Command Line:"):
-            kept.append(line)
-            skipping = True
-            continue
-        if skipping:
-            if line.startswith("  ") and not line.startswith("    "):
-                skipping = False
-                kept.append(line)
-            elif line.startswith("action "):
-                skipping = False
-                kept.append(line)
-            continue
-        kept.append(line)
-    return "\n".join(kept) + "\n"
-
-
 def test_graph_boundary():
+    if not RUNNER_TEMPLATE.startswith("#!/bin/bash\n\n# Copyright 2018 The Bazel Authors"):
+        fail("vendored ios_test_runner template is not the pinned file")
+    if "%signing_command_lines%" not in PROCESS_TEMPLATE or "/usr/bin/codesign" in PROCESS_TEMPLATE:
+        fail("vendored process_and_sign template is not the pinned file")
+    if not (placeholders(RUNNER_TEMPLATE) & RUNNER_FIRST):
+        fail("runner template has none of the ios_test_runner substitutions")
+    if placeholders(RUNNER_TEMPLATE) - RUNNER_FIRST == set():
+        fail("runner template has no second-stage placeholders")
+
+    parsed = json.loads(SAFE_GRAPH)
+    stored = [
+        action["templateContent"]
+        for action in parsed["actions"]
+        if action.get("mnemonic") == "TemplateExpand"
+        and action.get("templateContent", "").startswith("#!/bin/bash")
+    ]
+    if not stored or stored[0].splitlines()[1] != "":
+        fail("jsonproto dropped the template blank line")
+    if "# Copyright 2018 The Bazel Authors" not in stored[0]:
+        fail("jsonproto dropped the template copyright line")
+    if not any(
+        action.get("templateContent", "").startswith("ARTIFACT: " + RUNNER_OUT)
+        for action in parsed["actions"]
+    ):
+        fail("unit-test executable template is not an ARTIFACT link")
+
     flags = flags_of()
-    decoded, error = proof_bazel.decode_file_write_contents("[%s]" % OFFICIAL_HELLO_B64)
-    if error or decoded != "hello world":
-        fail("official FileWriteContents base64 did not decode to hello world: %s %s" % (decoded, error))
-    bad, bad_error = proof_bazel.decode_file_write_contents("[aGVsbG8gd29ybGQ=")
-    if bad is not None or bad_error != "truncated":
-        fail("truncated FileWriteContents was accepted: %s %s" % (bad, bad_error))
+    expect_allow(SAFE_GRAPH, flags, "real runner and process_and_sign templates")
+    param_only = safe_document(include_dossier_write=False, dossier_params=list(DOSSIER_LINES))
+    expect_allow(param_only, flags, "dossier arguments from a param file")
 
-    copy_args, copy_truncated = proof_bazel.split_pretty_command(
-        bazel92_command(["/bin/bash", "-c", COPY_SCRIPT]))
-    if copy_truncated or copy_args != ["/bin/bash", "-c", COPY_SCRIPT]:
-        fail("multi-line cp command did not round-trip: %s truncated=%s" % (copy_args, copy_truncated))
-    sign_args, sign_truncated = proof_bazel.split_pretty_command(bazel92_command([
-        "bazel-out/ios_sim_arm64-dbg/bin/process-and-sign-abc.sh",
-        "should_sign",
-    ]))
-    if sign_truncated or "should_sign" not in sign_args:
-        fail("multi-line should_sign command was not recovered: %s" % sign_args)
-    if "cp -p" in first_command_line(SAFE_GRAPH) or "should_sign" in first_command_line(HIDDEN_SCRIPT):
-        fail("fixture first lines already contain the parameter; this would not catch the one-line parser")
-
-    expect_allow(SAFE_GRAPH, flags, "multi-line cp plus base64 dossier file")
-    expect_allow(PARAM_GRAPH, flags, "multi-line cp plus param file dossier")
-
-    collapsed = without_continuations(SAFE_GRAPH)
-    expect_deny(collapsed, flags, "command line reduced to its first line")
-    expect_deny("", flags, "empty graph")
-    expect_deny(SAFE_GRAPH.rstrip("\n"), flags, "output that does not end in a newline")
-
-    missing_file = graph(
-        process_block(["/bin/bash", "-c", COPY_SCRIPT]),
-        dossier_block(["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH]),
+    hardcoded = expect_deny(
+        HARDCODED_GRAPH, flags, "hardcoded codesign with empty signing substitution and no should_sign")
+    if not any("template body contains /usr/bin/codesign" in reason for reason in hardcoded):
+        fail("hardcoded template codesign was not named: %s" % hardcoded)
+    expect_deny(
+        safe_document(process_text=HARDCODED_TEMPLATE),
+        flags,
+        "hardcoded codesign while ProcessAndSign is only cp -p",
     )
-    expect_deny(missing_file, flags, "dossier @file with no FileWrite and no param file")
-
-    opaque = graph(
-        process_block(["/bin/bash", "-c", COPY_SCRIPT]),
-        dossier_block(["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH]),
-        "action 'Writing file %s'\n  Mnemonic: FileWrite\n  Outputs: [%s]\n  IsExecutable: false\n" % (
-            DOSSIER_PATH, DOSSIER_PATH),
+    expect_allow(
+        safe_document(omit_keys=("%signing_command_lines%",)),
+        flags,
+        "empty signing substitution omitted by the json printer",
     )
-    expect_deny(opaque, flags, "FileWrite without FileWriteContents")
-
-    truncated_b64 = SAFE_GRAPH.replace(
-        "FileWriteContents: [%s]" % DOSSIER_B64,
-        "FileWriteContents: [%s" % DOSSIER_B64,
+    expect_deny(
+        safe_document(omit_keys=("%output_path%",)),
+        flags,
+        "a required template placeholder is absent",
     )
-    expect_deny(truncated_b64, flags, "FileWriteContents missing its closing bracket")
-
-    cut = SAFE_GRAPH.replace(
-        bazel92_command(["/bin/bash", "-c", COPY_SCRIPT]),
-        "(exec /bin/bash \\\n    -c \\",
-        1,
-    )
-    expect_deny(cut, flags, "command line cut off before its closing paren")
-
-    hidden = expect_deny(HIDDEN_SCRIPT, flags, "should_sign on a continuation line")
-    if not any("should_sign" in reason for reason in hidden):
-        fail("continuation should_sign was not named: %s" % hidden)
-
-    bad_identity = "\n".join(DOSSIER_LINES[:-1] + ["Apple Development: Example"])
-    bad_b64 = __import__("base64").b64encode(bad_identity.encode("utf-8")).decode("ascii")
-    expect_deny(SAFE_GRAPH.replace(DOSSIER_B64, bad_b64, 1), flags, "non-adhoc identity in FileWriteContents")
-
-    profile_lines = DOSSIER_LINES + ["--provisioning_profile", "bazel-out/app.mobileprovision"]
-    profile_graph = graph(
-        process_block(["/bin/bash", "-c", COPY_SCRIPT]),
-        dossier_block(
-            ["external/apple_support/bin/dossier_codesigningtool", "create", "@" + DOSSIER_PATH],
-            "  Params File Content (%s):\n    %s\n" % (DOSSIER_PATH, " \\\n    ".join(profile_lines)),
+    omitted_hardcoded = expect_deny(
+        safe_document(
+            process_text=HARDCODED_TEMPLATE,
+            omit_keys=("%signing_command_lines%",),
+            process_arguments=[SIGN_SCRIPT],
         ),
+        flags,
+        "hardcoded codesign when the empty signing substitution is omitted",
     )
-    expect_deny(profile_graph, flags, "param file provisioning profile")
-
-    author_single_line = (
-        "action 'Processing and signing TellomiFeedProofTests'\n"
-        "  Mnemonic: ProcessAndSign\n"
-        "  Command Line: (exec /bin/bash -c 'cp -p in.zip out.zip')\n"
-        "\n"
-        "action 'Generating codesigning dossier for TellomiFeedProofTests'\n"
-        "  Mnemonic: GenerateCodesigningDossier\n"
-        "  Command Line: (exec tool create @%s)\n"
-    ) % DOSSIER_PATH
-    expect_deny(author_single_line, flags, "author single-line fixture with no file contents")
-
+    if not any("template body contains /usr/bin/codesign" in reason for reason in omitted_hardcoded):
+        fail("omitted substitution hid hardcoded codesign: %s" % omitted_hardcoded)
+    expect_deny("", flags, "empty graph")
+    expect_deny("{", flags, "truncated jsonproto")
+    expect_deny(
+        safe_document(artifact_path="bazel-out/ios_sim_arm64-dbg/bin/missing-runner.sh"),
+        flags,
+        "derived template whose body is not in the graph",
+    )
+    expect_deny(
+        safe_document(include_dossier_write=False),
+        flags,
+        "dossier @file with no contents",
+    )
+    expect_deny(
+        safe_document(process_arguments=[SIGN_SCRIPT, "should_sign"]),
+        flags,
+        "should_sign argument",
+    )
+    expect_deny(
+        safe_document(dossier_text="\n".join(DOSSIER_LINES[:-1] + ["Apple Development: Example"])),
+        flags,
+        "non-adhoc dossier identity",
+    )
+    expect_deny(
+        safe_document(
+            include_dossier_write=False,
+            dossier_params=DOSSIER_LINES + ["--provisioning_profile", "bazel-out/app.mobileprovision"],
+        ),
+        flags,
+        "param file provisioning profile",
+    )
     expect_deny(SAFE_GRAPH, [flag for flag in flags if flag != proof_bazel.FEATURE], "missing feature")
     expect_deny(
         SAFE_GRAPH,
-        [flag for flag in flags if flag != "--include_file_write_contents"],
-        "file write contents not requested",
+        [flag for flag in flags if flag != "--output=jsonproto"],
+        "text output requested instead of jsonproto",
     )
     device = [flag for flag in flags if not flag.startswith("--ios_multi_cpus=")]
     device.append("--ios_multi_cpus=arm64")
@@ -318,7 +370,7 @@ def test_wrapper_order(make_argv, real):
         fail("aquery does not include the signing mnemonics: %s" % query)
     if 'mnemonic("FileWrite"' not in " ".join(query):
         fail("aquery does not include FileWrite: %s" % query)
-    for option in ("--include_file_write_contents", "--include_param_files", "--include_commandline"):
+    for option in ("--output=jsonproto", "--include_file_write_contents", "--include_param_files", "--include_commandline"):
         if option not in query:
             fail("aquery argv missing %s: %s" % (option, query))
     built = executed[0]

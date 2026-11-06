@@ -17,11 +17,11 @@
 # --bazelArguments and never applies it. Passing --bazel <wrapper> is the
 # supported binary path: locate_bazel is skipped, so it cannot hash-delete
 # the wrapper. The wrapper lives outside build-input/. Before exec it aqueries
-# Bazel 9.2 text output with --include_param_files and
-# --include_file_write_contents, including FileWrite. Command lines are read
-# across their continuation lines, and actions.write contents are the base64
-# FileWriteContents field. An empty, truncated, or incomplete graph is not
-# treated as unsigned. A build log grep is not that boundary.
+# Bazel 9.2 jsonproto with --include_param_files and
+# --include_file_write_contents. Template bodies stay inside templateContent,
+# including blank lines and copyright comments, and ARTIFACT: links are
+# expanded before the signing check. An empty, truncated, or incomplete graph
+# is not treated as unsigned. A build log grep is not that boundary.
 # CODE_SIGNING_ALLOWED is not passed. It is an Xcode setting.
 #
 # versions.json requires Xcode 27.1 and macOS 27. The job fails if sw_vers
