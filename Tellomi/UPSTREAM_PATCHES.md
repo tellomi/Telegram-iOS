@@ -813,7 +813,7 @@ Before the byte upload of a GIF, an ordinary document, or a video no larger than
 | File | Change |
 | --- | --- |
 | `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHash.swift` | New. Which files are probed, the video size cap, and what counts as a reusable document. |
-| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHashUpload.swift` | New. SHA-256 of the local bytes and the RPC, with fail-open. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiDocumentByHashUpload.swift` | New. SHA-256 of the local bytes and the RPC, with fail-open. The fail-open log is `error.errorDescription ?? ""`: the property is an unannotated Objective-C string, so a bare interpolation does not type-check. A present description is logged as written. The RPC error still returns no document. |
 | `submodules/TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift` | Chat send probes before `multipartUpload`. A hit reuses the document, including a video cover when one is attached. |
 | `submodules/TelegramCore/Sources/PendingMessages/UploadMediaToCloud.swift` | Composer pre-upload uses the same probe. |
 | `submodules/TelegramCore/Sources/PendingMessages/StandaloneUploadedMedia.swift` | Share-sheet file and video upload uses the same probe. |
@@ -844,7 +844,7 @@ Account 0 `mainconfig` on Android is `MessagesController.getGlobalMainSettings()
 | File | Change |
 | --- | --- |
 | `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashes.swift` | Part rules, fail-open, and the kill switch. |
-| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashDownload.swift` | The long-offset RPC, paging, and the commit decision. |
+| `submodules/TelegramCore/Sources/Tellomi/TellomiFileHashDownload.swift` | The long-offset RPC, paging, and the commit decision. `network.download` is `Signal<Download, NoError>`, so the page request uses `mapToSignalPromotingError`. The inner `upload.getFileHashes` error is still `TellomiFileHashPageError.rpc`, and that error still fail-opens. |
 | `submodules/TelegramCore/Sources/Network/MultipartFetch.swift` | Notes the location and CDN, and observes a plaintext download. |
 | `submodules/TelegramCore/Sources/Network/FetchV2.swift` | Notes the location, a CDN redirect, and a fallback to the datacenter. |
 | `submodules/Postbox/Sources/MediaBox.swift` | `beforeCompleteCommit`, read when a partial file would be linked. |
