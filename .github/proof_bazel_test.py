@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Simulate Make.py lookup and the jsonproto signing gate."""
+import io
 import json
 import os
 import re
@@ -383,8 +384,10 @@ def test_wrapper_order(make_argv, real):
     if code != 0 or len(calls) != 1 or len(executed) != 1:
         fail("safe graph did not aquery then exec: code=%s calls=%s exec=%s" % (code, calls, executed))
     query = calls[0]
-    if query[0] != real or "aquery" not in query or proof_bazel.FEATURE not in query:
-        fail("aquery argv lost the real binary or the feature: %s" % query)
+    if query[0] != real or "aquery" not in query:
+        fail("aquery argv lost the real binary: %s" % query)
+    if proof_bazel.FEATURE in query:
+        fail("compile aquery still forces skip_codesign: %s" % query)
     if "--subcommands" in query:
         fail("aquery kept the execution-only --subcommands flag")
     expression = " ".join(query)
@@ -399,23 +402,65 @@ def test_wrapper_order(make_argv, real):
         if option not in query:
             fail("aquery argv missing %s: %s" % (option, query))
     built = executed[0]
-    if built[0] != real or proof_bazel.FEATURE not in built or TARGET not in built:
-        fail("executed argv is not the real binary with the feature and target: %s" % built)
-    if "build" not in built:
-        fail("executed argv dropped the build command: %s" % built)
+    if built[0] != real or TARGET not in built or "build" not in built:
+        fail("executed argv is not the real binary with the target: %s" % built)
+    if proof_bazel.FEATURE in built:
+        fail("compile exec still forces skip_codesign: %s" % built)
     calls[:] = []
     executed[:] = []
-    denied = proof_bazel.wrapper_main(
-        make_argv + ["--deny-script"], real, run=run, execv=execv)
-    if denied == 0 or executed:
-        fail("signing script was executed: %s %s" % (denied, executed))
+    stderr = io.StringIO()
+    previous = sys.stderr
+    sys.stderr = stderr
+    try:
+        signed = proof_bazel.wrapper_main(
+            make_argv + ["--deny-script"], real, run=run, execv=execv)
+    finally:
+        sys.stderr = previous
+    signed_log = stderr.getvalue()
+    if signed != 0 or len(executed) != 1:
+        fail("signing graph did not compile: %s %s" % (signed, executed))
+    if "ProcessAndSign actions: 1" not in signed_log or "not claimed unsigned" not in signed_log:
+        fail("signing graph was not reported: %s" % signed_log)
+    if "refusing to execute bazel" in signed_log or "unsigned compile" in signed_log:
+        fail("signing graph was described as a refusal: %s" % signed_log)
 
     calls[:] = []
     executed[:] = []
-    failed = proof_bazel.wrapper_main(
-        make_argv + ["should-fail-aquery"], real, run=run, execv=execv)
-    if failed == 0 or executed:
-        fail("aquery failure still executed the build")
+    stderr = io.StringIO()
+    sys.stderr = stderr
+    try:
+        failed = proof_bazel.wrapper_main(
+            make_argv + ["should-fail-aquery"], real, run=run, execv=execv)
+    finally:
+        sys.stderr = previous
+    failed_log = stderr.getvalue()
+    if failed != 0 or len(executed) != 1:
+        fail("aquery failure blocked the compile: %s %s" % (failed, executed))
+    if "signing actions were not classified" not in failed_log or "aquery exploded" in failed_log:
+        fail("aquery failure leaked or skipped the report: %s" % failed_log)
+
+    def blocked(argv, needle, label):
+        executed[:] = []
+        buf = io.StringIO()
+        saved = sys.stderr
+        sys.stderr = buf
+        try:
+            status = proof_bazel.wrapper_main(argv, real, run=run, execv=execv)
+        finally:
+            sys.stderr = saved
+        if status == 0 or executed or needle not in buf.getvalue():
+            fail("%s was compiled: %s %s" % (label, status, buf.getvalue()))
+
+    blocked(
+        ["wrapper", "build", TARGET, "--ios_multi_cpus=arm64"],
+        "device ios cpu",
+        "device cpu",
+    )
+    blocked(
+        ["wrapper", "build", "//Telegram:Telegram", "--ios_multi_cpus=sim_arm64"],
+        "FeedScreen unit test",
+        "Telegram target",
+    )
 
 
 def write_real_bazel(path, version):
