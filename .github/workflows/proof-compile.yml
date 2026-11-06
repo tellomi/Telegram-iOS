@@ -1,22 +1,28 @@
-# Proof-only compile of the Discover feed library and its host tests.
+# Proof compile of FeedScreen through an ios_unit_test.
 #
-# This is not CI (.github/workflows/build.yml) and not TestFlight.
-# It never builds //Telegram:Telegram, never copies an IPA, never creates a
-# Release, and never uploads an artifact. The only Apple-platform product is
-# the Swift module for a swift_library.
+# Not CI (.github/workflows/build.yml) and not TestFlight. Do not dispatch
+# this file until it is on the default branch: GitHub returns 404 for
+# workflow_dispatch of a file that is not on that branch. This agent does
+# not call the dispatch API.
 #
-# Dispatch this file's branch, and pass compile_sha as the commit to compile
-# (the image PR head). The workflow definition stays on this branch; the
-# sources come from compile_sha.
+# A bare swift_library is built with the Mac host SDK. Tests/ComposerHarness/CLAUDE.md
+# records that only ios_application / ios_unit_test / ios_ui_test apply the iOS
+# platform transition. This job builds //Tests/TellomiFeedProof:TellomiFeedProofTests,
+# copied into the compile_sha tree from this branch. That target depends on
+# //submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen.
 #
-# CODE_SIGNING_ALLOWED is an Xcode setting. This graph does not read it.
-# rules_apple codesigns ios_application bundles. The job refuses to build
-# unless //.../FeedScreen:FeedScreen is a swift_library with no Apple bundle
-# in its deps. Make.py still requires one codesigning selector;
-# --xcodeManagedCodesigning loads no certificate
-# (XcodeManagedCodesigningSource.load_data is empty).
-# --disableProvisioningProfiles only sets //Telegram:disableProvisioningProfiles,
-# which ios_application reads. That rule is not in this build.
+# rules_apple 485016eb codesigning_support.bzl skips simulator codesign when
+# --features=apple.skip_codesign_simulator_bundles is set, before the
+# ios_unit_test exception that otherwise forces signing. Make.py has no
+# passthrough for that feature (--bazelArguments is parsed and unused), so
+# the pinned bazel binary is wrapped to add it on build and test only.
+# CODE_SIGNING_ALLOWED is not passed. It is an Xcode setting.
+#
+# versions.json requires Xcode 27.1 and macOS 27. The job fails if sw_vers
+# or xcodebuild do not match. It does not skip the compile.
+#
+# No //Telegram:Telegram, no IPA copy, no upload, no Release. A test bundle
+# under bazel-bin/Tests may exist. bazel-bin/Telegram/Telegram.ipa fails the job.
 
 name: Proof compile
 
@@ -33,7 +39,7 @@ on:
         default: ''
         type: string
       allow_xcode_mismatch:
-        description: 'Allow another Xcode 27.x than versions.json.'
+        description: 'Allow another Xcode 27.x than versions.json. Still requires macOS 27.'
         required: false
         default: false
         type: boolean
@@ -43,27 +49,20 @@ permissions:
 
 jobs:
   proof:
-    if: github.ref != 'refs/heads/master'
     runs-on: ${{ fromJSON(github.event.inputs.runner || '"xcode-27"') }}
     timeout-minutes: 180
     env:
       ALLOW_XCODE_MISMATCH: ${{ github.event.inputs.allow_xcode_mismatch && 'true' || 'false' }}
     steps:
-      - name: Reject a master ref
-        run: |
-          set -euo pipefail
-          if [[ "${GITHUB_REF}" == "refs/heads/master" ]]; then
-            echo "refusing to run on master"
-            exit 1
-          fi
-          echo "workflow ref ${GITHUB_REF}"
-
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           path: proof-tools
           fetch-depth: 1
-          sparse-checkout: .github
+          sparse-checkout: |
+            .github/proof-compile-guard.sh
+            .github/wrap-bazel.py
+            .github/tellomi-feed-proof
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -75,17 +74,19 @@ jobs:
           submodules: false
           persist-credentials: false
 
-      - name: Require the requested commit
+      - name: Require the requested commit and this machine
         working-directory: src
         run: |
           set -euo pipefail
           bash ../proof-tools/.github/proof-compile-guard.sh sha "${{ inputs.compile_sha }}"
           head="$(git rev-parse HEAD)"
           echo "HEAD ${head}"
-          if [[ "${head}" != "${{ inputs.compile_sha }}" ]]; then
-            echo "checked out ${head}, requested ${{ inputs.compile_sha }}"
-            exit 1
-          fi
+          [[ "${head}" == "${{ inputs.compile_sha }}" ]]
+          product="$(sw_vers -productVersion)"
+          echo "macos ${product}"
+          [[ "${product%%.*}" == "27" ]]
+          want="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          echo "versions.json xcode ${want}"
 
       - name: Checkout submodules
         working-directory: src
@@ -98,13 +99,10 @@ jobs:
           XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
           CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
           if [[ ! -d "$CANDIDATE" ]]; then
-            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
+            echo "Xcode ${XCODE_VERSION} is not installed."
             ls -1 /Applications | grep -E '^Xcode' || true
-            if [[ "$ALLOW_XCODE_MISMATCH" != "true" ]]; then
-              exit 1
-            fi
-            CANDIDATE="/Applications/Xcode.app"
-            [[ -d "$CANDIDATE" ]]
+            echo "This runner cannot compile the versions.json SDK. Not skipping."
+            exit 1
           fi
           PLIST_VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "${CANDIDATE}/Contents/Info.plist")"
           echo "CFBundleShortVersionString=${PLIST_VERSION}"
@@ -112,7 +110,7 @@ jobs:
             if [[ "$ALLOW_XCODE_MISMATCH" == "true" && "${PLIST_VERSION%%.*}" == "${XCODE_VERSION%%.*}" ]]; then
               echo "MAKE_XCODE_FLAGS=--overrideXcodeVersion" >> "$GITHUB_ENV"
             else
-              echo "Selected Xcode reports ${PLIST_VERSION}, versions.json requires ${XCODE_VERSION}."
+              echo "Xcode ${PLIST_VERSION} is not ${XCODE_VERSION}."
               exit 1
             fi
           fi
@@ -135,22 +133,42 @@ jobs:
           chmod +x "build-input/${name}"
           echo "BAZEL_BIN=${PWD}/build-input/${name}" >> "$GITHUB_ENV"
 
-      - name: Refuse a packaged Apple target
+      - name: Overlay the iOS proof target
         working-directory: src
         run: |
           set -euo pipefail
-          feed="//submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen"
-          kind="$("$BAZEL_BIN" query --output=label_kind "$feed")"
+          rm -rf Tests/TellomiFeedProof
+          mkdir -p Tests/TellomiFeedProof
+          cp ../proof-tools/.github/tellomi-feed-proof/BUILD Tests/TellomiFeedProof/BUILD
+          cp ../proof-tools/.github/tellomi-feed-proof/Proof.swift Tests/TellomiFeedProof/Proof.swift
+
+      - name: Require an ios_unit_test and no Telegram app
+        working-directory: src
+        run: |
+          set -euo pipefail
+          proof="//Tests/TellomiFeedProof:TellomiFeedProofTests"
+          kind="$("$BAZEL_BIN" query --output=label_kind "$proof")"
           echo "target kind: ${kind}"
           bash ../proof-tools/.github/proof-compile-guard.sh kind "$kind"
-          bundles="$("$BAZEL_BIN" query "kind('ios_application|ios_extension|macos_application|watchos_application', deps(${feed}))")"
-          echo "bundle deps: ${bundles:-<none>}"
-          bash ../proof-tools/.github/proof-compile-guard.sh deps "$bundles"
+          feed="$("$BAZEL_BIN" query "deps(${proof})")"
+          echo "$feed" | grep -F '//submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen' >/dev/null
+          bundles="$("$BAZEL_BIN" query "kind('ios_application', deps(${proof}))")"
+          echo "ios_application deps: ${bundles:-<none>}"
+          bash ../proof-tools/.github/proof-compile-guard.sh bundles "$bundles"
 
-      - name: Compile FeedScreen
+      - name: Wrap Bazel to skip simulator codesign
         working-directory: src
         run: |
           set -euo pipefail
+          real="${BAZEL_BIN}.real"
+          mv "$BAZEL_BIN" "$real"
+          python3 ../proof-tools/.github/wrap-bazel.py "$BAZEL_BIN" "$real"
+
+      - name: Compile FeedScreen via the iOS unit test
+        working-directory: src
+        run: |
+          set -euo pipefail
+          set -o pipefail
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="/private/var/tmp/_bazel_proof" \
             ${MAKE_XCODE_FLAGS:-} \
@@ -160,21 +178,9 @@ jobs:
             --disableProvisioningProfiles \
             --configuration=debug_sim_arm64 \
             --buildNumber=1 \
-            --target="//submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen"
-          bash ../proof-tools/.github/proof-compile-guard.sh no-ipa "bazel-bin/Telegram/Telegram.ipa"
-          module="$(find bazel-bin/submodules/TelegramUI/Components/Tellomi/FeedScreen -name 'TellomiFeedScreen.swiftmodule' -print -quit)"
-          echo "swiftmodule ${module}"
-          bash ../proof-tools/.github/proof-compile-guard.sh module "$module"
-
-      - name: Test TellomiDiscover
-        working-directory: src
-        run: |
-          set -euo pipefail
-          python3 -u build-system/Make/Make.py \
-            --bazelUserRoot="/private/var/tmp/_bazel_proof" \
-            ${MAKE_XCODE_FLAGS:-} \
-            test \
-            --configurationPath="build-system/appstore-configuration.json" \
-            --xcodeManagedCodesigning \
-            --target="//submodules/TellomiDiscover:TellomiDiscoverTests"
-          bash ../proof-tools/.github/proof-compile-guard.sh no-ipa "bazel-bin/Telegram/Telegram.ipa"
+            --showActions \
+            --target="//Tests/TellomiFeedProof:TellomiFeedProofTests" \
+            2>&1 | tee /tmp/proof-build.log
+          bash ../proof-tools/.github/proof-compile-guard.sh sdk-log /tmp/proof-build.log
+          bash ../proof-tools/.github/proof-compile-guard.sh sign-log /tmp/proof-build.log
+          bash ../proof-tools/.github/proof-compile-guard.sh no-app-ipa "bazel-bin/Telegram/Telegram.ipa"

@@ -1,9 +1,9 @@
 #!/bin/bash
-# Guards for the proof-only compile. This script does not invoke Bazel.
+# Guards for the proof-only iOS compile. This script does not invoke Bazel.
 set -euo pipefail
 
 usage() {
-  echo "usage: proof-compile-guard.sh sha SHA | kind TEXT | no-ipa PATH | module PATH" >&2
+  echo "usage: proof-compile-guard.sh sha SHA | kind TEXT | bundles TEXT | no-app-ipa PATH | sdk-log FILE | sign-log FILE" >&2
   exit 2
 }
 
@@ -19,42 +19,39 @@ case "$mode" in
     }
     ;;
   kind)
-    # `bazel query --output=label_kind` prints one "rule_kind label" line.
-    [[ "$value" == swift_library\ * ]] || {
-      echo "refusing: target is not a swift_library (${value})" >&2
+    [[ "$value" == ios_unit_test\ * ]] || {
+      echo "refusing: proof target must be an ios_unit_test so the iOS transition applies (${value})" >&2
       exit 1
     }
-    case "$value" in
-      *ios_application*|*ios_extension*|*apple_bundle*)
-        echo "refusing: packaged Apple rule in target kind (${value})" >&2
-        exit 1
-        ;;
-    esac
     ;;
-  deps)
-    if [[ -n "$value" ]]; then
-      echo "refusing: Apple bundle in the dependency graph:" >&2
+  bundles)
+    if grep -E 'ios_application|//Telegram:Telegram' <<<"$value" >/dev/null; then
+      echo "refusing: app packaging target in the proof graph" >&2
       echo "$value" >&2
       exit 1
     fi
     ;;
-  no-ipa)
+  no-app-ipa)
     if [[ -e "$value" ]]; then
-      echo "refusing: installable package exists at ${value}" >&2
+      echo "refusing: Telegram app package exists at ${value}" >&2
       exit 1
     fi
     ;;
-  module)
-    if [[ ! -e "$value" ]]; then
-      echo "compile finished without a Swift module at ${value}" >&2
+  sdk-log)
+    grep -E -i -q 'iphonesimulator|ios_sim_arm64|applebin_ios' "$value" || {
+      echo "build log has no iOS simulator SDK marker; FeedScreen was not compiled for iOS" >&2
+      exit 1
+    }
+    grep -q 'FeedScreen' "$value" || {
+      echo "build log never names FeedScreen" >&2
+      exit 1
+    }
+    ;;
+  sign-log)
+    if grep -E 'SignBinary|ProcessAndSign|/usr/bin/codesign|\.mobileprovision' "$value" >/dev/null; then
+      echo "refusing: a codesign or provisioning action ran" >&2
       exit 1
     fi
-    case "$value" in
-      *.ipa|*.app|*.dSYM)
-        echo "refusing to treat a packaged product as the compile result: ${value}" >&2
-        exit 1
-        ;;
-    esac
     ;;
   *)
     usage
