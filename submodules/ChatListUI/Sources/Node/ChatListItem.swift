@@ -675,6 +675,8 @@ public class ChatListItem: ListViewItem {
 
 
 private func swipeIcon(_ name: String) -> ItemListRevealOptionIcon {
+    // Each folder in `name` must set provides-namespace. Otherwise imageNamed
+    // is nil and the reveal layout uses the iconless 60×32 pill.
     if let image = UIImage(bundleImageName: name) {
         return .image(image: image)
     }

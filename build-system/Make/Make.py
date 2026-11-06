@@ -18,6 +18,7 @@ import TartBuild
 import GenerateProfiles
 import PostboxImportCheck
 import IconSizeCheck
+import ChatListSwipeCheck
 
 
 class ResolvedCodesigningData:
@@ -635,6 +636,8 @@ def build(bazel, arguments):
         sys.exit(1)
     if IconSizeCheck.run(os.getcwd()) != 0:
         sys.exit(1)
+    if ChatListSwipeCheck.run(os.getcwd()) != 0:
+        sys.exit(1)
 
     bazel_command_line = BazelCommandLine(
         bazel=bazel,
@@ -723,6 +726,8 @@ def test(bazel, arguments):
     if PostboxImportCheck.run(os.getcwd()) != 0:
         sys.exit(1)
     if IconSizeCheck.run(os.getcwd()) != 0:
+        sys.exit(1)
+    if ChatListSwipeCheck.run(os.getcwd()) != 0:
         sys.exit(1)
 
     bazel_command_line = BazelCommandLine(
