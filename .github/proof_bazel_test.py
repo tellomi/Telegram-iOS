@@ -387,12 +387,14 @@ def test_wrapper_order(make_argv, real):
         fail("aquery argv lost the real binary or the feature: %s" % query)
     if "--subcommands" in query:
         fail("aquery kept the execution-only --subcommands flag")
-    if 'mnemonic("GenerateCodesigningDossier"' not in " ".join(query):
-        fail("aquery does not include GenerateCodesigningDossier: %s" % query)
-    if 'mnemonic("ProcessAndSign"' not in " ".join(query) or 'mnemonic("SignBinary"' not in " ".join(query):
-        fail("aquery does not include the signing mnemonics: %s" % query)
-    if 'mnemonic("FileWrite"' not in " ".join(query):
-        fail("aquery does not include FileWrite: %s" % query)
+    expression = " ".join(query)
+    if expression.count("mnemonic(") != 1 or " union " in expression:
+        fail("aquery filter must be one mnemonic(), not a union Bazel 9.2 drops: %s" % query)
+    if "deps(%s)" % TARGET not in expression:
+        fail("aquery does not include dependency actions: %s" % query)
+    for name in ("SignBinary", "ProcessAndSign", "GenerateCodesigningDossier", "TemplateExpand", "FileWrite"):
+        if name not in expression:
+            fail("aquery filter missing %s: %s" % (name, query))
     for option in ("--output=jsonproto", "--include_file_write_contents", "--include_param_files", "--include_commandline"):
         if option not in query:
             fail("aquery argv missing %s: %s" % (option, query))

@@ -125,13 +125,18 @@ def aquery_argv(real, make_argv):
     flags = [flag for flag in flags if flag not in AQUERY_STRIP]
     if FEATURE not in flags:
         flags.append(FEATURE)
+    # Bazel 9.2 AqueryProcessor.buildActionFilters only walks one nested
+    # function chain. A top-level union is a binary operator, so every
+    # mnemonic() in it is dropped and the output is unfiltered. A bare label
+    # is that configured target's own actions; dependency actions, including
+    # the test bundle's ProcessAndSign and GenerateCodesigningDossier, require
+    # deps(). Matcher.matches() is the whole mnemonic, so one alternation is
+    # the filter Bazel actually applies. Run 42276107336 returned only the six
+    # actions of TellomiFeedProofTests.
     query = (
-        'mnemonic("SignBinary", {t}) union '
-        'mnemonic("ProcessAndSign", {t}) union '
-        'mnemonic("GenerateCodesigningDossier", {t}) union '
-        'mnemonic("TemplateExpand", {t}) union '
-        'mnemonic("FileWrite", {t})'
-    ).format(t=target)
+        'mnemonic("SignBinary|ProcessAndSign|GenerateCodesigningDossier'
+        '|TemplateExpand|FileWrite", deps(%s))' % target
+    )
     return [real] + startup + ["aquery"] + list(AQUERY_OPTIONS) + flags + [query]
 
 
