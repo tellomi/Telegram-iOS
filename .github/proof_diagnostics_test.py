@@ -22,116 +22,103 @@ class Completed(object):
         self.stderr = err
 
 
+SECRET = "sk_live_not_in_regex"
+BOMB = "\n::add-mask::" + SECRET + "\r::error::" + SECRET + "\n::set-output::name=" + SECRET + "\x1b"
+
+
+def assert_log_safe(text):
+    if SECRET in text:
+        fail("log contained the unknown token")
+    if "\r" in text or "\x1b" in text:
+        fail("log contained a raw control character")
+    for line in text.splitlines():
+        if line.lstrip().startswith("::"):
+            fail("log line starts a workflow command: %s" % line)
+    for command in ("::add-mask::", "::error::", "::set-output::"):
+        if command in text:
+            fail("workflow command text was copied: %s" % command)
+
+
 def sample_document():
-    secret = "ghp_supersecretvalue"
     return {
         "pathFragments": [
             {"id": 1, "label": "bazel-out"},
             {"id": 2, "label": "runner.sh", "parentId": 1},
-            {"id": 3, "label": "TellomiFeedProofTests", "parentId": 1},
-            {"id": 4, "label": "dossier_arguments", "parentId": 1},
-            {"id": 5, "label": "Info.plist", "parentId": 1},
+            {"id": 3, "label": BOMB, "parentId": 1},
         ],
         "artifacts": [
             {"id": 10, "pathFragmentId": 2},
             {"id": 11, "pathFragmentId": 3},
-            {"id": 12, "pathFragmentId": 4},
-            {"id": 13, "pathFragmentId": 5},
         ],
-        "targets": [{"id": 1, "label": "//Tests/TellomiFeedProof:TellomiFeedProofTests"}],
+        "targets": [{"id": 1, "label": "//Tests/TellomiFeedProof:TellomiFeedProofTests"},
+                    {"id": 2, "label": BOMB}],
         "depSetOfFiles": [{"id": 1, "directArtifactIds": [10]}],
         "actions": [
             {
                 "mnemonic": "TemplateExpand",
                 "targetId": 1,
                 "outputIds": [10],
-                "templateContent": "#!/bin/bash\n\n# Copyright 2018 The Bazel Authors\n" + secret,
-                "environmentVariables": [{"key": "GITHUB_TOKEN", "value": secret}],
-                "executionInfo": {"no-sandbox": "1"},
+                "templateContent": "#!/bin/bash\n" + SECRET + BOMB,
+                "environmentVariables": [{"key": BOMB, "value": SECRET}],
+                "executionInfo": {BOMB: SECRET},
+                "paramFiles": [{
+                    "execPath": "bazel-out/" + SECRET,
+                    "arguments": ["--codesign_identity", "-", SECRET, BOMB],
+                }],
             },
             {
-                "mnemonic": "TemplateExpand",
-                "targetId": 1,
+                "mnemonic": BOMB,
+                "targetId": 2,
                 "outputIds": [11],
                 "inputDepSetIds": [1],
                 "templateContent": "ARTIFACT: bazel-out/runner.sh",
-                "substitutions": [{"key": "%(test_bundle_path)s", "value": "/Users/runner/secret.mobileprovision"}],
-                "arguments": ["--profile", "/Users/runner/secret.mobileprovision"],
-            },
-            {
-                "mnemonic": "FileWrite",
-                "targetId": 1,
-                "outputIds": [12],
-                "fileContents": "--output\nbazel-out/out.zip\n--zip\n--codesign_identity\n-\n",
-            },
-            {
-                "mnemonic": "FileWrite",
-                "targetId": 1,
-                "outputIds": [13],
-                "fileContents": "-----BEGIN PRIVATE KEY-----\n" + secret + "\n-----END PRIVATE KEY-----\n",
-            },
-            {
-                "mnemonic": "TestRunner",
-                "targetId": 1,
-                "outputIds": [11],
-                "arguments": ["run"],
+                "substitutions": [
+                    {"key": "%(test_bundle_path)s", "value": SECRET + BOMB},
+                    {"key": SECRET, "value": BOMB},
+                    {"key": BOMB, "value": SECRET},
+                ],
+                "arguments": ["create", "should_sign", SECRET, BOMB],
+                "fileContents": SECRET + BOMB,
             },
         ],
     }
 
 
-def test_projection_is_redacted_and_links_producer():
-    text = json.dumps(sample_document())
-    projected = proof_bazel.project_aquery(text)
-    if "ghp_supersecretvalue" in projected:
-        fail("projection leaked a token")
-    if "GITHUB_TOKEN" in projected or "BEGIN PRIVATE KEY" in projected:
-        fail("projection leaked an environment value or private key")
-    if "secret.mobileprovision" in projected:
-        fail("projection leaked a provisioning path")
-    if "environmentVariables: omitted (1)" not in projected:
-        fail("environment variables were not omitted by count")
-    if "executionInfo: omitted" not in projected:
-        fail("execution info was logged")
-    if "templateProducer: TemplateExpand bazel-out/runner.sh" not in projected:
-        fail("derived template producer was not linked:\n%s" % projected)
-    if "#!/bin/bash" not in projected or "# Copyright 2018 The Bazel Authors" not in projected:
-        fail("runner template text was dropped")
-    if "--codesign_identity" not in projected or "\n-" not in projected and "| -" not in projected:
-        # dossier body is included; identity line is "-"
-        if "--codesign_identity" not in projected:
-            fail("dossier arguments were omitted")
-    if "fileContents: omitted" not in projected:
-        fail("arbitrary file contents were not omitted")
+def test_projection_fingerprints_unknown_text():
+    projected = proof_bazel.project_aquery(json.dumps(sample_document()))
+    assert_log_safe(projected)
     if "not a raw action graph" not in projected:
-        fail("projection was presented as a complete graph")
-    if "TestRunner" not in projected or "TemplateExpand" not in projected:
-        fail("mnemonics missing from projection")
-    huge = json.dumps({
-        "actions": [{
-            "mnemonic": "TemplateExpand",
-            "outputIds": [],
-            "templateContent": "A" * 10000,
-        }],
-        "artifacts": [],
-        "pathFragments": [],
-    })
-    huge_projected = proof_bazel.project_aquery(huge)
-    if "truncated" not in huge_projected or "not a complete graph" not in huge_projected:
-        fail("truncated template was presented as complete")
-    if proof_bazel.project_aquery("{").count("not a complete graph") < 1:
+        fail("projection was presented as a raw graph")
+    if '"text": "TemplateExpand"' not in projected:
+        fail("public mnemonic was not kept")
+    if '"text": "%(test_bundle_path)s"' not in projected:
+        fail("public placeholder key was not kept")
+    if '"text": "--codesign_identity"' not in projected or '"text": "-"' not in projected:
+        fail("public dossier tokens were not kept")
+    path_id = proof_bazel.fingerprint("bazel-out/runner.sh")["sha256"]
+    if projected.count(path_id) < 2:
+        fail("derived template was not tied to its producer fingerprint:\n%s" % projected)
+    if '"contents": "omitted"' not in projected:
+        fail("free-text contents were not omitted")
+    if '"reason": "absent"' in projected:
+        fail("producer that is in the document was reported absent")
+    failure = proof_bazel.project_aquery_failure(SECRET + BOMB)
+    assert_log_safe(failure)
+    if "not a complete graph" not in failure or '"contents": "omitted"' not in failure:
+        fail("failed aquery stderr was not reduced to a fingerprint")
+    unparsed = proof_bazel.project_aquery("{" + SECRET)
+    assert_log_safe(unparsed)
+    if "not a complete graph" not in unparsed:
         fail("unparsed document was treated as a graph")
-    if "AAAA" in proof_bazel.project_aquery("{"):
-        fail("unparsed document leaked raw text")
 
 
-def _run(document, code, diagnose):
+def _run(document, code, diagnose, err=""):
     calls = []
 
     def run(argv, check=False, stdout=None, stderr=None, text=False):
         calls.append(list(argv))
         if code != 0:
-            return Completed(code, "", "aquery exploded")
+            return Completed(code, "", err or "aquery exploded")
         return Completed(0, document, "")
 
     executed = []
@@ -164,7 +151,8 @@ def test_diagnostics_never_executes():
         (allowed, 3, True),
         (refused, 0, False),
     ):
-        status, executed, log, calls = _run(document, aquery_code, diagnose)
+        status, executed, log, calls = _run(document, aquery_code, diagnose, SECRET + BOMB)
+        assert_log_safe(log)
         if executed:
             fail("build was executed diagnose=%s aquery=%s" % (diagnose, aquery_code))
         if not calls or calls[0][calls[0].index("aquery") + 1:].count("build"):
@@ -180,8 +168,17 @@ def test_diagnostics_never_executes():
     status, executed, log, _calls = _run(allowed, 0, False)
     if status != 0 or not executed:
         fail("default allow path no longer builds: %s %s" % (status, executed))
-    if "diagnostics-only" in log:
-        fail("default path enabled diagnostics-only")
+    if "diagnostics-only" in log or log.startswith("diag ") or "\ndiag " in log:
+        fail("default allow path logged a projection")
+    status, executed, refused_log, _calls = _run(refused, 0, False)
+    if executed or "diag " in refused_log:
+        fail("default refusal logged a projection or executed: %s" % refused_log)
+    if "signing-boundary:" not in refused_log:
+        fail("default refusal dropped the existing gate reasons")
+    status, executed, failed_log, _calls = _run(allowed, 3, False, SECRET + BOMB)
+    assert_log_safe(failed_log)
+    if executed or "diag " in failed_log:
+        fail("default aquery failure logged stderr or executed")
     workflow = open(
         __import__("os").path.join(__import__("os").path.dirname(__file__), "workflows", "proof-compile.yml"),
         encoding="utf-8",
@@ -192,7 +189,7 @@ def test_diagnostics_never_executes():
 
 
 def main():
-    test_projection_is_redacted_and_links_producer()
+    test_projection_fingerprints_unknown_text()
     test_diagnostics_never_executes()
     print("proof diagnostics tests passed")
 
