@@ -60,6 +60,7 @@ import sys
 
 FEATURE = "--features=apple.skip_codesign_simulator_bundles"
 PROOF_TARGET = "//Tests/TellomiFeedProof:TellomiFeedProofTests"
+HOST_TEST_TARGET = "//submodules/TellomiDiscover:TellomiDiscoverTests"
 GATED_COMMANDS = ("build", "test")
 _SIGNING_MNEMONICS = ("SignBinary", "ProcessAndSign", "GenerateCodesigningDossier")
 AQUERY_STRIP = ("--subcommands",)
@@ -1004,8 +1005,9 @@ def _compile_allowed(argv):
         if "\n" in argv[index] or "\r" in argv[index]:
             return _NOT_PROOF_BUILD
         index += 1
-    if index >= len(argv) or argv[index] != "build":
+    if index >= len(argv) or argv[index] not in ("build", "test"):
         return _NOT_PROOF_BUILD
+    command = argv[index]
     index += 1
     positionals = []
     ios_cpus = []
@@ -1032,8 +1034,16 @@ def _compile_allowed(argv):
             continue
         positionals.append(arg)
         index += 1
-    if positionals != [PROOF_TARGET]:
-        return _NOT_PROOF_TARGET
+    if command == "test" and positionals == [HOST_TEST_TARGET]:
+        if ios_cpus or watch_cpus:
+            return _NOT_SIMULATOR
+        return None
+    if command == "test" and positionals == [PROOF_TARGET]:
+        if ios_cpus != ["sim_arm64"] or len(watch_cpus) > 1:
+            return _NOT_SIMULATOR
+        return None
+    if command != "build" or positionals != [PROOF_TARGET]:
+        return _NOT_PROOF_TARGET if command == "build" or command == "test" else _NOT_PROOF_BUILD
     if ios_cpus != ["sim_arm64"] or len(watch_cpus) > 1:
         return _NOT_SIMULATOR
     return None
@@ -1058,6 +1068,8 @@ def wrapper_main(argv, real, run=None, execv=None, environ=None):
         sys.stderr.write(blocked)
         if diagnose:
             sys.stderr.write("diagnostics-only: build was not executed\n")
+            if "test" in argv:
+                sys.stderr.write("diagnostics-only: test was not executed\n")
         return 1
 
     query = aquery_argv(real, argv)
@@ -1070,6 +1082,8 @@ def wrapper_main(argv, real, run=None, execv=None, environ=None):
             sys.stderr.write(project_aquery(completed.stdout or ""))
             sys.stderr.write(report_signing(completed.stdout or ""))
         sys.stderr.write("diagnostics-only: build was not executed\n")
+        if "test" in argv:
+            sys.stderr.write("diagnostics-only: test was not executed\n")
         return 2
     if completed.returncode != 0:
         sys.stderr.write("compile-verify: signing actions were not classified\n")

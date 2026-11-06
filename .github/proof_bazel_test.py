@@ -520,6 +520,45 @@ def test_wrapper_order(make_argv, real):
         "platform override",
         "mixed ios cpus",
     )
+    blocked(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "test", "//Telegram:Telegram",
+         "--ios_multi_cpus=sim_arm64"],
+        "FeedScreen unit test",
+        "other test target",
+    )
+    blocked(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "test",
+         "//submodules/TellomiDiscover:TellomiDiscoverTests", "--ios_multi_cpus=arm64"],
+        "platform override",
+        "host test with a device cpu",
+        diagnose=True,
+    )
+
+    def allowed(argv, label):
+        executed[:] = []
+        calls[:] = []
+        status = proof_bazel.wrapper_main(argv, real, run=run, execv=execv, environ={})
+        if status != 0 or len(executed) != 1 or executed[0][executed[0].index("test")] != "test":
+            fail("%s was not executed through the wrapper: %s %s" % (label, status, executed))
+
+    allowed(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "test",
+         "//submodules/TellomiDiscover:TellomiDiscoverTests", "--test_output=errors", "--announce_rc"],
+        "host discover test",
+    )
+    allowed(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "test", TARGET,
+         "--test_output=errors", "--announce_rc", "--//Telegram:disableProvisioningProfiles",
+         "-c", "dbg", "--ios_multi_cpus=sim_arm64"],
+        "simulator proof test",
+    )
+    blocked(
+        ["wrapper", "--output_user_root=/tmp/bazel-proof", "test", TARGET,
+         "--ios_multi_cpus=sim_arm64"],
+        "test was not executed",
+        "diagnostics simulator test",
+        diagnose=True,
+    )
     forwarded = []
 
     def exec_version(path, argv):
@@ -739,23 +778,35 @@ def changed_files():
     return sorted(path for path in files if path)
 
 
+# Product files this proof PR may change. Anything else outside .github fails.
+ALLOWED_PRODUCT = (
+    "submodules/TellomiDiscover/Sources/TellomiDiscoverTransport.swift",
+    "submodules/TellomiDiscover/Tests/TellomiDiscoverImageClosureTests.swift",
+    "submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverImageEncode.swift",
+    "submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverNetworking.swift",
+)
+
+
 def test_first_merge_does_not_run_old_ci():
     files = changed_files()
-    outside = [path for path in files if not path.startswith(".github/")]
+    outside = [path for path in files if not path.startswith(".github/") and path not in ALLOWED_PRODUCT]
     if outside:
-        fail("diff is not limited to .github: %s" % outside)
-    if not files:
-        fail("no files in the proof diff")
+        fail("diff leaves the proof transport scope: %s" % outside)
+    github_only = [path for path in files if path.startswith(".github/")]
+    if not github_only:
+        fail("proof workflow files are missing")
     build_text = open(os.path.join(ROOT, ".github", "workflows", "build.yml"), encoding="utf-8").read()
     proof_text = open(os.path.join(ROOT, ".github", "workflows", "proof-compile.yml"), encoding="utf-8").read()
     build_patterns = push_patterns(build_text)
     proof_patterns = push_patterns(proof_text)
     if build_patterns != [".github/**"] or proof_patterns != [".github/**"]:
         fail("paths-ignore is %s and %s" % (build_patterns, proof_patterns))
-    if ci_gate.push_triggers(files, build_patterns):
-        fail("this .github-only diff would start CI")
-    if ci_gate.push_triggers(files, proof_patterns):
-        fail("this .github-only diff would start Proof compile")
+    if ci_gate.push_triggers(github_only, build_patterns):
+        fail("a .github-only push would start CI")
+    if ci_gate.push_triggers(github_only, proof_patterns):
+        fail("a .github-only push would start Proof compile")
+    if not ci_gate.push_triggers(list(ALLOWED_PRODUCT), proof_patterns):
+        fail("the transport source was ignored by Proof compile")
     source = files + ["submodules/TelegramUI/Components/Tellomi/FeedScreen/BUILD"]
     if not ci_gate.push_triggers(source, build_patterns):
         fail("a source push was treated as ignored")
@@ -777,8 +828,9 @@ def test_first_merge_does_not_run_old_ci():
     print("first-merge files:")
     for path in files:
         print("  %s" % path)
-    print("CI push triggers for this diff: no")
-    print("Proof compile push triggers for this diff: no")
+    print("CI push triggers for .github-only: no")
+    print("Proof compile push triggers for .github-only: no")
+    print("transport source starts Proof compile: yes")
     print("source push packages or publishes: no")
 
 

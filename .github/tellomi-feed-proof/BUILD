@@ -13,6 +13,7 @@ swift_library(
     ],
     deps = [
         "//submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen",
+        "//submodules/TellomiDiscover:TellomiDiscover",
     ],
 )
 
