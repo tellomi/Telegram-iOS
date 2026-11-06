@@ -12,6 +12,7 @@ import AccountUtils
 import OverlayStatusController
 import PremiumUI
 import TelegramPresentationData
+import TelegramUIPreferences
 import PresentationDataUtils
 import PasswordSetupUI
 import InstantPageCache
@@ -222,21 +223,36 @@ extension PeerInfoScreenNode {
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
                 return
             }
-            guard let navigationController = controller.navigationController as? NavigationController else {
-                return
-            }
-            let existing: String?
+            let phone: String?
+            let peerId: EnginePeer.Id
             if case let .user(user) = self.data?.peer {
-                existing = tellomiAccountContact(phone: user.phone, peerId: user.id).email
+                phone = user.phone
+                peerId = user.id
             } else {
-                existing = nil
+                phone = nil
+                peerId = self.context.account.peerId
             }
-            // Same screens as Settings → change phone: an entry field, then the code.
-            // `emailPattern` selects change vs first-time setup. The RPCs are the stock
-            // `account.sendVerifyEmailCode` / `account.verifyEmail` login-change purpose.
-            push(loginEmailSetupController(context: self.context, blocking: false, emailPattern: existing, navigationController: navigationController, completion: {
-            }, dismiss: {
-            }))
+            // Phone accounts may still open the native login-email screen.
+            // An email-only identity (users.email, surfaced as login_email_pattern)
+            // does not. The mask is not sent as a new address.
+            let _ = (self.twoStepAuthData.get()
+            |> take(1)
+            |> deliverOnMainQueue).start(next: { [weak self] data in
+                guard let self, let navigationController = self.controller?.navigationController as? NavigationController else {
+                    return
+                }
+                let action = tellomiSettingsEmailAction(tellomiSettingsEmailChannels(phone: phone, peerId: peerId, loginEmailPattern: data?.loginEmailPattern))
+                switch action {
+                case let .showIdentity(_, fullAddress):
+                    let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+                    let pack = tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)
+                    tellomiPresentSignInEmailNotice(context: self.context, controller: self.controller, languageCode: presentationData.strings.primaryComponent.languageCode, pack: pack, masked: fullAddress == nil)
+                case let .phoneAccountLoginEmail(pattern):
+                    push(loginEmailSetupController(context: self.context, blocking: false, emailPattern: pattern, navigationController: navigationController, completion: {
+                    }, dismiss: {
+                    }))
+                }
+            })
         case .username:
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
                 return
