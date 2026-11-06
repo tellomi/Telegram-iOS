@@ -761,83 +761,140 @@ def push_patterns(workflow_text):
     return patterns
 
 
-def changed_files():
-    import subprocess
-    base = subprocess.check_output(
-        ["git", "merge-base", "origin/master", "HEAD"], cwd=ROOT, text=True).strip()
-    diff = subprocess.check_output(
-        ["git", "diff", "--name-only", base], cwd=ROOT, text=True).splitlines()
-    status = subprocess.check_output(
-        ["git", "status", "--porcelain"], cwd=ROOT, text=True).splitlines()
-    files = set(diff)
-    for line in status:
-        path = line[3:].strip()
-        if " -> " in path:
-            path = path.split(" -> ", 1)[1]
-        files.add(path)
-    return sorted(path for path in files if path)
+def on_keys(workflow_text):
+    keys = []
+    in_on = False
+    for line in workflow_text.splitlines():
+        if line.startswith("on:"):
+            in_on = True
+            continue
+        if not in_on:
+            continue
+        if line and not line.startswith(" "):
+            break
+        if line.startswith("  ") and not line.startswith("    ") and line.strip().endswith(":"):
+            keys.append(line.strip()[:-1])
+    return keys
 
 
-# Product files this proof PR may change. Anything else outside .github fails.
-ALLOWED_PRODUCT = (
-    "submodules/TellomiDiscover/Sources/TellomiDiscoverTransport.swift",
-    "submodules/TellomiDiscover/Tests/TellomiDiscoverImageClosureTests.swift",
-    "submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverImageEncode.swift",
-    "submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverNetworking.swift",
-)
+def push_branches(workflow_text):
+    branches = []
+    in_push = False
+    in_branches = False
+    for line in workflow_text.splitlines():
+        if line.startswith("  push:"):
+            in_push = True
+            in_branches = False
+            continue
+        if in_push and line.startswith("  ") and not line.startswith("    ") and line.strip().endswith(":"):
+            break
+        stripped = line.strip()
+        if in_push and stripped.startswith("branches:"):
+            rest = stripped[len("branches:"):].strip()
+            if rest.startswith("[") and rest.endswith("]"):
+                return [part.strip().strip("'").strip('"') for part in rest[1:-1].split(",") if part.strip()]
+            in_branches = True
+            continue
+        if in_branches:
+            if stripped.startswith("- "):
+                branches.append(stripped[2:].strip().strip("'").strip('"'))
+                continue
+            if stripped:
+                break
+    return branches
 
 
-def test_first_merge_does_not_run_old_ci():
-    files = changed_files()
-    outside = [path for path in files if not path.startswith(".github/") and path not in ALLOWED_PRODUCT]
-    if outside:
-        fail("diff leaves the proof transport scope: %s" % outside)
-    github_only = [path for path in files if path.startswith(".github/")]
-    if not github_only:
-        fail("proof workflow files are missing")
+def test_workflow_gates_are_independent_of_the_branch_diff():
+    """The gate is the workflow text, not the files this pull request changes."""
     build_text = open(os.path.join(ROOT, ".github", "workflows", "build.yml"), encoding="utf-8").read()
     proof_text = open(os.path.join(ROOT, ".github", "workflows", "proof-compile.yml"), encoding="utf-8").read()
+    flight_text = open(os.path.join(ROOT, ".github", "workflows", "testflight.yml"), encoding="utf-8").read()
+    if on_keys(build_text) != ["push", "workflow_dispatch"] or on_keys(proof_text) != ["push", "workflow_dispatch"]:
+        fail("CI or Proof compile triggers are %s and %s" % (on_keys(build_text), on_keys(proof_text)))
+    if push_branches(build_text) != ["master"] or push_branches(proof_text) != ["master"]:
+        fail("push branches are %s and %s" % (push_branches(build_text), push_branches(proof_text)))
     build_patterns = push_patterns(build_text)
     proof_patterns = push_patterns(proof_text)
     if build_patterns != [".github/**"] or proof_patterns != [".github/**"]:
         fail("paths-ignore is %s and %s" % (build_patterns, proof_patterns))
-    if ci_gate.push_triggers(github_only, build_patterns):
-        fail("a .github-only push would start CI")
-    if ci_gate.push_triggers(github_only, proof_patterns):
-        fail("a .github-only push would start Proof compile")
-    if not ci_gate.push_triggers(list(ALLOWED_PRODUCT), proof_patterns):
-        fail("the transport source was ignored by Proof compile")
-    source = files + ["submodules/TelegramUI/Components/Tellomi/FeedScreen/BUILD"]
-    if not ci_gate.push_triggers(source, build_patterns):
-        fail("a source push was treated as ignored")
-    if ci_gate.package_job_runs("push", None):
-        fail("a source push would package")
-    if ci_gate.release_publishes("push", None, "refs/heads/master"):
-        fail("a source push would publish")
+    github_only = [
+        ".github/workflows/build.yml",
+        ".github/workflows/proof-compile.yml",
+        ".github/proof_bazel_test.py",
+    ]
+    business = ["submodules/TellomiDiscover/Sources/TellomiDiscoverReact.swift"]
+    if ci_gate.push_triggers(github_only, build_patterns) or ci_gate.push_triggers(github_only, proof_patterns):
+        fail("a .github-only push would start CI or Proof compile")
+    if not ci_gate.push_triggers(business, build_patterns) or not ci_gate.push_triggers(business, proof_patterns):
+        fail("a business source push was ignored")
+    if not ci_gate.push_triggers(github_only + business, proof_patterns):
+        fail("a push that also changes source was ignored")
+    if not ci_gate.push_triggers([], build_patterns):
+        fail("an empty compare was treated as ignored")
+    if ci_gate.package_job_runs("push", None) or ci_gate.package_job_runs("push", True):
+        fail("a push would package")
+    if ci_gate.package_job_runs("workflow_dispatch", False) or ci_gate.package_job_runs("workflow_dispatch", None):
+        fail("dispatch without package_release would package")
+    if not ci_gate.package_job_runs("workflow_dispatch", True):
+        fail("explicit package dispatch would not package")
+    if ci_gate.release_publishes("push", True, "refs/heads/master"):
+        fail("a push would publish")
     if ci_gate.release_publishes("workflow_dispatch", False, "refs/heads/master"):
         fail("dispatch without package_release would publish")
+    if ci_gate.release_publishes("workflow_dispatch", True, "refs/heads/release/ios"):
+        fail("a non-master ref would publish")
     if not ci_gate.release_publishes("workflow_dispatch", True, "refs/heads/master"):
-        fail("explicit package dispatch would not publish")
+        fail("explicit package dispatch on master would not publish")
+    if "github.event_name == 'workflow_dispatch' && inputs.package_release" not in build_text:
+        fail("the package job condition changed")
+    if "inputs.package_release && github.ref == 'refs/heads/master'" not in build_text:
+        fail("publish is not limited to master")
     if "contents: write" not in build_text:
         fail("CI contents permission changed")
     if "inputs.package_release" not in build_text or "default: false" not in build_text:
         fail("package_release is not an explicit default-off input")
-    flight = os.path.join(ROOT, ".github", "workflows", "testflight.yml")
-    if flight.replace(ROOT + "/", "") in files or ".github/workflows/testflight.yml" in files:
-        fail("TestFlight workflow is in the diff")
-    print("first-merge files:")
-    for path in files:
-        print("  %s" % path)
-    print("CI push triggers for .github-only: no")
-    print("Proof compile push triggers for .github-only: no")
-    print("transport source starts Proof compile: yes")
-    print("source push packages or publishes: no")
+    if "contents: write" in proof_text or "contents: read" not in proof_text:
+        fail("Proof compile contents permission changed")
+    host = (
+        '"$PROOF_BAZEL" --output_user_root=/private/var/tmp/_bazel_proof test '
+        "//submodules/TellomiDiscover:TellomiDiscoverTests --test_output=errors --announce_rc"
+    )
+    simulator = (
+        '"$PROOF_BAZEL" --output_user_root=/private/var/tmp/_bazel_proof test '
+        "//Tests/TellomiFeedProof:TellomiFeedProofTests --test_output=errors --announce_rc "
+        "--//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64"
+    )
+    if proof_text.count(host) != 1 or proof_text.count(simulator) != 1:
+        fail("proof host or simulator test command changed")
+    if proof_text.count('--target="//Tests/TellomiFeedProof:TellomiFeedProofTests"') != 1:
+        fail("proof compile target changed")
+    if "--configuration=debug_sim_arm64" not in proof_text:
+        fail("proof compile is not the simulator configuration")
+    if "test //Telegram:Telegram" in proof_text or "build //Telegram:Telegram" in proof_text:
+        fail("proof workflow builds the app target")
+    if proof_text.count("inputs.diagnostics_only != true") != 2:
+        fail("a proof test step is not skipped when diagnostics_only is set")
+    if push_branches(flight_text) != ["release/ios"]:
+        fail("TestFlight push branches are %s" % push_branches(flight_text))
+    flight_patterns = push_patterns(flight_text)
+    if flight_patterns != ["**/*.md", "docs/**"]:
+        fail("TestFlight paths-ignore is %s" % flight_patterns)
+    if ci_gate.push_triggers(["docs/TELLOMI_RULES.md"], flight_patterns):
+        fail("a docs push would start TestFlight")
+    if not ci_gate.push_triggers(business, flight_patterns):
+        fail("TestFlight path filter ignored a source file")
+    print("CI and Proof compile paths-ignore: .github/**")
+    print(".github-only push starts CI or Proof compile: no")
+    print("business source push starts CI and Proof compile: yes")
+    print("push or bare dispatch packages or publishes: no")
+    print("proof tests: host TellomiDiscoverTests and simulator FeedScreen, skipped for diagnostics_only")
+    print("TestFlight push branch: release/ios")
 
 
 def main():
     test_graph_boundary()
     test_make_lookup()
-    test_first_merge_does_not_run_old_ci()
+    test_workflow_gates_are_independent_of_the_branch_diff()
     print("proof_bazel tests passed")
 
 
