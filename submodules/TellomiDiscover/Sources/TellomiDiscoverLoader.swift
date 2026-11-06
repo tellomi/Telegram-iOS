@@ -87,18 +87,26 @@ public final class TellomiDiscoverLoader {
     }
 
     /// Logout. Image and feed calls already in flight are cancelled, and a later `performImage` does not send.
+    /// `run(loggedIn: true)` does not clear this. Only `noteSignedIn` does.
     public func signOut() {
         self.signedOut = true
         self.credential = nil
         self.cancel()
     }
 
+    /// A new login or a new account. An already-open screen that still has `loggedIn == true` must not call this.
+    public func noteSignedIn(account: String) {
+        let account = account.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !account.isEmpty else {
+            return
+        }
+        self.signedOut = false
+        self.credential = nil
+    }
+
     public func run(loggedIn: Bool, configuration: TellomiDiscoverConfiguration, operation: TellomiDiscoverOperation, completion: @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) {
         let ticket = self.generation
-        if loggedIn {
-            self.signedOut = false
-        }
-        guard loggedIn else {
+        guard loggedIn, !self.signedOut else {
             completion(.failure(.signedOut))
             return
         }

@@ -47,6 +47,7 @@ public final class TellomiFeedScreen: ViewController {
         }
         return ""
     }
+    private var notedAccount: String?
     private var loading = false
     private var loadingMore = false
     private var feedGeneration = 0
@@ -85,10 +86,17 @@ public final class TellomiFeedScreen: ViewController {
             }
             self.loggedOut = loggedOut
             if loggedOut {
+                self.notedAccount = nil
                 self.loader.signOut()
                 self.localPreviews.dropAll()
                 self.loading = false
                 self.loadingMore = false
+            } else {
+                let account = self.previewAccount
+                if !account.isEmpty, account != self.notedAccount {
+                    self.notedAccount = account
+                    self.loader.noteSignedIn(account: account)
+                }
             }
             self.sync(reload: false)
         })

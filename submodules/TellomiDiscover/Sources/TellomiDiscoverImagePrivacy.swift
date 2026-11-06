@@ -391,7 +391,9 @@ private func tellomiParseTIFF(_ data: Data) -> TellomiTIFFParsed? {
     }
     let offset = Int(tellomiU32(bytes, 4, little))
     var hadGPS = false
-    guard let root = tellomiParseTIFFIFD(bytes, offset, little: little, hadGPS: &hadGPS) else {
+    var seen: Set<Int> = []
+    var copied = 0
+    guard let root = tellomiParseTIFFIFD(bytes, offset, little: little, hadGPS: &hadGPS, depth: 0, seen: &seen, copied: &copied) else {
         return nil
     }
     return TellomiTIFFParsed(little: little, items: root.items, thumbnail: root.thumbnail, thumbnailJPEG: root.thumbnailJPEG, hadGPS: hadGPS)
@@ -403,13 +405,29 @@ private struct TellomiTIFFIFD {
     var thumbnailJPEG: Data?
 }
 
-private func tellomiParseTIFFIFD(_ bytes: [UInt8], _ offset: Int, little: Bool, hadGPS: inout Bool) -> TellomiTIFFIFD? {
-    guard offset >= 0, offset + 2 <= bytes.count else {
+private let tellomiTIFFMaxDepth = 8
+private let tellomiTIFFMaxEntries = 256
+private let tellomiTIFFMaxCopied = 1_048_576
+
+private func tellomiParseTIFFIFD(_ bytes: [UInt8], _ offset: Int, little: Bool, hadGPS: inout Bool, depth: Int, seen: inout Set<Int>, copied: inout Int) -> TellomiTIFFIFD? {
+    if depth > tellomiTIFFMaxDepth || copied > tellomiTIFFMaxCopied {
+        return nil
+    }
+    guard offset >= 0, offset <= bytes.count, bytes.count - offset >= 6 else {
+        return nil
+    }
+    if !seen.insert(offset).inserted {
         return nil
     }
     let count = Int(tellomiU16(bytes, offset, little))
+    if count < 0 || count > tellomiTIFFMaxEntries {
+        return nil
+    }
+    if count > (bytes.count - offset - 6) / 12 {
+        return nil
+    }
     let directoryEnd = offset + 2 + count * 12
-    guard count < 10_000, directoryEnd + 4 <= bytes.count else {
+    guard directoryEnd >= offset, directoryEnd + 4 <= bytes.count else {
         return nil
     }
     var items: [TellomiTIFFItem] = []
@@ -417,6 +435,9 @@ private func tellomiParseTIFFIFD(_ bytes: [UInt8], _ offset: Int, little: Bool, 
     var jpegLength: Int?
     for entry in 0 ..< count {
         let start = offset + 2 + entry * 12
+        guard start >= 0, start + 12 <= bytes.count else {
+            return nil
+        }
         let tag = tellomiU16(bytes, start, little)
         let type = tellomiU16(bytes, start + 2, little)
         let components = tellomiU32(bytes, start + 4, little)
@@ -426,17 +447,20 @@ private func tellomiParseTIFFIFD(_ bytes: [UInt8], _ offset: Int, little: Bool, 
         }
         if tag == 0x8769 || tag == 0xA005 {
             let nestedOffset = Int(tellomiU32(bytes, start + 8, little))
-            guard let nested = tellomiParseTIFFIFD(bytes, nestedOffset, little: little, hadGPS: &hadGPS) else {
+            guard let nested = tellomiParseTIFFIFD(bytes, nestedOffset, little: little, hadGPS: &hadGPS, depth: depth + 1, seen: &seen, copied: &copied) else {
                 return nil
             }
             items.append(TellomiTIFFItem(verbatim: nil, tag: tag, type: type, count: components, external: nil, nested: nested.items))
             continue
         }
-        guard let unit = tellomiTIFFUnitSize(type) else {
+        guard let unit = tellomiTIFFUnitSize(type), unit > 0 else {
+            return nil
+        }
+        if components > 1_000_000 {
             return nil
         }
         let size = unit * Int(components)
-        guard size >= 0, components <= 50_000_000 else {
+        guard size >= 0, size <= bytes.count, copied <= tellomiTIFFMaxCopied - size else {
             return nil
         }
         if tag == 0x0201 {
@@ -451,20 +475,22 @@ private func tellomiParseTIFFIFD(_ bytes: [UInt8], _ offset: Int, little: Bool, 
             items.append(TellomiTIFFItem(verbatim: Data(bytes[start ..< start + 12]), tag: tag, type: type, count: components, external: nil, nested: nil))
         } else {
             let dataOffset = Int(tellomiU32(bytes, start + 8, little))
-            guard dataOffset >= 0, dataOffset + size <= bytes.count else {
+            guard dataOffset >= 0, dataOffset <= bytes.count, size <= bytes.count - dataOffset else {
                 return nil
             }
+            copied += size
             items.append(TellomiTIFFItem(verbatim: nil, tag: tag, type: type, count: components, external: Data(bytes[dataOffset ..< dataOffset + size]), nested: nil))
         }
     }
     let next = Int(tellomiU32(bytes, directoryEnd, little))
     var thumbnail: [TellomiTIFFItem] = []
     var thumbnailJPEG: Data?
-    if let jpegOffset, let jpegLength, jpegOffset >= 0, jpegLength >= 0, jpegOffset + jpegLength <= bytes.count {
+    if let jpegOffset, let jpegLength, jpegOffset >= 0, jpegLength >= 0, jpegOffset <= bytes.count, jpegLength <= bytes.count - jpegOffset, copied <= tellomiTIFFMaxCopied - jpegLength {
+        copied += jpegLength
         thumbnailJPEG = Data(bytes[jpegOffset ..< jpegOffset + jpegLength])
     }
     if next != 0 {
-        guard let linked = tellomiParseTIFFIFD(bytes, next, little: little, hadGPS: &hadGPS) else {
+        guard let linked = tellomiParseTIFFIFD(bytes, next, little: little, hadGPS: &hadGPS, depth: depth + 1, seen: &seen, copied: &copied) else {
             return nil
         }
         thumbnail = linked.items

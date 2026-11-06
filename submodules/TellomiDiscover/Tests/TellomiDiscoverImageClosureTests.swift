@@ -213,6 +213,68 @@ final class TellomiDiscoverImageClosureTests: XCTestCase {
         self.redirectProcess?.terminate()
     }
 
+    func testSignedOutDetailCannotReopenTheLoader() {
+        var calls = 0
+        let loader = TellomiDiscoverLoader(now: { 0 }, credential: TellomiDiscoverCredential(token: "jwt-a", expires: 10_000, region: "cn"), fetchCredential: { completion in
+            completion(.success(TellomiDiscoverCredential(token: "jwt-b", expires: 10_000, region: "cn")))
+        }, http: { _, completion in
+            calls += 1
+            completion(.success(TellomiDiscoverHTTPResult(status: 204, body: Data(), headers: [:])))
+        })
+        let configuration = TellomiDiscoverConfiguration(enabled: true, baseURL: self.base)
+        let upload = TellomiDiscoverImageWireCall(method: "POST", url: URL(string: "https://feed.example/v1/feed/media/uploads")!, body: nil, authorizes: true, headers: [:])
+        loader.noteSignedIn(account: "account-a")
+        let opened = expectation(description: "opened")
+        _ = loader.performImage(loggedIn: true, configuration: configuration, call: upload) { result in
+            guard case .success = result else {
+                return XCTFail("expected the signed-in upload")
+            }
+            opened.fulfill()
+        }
+        wait(for: [opened], timeout: 1)
+        XCTAssertEqual(calls, 1)
+        let staleLoggedIn = true
+        loader.signOut()
+        let blockedRun = expectation(description: "blocked-run")
+        loader.run(loggedIn: staleLoggedIn, configuration: configuration, operation: .status) { result in
+            guard case .failure(.signedOut) = result else {
+                return XCTFail("a stale detail must not clear sign-out")
+            }
+            blockedRun.fulfill()
+        }
+        wait(for: [blockedRun], timeout: 1)
+        let blockedImage = expectation(description: "blocked-image")
+        _ = loader.performImage(loggedIn: staleLoggedIn, configuration: configuration, call: upload) { result in
+            guard case .failure(.signedOut) = result else {
+                return XCTFail("image upload stayed open after sign-out")
+            }
+            blockedImage.fulfill()
+        }
+        wait(for: [blockedImage], timeout: 1)
+        XCTAssertEqual(calls, 1)
+        loader.noteSignedIn(account: "account-b")
+        let switched = expectation(description: "switched")
+        _ = loader.performImage(loggedIn: true, configuration: configuration, call: upload) { result in
+            guard case .success = result else {
+                return XCTFail("a new account login should allow upload")
+            }
+            switched.fulfill()
+        }
+        wait(for: [switched], timeout: 1)
+        XCTAssertEqual(calls, 2)
+    }
+
+    func testCyclicAndDeepExifIsRejected() {
+        let started = Date()
+        XCTAssertNil(tellomiDiscoverStripImageLocation(self.jpeg(tiff: self.cyclicTIFF(), xmp: nil)))
+        XCTAssertNil(tellomiDiscoverStripImageLocation(self.jpeg(tiff: self.deepTIFF(links: 40), xmp: nil)))
+        XCTAssertNil(tellomiDiscoverStripImageLocation(self.jpeg(tiff: self.hugeCountTIFF(), xmp: nil)))
+        XCTAssertNil(tellomiDiscoverStripImageLocation(self.jpeg(tiff: self.offsetPastEndTIFF(), xmp: nil)))
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1)
+        let clean = tellomiDiscoverStripImageLocation(self.jpeg(tiff: self.tiff(gps: false), xmp: nil))
+        XCTAssertEqual(clean, self.jpeg(tiff: self.tiff(gps: false), xmp: nil))
+    }
+
     #if os(Linux)
     static var allTests: [(String, (TellomiDiscoverImageClosureTests) -> () throws -> Void)] {
         return [
@@ -220,7 +282,9 @@ final class TellomiDiscoverImageClosureTests: XCTestCase {
             ("testJPEGPNGandWebPDropLocationWithoutReencodingPixels", testJPEGPNGandWebPDropLocationWithoutReencodingPixels),
             ("testCloseBackgroundAndLostCreateDoNotKeepBytesOrInventALocation", testCloseBackgroundAndLostCreateDoNotKeepBytesOrInventALocation),
             ("testSignOutStopsImageRequestsAndRedirectKeepsBearerOnTheOrigin", testSignOutStopsImageRequestsAndRedirectKeepsBearerOnTheOrigin),
-            ("testRedirectGateIsTheURLSessionDelegate", testRedirectGateIsTheURLSessionDelegate)
+            ("testRedirectGateIsTheURLSessionDelegate", testRedirectGateIsTheURLSessionDelegate),
+            ("testSignedOutDetailCannotReopenTheLoader", testSignedOutDetailCannotReopenTheLoader),
+            ("testCyclicAndDeepExifIsRejected", testCyclicAndDeepExifIsRejected)
         ]
     }
     #endif
@@ -281,6 +345,33 @@ c.close()
         }
         let text = String(data: collected, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return UInt16(text) ?? 0
+    }
+
+    private func cyclicTIFF() -> Data {
+        var data = Data([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00])
+        data.append(contentsOf: [0x00, 0x00])
+        data.append(contentsOf: [0x08, 0x00, 0x00, 0x00])
+        return data
+    }
+
+    private func deepTIFF(links: Int) -> Data {
+        var data = Data([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00])
+        for index in 0 ..< links {
+            data.append(contentsOf: [0x00, 0x00])
+            let next = index + 1 < links ? 8 + (index + 1) * 6 : 0
+            data.append(contentsOf: [UInt8(next & 0xFF), UInt8((next >> 8) & 0xFF), UInt8((next >> 16) & 0xFF), UInt8((next >> 24) & 0xFF)])
+        }
+        return data
+    }
+
+    private func hugeCountTIFF() -> Data {
+        var data = Data([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00])
+        data.append(contentsOf: [0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00])
+        return data
+    }
+
+    private func offsetPastEndTIFF() -> Data {
+        return Data([0x49, 0x49, 0x2A, 0x00, 0xFF, 0xFF, 0x00, 0x00])
     }
 
     private func tiff(gps: Bool) -> Data {
