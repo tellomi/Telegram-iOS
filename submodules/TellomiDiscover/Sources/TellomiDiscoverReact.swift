@@ -190,6 +190,23 @@ public final class TellomiDiscoverLike {
     }
 }
 
+/// Detail draws only the comment thread. Once the thread is bound, an empty
+/// visible and pending list stays empty. The card snapshot is not drawn again.
+public func tellomiDiscoverDetailCommentRows(bound: Bool, visible: [TellomiDiscoverComment], pending: [TellomiDiscoverComment]) -> [TellomiDiscoverComment] {
+    if !bound {
+        return []
+    }
+    return visible + pending
+}
+
+/// A pending or held comment was never added to the public total.
+public func tellomiDiscoverPublicCountAfterDelete(count: Int, wasVisible: Bool, deleted: Bool) -> Int {
+    guard deleted, wasVisible else {
+        return count
+    }
+    return max(0, count - 1)
+}
+
 public func tellomiDiscoverPermanentLikeFailure(_ error: TellomiDiscoverClientError) -> Bool {
     switch error {
     case .notFound, .hidden, .unauthorized, .profileRequired, .invalidText, .invalidNonce, .invalidParent, .commentsClosed, .replyNotAllowed, .harassmentGuard, .notCommentable, .badCursor:

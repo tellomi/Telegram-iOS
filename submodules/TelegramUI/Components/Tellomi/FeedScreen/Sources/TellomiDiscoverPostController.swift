@@ -32,6 +32,7 @@ final class TellomiDiscoverPostController: ViewController {
     private let surface: String
     private var like: TellomiDiscoverLike?
     private let comments = TellomiDiscoverComments()
+    private var commentsBound = false
     private let moreCommentsButton = UIButton(type: .system)
     private var imageViews: [UIImageView] = []
     private var imageTasks: [URLSessionDataTask] = []
@@ -329,8 +330,8 @@ final class TellomiDiscoverPostController: ViewController {
             self.linkCard.hide()
         }
         self.installPoll(self.post?.poll, copy: copy)
-        let rows = self.comments.visibleRows() + self.comments.pendingRows()
-        self.installComments(rows.isEmpty ? (self.post?.comments ?? []) : rows, color: self.presentationData.theme.list.itemPrimaryTextColor)
+        let rows = tellomiDiscoverDetailCommentRows(bound: self.commentsBound, visible: self.comments.visibleRows(), pending: self.comments.pendingRows())
+        self.installComments(rows, color: self.presentationData.theme.list.itemPrimaryTextColor)
         if let post = self.post {
             if self.like == nil || self.like?.postId != post.id {
                 self.like = TellomiDiscoverLike(postId: post.id, liked: post.liked, count: post.likeCount, hidden: post.likesHidden, surface: self.surface)
@@ -410,6 +411,7 @@ final class TellomiDiscoverPostController: ViewController {
     }
 
     func openComments() {
+        self.commentsBound = true
         let load = self.comments.open(postId: self.postId)
         self.loadComments(load)
     }
@@ -429,6 +431,7 @@ final class TellomiDiscoverPostController: ViewController {
     }
 
     func deleteComment(_ commentId: String) {
+        let wasVisible = self.comments.visibleRows().contains { $0.id == commentId }
         guard let request = self.comments.delete(commentId) else {
             return
         }
@@ -442,8 +445,9 @@ final class TellomiDiscoverPostController: ViewController {
             } else {
                 ok = false
             }
-            if self.comments.finishDelete(generation: request.generation, version: request.version, commentId: request.commentId, ok: ok), ok, var post = self.post {
-                post.commentCount = max(0, post.commentCount - 1)
+            let deleted = self.comments.finishDelete(generation: request.generation, version: request.version, commentId: request.commentId, ok: ok)
+            if var post = self.post {
+                post.commentCount = tellomiDiscoverPublicCountAfterDelete(count: post.commentCount, wasVisible: wasVisible, deleted: deleted)
                 self.post = post
             }
             self.apply()
