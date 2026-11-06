@@ -292,10 +292,10 @@ final class TellomiDiscoverImageClosureTests: XCTestCase, @unchecked Sendable {
     }
 
     /// `tellomiDiscoverBeginTransport` is what `TellomiDiscoverHTTPS.start` calls.
-    /// http never opens a task. https cancel closes the slot before URLProtocol's
-    /// late redirect, so that redirect is not a successful response.
-    /// This does not present PhotosUI and does not scroll the detail view.
-    func testProductionTransportRefusesHTTPAndDropsALateRedirect() {
+    /// http never opens a task. The slot closes once, so a second completion is dropped.
+    /// Linux corelibs URLProtocol aborts if a test injects a 302, so the late
+    /// redirect itself is Darwin-only and is not claimed here.
+    func testProductionTransportRefusesHTTPAndClosesTheSlot() {
         let refused = expectation(description: "http refused")
         let host = TellomiRedirectHost()
         let http = TellomiDiscoverHTTPCall(method: "POST", url: URL(string: "http://127.0.0.1/v1/feed/media/uploads")!, body: nil, token: "jwt", authorizes: true, contentType: nil)
@@ -307,7 +307,14 @@ final class TellomiDiscoverImageClosureTests: XCTestCase, @unchecked Sendable {
         wait(for: [refused], timeout: 1)
         XCTAssertEqual(host.calls, 1)
         XCTAssertEqual(host.successCount, 0)
+        let slot = TellomiDiscoverTransportSlot()
+        XCTAssertTrue(slot.close())
+        XCTAssertFalse(slot.close())
+    }
 
+#if !os(Linux)
+    /// Darwin URLSession only. Do not compile this on Linux: corelibs fatals on a 302.
+    func testProductionTransportDropsLateRedirectOnDarwin() {
         TellomiLateRedirectProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TellomiLateRedirectProtocol.self]
@@ -329,6 +336,7 @@ final class TellomiDiscoverImageClosureTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(TellomiLateRedirectProtocol.didAttemptRedirectAfterStop)
         session.invalidateAndCancel()
     }
+#endif
 
     func testSignedOutDetailCannotReopenTheLoader() {
         var calls = 0
@@ -400,7 +408,7 @@ final class TellomiDiscoverImageClosureTests: XCTestCase, @unchecked Sendable {
             ("testCloseBackgroundAndLostCreateDoNotKeepBytesOrInventALocation", testCloseBackgroundAndLostCreateDoNotKeepBytesOrInventALocation),
             ("testSignOutStopsImageRequestsAndRedirectKeepsBearerOnTheOrigin", testSignOutStopsImageRequestsAndRedirectKeepsBearerOnTheOrigin),
             ("testRedirectGateIsTheURLSessionDelegate", testRedirectGateIsTheURLSessionDelegate),
-            ("testProductionTransportRefusesHTTPAndDropsALateRedirect", testProductionTransportRefusesHTTPAndDropsALateRedirect),
+            ("testProductionTransportRefusesHTTPAndClosesTheSlot", testProductionTransportRefusesHTTPAndClosesTheSlot),
             ("testSignedOutDetailCannotReopenTheLoader", testSignedOutDetailCannotReopenTheLoader),
             ("testCyclicAndDeepExifIsRejected", testCyclicAndDeepExifIsRejected)
         ]
