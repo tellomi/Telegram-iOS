@@ -924,3 +924,19 @@ Master CI on `969315d5df` failed `//submodules/ChatListUI:ChatListUI` while buil
 | --- | --- |
 | `submodules/ChatListUI/Sources/Node/ChatListNodeLocation.swift` | The scroll position keeps the engine index. The view tracker still receives the unwrapped `ChatListIndex`. |
 | `submodules/ChatListUI/Sources/Node/ChatListViewTransition.swift` | Both scroll comparisons use the engine index directly. |
+
+## Lock-screen sender avatar
+
+A message notification on the lock screen and in Notification Center was drawing the Tellomi app icon. Upstream Telegram draws the sender's photo there, or the colored letter avatar when the peer has no photo. The notification service already does the same work as upstream: `peerAvatar` builds an `INImage` from the cached profile photo (or the letter avatar), `addSenderInfo` puts it on an `INSendMessageIntent`, and `generate` calls `UNNotificationContent.updating(from:)`. `Avatar/TellomiMark` is not on this path. It is only the in-app fallback for service users 777000 and 333000 when they have no photo.
+
+iOS uses that intent image as the row icon only for a communication notification. That presentation requires `com.apple.developer.usernotifications.communication` on the main app. `Telegram/BUILD` used to emit the key only for `ph.telegra.Telegraph` and `org.telegram.Telegram-iOS`. Tellomi's bundle id is `app.tellomi.chat`, so the signed app never had the key, `updating(from:)` did not change the icon, and iOS kept the app icon. The notification service extension does not need the key. Upstream puts it on the app only. The extension Info.plist already lists `INSendMessageIntent`, and the app Info.plist already lists it under `NSUserActivityTypes`.
+
+The key is now signed when the main provisioning profile contains it. `prepare_appstore_signing.py` enables App ID capability `USERNOTIFICATIONS_COMMUNICATION` before creating the profile. If the API refuses the capability, the script warns and continues, and the profile check decides the binary: a profile without the key omits the entitlement so codesign still succeeds, and that build still shows the app icon. An unsigned simulator build includes the entitlement. CarPlay, unrestricted VoIP, and the other official-only entitlements are unchanged.
+
+| File | Change |
+| --- | --- |
+| `Telegram/BUILD` | Communication notifications follow `telegram_communication_notifications` as well as the official bundle ids. |
+| `build-system/Make/BuildConfiguration.py`, `build-system/Make/Make.py` | The flag is true when the main profile grants the entitlement, and on `--disableProvisioningProfiles`. |
+| `build-system/example-configuration/variables.bzl` | The checked-in example sets the flag true. |
+| `Tellomi/extension-suffixes.json`, `Tellomi/prepare_appstore_signing.py` | The main App ID requests `USERNOTIFICATIONS_COMMUNICATION`. A downloaded profile without the entitlement is reported and does not fail the signing run. |
+| `docs/TELLOMI.md` | The entitlement is no longer listed as absent. |

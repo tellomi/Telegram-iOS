@@ -71,7 +71,7 @@ Teamgram's server does not check `api_id` or `api_hash` ([teamgram-server#120](h
 
 The legacy Xcode configs `Telegram/Telegram-iOS/Config-AppStoreLLC.xcconfig` and `Config-Fork.xcconfig` carry the same name, bundle id and placeholders. Bazel is the build that ships.
 
-Because the bundle id is not `ph.telegra.Telegraph`, `Telegram/BUILD` drops the entitlements that exist only for the official client: CarPlay, Apple Pay merchant ids, unrestricted VoIP, communication notifications, Sign in with Apple, and the continued-processing GPU entitlement. Siri and iCloud are off via the flags above. Associated domains are `applinks:tell.cc` and `webcredentials:tell.cc` (see Public links).
+Because the bundle id is not `ph.telegra.Telegraph`, `Telegram/BUILD` drops the entitlements that exist only for the official client: CarPlay, Apple Pay merchant ids, unrestricted VoIP, Sign in with Apple, and the continued-processing GPU entitlement. Communication notifications stay. That entitlement (`com.apple.developer.usernotifications.communication`) is what makes iOS draw the sender avatar on the lock screen instead of the app icon. A signed build includes it when the provisioning profile contains the key. `prepare_appstore_signing.py` enables the App ID capability `USERNOTIFICATIONS_COMMUNICATION` before it creates the profile. An unsigned simulator build (`--disableProvisioningProfiles`) includes it as well. A profile created before the capability was enabled does not, and that build keeps the app icon so codesign can succeed. Siri and iCloud are off via the flags above. Associated domains are `applinks:tell.cc` and `webcredentials:tell.cc` (see Public links).
 
 System permission prompts (the `InfoPlist.strings` files, plus the English strings in the plist) say Tellomi, including the Arabic, Persian and Korean product names that override the home-screen title. That was a name swap in those files only.
 
@@ -158,7 +158,7 @@ These seven ids are what `Make.py build --configuration=release_arm64` signs. Th
 
 | Bundle id | Signed entitlements | App Group | Capabilities on the App ID |
 | --- | --- | --- | --- |
-| `app.tellomi.chat` | `aps-environment` = `production` (Make.py copies this out of the profile and refuses to build if it is missing), `com.apple.security.application-groups` = `group.app.tellomi.chat`, `application-identifier` = `{TEAMID}.app.tellomi.chat`, associated domains `applinks:tell.cc` and `webcredentials:tell.cc` | `group.app.tellomi.chat` | Push Notifications, App Groups, Associated Domains |
+| `app.tellomi.chat` | `aps-environment` = `production` (Make.py copies this out of the profile and refuses to build if it is missing), `com.apple.developer.usernotifications.communication` when the profile contains that key, `com.apple.security.application-groups` = `group.app.tellomi.chat`, `application-identifier` = `{TEAMID}.app.tellomi.chat`, associated domains `applinks:tell.cc` and `webcredentials:tell.cc` | `group.app.tellomi.chat` | Push Notifications, App Groups, Associated Domains, Communication Notifications (`USERNOTIFICATIONS_COMMUNICATION`) |
 | `app.tellomi.chat.Share` | App Group only | `group.app.tellomi.chat` | App Groups |
 | `app.tellomi.chat.NotificationContent` | App Group only | `group.app.tellomi.chat` | App Groups |
 | `app.tellomi.chat.NotificationService` | App Group only | `group.app.tellomi.chat` | App Groups |
@@ -172,7 +172,7 @@ Keychain group used by `BuildConfig.keychainAccessGroup`: `{TEAMID}.app.tellomi.
 
 iCloud container: none. `enable_icloud` is false, so `TelegramEntitlements` does not contain `com.apple.developer.icloud-container-identifiers`. Turning the flag on would add container `iCloud.app.tellomi.chat` and ubiquity key-value store `{TEAMID}.app.tellomi.chat`.
 
-Also absent with this bundle id and these flags: Siri on the main app, Sign in with Apple, Apple Pay, CarPlay, unrestricted VoIP, communication notifications, notification filtering, and the continued-processing GPU entitlement. Those fragments in `Telegram/BUILD` are empty unless the bundle id is an official Telegram id or the JSON flag is turned on. Associated domains are present and name `tell.cc` only.
+Also absent with this bundle id and these flags: Siri on the main app, Sign in with Apple, Apple Pay, CarPlay, unrestricted VoIP, notification filtering, and the continued-processing GPU entitlement. Those fragments in `Telegram/BUILD` are empty unless the bundle id is an official Telegram id or the JSON flag is turned on. Communication notifications are the exception: the fragment is included for an official Telegram id, and for Tellomi when `telegram_communication_notifications` is true. Associated domains are present and name `tell.cc` only.
 
 The main app's Info.plist background modes, which are not separate App IDs, are `audio`, `fetch`, `location`, `remote-notification`, `voip`, and `processing`.
 
