@@ -157,7 +157,7 @@ public final class TellomiFeedScreen: ViewController {
         tellomiPresentDiscoverPostMenu(host: self, context: self.context, loggedIn: !self.loggedOut, configuration: self.configuration(), loader: self.loader, postId: id, post: post, onReposted: { [weak self] reposted in
             self?.noteRepost(id: id, reposted: reposted)
         }, onQuote: { [weak self] in
-            self?.composePressed(quoteOf: id, quotePreview: post?.text ?? "")
+            self?.presentCompose(quoteOf: id, quotePreview: post?.text ?? "")
         })
     }
 
@@ -659,10 +659,10 @@ public final class TellomiFeedScreen: ViewController {
     }
 
     @objc private func composePressed() {
-        self.composePressed(quoteOf: nil, quotePreview: "")
+        self.presentCompose(quoteOf: nil, quotePreview: "")
     }
 
-    private func composePressed(quoteOf: String?, quotePreview: String) {
+    private func presentCompose(quoteOf: String?, quotePreview: String) {
         let configuration = self.configuration()
         guard tellomiDiscoverChrome(loggedIn: !self.loggedOut, enabled: configuration.enabled, kind: self.kind, openedPostId: nil, failed: false, city: self.cityCode).showsCompose else {
             return
