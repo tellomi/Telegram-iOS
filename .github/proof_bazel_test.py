@@ -126,7 +126,8 @@ def pairs(keys, values=None):
 
 def safe_document(process_text=None, signing_value="", omit_keys=(),
                   process_arguments=None, dossier_text=None, dossier_params=None,
-                  include_dossier_write=True, artifact_path=None):
+                  include_dossier_write=True, include_process_template=False,
+                  artifact_path=None):
     process_text = PROCESS_TEMPLATE if process_text is None else process_text
     builder = Builder()
     if include_dossier_write:
@@ -175,17 +176,18 @@ def safe_document(process_text=None, signing_value="", omit_keys=(),
         template="ARTIFACT: " + (artifact_path or RUNNER_OUT),
         substitutions=pairs(second),
     )
-    sign_keys = placeholders(process_text)
-    sign_values = {key: "filled" for key in sign_keys}
-    if "%signing_command_lines%" in sign_keys:
-        sign_values["%signing_command_lines%"] = signing_value
-    sign_pairs = [item for item in pairs(sign_keys, sign_values) if item["key"] not in omit_keys]
-    builder.add(
-        "TemplateExpand",
-        [SIGN_SCRIPT],
-        template=process_text,
-        substitutions=sign_pairs,
-    )
+    if include_process_template:
+        sign_keys = placeholders(process_text)
+        sign_values = {key: "filled" for key in sign_keys}
+        if "%signing_command_lines%" in sign_keys:
+            sign_values["%signing_command_lines%"] = signing_value
+        sign_pairs = [item for item in pairs(sign_keys, sign_values) if item["key"] not in omit_keys]
+        builder.add(
+            "TemplateExpand",
+            [SIGN_SCRIPT],
+            template=process_text,
+            substitutions=sign_pairs,
+        )
     return builder.dumps()
 
 
@@ -198,6 +200,7 @@ HARDCODED_TEMPLATE = PROCESS_TEMPLATE.replace(
 HARDCODED_GRAPH = safe_document(
     process_text=HARDCODED_TEMPLATE,
     process_arguments=[SIGN_SCRIPT],
+    include_process_template=True,
 )
 HIDDEN_SCRIPT = HARDCODED_GRAPH
 
@@ -256,26 +259,45 @@ def test_graph_boundary():
         fail("unit-test executable template is not an ARTIFACT link")
 
     flags = flags_of()
-    expect_allow(SAFE_GRAPH, flags, "real runner and process_and_sign templates")
+    unsigned = json.loads(SAFE_GRAPH)
+    if any(
+        "%signing_command_lines%" in action.get("templateContent", "")
+        for action in unsigned["actions"]
+    ):
+        fail("the unsigned cp graph still contains a process_and_sign template")
+    expect_allow(SAFE_GRAPH, flags, "debug cp -p with runner and dossier and no process template")
+    expect_allow(
+        safe_document(include_process_template=True),
+        flags,
+        "a present process_and_sign template with empty signing lines",
+    )
     param_only = safe_document(include_dossier_write=False, dossier_params=list(DOSSIER_LINES))
     expect_allow(param_only, flags, "dossier arguments from a param file")
+
+    missing_script = expect_deny(
+        safe_document(process_arguments=[SIGN_SCRIPT]),
+        flags,
+        "ProcessAndSign script with no template body",
+    )
+    if not any("script contents are not in the graph" in reason for reason in missing_script):
+        fail("missing script body was not named: %s" % missing_script)
 
     hardcoded = expect_deny(
         HARDCODED_GRAPH, flags, "hardcoded codesign with empty signing substitution and no should_sign")
     if not any("template body contains /usr/bin/codesign" in reason for reason in hardcoded):
         fail("hardcoded template codesign was not named: %s" % hardcoded)
     expect_deny(
-        safe_document(process_text=HARDCODED_TEMPLATE),
+        safe_document(process_text=HARDCODED_TEMPLATE, include_process_template=True),
         flags,
         "hardcoded codesign while ProcessAndSign is only cp -p",
     )
     expect_allow(
-        safe_document(omit_keys=("%signing_command_lines%",)),
+        safe_document(omit_keys=("%signing_command_lines%",), include_process_template=True),
         flags,
         "empty signing substitution omitted by the json printer",
     )
     expect_deny(
-        safe_document(omit_keys=("%output_path%",)),
+        safe_document(omit_keys=("%output_path%",), include_process_template=True),
         flags,
         "a required template placeholder is absent",
     )
@@ -284,6 +306,7 @@ def test_graph_boundary():
             process_text=HARDCODED_TEMPLATE,
             omit_keys=("%signing_command_lines%",),
             process_arguments=[SIGN_SCRIPT],
+            include_process_template=True,
         ),
         flags,
         "hardcoded codesign when the empty signing substitution is omitted",
@@ -303,7 +326,7 @@ def test_graph_boundary():
         "dossier @file with no contents",
     )
     expect_deny(
-        safe_document(process_arguments=[SIGN_SCRIPT, "should_sign"]),
+        safe_document(process_arguments=[SIGN_SCRIPT, "should_sign"], include_process_template=True),
         flags,
         "should_sign argument",
     )

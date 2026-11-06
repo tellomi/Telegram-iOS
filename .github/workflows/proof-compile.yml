@@ -20,8 +20,11 @@
 # Bazel 9.2 jsonproto with --include_param_files and
 # --include_file_write_contents. Template bodies stay inside templateContent,
 # including blank lines and copyright comments, and ARTIFACT: links are
-# expanded before the signing check. An empty, truncated, or incomplete graph
-# is not treated as unsigned. A build log grep is not that boundary.
+# expanded before the signing check. The unsigned debug path's ProcessAndSign
+# is cp -p and returns before expand_template, so that template is not
+# required. A script that is executed still needs its expanded body. An empty,
+# truncated, or incomplete graph is not treated as unsigned. A build log grep
+# is not that boundary.
 # CODE_SIGNING_ALLOWED is not passed. It is an Xcode setting.
 #
 # versions.json requires Xcode 27.1 and macOS 27. The job fails if sw_vers

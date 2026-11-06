@@ -25,10 +25,15 @@ rules_apple 485016eb:
 - ios_test_runner and the unit-test executable are expand_template actions.
   The executable's template is a derived artifact, so getTemplateContent
   returns "ARTIFACT: <exec path>" and the body is the earlier expansion.
-- process_and_sign.sh.template is expanded for every bundle. Signing commands
-  are the %signing_command_lines% substitution. The template body itself has
-  no /usr/bin/codesign. A body that hardcodes that path still signs when the
-  substitution is empty.
+- process_and_sign.sh.template is expanded only when there is signing work,
+  a post-processor, or compression. codesigning_support.bzl registers the
+  cp -p ProcessAndSign and returns before expand_template otherwise. Debug
+  simulator builds do not compress, and the skip-codesign feature leaves
+  signing_command_lines empty, so that template action is absent. A direct
+  cp does not need it. A ProcessAndSign that executes a script, or a
+  template that is present, is audited from the expanded body. The real
+  template has %signing_command_lines% and no /usr/bin/codesign. A body
+  that hardcodes that path still signs when the substitution is empty.
 - Empty ProcessAndSign is /bin/bash -c "cp -p ...". should_sign runs the
   generated script.
 - GenerateCodesigningDossier writes dossier_arguments with actions.write.
@@ -401,12 +406,6 @@ def _runner_source(action):
     )
 
 
-def _process_source(action):
-    return "%signing_command_lines%" in (action.template_content or "") and (
-        "readonly OUTPUT_PATH=%output_path%" in (action.template_content or "")
-    )
-
-
 def evaluate_graph(text, flags):
     """Return whether this configured graph may be executed."""
     reasons = []
@@ -430,7 +429,6 @@ def evaluate_graph(text, flags):
 
     saw_runner = False
     saw_runner_executable = False
-    saw_process_template = False
     for action in actions:
         if action.mnemonic == "FileWrite" and not action.saw_file_contents:
             reasons.append("FileWrite fileContents is missing")
@@ -477,8 +475,6 @@ def evaluate_graph(text, flags):
         elif action.mnemonic == "TemplateExpand":
             if _runner_source(action):
                 saw_runner = True
-            if _process_source(action):
-                saw_process_template = True
             if (action.template_content or "").startswith("ARTIFACT: "):
                 produced = (action.template_content or "")[len("ARTIFACT: "):]
                 producer = next((
@@ -508,8 +504,6 @@ def evaluate_graph(text, flags):
             "ios_test_runner expand_template chain is missing; "
             "the unit-test executable template was not audited"
         )
-    if not saw_process_template:
-        reasons.append("process_and_sign template is missing")
     if not any(action.mnemonic == "ProcessAndSign" for action in actions):
         reasons.append("ProcessAndSign is absent")
     if not any(action.mnemonic == "GenerateCodesigningDossier" for action in actions):
