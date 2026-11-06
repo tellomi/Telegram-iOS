@@ -1778,10 +1778,30 @@ public func privacyAndSecurityController(
     }
         
     setupEmailImpl = { emailPattern in
-        let controller = loginEmailSetupController(context: context, blocking: false, emailPattern: emailPattern, navigationController: getNavigationControllerImpl?(), completion: {
-            updatedTwoStepAuthData?()
-        }, dismiss: {})
-        pushControllerImpl?(controller, true)
+        let peerId = context.account.peerId
+        let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+        |> deliverOnMainQueue).start(next: { peer in
+            let phone: String?
+            if case let .user(user) = peer {
+                phone = user.phone
+            } else {
+                phone = nil
+            }
+            let action = tellomiSettingsEmailAction(TellomiEmailChannels(phone: phone, cachedSignInAddress: tellomiStoredAccountLoginEmail(peerId: peerId), loginEmailPattern: emailPattern, recoveryEmailPattern: nil))
+            switch action {
+            case let .showIdentity(_, fullAddress):
+                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                let pack = tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)
+                let copy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: pack)
+                let notice = textAlertController(context: context, title: copy.signInEmailTitle, text: fullAddress == nil ? copy.signInEmailMaskBody : copy.signInEmailBody, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})])
+                presentControllerImpl?(notice)
+            case .phoneAccountLoginEmail:
+                let controller = loginEmailSetupController(context: context, blocking: false, emailPattern: emailPattern, navigationController: getNavigationControllerImpl?(), completion: {
+                    updatedTwoStepAuthData?()
+                }, dismiss: {})
+                pushControllerImpl?(controller, true)
+            }
+        })
     }
     
     if let focusOnItemTag {

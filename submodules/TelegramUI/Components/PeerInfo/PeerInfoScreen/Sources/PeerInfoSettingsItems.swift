@@ -31,7 +31,7 @@ enum SettingsSection: Int, CaseIterable {
     case support
 }
 
-func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
+func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool, loginEmailPattern: String? = nil) -> [(AnyHashable, [PeerInfoScreenItem])] {
     guard let data = data else {
         return []
     }
@@ -484,20 +484,27 @@ func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, conte
                 interaction.openSettings(.phoneNumber)
             }))
         }
-        if let email = contact.email, !email.isEmpty {
-            items[.info]!.append(PeerInfoScreenDisclosureItem(id: 30, label: .text(email), text: accountCopy.email, icon: PresentationResourcesSettings.email, action: {
+        let emailAction = tellomiSettingsEmailAction(tellomiSettingsEmailChannels(phone: user.phone, peerId: user.id, loginEmailPattern: loginEmailPattern))
+        switch emailAction {
+        case let .showIdentity(display, fullAddress):
+            items[.info]!.append(PeerInfoScreenDisclosureItem(id: 30, label: .text(display), text: accountCopy.email, icon: PresentationResourcesSettings.email, action: {
                 let pack = tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)
-                tellomiPresentSignInEmailNotice(context: context, controller: interaction.getController(), languageCode: presentationData.strings.primaryComponent.languageCode, pack: pack)
+                tellomiPresentSignInEmailNotice(context: context, controller: interaction.getController(), languageCode: presentationData.strings.primaryComponent.languageCode, pack: pack, masked: fullAddress == nil)
             }))
+        case let .phoneAccountLoginEmail(pattern):
+            if let pattern, !pattern.isEmpty {
+                items[.info]!.append(PeerInfoScreenDisclosureItem(id: 30, label: .text(pattern), text: accountCopy.email, icon: PresentationResourcesSettings.email, action: {
+                    interaction.openSettings(.loginEmail)
+                }))
+            } else {
+                items[.info]!.append(PeerInfoScreenDisclosureItem(id: 32, text: accountCopy.bindEmail, icon: PresentationResourcesSettings.email, action: {
+                    interaction.openSettings(.loginEmail)
+                }))
+            }
         }
         if contact.phone == nil {
             items[.info]!.append(PeerInfoScreenDisclosureItem(id: 31, text: accountCopy.bindPhone, icon: PresentationResourcesSettings.recentCalls, action: {
                 interaction.openSettings(.phoneNumber)
-            }))
-        }
-        if contact.email == nil {
-            items[.info]!.append(PeerInfoScreenDisclosureItem(id: 32, text: accountCopy.bindEmail, icon: PresentationResourcesSettings.email, action: {
-                interaction.openSettings(.loginEmail)
             }))
         }
     }

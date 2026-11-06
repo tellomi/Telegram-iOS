@@ -2691,6 +2691,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     deinit {
         self.dataDisposable?.dispose()
         self.walletStickersPreloadDisposable.dispose()
+        self.tellomiLoginEmailPatternDisposable.dispose()
         self.hiddenMediaDisposable?.dispose()
         self.activeActionDisposable.dispose()
         self.logoutConfirmationDisposable.dispose()
@@ -2726,6 +2727,23 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     
     override func didLoad() {
         super.didLoad()
+
+        if self.isSettings {
+            self.tellomiLoginEmailPatternDisposable.set((self.twoStepAuthData.get()
+            |> deliverOnMainQueue).start(next: { [weak self] data in
+                guard let self else {
+                    return
+                }
+                let pattern = data?.loginEmailPattern
+                guard pattern != self.tellomiLoginEmailPattern else {
+                    return
+                }
+                self.tellomiLoginEmailPattern = pattern
+                if let (layout, navigationHeight) = self.validLayout {
+                    self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: .immediate, additive: false)
+                }
+            }))
+        }
                 
         self.view.disablesInteractiveTransitionGestureRecognizerNow = { [weak self] in
             if let strongSelf = self {
@@ -2786,6 +2804,8 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     }
     
     private let walletStickersPreloadDisposable = MetaDisposable()
+    private let tellomiLoginEmailPatternDisposable = MetaDisposable()
+    private var tellomiLoginEmailPattern: String?
     private var preloadedWalletCard: WalletCard?
     private let shareThemePreloadDisposable = MetaDisposable()
     private var didPreloadShareTheme = false
@@ -5669,7 +5689,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             insets.left += sideInsets.sectionLeft
             insets.right += sideInsets.sectionRight
             
-            let items = self.isSettings ? tellomiSettingsHomeItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isExpanded: self.headerNode.isAvatarExpanded) : infoItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, reactionSourceMessageId: self.reactionSourceMessageId, canDeleteReaction: self.canDeleteReaction, callMessages: self.callMessages, chatLocation: self.chatLocation, isOpenedFromChat: self.isOpenedFromChat, isMyProfile: self.isMyProfile)
+            let items = self.isSettings ? tellomiSettingsHomeItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isExpanded: self.headerNode.isAvatarExpanded, loginEmailPattern: self.tellomiLoginEmailPattern) : infoItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, reactionSourceMessageId: self.reactionSourceMessageId, canDeleteReaction: self.canDeleteReaction, callMessages: self.callMessages, chatLocation: self.chatLocation, isOpenedFromChat: self.isOpenedFromChat, isMyProfile: self.isMyProfile)
             
             contentHeight += headerHeight
             if !((self.isSettings || self.isMyProfile) && self.state.isEditing) {

@@ -2581,8 +2581,17 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         if let navigationController = strongSelf.navigationController as? NavigationController {
                             let blocking = currentValues.contains(.setupLoginEmailBlocking)
                             let peerId = strongSelf.context.account.peerId
-                            let _ = (strongSelf.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
-                            |> deliverOnMainQueue).start(next: { [weak self] peer in
+                            let password = strongSelf.context.engine.auth.twoStepAuthData()
+                            |> map(Optional.init)
+                            |> `catch` { _ -> Signal<TwoStepAuthData?, NoError> in
+                                return .single(nil)
+                            }
+                            |> take(1)
+                            let _ = (combineLatest(
+                                strongSelf.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId)),
+                                password
+                            )
+                            |> deliverOnMainQueue).start(next: { [weak self] peer, password in
                                 guard let strongSelf = self, let navigationController = strongSelf.navigationController as? NavigationController else {
                                     return
                                 }
@@ -2592,13 +2601,9 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                                 } else {
                                     phone = nil
                                 }
-                                // Local sign-in address only. A recovery pattern or login_email_pattern
-                                // does not count, and this does not write either one or dismiss the suggestion.
-                                let channels = TellomiEmailChannels(
-                                    signInAddress: tellomiAccountContact(phone: phone, peerId: peerId).email,
-                                    nativeLoginEmailPattern: nil,
-                                    recoveryEmailPattern: nil
-                                )
+                                // A mask from getPassword counts. A recovery pattern does not.
+                                // The suggestion is not dismissed and the account is not rewritten.
+                                let channels = TellomiEmailChannels(phone: phone, cachedSignInAddress: tellomiStoredAccountLoginEmail(peerId: peerId), loginEmailPattern: password?.loginEmailPattern, recoveryEmailPattern: nil)
                                 if !tellomiShouldPresentNativeLoginEmailSetup(channels) {
                                     return
                                 }
