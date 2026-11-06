@@ -23,8 +23,10 @@ public struct TellomiDiscoverPost: Equatable {
     public var reposted: Bool
     public var poll: TellomiDiscoverPoll?
     public var linkPreview: TellomiDiscoverLink.Preview?
+    public var images: [TellomiDiscoverImageMedia]
+    public var moderation: TellomiDiscoverCardModeration
 
-    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil) {
+    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil, images: [TellomiDiscoverImageMedia] = [], moderation: TellomiDiscoverCardModeration = .published) {
         self.id = id
         self.text = text
         self.authorName = authorName
@@ -46,6 +48,8 @@ public struct TellomiDiscoverPost: Equatable {
         self.reposted = reposted
         self.poll = poll
         self.linkPreview = linkPreview
+        self.images = images
+        self.moderation = moderation
     }
 }
 
@@ -78,14 +82,17 @@ public struct TellomiDiscoverEngineConfig: Equatable {
     public var recommendMode: String?
     public var personalizationToggleVisible: Bool
     public var postTextChars: Int
+    /// `media_base_url` when it is an https URL. Absent or invalid stays nil.
+    public var mediaBaseURL: URL?
 
-    public init(enabled: Bool, region: String?, tabs: [TellomiDiscoverFeedKind], recommendMode: String?, personalizationToggleVisible: Bool, postTextChars: Int) {
+    public init(enabled: Bool, region: String?, tabs: [TellomiDiscoverFeedKind], recommendMode: String?, personalizationToggleVisible: Bool, postTextChars: Int, mediaBaseURL: URL? = nil) {
         self.enabled = enabled
         self.region = region
         self.tabs = tabs
         self.recommendMode = recommendMode
         self.personalizationToggleVisible = personalizationToggleVisible
         self.postTextChars = postTextChars
+        self.mediaBaseURL = mediaBaseURL
     }
 }
 
@@ -136,8 +143,9 @@ public struct TellomiDiscoverCard: Equatable {
     public var reposted: Bool
     public var poll: TellomiDiscoverPoll?
     public var linkPreview: TellomiDiscoverLink.Preview?
+    public var images: [TellomiDiscoverImageMedia]
 
-    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil) {
+    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil, images: [TellomiDiscoverImageMedia] = []) {
         self.id = id
         self.state = state
         self.version = version
@@ -162,6 +170,7 @@ public struct TellomiDiscoverCard: Equatable {
         self.reposted = reposted
         self.poll = poll
         self.linkPreview = linkPreview
+        self.images = images
     }
 }
 
@@ -221,13 +230,15 @@ public func tellomiDiscoverParseEngineConfig(_ data: Data) -> TellomiDiscoverEng
     }
     let limits = objectValue(object["limits"])
     let textChars = intValue(limits?["post_text_chars"]) ?? tellomiDiscoverPostTextLimit
+    let mediaBase = stringValue(object["media_base_url"]).flatMap(tellomiDiscoverMediaBaseURL)
     return TellomiDiscoverEngineConfig(
         enabled: enabled,
         region: stringValue(object["region"]),
         tabs: tabs,
         recommendMode: stringValue(object["recommend_mode"]),
         personalizationToggleVisible: boolValue(object["personalization_toggle_visible"]) ?? false,
-        postTextChars: textChars > 0 ? textChars : tellomiDiscoverPostTextLimit
+        postTextChars: textChars > 0 ? textChars : tellomiDiscoverPostTextLimit,
+        mediaBaseURL: mediaBase
     )
 }
 
@@ -293,7 +304,10 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         authorName: card.authorName,
         authorHandle: card.authorHandle,
         tellomiNumber: card.tellomiNumber,
-        unavailable: card.state != "ok",
+        unavailable: {
+            let moderation = tellomiDiscoverCardModeration(card.state)
+            return moderation == .hidden || moderation == .unknown
+        }(),
         aiGenerated: card.aiGenerated,
         badge: card.badge,
         likeCount: card.likeCount,
@@ -308,7 +322,9 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         shareable: card.shareable,
         reposted: card.reposted,
         poll: card.poll,
-        linkPreview: card.linkPreview
+        linkPreview: card.linkPreview,
+        images: card.images,
+        moderation: tellomiDiscoverCardModeration(card.state)
     )
 }
 
@@ -319,7 +335,7 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
     guard let identifier = stringValue(entry["id"]).flatMap(tellomiDiscoverPostId) else {
         return nil
     }
-    let state = stringValue(entry["state"]) ?? "ok"
+    let state = stringValue(entry["state"]) ?? ""
     let body = objectValue(entry["card"])
     let author = objectValue(body?["author"])
     let stats = objectValue(entry["stats"])
@@ -350,7 +366,8 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
         comments: parseComments(entry["comments"]),
         reposted: boolValue(me?["reposted"]) ?? false,
         poll: parsePoll(labels: body?["poll"], tally: entry["poll"]),
-        linkPreview: storedLinkPreview(card: body, entry: entry)
+        linkPreview: storedLinkPreview(card: body, entry: entry),
+        images: parseImages(body?["media"])
     )
 }
 
@@ -437,6 +454,25 @@ private func parseComments(_ json: TellomiJSON?) -> [TellomiDiscoverComment] {
         ))
     }
     return comments
+}
+
+private func parseImages(_ json: TellomiJSON?) -> [TellomiDiscoverImageMedia] {
+    guard let json, case let .array(values) = json else {
+        return []
+    }
+    var images: [TellomiDiscoverImageMedia] = []
+    for value in values {
+        guard let object = objectValue(value) else {
+            continue
+        }
+        let kind = (stringValue(object["type"]) ?? "").lowercased()
+        guard kind == "image", let key = stringValue(object["key"]).flatMap(tellomiDiscoverMediaKey), let width = intValue(object["w"]), let height = intValue(object["h"]), tellomiDiscoverImagePixelsAllowed(width: width, height: height) else {
+            continue
+        }
+        let url = stringValue(object["url"]).flatMap(tellomiDiscoverMediaBaseURL)
+        images.append(TellomiDiscoverImageMedia(key: key, width: width, height: height, url: url))
+    }
+    return images
 }
 
 private func imageCount(_ json: TellomiJSON?) -> Int {

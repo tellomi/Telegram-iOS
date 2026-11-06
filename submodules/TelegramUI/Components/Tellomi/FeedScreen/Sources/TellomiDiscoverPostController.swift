@@ -15,23 +15,40 @@ final class TellomiDiscoverPostController: ViewController {
     private let loader: TellomiDiscoverLoader
     private let configuration: TellomiDiscoverConfiguration
     private let loggedIn: Bool
+    private let mediaUpload: Bool
+    private let mediaBaseURL: URL?
+    private let previews: TellomiDiscoverLocalPreviewBook?
+    private let previewAccount: String
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
     private var audienceDisposable: Disposable?
     private let textNode = ImmediateTextNode()
+    private let scrollView = UIScrollView()
     private let linkCard = TellomiDiscoverLinkCardView()
     private var commentRows: [TellomiDiscoverCommentRow] = []
     private var pollButtons: [UIButton] = []
+    private var imageViews: [UIImageView] = []
+    private var imageTasks: [URLSessionDataTask] = []
+    private let imageSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        return URLSession(configuration: configuration)
+    }()
     private var post: TellomiDiscoverPost?
     private var failed = false
     private var started = false
 
-    init(context: AccountContext, postId: String, loader: TellomiDiscoverLoader, configuration: TellomiDiscoverConfiguration, loggedIn: Bool) {
+    init(context: AccountContext, postId: String, loader: TellomiDiscoverLoader, configuration: TellomiDiscoverConfiguration, loggedIn: Bool, mediaUpload: Bool = false, mediaBaseURL: URL? = nil, previews: TellomiDiscoverLocalPreviewBook? = nil, previewAccount: String = "") {
         self.context = context
         self.postId = postId
         self.loader = loader
         self.configuration = configuration
         self.loggedIn = loggedIn
+        self.mediaUpload = mediaUpload
+        self.mediaBaseURL = mediaBaseURL
+        self.previews = previews
+        self.previewAccount = previewAccount
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
         let copy = TellomiTabCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict))
@@ -58,41 +75,100 @@ final class TellomiDiscoverPostController: ViewController {
     deinit {
         self.presentationDataDisposable?.dispose()
         self.audienceDisposable?.dispose()
+        for task in self.imageTasks {
+            task.cancel()
+        }
     }
 
     override func loadDisplayNode() {
         self.displayNode = ASDisplayNode()
-        self.displayNode.addSubnode(self.textNode)
         self.textNode.maximumNumberOfLines = 0
         self.displayNodeDidLoad()
-        self.displayNode.view.addSubview(self.linkCard)
+        self.scrollView.alwaysBounceVertical = true
+        self.scrollView.delaysContentTouches = false
+        self.scrollView.backgroundColor = .clear
+        self.scrollView.contentInsetAdjustmentBehavior = .never
+        self.scrollView.keyboardDismissMode = .interactive
+        self.displayNode.view.addSubview(self.scrollView)
+        self.scrollView.addSubview(self.textNode.view)
+        self.scrollView.addSubview(self.linkCard)
         self.apply()
         self.loadIfAllowed()
     }
 
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
-        let top = self.navigationLayout(layout: layout).navigationFrame.maxY + 16.0
+        let navigationHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
+        self.scrollView.frame = CGRect(x: 0, y: navigationHeight, width: layout.size.width, height: max(1, layout.size.height - navigationHeight))
         let width = max(1, layout.size.width - 32.0)
-        let size = self.textNode.updateLayout(CGSize(width: width, height: 4000))
-        transition.updateFrame(node: self.textNode, frame: CGRect(x: 16, y: top, width: size.width, height: size.height))
-        var commentY = self.textNode.frame.maxY + 12.0
-        if self.linkCard.isHidden {
-            self.linkCard.frame = .zero
-        } else {
-            let cardHeight = self.linkCard.sizeThatFits(CGSize(width: width, height: 200)).height
-            self.linkCard.frame = CGRect(x: 16, y: commentY, width: width, height: cardHeight)
-            commentY = self.linkCard.frame.maxY + 12.0
+        let textSize = self.textNode.updateLayout(CGSize(width: width, height: 4000))
+        var pieces: [TellomiDiscoverDetailPiece] = [.text(Double(textSize.height))]
+        var imageHeights: [CGFloat] = []
+        for imageView in self.imageViews {
+            let imageWidth = min(width, 280.0)
+            let imageHeight: CGFloat
+            if let image = imageView.image, image.size.width > 1, image.size.height > 1 {
+                imageHeight = min(320.0, imageWidth * image.size.height / image.size.width)
+            } else {
+                imageHeight = 160.0
+            }
+            imageHeights.append(imageHeight)
+            pieces.append(.image(Double(imageHeight)))
         }
-        for button in self.pollButtons {
-            button.frame = CGRect(x: 16, y: commentY, width: width, height: 40)
-            commentY += 48.0
+        var linkHeight: CGFloat = 0
+        if !self.linkCard.isHidden {
+            linkHeight = self.linkCard.sizeThatFits(CGSize(width: width, height: 200)).height
+            pieces.append(.link(Double(linkHeight)))
         }
+        for _ in self.pollButtons {
+            pieces.append(.poll(40))
+        }
+        var commentHeights: [CGFloat] = []
         for row in self.commentRows {
             let height = row.layout(width: width)
-            row.frame = CGRect(x: 16, y: commentY, width: width, height: height)
-            commentY += height + 8.0
+            commentHeights.append(height)
+            pieces.append(.comment(Double(height)))
         }
+        let bottom = max(layout.intrinsicInsets.bottom, layout.safeInsets.bottom) + 16.0
+        let placed = tellomiDiscoverDetailLayout(contentWidth: Double(layout.size.width), viewportHeight: Double(self.scrollView.bounds.height), pieces: pieces, bottom: Double(bottom))
+        var index = 0
+        if index < placed.frames.count {
+            let frame = placed.frames[index]
+            self.textNode.frame = CGRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
+            index += 1
+        }
+        for (imageView, imageHeight) in zip(self.imageViews, imageHeights) {
+            guard index < placed.frames.count else {
+                break
+            }
+            let frame = placed.frames[index]
+            imageView.frame = CGRect(x: frame.x, y: frame.y, width: frame.width, height: max(frame.height, Double(imageHeight)))
+            index += 1
+        }
+        if !self.linkCard.isHidden, index < placed.frames.count {
+            let frame = placed.frames[index]
+            self.linkCard.frame = CGRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
+            index += 1
+        } else {
+            self.linkCard.frame = .zero
+        }
+        for button in self.pollButtons {
+            guard index < placed.frames.count else {
+                break
+            }
+            let frame = placed.frames[index]
+            button.frame = CGRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
+            index += 1
+        }
+        for (row, commentHeight) in zip(self.commentRows, commentHeights) {
+            guard index < placed.frames.count else {
+                break
+            }
+            let frame = placed.frames[index]
+            row.frame = CGRect(x: frame.x, y: frame.y, width: frame.width, height: max(frame.height, Double(commentHeight)))
+            index += 1
+        }
+        self.scrollView.contentSize = CGSize(width: layout.size.width, height: CGFloat(placed.contentHeight))
     }
 
     @objc private func menuPressed() {
@@ -121,7 +197,7 @@ final class TellomiDiscoverPostController: ViewController {
                 self?.audienceDisposable?.dispose()
                 self?.audienceDisposable = disposable
             }, completion: completion)
-        }, published: {})
+        }, published: {}, mediaUpload: self.mediaUpload, configuration: self.configuration, loader: self.loader, previews: self.previews, previewAccount: self.previewAccount)
         self.push(controller)
     }
 
@@ -162,6 +238,7 @@ final class TellomiDiscoverPostController: ViewController {
             case let .success(.cards(cards)):
                 self.post = cards.first.map(tellomiDiscoverDisplayPost)
                 self.failed = self.post == nil || self.post?.unavailable == true
+                self.installImages()
             default:
                 self.failed = true
             }
@@ -219,7 +296,7 @@ final class TellomiDiscoverPostController: ViewController {
             button.accessibilityIdentifier = "tellomi.discover.vote.\(index)"
             button.setTitleColor(poll.voted.contains(index) ? self.presentationData.theme.list.itemAccentColor : self.presentationData.theme.list.itemPrimaryTextColor, for: .normal)
             button.addTarget(self, action: #selector(self.votePressed(_:)), for: .touchUpInside)
-            self.displayNode.view.addSubview(button)
+            self.scrollView.addSubview(button)
             return button
         }
     }
@@ -241,9 +318,64 @@ final class TellomiDiscoverPostController: ViewController {
                 }
                 tellomiPresentDiscoverReport(host: self, context: self.context, loggedIn: self.loggedIn, configuration: self.configuration, loader: self.loader, target: .comment(postId: self.postId, commentId: comment.id))
             }
-            self.displayNode.view.addSubview(row)
+            self.scrollView.addSubview(row)
             return row
         }
+    }
+
+    private func installImages() {
+        for task in self.imageTasks {
+            task.cancel()
+        }
+        self.imageTasks = []
+        for view in self.imageViews {
+            view.removeFromSuperview()
+        }
+        self.imageViews = []
+        guard self.isNodeLoaded, let post = self.post else {
+            return
+        }
+        let remote = post.moderation == .published ? post.images.compactMap { tellomiDiscoverImageURL(image: $0, mediaBaseURL: self.mediaBaseURL) } : []
+        let local = post.moderation == .pending ? (self.previews?.images(account: self.previewAccount, postId: self.postId) ?? []) : []
+        let source = tellomiDiscoverImagePreviewSource(moderation: post.moderation, remoteURLs: remote, hasLocalBytes: !local.isEmpty)
+        switch source {
+        case .remote:
+            self.previews?.drop(account: self.previewAccount, postId: self.postId)
+            for url in remote {
+                let view = self.makeImageView(image: nil)
+                let task = self.imageSession.dataTask(with: url) { [weak self, weak view] data, response, _ in
+                    guard let http = response as? HTTPURLResponse, http.statusCode == 200, let data, let image = UIImage(data: data) else {
+                        return
+                    }
+                    DispatchQueue.main.async {
+                        view?.image = image
+                        guard let self, let layout = self.currentlyAppliedLayout else {
+                            return
+                        }
+                        self.containerLayoutUpdated(layout, transition: .immediate)
+                    }
+                }
+                task.resume()
+                self.imageTasks.append(task)
+            }
+        case .local:
+            for data in local {
+                _ = self.makeImageView(image: UIImage(data: data))
+            }
+        case .none:
+            break
+        }
+    }
+
+    private func makeImageView(image: UIImage?) -> UIImageView {
+        let view = UIImageView(image: image)
+        view.contentMode = .scaleAspectFill
+        view.clipsToBounds = true
+        view.layer.cornerRadius = 8.0
+        view.backgroundColor = self.presentationData.theme.list.itemSecondaryTextColor.withAlphaComponent(0.12)
+        self.scrollView.addSubview(view)
+        self.imageViews.append(view)
+        return view
     }
 }
 

@@ -925,6 +925,32 @@ Master CI on `969315d5df` failed `//submodules/ChatListUI:ChatListUI` while buil
 | `submodules/ChatListUI/Sources/Node/ChatListNodeLocation.swift` | The scroll position keeps the engine index. The view tracker still receives the unwrapped `ChatListIndex`. |
 | `submodules/ChatListUI/Sources/Node/ChatListViewTransition.swift` | Both scroll comparisons use the engine index directly. |
 
+## Discover image publish
+
+D-10 multi-image publish now follows the content-engine contract verified at `99fb6ce` on 2026-11-06. No upstream file is edited.
+
+Limits, from that contract and not from the Android client: `media_keys` accepts at most 10 keys, in order, and `OPTIONS /v1/feed/media/uploads` advertises `Tus-Max-Size: 20971520`. The picker stays closed unless `GET /v1/capabilities` includes `media_upload`. A post with no images still sends the previous text, quote, and poll body and does not wait on an upload.
+
+Upload is tus 1.0.0. `OPTIONS` is sent without the discover credential. `POST`, `PATCH`, `HEAD`, and `DELETE` use the existing Bearer credential and only after the URL is checked as this feed origin's `/v1/feed/media/uploads` path. `Location` on another host, an `http` URL, a URL with a user, or a path that escapes the upload prefix is refused and the credential is not attached. JPEG, PNG, and WebP keep their compressed image data. GPS IFDs and XMP GPS fields are removed before upload; a file with no location metadata is not rewritten. Orientation tag `0x0112` stays. HEIC is transcoded to JPEG without copying source properties. `415` voids the upload. `409` reads the offset with `HEAD` and resumes. `429` waits for `Retry-After` (60 when the header is missing). `DELETE` cancels an upload that is not attached to a post.
+
+The post detail lays text, images, link, poll, and comments out in one scrollable stack, so ten images stay reachable. Closing the composer cancels the in-flight URLSession task, drops the in-memory bytes, and deletes a known unattached Location. It does not write a temporary image file. Background cancels the socket and waits with backoff before `HEAD`. A lost create response and an uncertain publish response do not invent a delete. Logout calls `signOut`, which cancels image tasks and stops a later `performImage`, and clears the preview book. Previews are keyed by account and post id. Removing a finished image before the post is sent deletes that unattached upload. After the post is sent, or when the publish response was lost, the local row can be dropped without deleting the server key. A missing or unknown card state is not treated as `ok`. `pending` stays distinct from `unavailable` and does not fetch remote media.
+
+`URLSession` redirects go through `TellomiDiscoverRedirectGate`. Any target off the original https origin or outside the original path prefix is refused, so the Bearer token is not forwarded. EXIF IFD walks stop at depth 8, 256 entries, a seen-offset set, and checked lengths, so a cycle or a deep chain is rejected. `signOut` stays set until `noteSignedIn(account:)`. `run(loggedIn: true)` from an already-open detail does not clear it. This client does not switch Discover picking over to `MediaEditorScreen` or `TGMediaAssetsController`: those own story editing and re-encode to JPEG. `ImageCompression.compressImageToJPEG` is not used: it always writes JPEG and would change PNG and WebP. Video upload stays out of this change.
+
+`POST /v1/feed/posts` adds `media_keys`. Text may be empty when keys are present. `client_nonce` is unchanged across retries. `operation_id` is not sent: `write_idempotency` is recognized, and this contract does not define a value for that field. `400 invalid_media` fails the whole post and does not rotate the nonce. `401 credential_expired` is the existing unauthorized refresh.
+
+Visibility is not rewritten. This client still sends `public`, `contacts`, `close_friends`, `include`, and `exclude`. The server enum is `public`, `friends`, `include`, `exclude`, and `only_me`. `contacts` and `close_friends` are sent as those strings and work only when `ENGINE_DISCOVER_RELATIONS` is on. They are not mapped to `friends` or `only_me`. `include` and `exclude` still require `audience`.
+
+Before review, cards are not `ok`. The author's pending post has no `media_keys` in the card, so the compose screen keeps the local bytes on the post id and the detail shows that preview. After review, `media[]` is `{type:image,key,w,h}` and an optional `url`. A present https `url` is used. Otherwise `feed/config` `media_base_url` is joined with the key. No public host is invented. Video is still not uploaded.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverImagePublish.swift` | Selection, upload phases, cancel, retry, and the publish gate. |
+| `submodules/TellomiDiscover/Tests/TellomiDiscoverImagePublishTests.swift` | Caps, incomplete send, cancel, nonce, and the unchanged text body. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverImagePrivacy.swift` | Strips GPS from JPEG, PNG, and WebP without re-encoding the image. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverDetailLayout.swift` | Scroll stack so ten images stay reachable above the poll and link. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverComposeController.swift` | Picker, upload, and release on close, background, and cancel. |
+
 ## Lock-screen sender avatar
 
 A message notification on the lock screen and in Notification Center was drawing the Tellomi app icon. Upstream Telegram draws the sender's photo there, or the colored letter avatar when the peer has no photo. The notification service already does the same work as upstream: `peerAvatar` builds an `INImage` from the cached profile photo (or the letter avatar), `addSenderInfo` puts it on an `INSendMessageIntent`, and `generate` calls `UNNotificationContent.updating(from:)`. `Avatar/TellomiMark` is not on this path. It is only the in-app fallback for service users 777000 and 333000 when they have no photo.
