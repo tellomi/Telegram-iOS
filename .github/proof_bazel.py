@@ -44,6 +44,7 @@ ARTIFACT: links. An empty graph, a truncated document, a missing body, or an
 unresolved placeholder is not evidence that the action is unsigned.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -516,10 +517,434 @@ def evaluate_graph(text, flags):
     return Decision(not unique, unique)
 
 
-def wrapper_main(argv, real, run=None, execv=None):
+_LIST_LIMIT = 40
+# Finite literals from Bazel 9.2 test actions seen on run 42272704009,
+# rules_apple 485016eb signing mnemonics, and this proof's BUILD targets.
+# Anything else is fingerprinted. A regex is not an allowlist.
+_MNEMONICS = frozenset((
+    "FileWrite",
+    "GenerateCodesigningDossier",
+    "ProcessAndSign",
+    "RepoMappingManifest",
+    "RunfilesTree",
+    "SignBinary",
+    "SourceSymlinkManifest",
+    "SymlinkTree",
+    "TemplateExpand",
+    "TestRunner",
+))
+_LABELS = frozenset((
+    "//Tests/TellomiFeedProof:TellomiFeedProofRunner",
+    "//Tests/TellomiFeedProof:TellomiFeedProofTests",
+    "//Tests/TellomiFeedProof:TellomiFeedProofTestsLib",
+    "//submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen",
+))
+_PLACEHOLDER_KEYS = frozenset((
+    "%(create_simulator_action_binary)s",
+    "%(device_type)s",
+    "%(os_version)s",
+    "%(post_action_binary)s",
+    "%(post_action_determines_exit_code)s",
+    "%(pre_action_binary)s",
+    "%(sdk_version)s",
+    "%(test_bundle_path)s",
+    "%(test_coverage_manifest)s",
+    "%(test_env)s",
+    "%(test_env_inherit)s",
+    "%(test_filter)s",
+    "%(test_host_path)s",
+    "%(test_type)s",
+    "%(testrunner_binary)s",
+    "%ipa_post_processor%",
+    "%output_path%",
+    "%should_compress%",
+    "%should_verify%",
+    "%signing_command_lines%",
+    "%unprocessed_archive_path%",
+    "%work_dir%",
+))
+_EXACT_TOKENS = frozenset((
+    "-",
+    "-c",
+    "bash",
+    "/bin/bash",
+    "/usr/bin/bash",
+    "/usr/bin/codesign",
+    "codesign_allocate",
+    "create",
+    "should_sign",
+    "--output",
+    "--zip",
+    "--codesign_identity",
+    "--embedded_dossier",
+    "--entitlements_file",
+    "--provisioning_profile",
+    "--infer_identity",
+))
+
+
+def diagnostics_requested(environ=None):
+    """Explicit diagnostics mode. Default off. Never changes the allow decision."""
+    environ = os.environ if environ is None else environ
+    return environ.get("TELLOMI_PROOF_DIAGNOSTICS") == "1"
+
+
+def fingerprint(text):
+    """Stable id for a string that is not on the public-syntax allowlist."""
+    encoded = text.encode("utf-8")
+    return {
+        "shown": False,
+        "sha256": hashlib.sha256(encoded).hexdigest()[:16],
+        "len": len(encoded),
+    }
+
+
+def project_token(text, kind):
+    """Return a log value. Unknown strings are fingerprints, never copied."""
+    if kind == "mnemonic" and text in _MNEMONICS:
+        return {"type": "mnemonic", "shown": True, "text": text}
+    if kind == "label" and text in _LABELS:
+        return {"type": "label", "shown": True, "text": text}
+    if kind == "key" and text in _PLACEHOLDER_KEYS:
+        return {"type": "placeholder", "shown": True, "text": text}
+    if kind == "token" and text in _EXACT_TOKENS:
+        return {"type": "token", "shown": True, "text": text}
+    ident = fingerprint(text)
+    ident["type"] = kind
+    return ident
+
+
+def _emit(records):
+    """One diag JSON object per line. User text cannot start a workflow command."""
+    lines = []
+    for record in records:
+        encoded = json.dumps(record, ensure_ascii=True, sort_keys=True)
+        if "\n" in encoded or "\r" in encoded:
+            encoded = json.dumps(
+                {"kind": "dropped", "reason": "serializer emitted a control character"},
+                ensure_ascii=True,
+            )
+        line = "diag " + encoded
+        if line.lstrip().startswith("::"):
+            line = "diag " + json.dumps({"kind": "dropped", "reason": "workflow command"})
+        lines.append(line)
+    return "\n".join(lines) + "\n"
+
+
+def _artifact_paths(document):
+    fragments = {}
+    for fragment in document.get("pathFragments") or []:
+        if isinstance(fragment, dict) and isinstance(fragment.get("id"), int):
+            fragments[fragment["id"]] = fragment
+    paths = {}
+    for artifact in document.get("artifacts") or []:
+        if not isinstance(artifact, dict):
+            continue
+        identifier = artifact.get("id")
+        fragment_id = artifact.get("pathFragmentId")
+        if not isinstance(identifier, int) or not isinstance(fragment_id, int):
+            continue
+        path = _fragment_path(fragments, fragment_id, set())
+        if path is not None:
+            paths[identifier] = path
+    return paths
+
+
+def _walk_inputs(document, paths, dep_ids, cap):
+    depsets = {}
+    for depset in document.get("depSetOfFiles") or []:
+        if isinstance(depset, dict) and isinstance(depset.get("id"), int):
+            depsets[depset["id"]] = depset
+    found = []
+    truncated = False
+    seen = set()
+    stack = list(dep_ids or [])
+    while stack:
+        dep_id = stack.pop()
+        if dep_id in seen:
+            continue
+        seen.add(dep_id)
+        depset = depsets.get(dep_id)
+        if depset is None:
+            truncated = True
+            continue
+        for artifact_id in depset.get("directArtifactIds") or []:
+            path = paths.get(artifact_id)
+            if path is None:
+                truncated = True
+                continue
+            if len(found) >= cap:
+                truncated = True
+                return found, truncated
+            found.append(path)
+        stack.extend(depset.get("transitiveDepSetIds") or [])
+    return found, truncated
+
+
+def _field_list(values, kind, truncated):
+    shown = []
+    if not isinstance(values, list):
+        return [{"type": kind, "shown": False, "reason": "not a list"}], True
+    for value in values[:_LIST_LIMIT]:
+        if not isinstance(value, str):
+            shown.append({"type": kind, "shown": False, "reason": "not a string"})
+            truncated = True
+            continue
+        shown.append(project_token(value, kind))
+    if len(values) > _LIST_LIMIT:
+        truncated = True
+        shown.append({"type": kind, "shown": False, "reason": "truncated", "count": len(values)})
+    return shown, truncated
+
+
+def _template_record(template, producers):
+    if not isinstance(template, str):
+        return {"contents": "omitted", "reason": "not a string"}, True
+    if template.startswith("ARTIFACT: ") and "\n" not in template and "\r" not in template:
+        path = template[len("ARTIFACT: "):]
+        ident = project_token(path, "path")
+        producer = producers.get(path)
+        return {
+            "contents": "omitted",
+            "form": "artifact-ref",
+            "path": ident,
+            "producer": project_token(producer, "mnemonic") if producer else {"shown": False, "reason": "absent"},
+        }, producer is None
+    ident = fingerprint(template)
+    ident["contents"] = "omitted"
+    ident["form"] = "template"
+    return ident, False
+
+
+def project_aquery(text):
+    """Whitelist projection. Free text is fingerprinted, never copied."""
+    header = {
+        "kind": "header",
+        "note": "whitelist projection; not a raw action graph",
+    }
+    if text is None or str(text).strip() == "":
+        return _emit([header, {
+            "kind": "unparsed",
+            "note": "aquery document was not parsed; not a complete graph",
+            "documentBytes": 0,
+        }])
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError:
+        return _emit([header, {
+            "kind": "unparsed",
+            "note": "aquery document was not parsed; not a complete graph",
+            "documentBytes": len(text),
+        }])
+    if not isinstance(document, dict) or not isinstance(document.get("actions"), list):
+        return _emit([header, {
+            "kind": "unparsed",
+            "note": "aquery document was not parsed; not a complete graph",
+        }])
+    actions = document["actions"]
+    paths = _artifact_paths(document)
+    labels = {}
+    for target in document.get("targets") or []:
+        if isinstance(target, dict) and isinstance(target.get("id"), int):
+            labels[target["id"]] = target.get("label") if isinstance(target.get("label"), str) else ""
+    producers = {}
+    counts = {}
+    for raw in actions:
+        if not isinstance(raw, dict):
+            continue
+        mnemonic = raw.get("mnemonic") if isinstance(raw.get("mnemonic"), str) else ""
+        counts[mnemonic] = counts.get(mnemonic, 0) + 1
+        for output_id in raw.get("outputIds") or []:
+            path = paths.get(output_id)
+            if path:
+                producers[path] = mnemonic
+    truncated = False
+    records = [header, {
+        "kind": "summary",
+        "actions": len(actions),
+        "mnemonics": {
+            (project_token(name, "mnemonic")["text"] if project_token(name, "mnemonic").get("shown")
+             else project_token(name, "mnemonic")["sha256"]): counts[name]
+            for name in sorted(counts)
+        },
+    }]
+    shown = 0
+    for raw in actions:
+        if not isinstance(raw, dict):
+            continue
+        if shown >= _LIST_LIMIT:
+            truncated = True
+            records.append({"kind": "truncated", "note": "action list truncated", "count": len(actions)})
+            break
+        shown += 1
+        mnemonic = raw.get("mnemonic") if isinstance(raw.get("mnemonic"), str) else ""
+        outputs = []
+        for output_id in raw.get("outputIds") or []:
+            path = paths.get(output_id)
+            outputs.append(project_token(path, "path") if path else {"type": "path", "shown": False, "reason": "unresolved"})
+        inputs, inputs_cut = _walk_inputs(document, paths, raw.get("inputDepSetIds") or [], _LIST_LIMIT)
+        truncated = truncated or inputs_cut
+        arguments, arg_cut = _field_list(raw.get("arguments") or [], "token", False)
+        truncated = truncated or arg_cut
+        template_record = None
+        template_cut = False
+        if "templateContent" in raw:
+            template_record, template_cut = _template_record(raw.get("templateContent"), producers)
+            truncated = truncated or template_cut
+        substitutions = []
+        pairs = raw.get("substitutions") or []
+        if isinstance(pairs, list):
+            for pair in pairs[:_LIST_LIMIT]:
+                if not isinstance(pair, dict) or not isinstance(pair.get("key"), str) or not isinstance(pair.get("value", ""), str):
+                    truncated = True
+                    substitutions.append({"key": {"shown": False}, "value": {"contents": "omitted"}})
+                    continue
+                value = pair.get("value", "")
+                substitutions.append({
+                    "key": project_token(pair["key"], "key"),
+                    "value": {"contents": "omitted", **fingerprint(value)},
+                })
+            if len(pairs) > _LIST_LIMIT:
+                truncated = True
+        param_files = []
+        for param in raw.get("paramFiles") or []:
+            if not isinstance(param, dict):
+                truncated = True
+                continue
+            param_args, param_cut = _field_list(param.get("arguments") or [], "token", False)
+            truncated = truncated or param_cut
+            path = param.get("execPath") if isinstance(param.get("execPath"), str) else ""
+            param_files.append({"path": project_token(path, "path"), "arguments": param_args})
+        file_record = None
+        if "fileContents" in raw:
+            body = raw.get("fileContents")
+            if isinstance(body, str):
+                file_record = {"contents": "omitted", **fingerprint(body)}
+            else:
+                file_record = {"contents": "omitted", "shown": False, "reason": "not a string"}
+                truncated = True
+        records.append({
+            "kind": "action",
+            "mnemonic": project_token(mnemonic, "mnemonic"),
+            "target": project_token(labels.get(raw.get("targetId"), ""), "label"),
+            "outputs": outputs,
+            "inputs": [project_token(path, "path") for path in inputs],
+            "inputsTruncated": inputs_cut,
+            "arguments": arguments,
+            "template": template_record,
+            "substitutions": substitutions,
+            "paramFiles": param_files,
+            "fileContents": file_record,
+            "environmentVariables": {"contents": "omitted", "count": len(raw.get("environmentVariables") or [])},
+            "executionInfo": "omitted" if "executionInfo" in raw else None,
+        })
+    if truncated:
+        records.append({
+            "kind": "truncated",
+            "note": "truncated fields are incomplete; not a complete graph",
+        })
+    return _emit(records)
+
+
+def project_aquery_failure(stderr):
+    body = stderr or ""
+    return _emit([{
+        "kind": "failure",
+        "note": "aquery failed; not a complete graph",
+        "stderr": {"contents": "omitted", **fingerprint(body)},
+    }])
+
+
+def log_reason(reason):
+    """Print a gate reason only when every word is a fixed literal."""
+    prefix = "unknown action "
+    if reason.startswith(prefix) and "\n" not in reason and "\r" not in reason:
+        token = project_token(reason[len(prefix):], "mnemonic")
+        if token.get("shown"):
+            return "signing-boundary: unknown action " + token["text"]
+        return "signing-boundary: unknown action sha256:%s len:%d" % (token["sha256"], token["len"])
+    if "\n" not in reason and "\r" not in reason and (
+        reason in {
+            "skip_codesign feature is not on the aquery command",
+            "aquery output is not jsonproto",
+            "configuration has no sim_arm64 cpu",
+            "empty action graph",
+            "empty action graph is not evidence that signing is absent",
+            "truncated or invalid jsonproto",
+            "jsonproto is not an object",
+            "jsonproto fields are not the Bazel 9.2 container shape",
+            "path fragment id is missing",
+            "duplicate path fragment id",
+            "artifact path is missing",
+            "duplicate artifact id",
+            "artifact path fragment is truncated or cyclic",
+            "action has no mnemonic",
+            "action arguments are not a string list",
+            "action outputs are truncated",
+            "action output artifact is missing",
+            "fileContents is not a string",
+            "templateContent is not a string",
+            "substitutions are truncated",
+            "substitution is not a key/value",
+            "substitution key or value is not a string",
+            "duplicate substitution key",
+            "param file is truncated",
+            "param file arguments are not strings",
+            "duplicate param file",
+            "TemplateExpand templateContent is missing",
+            "TemplateExpand template failed to load",
+            "template substitutions overlap; expansion is ambiguous",
+            "TemplateExpand output path is missing",
+            "derived template body is not visible",
+            "FileWrite fileContents is missing",
+            "SignBinary is a signing action",
+            "ProcessAndSign arguments are not visible",
+            "ProcessAndSign should_sign; the generated script signs",
+            "ProcessAndSign is not the empty cp -p action",
+            "ProcessAndSign script sources disagree",
+            "ProcessAndSign script contents are not in the graph",
+            "GenerateCodesigningDossier arguments are not visible",
+            "GenerateCodesigningDossier args file is not a single @file",
+            "dossier argument sources disagree",
+            "dossier_arguments contents are not in the graph",
+            "dossier arguments are empty",
+            "dossier arguments contain /usr/bin/codesign",
+            "dossier arguments contain provisioning profile",
+            "dossier arguments contain entitlement or inferred identity",
+            "dossier arguments contain should_sign",
+            "dossier identity is truncated",
+            "dossier arguments have no --output/--zip",
+            "ios_test_runner expand_template chain is missing; the unit-test executable template was not audited",
+            "ProcessAndSign is absent",
+            "GenerateCodesigningDossier is absent",
+            "expanded template still has an unresolved placeholder",
+            "template body contains /usr/bin/codesign",
+            "template body contains provisioning profile",
+            "template body contains entitlement or inferred identity",
+            "template body contains should_sign",
+            "ProcessAndSign script contains /usr/bin/codesign",
+            "ProcessAndSign script contains provisioning profile",
+            "ProcessAndSign script contains entitlement or inferred identity",
+            "ProcessAndSign script contains should_sign",
+            "FileWrite contains /usr/bin/codesign",
+            "FileWrite contains provisioning profile",
+            "FileWrite contains entitlement or inferred identity",
+            "FileWrite contains should_sign",
+            "aquery was not asked for --include_file_write_contents",
+            "aquery was not asked for --include_param_files",
+            "device ios cpu in sim_arm64",
+        }
+    ):
+        return "signing-boundary: " + reason
+    ident = fingerprint(reason)
+    return "signing-boundary: omitted sha256:%s len:%d" % (ident["sha256"], ident["len"])
+
+
+def wrapper_main(argv, real, run=None, execv=None, environ=None):
     """Gate build/test, then exec the real binary. Other commands are forwarded."""
     run = run or subprocess.run
     execv = execv or os.execv
+    diagnose = diagnostics_requested(environ)
     if command_index(argv) is None:
         forwarded = [real] + list(argv[1:])
         execv(forwarded[0], forwarded)
@@ -527,9 +952,9 @@ def wrapper_main(argv, real, run=None, execv=None):
 
     query = aquery_argv(real, argv)
     completed = run(query, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    output = (completed.stdout or "") + "\n" + (completed.stderr or "")
     if completed.returncode != 0:
-        sys.stderr.write(output)
+        if diagnose:
+            sys.stderr.write(project_aquery_failure(completed.stderr))
         sys.stderr.write("aquery failed; build was not executed\n")
         return completed.returncode or 1
 
@@ -543,10 +968,19 @@ def wrapper_main(argv, real, run=None, execv=None):
         flags.append(arg)
     flags = flags[:-1]
     decision = evaluate_graph(completed.stdout or "", flags)
+    if diagnose:
+        sys.stderr.write(project_aquery(completed.stdout or ""))
+    if diagnose:
+        sys.stderr.write("diagnostics-only: build was not executed\n")
+        if not decision.allow:
+            sys.stderr.write("refusing to execute bazel; signing boundary failed before any build action\n")
+            for reason in decision.reasons:
+                sys.stderr.write(log_reason(reason) + "\n")
+        return 2
     if not decision.allow:
         sys.stderr.write("refusing to execute bazel; signing boundary failed before any build action\n")
         for reason in decision.reasons:
-            sys.stderr.write("signing-boundary: %s\n" % reason)
+            sys.stderr.write(log_reason(reason) + "\n")
         return 1
 
     executed = exec_argv(real, argv)

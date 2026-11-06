@@ -61,6 +61,11 @@ on:
         required: false
         default: false
         type: boolean
+      diagnostics_only:
+        description: 'Log a redacted aquery projection and exit. Does not build or sign.'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -75,6 +80,7 @@ jobs:
       # ALLOW_XCODE_MISMATCH=true. The typed inputs context keeps the default off.
       ALLOW_XCODE_MISMATCH: ${{ inputs.allow_xcode_mismatch == true && 'true' || 'false' }}
       COMPILE_SHA: ${{ github.event.inputs.compile_sha || github.sha }}
+      TELLOMI_PROOF_DIAGNOSTICS: ${{ inputs.diagnostics_only == true && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
         with:
