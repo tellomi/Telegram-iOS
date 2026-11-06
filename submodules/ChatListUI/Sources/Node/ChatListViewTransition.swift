@@ -163,7 +163,7 @@ func preparedChatListNodeViewTransition(from fromView: ChatListNodeView?, to toV
             case let .index(scrollIndex, position, directionHint, animated):
                 var index = toView.filteredEntries.count - 1
                 for entry in toView.filteredEntries {
-                    if entry.sortIndex >= .index(.chatList(scrollIndex)) {
+                    if entry.sortIndex >= .index(scrollIndex) {
                         scrollToItem = ListViewScrollToItem(index: index, position: position, animated: animated, curve: .Default(duration: nil), directionHint: directionHint)
                         break
                     }
@@ -173,7 +173,7 @@ func preparedChatListNodeViewTransition(from fromView: ChatListNodeView?, to toV
                 if scrollToItem == nil {
                     var index = 0
                     for entry in toView.filteredEntries.reversed() {
-                        if entry.sortIndex < .index(.chatList(scrollIndex)) {
+                        if entry.sortIndex < .index(scrollIndex) {
                             scrollToItem = ListViewScrollToItem(index: index, position: position, animated: animated, curve: .Default(duration: nil), directionHint: directionHint)
                             break
                         }

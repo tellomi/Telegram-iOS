@@ -911,3 +911,12 @@ Master CI on `8aee720666` failed `//submodules/TelegramUI/Components/Tellomi/Fee
 | --- | --- |
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverShareMenu.swift` | Imports `TelegramUIPreferences` so `tellomiStringPack` is in scope. |
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreen.swift` | Quote compose is `presentCompose`. The selector names only the bar-button method. |
+
+## Chat list index compile
+
+Master CI on `969315d5df` failed `//submodules/ChatListUI:ChatListUI` while building `//Telegram:Telegram`. `ChatListNodeViewScrollPosition` carries `EngineChatList.Item.Index`. The scroll location shadowed that value with the inner `ChatListIndex` and passed the inner value into the scroll position. The transition then wrapped the engine index in `.chatList`, which expects `ChatListIndex`. `aroundChatListView` still takes the inner `ChatListIndex`. A peer entry's sort index is already `.index` of the engine index, so the scroll comparison uses that same value. The Discover feed compile fix is unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/ChatListUI/Sources/Node/ChatListNodeLocation.swift` | The scroll position keeps the engine index. The view tracker still receives the unwrapped `ChatListIndex`. |
+| `submodules/ChatListUI/Sources/Node/ChatListViewTransition.swift` | Both scroll comparisons use the engine index directly. |
