@@ -11,7 +11,10 @@
 # copied into the compile_sha tree from this branch. That target depends on
 # //submodules/TelegramUI/Components/Tellomi/FeedScreen:FeedScreen.
 #
-# This job is a compile of that unit test. rules_apple may ad-hoc sign the
+# This job compiles that unit test, runs the host Discover tests, then runs
+# the unit test on the simulator. The simulator run may ad-hoc sign the test
+# runner. It does not copy or upload an IPA.
+# rules_apple may ad-hoc sign the
 # simulator bundle; the wrapper does not inject apple.skip_codesign_simulator_bundles
 # and does not describe the result as unsigned. Before the build it prints only
 # the counts of SignBinary, ProcessAndSign, and GenerateCodesigningDossier.
@@ -247,4 +250,22 @@ jobs:
           python3 -u build-system/Make/Make.py "${make_args[@]}" \
             2>&1 | tee /tmp/proof-build.log
           bash ../proof-tools/.github/proof-compile-guard.sh sdk-log /tmp/proof-build.log
+          bash ../proof-tools/.github/proof-compile-guard.sh no-app-ipa "bazel-bin/Telegram/Telegram.ipa"
+
+      - name: Run Discover host tests
+        working-directory: src
+        run: |
+          set -euo pipefail
+          # Host swift_test. Darwin URLSession runs here. This is not the
+          # proof wrapper and it does not sign or package the Telegram app.
+          "$BAZEL_BIN" --output_user_root=/private/var/tmp/_bazel_proof test //submodules/TellomiDiscover:TellomiDiscoverTests --test_output=errors --announce_rc
+          bash ../proof-tools/.github/proof-compile-guard.sh no-app-ipa "bazel-bin/Telegram/Telegram.ipa"
+
+      - name: Run the FeedScreen simulator test
+        working-directory: src
+        run: |
+          set -euo pipefail
+          # Same simulator cpu as the compile. The test runner may be ad-hoc
+          # signed. The explicit target is the proof unit test, not Telegram.
+          "$BAZEL_BIN" --output_user_root=/private/var/tmp/_bazel_proof test //Tests/TellomiFeedProof:TellomiFeedProofTests --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64
           bash ../proof-tools/.github/proof-compile-guard.sh no-app-ipa "bazel-bin/Telegram/Telegram.ipa"
