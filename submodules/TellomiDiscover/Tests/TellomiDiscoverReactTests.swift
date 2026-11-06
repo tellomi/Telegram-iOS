@@ -77,25 +77,46 @@ final class TellomiDiscoverReactTests: XCTestCase {
         XCTAssertEqual(comments.publicCount(), 1)
         XCTAssertEqual(comments.pendingRows().count, 1)
         XCTAssertTrue(comments.canDelete(self.commentId))
-        let cardSnapshot = [TellomiDiscoverComment(id: self.commentId, text: "old card", authorName: "Ada", postId: self.postId)]
-        XCTAssertEqual(tellomiDiscoverDetailCommentRows(bound: true, visible: comments.visibleRows(), pending: comments.pendingRows()).map { $0.text }, ["public"])
+        let cardSnapshot = ["old card"]
+        func drawn() -> [String] {
+            return tellomiDiscoverDetailCommentRows(bound: true, visible: comments.visibleRows(), pending: comments.pendingRows()).map { $0.text }
+        }
+        // Pending stays on screen and is not part of the public total.
+        XCTAssertEqual(drawn(), ["public", "hello"])
+        XCTAssertNotEqual(drawn(), cardSnapshot)
+        XCTAssertEqual(comments.publicCount(), 1)
+        comments.failLoad(generation: comments.generationValue(), version: 0)
+        XCTAssertEqual(drawn(), ["public", "hello"])
         let remove = comments.delete(self.commentId)
         XCTAssertEqual(remove?.commentId, self.commentId)
         XCTAssertTrue(comments.finishDelete(generation: remove!.generation, version: remove!.version, commentId: self.commentId, ok: true))
+        // The last public row is gone. The held row is still shown.
         XCTAssertEqual(comments.publicCount(), 0)
-        XCTAssertEqual(tellomiDiscoverDetailCommentRows(bound: true, visible: comments.visibleRows(), pending: comments.pendingRows()), [])
+        XCTAssertEqual(drawn(), ["hello"])
+        XCTAssertNotEqual(drawn(), cardSnapshot)
         XCTAssertEqual(tellomiDiscoverPublicCountAfterDelete(count: 3, wasVisible: true, deleted: true), 2)
         XCTAssertEqual(tellomiDiscoverPublicCountAfterDelete(count: 3, wasVisible: false, deleted: true), 3)
-        comments.failLoad(generation: comments.generationValue(), version: 0)
-        XCTAssertEqual(tellomiDiscoverDetailCommentRows(bound: true, visible: comments.visibleRows(), pending: comments.pendingRows()), [])
-        XCTAssertFalse(cardSnapshot.isEmpty)
+        let reload = comments.more()
+        XCTAssertNotNil(reload)
+        comments.failLoad(generation: reload!.generation, version: reload!.version)
+        XCTAssertEqual(drawn(), ["hello"])
+        XCTAssertNotEqual(drawn(), cardSnapshot)
         let heldId = comments.pendingRows()[0].id
         let dropHeld = comments.delete(heldId)
         XCTAssertEqual(dropHeld?.commentId, heldId)
         XCTAssertTrue(comments.finishDelete(generation: dropHeld!.generation, version: dropHeld!.version, commentId: heldId, ok: true))
+        // Empty only after the pending row is deleted too.
         XCTAssertEqual(comments.pendingRows().count, 0)
+        XCTAssertEqual(comments.publicCount(), 0)
+        XCTAssertEqual(drawn(), [])
+        XCTAssertNotEqual(drawn(), cardSnapshot)
         XCTAssertEqual(tellomiDiscoverPublicCountAfterDelete(count: 3, wasVisible: false, deleted: true), 3)
-        XCTAssertEqual(tellomiDiscoverDetailCommentRows(bound: true, visible: comments.visibleRows(), pending: comments.pendingRows()), [])
+        let emptyReload = comments.more()
+        XCTAssertNotNil(emptyReload)
+        comments.failLoad(generation: emptyReload!.generation, version: emptyReload!.version)
+        comments.failLoad(generation: comments.generationValue(), version: 0)
+        XCTAssertEqual(drawn(), [])
+        XCTAssertNotEqual(drawn(), cardSnapshot)
         comments.close()
         XCTAssertFalse(comments.accept(generation: load.generation, version: load.version, page: page))
         let body = tellomiDiscoverCommentBody(text: "hello", parentId: nil, nonce: self.nonce)
@@ -106,4 +127,15 @@ final class TellomiDiscoverReactTests: XCTestCase {
         XCTAssertEqual(delete?.method, "DELETE")
         XCTAssertEqual(delete?.url.path, "/v1/feed/posts/\(self.commentId)")
     }
+
+    #if os(Linux)
+    static var allTests: [(String, (TellomiDiscoverReactTests) -> () throws -> Void)] {
+        return [
+            ("testLikeUsesTheEngineSurfaceAndNotAStoryCall", testLikeUsesTheEngineSurfaceAndNotAStoryCall),
+            ("testLikeMachineKeepsANewerTapAndRollsBackAPermanentFailure", testLikeMachineKeepsANewerTapAndRollsBackAPermanentFailure),
+            ("testSignedOutResultRestoresTheConfirmedLike", testSignedOutResultRestoresTheConfirmedLike),
+            ("testPublicCommentReusesTheNonceAndKeepsHeldOutOfTheTotal", testPublicCommentReusesTheNonceAndKeepsHeldOutOfTheTotal)
+        ]
+    }
+    #endif
 }
