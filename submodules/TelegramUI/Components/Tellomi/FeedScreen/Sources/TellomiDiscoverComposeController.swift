@@ -11,7 +11,9 @@ import UIKit
 import ShareWithPeersScreen
 
 /// Text, visibility, and an optional poll or quote. A picked video is not a
-/// field: `POST /v1/feed/posts` has nowhere to put one. `@username` stays in
+/// field: `POST /v1/feed/posts` has nowhere to put one. Selected images are
+/// tracked beside this request and block send until the upload contract is
+/// confirmed; they are not fields on this value. `@username` stays in
 /// `text`. A public link may add `linkPreview`.
 struct TellomiDiscoverComposeRequest {
     var text: String
@@ -29,6 +31,8 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     private let quoteOf: String?
     private let quotePreview: String
     private let nonce = UUID().uuidString
+    /// Empty until a confirmed image cap is applied. No images means text publish is unchanged.
+    private let imagePublish = TellomiDiscoverImagePublish()
     private let publish: (TellomiDiscoverComposeRequest, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void
     private let published: () -> Void
     private var presentationData: PresentationData
@@ -316,6 +320,9 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
 
     @objc private func sendPressed() {
         guard !self.sending, let choice = self.choice(), choice.publishable else {
+            return
+        }
+        if self.imagePublish.posting != .textOnly {
             return
         }
         switch TellomiDiscoverVideo.publishGate(hasVideo: self.videoURL != nil, busy: self.videoBusy, durationMs: self.videoDurationMs) {
@@ -630,7 +637,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         ]
         self.paintMentions()
         let pollReady = !self.pollOn || self.pollOptions() != nil
-        let canSend = !self.sending && !self.videoBusy && !self.linkHolding && invalid.isEmpty && choice?.publishable == true && pollReady && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= self.textLimit && tellomiDiscoverClientNonce(self.nonce)
+        let canSend = self.imagePublish.posting == .textOnly && !self.sending && !self.videoBusy && !self.linkHolding && invalid.isEmpty && choice?.publishable == true && pollReady && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= self.textLimit && tellomiDiscoverClientNonce(self.nonce)
         let item = UIBarButtonItem(title: copy.publish, style: .done, target: self, action: #selector(self.sendPressed))
         item.isEnabled = canSend
         self.navigationItem.setRightBarButton(item, animated: false)

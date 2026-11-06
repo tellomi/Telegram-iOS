@@ -925,6 +925,16 @@ Master CI on `969315d5df` failed `//submodules/ChatListUI:ChatListUI` while buil
 | `submodules/ChatListUI/Sources/Node/ChatListNodeLocation.swift` | The scroll position keeps the engine index. The view tracker still receives the unwrapped `ChatListIndex`. |
 | `submodules/ChatListUI/Sources/Node/ChatListViewTransition.swift` | Both scroll comparisons use the engine index directly. |
 
+## Discover image selection
+
+D-10 multi-image publish is not wired to `POST /v1/feed/posts`. `content-engine` was not readable from this checkout, and `TellomiDiscoverEngineConfig` has no image count or byte cap, so no upload URL, header, or JSON key was added. `TellomiDiscoverImagePublish` records a local selection only after a caller supplies confirmed limits. It stores no file URL, no bytes, and no credential. Cancel removes the item. A key is stored only when `complete(localId:key:)` is given one. Until every selected image has a key, `posting` is `.blocked`. When they all have keys, `posting` is `.heldUntilWireConfirmed` and the compose screen still does not send: the text body is unchanged and must not be published as a stand-in for the images. No upstream file is edited.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverImagePublish.swift` | Selection, upload phases, cancel, retry, and the publish gate. |
+| `submodules/TellomiDiscover/Tests/TellomiDiscoverImagePublishTests.swift` | Caps, incomplete send, cancel, nonce, and the unchanged text body. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverComposeController.swift` | Send stays disabled unless `posting` is `.textOnly`. The empty batch keeps today's text, quote, poll, and visibility path. |
+
 ## Lock-screen sender avatar
 
 A message notification on the lock screen and in Notification Center was drawing the Tellomi app icon. Upstream Telegram draws the sender's photo there, or the colored letter avatar when the peer has no photo. The notification service already does the same work as upstream: `peerAvatar` builds an `INImage` from the cached profile photo (or the letter avatar), `addSenderInfo` puts it on an `INSendMessageIntent`, and `generate` calls `UNNotificationContent.updating(from:)`. `Avatar/TellomiMark` is not on this path. It is only the in-app fallback for service users 777000 and 333000 when they have no photo.
