@@ -334,7 +334,7 @@ def check_extension_suffixes(build: str, variables: str) -> None:
     if "SIRIKIT" not in siri["capabilities"]:
         fail("SiriIntents must enable SiriKit")
     main = next(item for item in targets() if item["suffix"] == "")
-    if main["capabilities"] != ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS"]:
+    if main["capabilities"] != ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS", "USERNOTIFICATIONS_COMMUNICATION"]:
         fail("main app capabilities changed")
 
     for line in bazel_suffix_lines().splitlines():
@@ -360,11 +360,13 @@ def check_extension_suffixes(build: str, variables: str) -> None:
         app_name="Tellomi",
     )
     written_path = "/tmp/tellomi-variables-check.bzl"
-    configuration.write_to_variables_file("bazel", False, "production", written_path)
+    configuration.write_to_variables_file("bazel", False, "production", written_path, communication_notifications=True)
     written = pathlib.Path(written_path).read_text(encoding="utf-8")
     for line in bazel_suffix_lines().splitlines():
         if line not in written:
             fail("variables.bzl writer dropped " + line)
+    if "telegram_communication_notifications = True\n" not in written:
+        fail("variables.bzl writer dropped communication notifications")
 
 
 def check_wiring() -> None:
@@ -393,6 +395,10 @@ def check_wiring() -> None:
         fail("example variables.bzl is not Tellomi")
     if 'telegram_team_id = "CB7KP6GBAR"' not in variables:
         fail("example variables.bzl team id is not CB7KP6GBAR")
+    if "telegram_communication_notifications = True" not in variables:
+        fail("example variables.bzl does not include communication notifications")
+    if "telegram_communication_notifications" not in build:
+        fail("Telegram/BUILD does not sign communication notifications from the profile flag")
     check_extension_suffixes(build, variables)
     logo = (ROOT / "Tellomi/Brand/logo.svg").read_text(encoding="utf-8")
     if "M485.73 20.63" not in logo or "M481.88 248.76" not in logo:

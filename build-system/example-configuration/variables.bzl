@@ -11,6 +11,7 @@ telegram_appstore_id = "0"
 telegram_app_specific_url_scheme = "tellomi"
 telegram_premium_iap_product_id = "app.tellomi.chat.premium.monthly"
 telegram_aps_environment = "production"
+telegram_communication_notifications = True
 telegram_enable_siri = False
 telegram_enable_icloud = False
 telegram_enable_watch = True

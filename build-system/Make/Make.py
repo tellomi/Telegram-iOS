@@ -21,9 +21,10 @@ import IconSizeCheck
 
 
 class ResolvedCodesigningData:
-    def __init__(self, aps_environment, use_xcode_managed_codesigning):
+    def __init__(self, aps_environment, use_xcode_managed_codesigning, communication_notifications):
         self.aps_environment = aps_environment
         self.use_xcode_managed_codesigning = use_xcode_managed_codesigning
+        self.communication_notifications = communication_notifications
 
 
 class BazelCommandLine:
@@ -450,7 +451,8 @@ def resolve_codesigning(arguments, base_path, build_configuration, provisioning_
 
     return ResolvedCodesigningData(
         aps_environment=profile_source.resolve_aps_environment(),
-        use_xcode_managed_codesigning=profile_source.use_xcode_managed_codesigning()
+        use_xcode_managed_codesigning=profile_source.use_xcode_managed_codesigning(),
+        communication_notifications=profile_source.resolve_communication_notifications()
     )
 
 
@@ -481,6 +483,13 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
         provisioning_profiles_path=provisioning_path,
         additional_codesigning_output_path=additional_codesigning_output_path
     )
+    # Unsigned builds ad-hoc sign and do not embed a profile, so the
+    # communication-notifications entitlement can be present. A signed build
+    # may request it only when the profile grants it.
+    if getattr(arguments, 'disableProvisioningProfiles', False):
+        communication_notifications = True
+    else:
+        communication_notifications = codesigning_data.communication_notifications is True
     if codesigning_data.aps_environment is None:
         # build-system/fake-codesigning is the upstream Telegram team
         # (C67CF9S4VU / ph.telegra.Telegraph). A fork whose configuration
@@ -496,8 +505,13 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
             print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
             sys.exit(1)
 
+    if build_configuration.bundle_id == 'app.tellomi.chat' and not communication_notifications:
+        print('Communication notifications entitlement omitted: the provisioning profile has no com.apple.developer.usernotifications.communication key. Lock-screen notifications keep the app icon until that capability is enabled on the App ID and the profile is regenerated.')
+    elif build_configuration.bundle_id == 'app.tellomi.chat':
+        print('Communication notifications entitlement included.')
+
     if bazel_command_line is not None:
-        build_configuration.write_to_variables_file(bazel_path=bazel_command_line.bazel, use_xcode_managed_codesigning=codesigning_data.use_xcode_managed_codesigning, aps_environment=codesigning_data.aps_environment, path=configuration_repository_path + '/variables.bzl')
+        build_configuration.write_to_variables_file(bazel_path=bazel_command_line.bazel, use_xcode_managed_codesigning=codesigning_data.use_xcode_managed_codesigning, aps_environment=codesigning_data.aps_environment, path=configuration_repository_path + '/variables.bzl', communication_notifications=communication_notifications)
 
     provisioning_profile_files = []
     for file_name in os.listdir(provisioning_path):
