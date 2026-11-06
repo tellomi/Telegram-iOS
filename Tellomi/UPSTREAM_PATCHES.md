@@ -940,3 +940,18 @@ The key is now signed when the main provisioning profile contains it. `prepare_a
 | `build-system/example-configuration/variables.bzl` | The checked-in example sets the flag true. |
 | `Tellomi/extension-suffixes.json`, `Tellomi/prepare_appstore_signing.py` | The main App ID requests `USERNOTIFICATIONS_COMMUNICATION`. A downloaded profile without the entitlement is reported and does not fail the signing run. |
 | `docs/TELLOMI.md` | The entitlement is no longer listed as absent. |
+
+## Chat list swipe buttons
+
+Checked against TelegramMessenger/Telegram-iOS `279f89e4d4f63f17227bf877dc3d8990f22ecd58` (master, "Bump version", 2026-10-28). `ItemListRevealOptionsNode.swift` and `ItemListRevealMotion.swift` match that tree. The circle-or-capsule choice is `ItemListRevealOptionLayoutMetrics.metrics` (upstream since `c64653ed`, merged here as `91eb779ae2` on 2026-05-14). A row at least `50 + 4 + ceil(11pt line height)` tall, with an icon, draws a 50×50 circle, corner radius 25. A shorter row, or an action with no icon, draws a 60×32 capsule, corner radius 16, and an iconless action puts the title inside the capsule. That capsule is the upstream iconless branch. It is not an iOS version of `UISwipeActionsConfiguration`, and it is not a Tellomi theme.
+
+`ChatListItem.swift` differs from that upstream file only in the swipe icons. Upstream plays `anim_mute`, `anim_delete`, `anim_archive`, `anim_unread`, and the other reveal Lotties. Tellomi keeps the MingCute PDFs from the icon pass (`599d6869aa`). Those imagesets sit in `Chat List/Swipe`. Every other imageset folder in `Images.xcassets` sets `provides-namespace`. `Swipe` did not, so the compiled name was `Chat List/Mute` (and the same for the other fourteen) while `swipeIcon` asks for `Chat List/Swipe/Mute`. `imageNamed` returned nil, `swipeIcon` returned `.none`, and `metrics(for:hasVisualIcons:)` took the capsule at every row height. Mute, delete, archive, unread, and pin all went through that one lookup.
+
+The actions are the upstream ones. On the main list, the leading side is read/unread and pin/unpin, and the trailing side is mute/unmute, delete, and archive. The archive list's trailing side is pin/unpin, delete, and unarchive, and its leading side is empty. A folder that excludes archived chats still offers archive. Full-swipe distance, the destructive confirmation (`width - 29`), the other confirmation (`width * 0.525`), the arming threshold (`width * 0.75`), and the 414/375 edge zones are the upstream `ItemListRevealMotion` values. The leading side uses `leftInset` and the trailing side uses `rightInset`. Light and dark still use `theme.list.itemDisclosureActions`. The MingCute drawings stay; the Lottie clips are not put back. The glyph page stays 30×30, which is under the circle's 40pt icon cap. Upstream's Lottie is scaled by an extra 1.5 and draws larger than the circle. That is the remaining difference.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Images.xcassets/Chat List/Swipe/Contents.json` | `provides-namespace`, same as `Chat List/Search` and `Chat List/Tabs`. |
+| `submodules/ChatListUI/Sources/Node/ChatListItem.swift` | Comment on the nil lookup. The MingCute names are unchanged. |
+| `Tellomi/Icons/test_chat_list_swipe.py` | Catalog name, circle-versus-capsule, actions, and the upstream gesture thresholds. |
+| `build-system/Make/ChatListSwipeCheck.py`, `Make.py` | `build` and `test` run that check next to the icon-size check. |
