@@ -428,6 +428,7 @@ def evaluate_graph(text, flags):
     if any(not cpu.startswith("sim_") for cpu in cpus):
         reasons.append("device ios cpu in %s" % ",".join(cpus))
 
+    contents_requested = "--include_file_write_contents" in flags
     actions, parse_errors = load_actions(text)
     reasons.extend(parse_errors)
     reasons.extend(resolve_templates(actions))
@@ -436,7 +437,18 @@ def evaluate_graph(text, flags):
     saw_runner = False
     saw_runner_executable = False
     for action in actions:
-        if action.mnemonic == "FileWrite" and not action.saw_file_contents:
+        # Bazel 9.2 analysis_v2.proto field file_contents is a plain proto3
+        # string. MonolithicOutputHandler prints it with JsonFormat.printer(),
+        # which omits the default "". A local 9.2.0 aquery of actions.write
+        # confirms the flag-on shapes: "" and an executable "" omit
+        # fileContents; "hello" and " " keep it. The same key is also absent
+        # when the flag is off, and ParameterFileWriteAction / BinaryFileWriteAction
+        # share the FileWrite mnemonic but are not FileContentsProvider, so
+        # the dump never sets the field. Absence is therefore not a body we
+        # can read. Do not invent "". A dossier or script that resolves here
+        # still fails closed. The blanket missing-field error stays only when
+        # this aquery was not asked for the contents.
+        if action.mnemonic == "FileWrite" and not action.saw_file_contents and not contents_requested:
             reasons.append("FileWrite fileContents is missing")
         if action.mnemonic == "SignBinary":
             reasons.append("SignBinary is a signing action")
@@ -455,7 +467,7 @@ def evaluate_graph(text, flags):
                     body, conflict = _contents_for(script, action, actions)
                     if conflict:
                         reasons.append("ProcessAndSign script sources disagree")
-                    elif body is None:
+                    elif body is None or body == "":
                         reasons.append("ProcessAndSign script contents are not in the graph")
                     else:
                         marker = _signing_marker(body)

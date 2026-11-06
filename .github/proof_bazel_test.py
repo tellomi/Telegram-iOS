@@ -657,8 +657,130 @@ def test_first_merge_does_not_run_old_ci():
     print("source push packages or publishes: no")
 
 
+def _load_fixture(name):
+    path = os.path.join(FIXTURE_DIR, name)
+    return json.load(open(path, encoding="utf-8"))
+
+
+def _append_filewrite(document, path, source_action):
+    """Add a FileWrite whose content keys are exactly those Bazel emitted."""
+    parsed = json.loads(document)
+    used = [artifact["id"] for artifact in parsed["artifacts"]]
+    used.extend(fragment["id"] for fragment in parsed["pathFragments"])
+    identifier = max(used) + 1
+    parent = None
+    built = ""
+    for part in path.split("/"):
+        built = part if not built else built + "/" + part
+        identifier += 1
+        entry = {"id": identifier, "label": part}
+        if parent is not None:
+            entry["parentId"] = parent
+        parsed["pathFragments"].append(entry)
+        parent = identifier
+    artifact_id = identifier + 1
+    parsed["artifacts"].append({"id": artifact_id, "pathFragmentId": parent})
+    action = {
+        "mnemonic": source_action["mnemonic"],
+        "targetId": 1,
+        "outputIds": [artifact_id],
+        "primaryOutputId": artifact_id,
+    }
+    if "fileContents" in source_action:
+        action["fileContents"] = source_action["fileContents"]
+    if "isExecutable" in source_action:
+        action["isExecutable"] = source_action["isExecutable"]
+    parsed["actions"].append(action)
+    return json.dumps(parsed)
+
+
+def test_real_bazel_filewrite_json():
+    """Bazel 9.2.0 aquery of actions.write('', 'hello', ' ', executable '')."""
+    flagged = _load_fixture("bazel-9.2.0-filewrite.json")
+    plain = _load_fixture("bazel-9.2.0-filewrite-noflag.json")
+    if [action.get("mnemonic") for action in flagged["actions"]] != ["FileWrite"] * 4:
+        fail("flagged fixture is not the four FileWrite actions")
+    empty, hello, space, executable = flagged["actions"]
+    if "fileContents" in empty or "isExecutable" in empty:
+        fail("actions.write('') kept a json field: %s" % sorted(empty))
+    if hello.get("fileContents") != "hello" or "isExecutable" in hello:
+        fail("actions.write('hello') was not kept verbatim: %s" % hello.get("fileContents"))
+    if space.get("fileContents") != " ":
+        fail("a single space was treated as the proto default")
+    if "fileContents" in executable or executable.get("isExecutable") is not True:
+        fail("executable empty write was not isExecutable without fileContents")
+    hello_without_flag = plain["actions"][1]
+    if "fileContents" in hello_without_flag:
+        fail("jsonproto kept fileContents when the flag was off")
+
+    flags = flags_of()
+    omitted = _append_filewrite(
+        SAFE_GRAPH,
+        "bazel-out/k8-fastbuild/bin/out.empty",
+        empty,
+    )
+    expect_allow(omitted, flags, "unreferenced FileWrite whose empty body jsonproto omits")
+    visible = _append_filewrite(
+        SAFE_GRAPH,
+        "bazel-out/k8-fastbuild/bin/out.txt",
+        hello,
+    )
+    expect_allow(visible, flags, "unreferenced FileWrite with the real hello body")
+    signing = dict(hello)
+    signing["fileContents"] = "/usr/bin/codesign"
+    expect_deny(
+        _append_filewrite(SAFE_GRAPH, "bazel-out/k8-fastbuild/bin/out.txt", signing),
+        flags,
+        "visible FileWrite body that signs",
+    )
+    dossier = _append_filewrite(
+        safe_document(include_dossier_write=False),
+        DOSSIER_PATH,
+        empty,
+    )
+    dossier_reasons = expect_deny(dossier, flags, "dossier @file whose FileWrite body was omitted")
+    if not any("dossier_arguments contents are not in the graph" in reason for reason in dossier_reasons):
+        fail("omitted dossier body was allowed: %s" % dossier_reasons)
+    script = _append_filewrite(
+        safe_document(process_arguments=[SIGN_SCRIPT]),
+        SIGN_SCRIPT,
+        empty,
+    )
+    script_reasons = expect_deny(script, flags, "ProcessAndSign script whose FileWrite body was omitted")
+    if not any("script contents are not in the graph" in reason for reason in script_reasons):
+        fail("omitted script body was allowed: %s" % script_reasons)
+    # A literal empty string is not the omitted default, and it is still no body.
+    blank = json.loads(_append_filewrite(
+        safe_document(process_arguments=[SIGN_SCRIPT]),
+        SIGN_SCRIPT,
+        {"mnemonic": "FileWrite", "fileContents": ""},
+    ))
+    blank_reasons = expect_deny(json.dumps(blank), flags, "script FileWrite with an explicit empty string")
+    if not any("script contents are not in the graph" in reason for reason in blank_reasons):
+        fail("explicit empty script was allowed: %s" % blank_reasons)
+    unknown = json.loads(SAFE_GRAPH)
+    unknown["actions"].append({"mnemonic": "TestRunner", "targetId": 1, "outputIds": [], "arguments": []})
+    unknown_reasons = expect_deny(json.dumps(unknown), flags, "unknown TestRunner")
+    if not any(reason == "unknown action TestRunner" for reason in unknown_reasons):
+        fail("unknown action was allowed: %s" % unknown_reasons)
+    stripped = json.loads(SAFE_GRAPH)
+    for action in stripped["actions"]:
+        action.pop("fileContents", None)
+    blind = expect_deny(
+        json.dumps(stripped),
+        [flag for flag in flags if flag != "--include_file_write_contents"],
+        "file writes without the contents flag",
+    )
+    if not any(reason == "FileWrite fileContents is missing" for reason in blind):
+        fail("flag-off FileWrite was not fail-closed: %s" % blind)
+    if not any("not asked for --include_file_write_contents" in reason for reason in blind):
+        fail("missing contents flag was not named: %s" % blind)
+    print("bazel 9.2 filewrite json omission")
+
+
 def main():
     test_graph_boundary()
+    test_real_bazel_filewrite_json()
     test_make_lookup()
     test_first_merge_does_not_run_old_ci()
     print("proof_bazel tests passed")
