@@ -2,7 +2,6 @@ import AccountContext
 import AsyncDisplayKit
 import Display
 import Foundation
-import Postbox
 import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
@@ -773,49 +772,42 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     }
 
     private func reloadPeople() {
-        let account = self.context.account
-        let selfId = account.peerId
+        let selfId = self.context.account.peerId
         self.peopleDisposable?.dispose()
-        self.peopleDisposable = (account.postbox.transaction { transaction -> [TellomiDiscoverMention.Person] in
-            var ids = transaction.getContactPeerIds()
-            for id in transaction.chatListGetAllPeerIds() {
-                ids.insert(id)
-            }
-            var people: [TellomiDiscoverMention.Person] = []
-            for id in ids {
-                if id == selfId {
-                    continue
-                }
-                guard let user = transaction.getPeer(id) as? TelegramUser, !user.isDeleted else {
-                    continue
-                }
-                guard let username = user.addressName, TellomiDiscoverMention.validUsername(username) else {
-                    continue
-                }
-                people.append(TellomiDiscoverMention.Person(username: username, name: Self.displayName(user)))
-            }
-            return people
-        }
-        |> deliverOnMainQueue).start(next: { [weak self] people in
+        self.peopleDisposable = (self.context.engine.contacts.peersFromContactsAndChatList()
+        |> deliverOnMainQueue).start(next: { [weak self] peers in
             guard let self else {
                 return
+            }
+            var people: [TellomiDiscoverMention.Person] = []
+            for peer in peers {
+                let firstName: String?
+                let lastName: String?
+                let isUser: Bool
+                if case let .user(user) = peer {
+                    firstName = user.firstName
+                    lastName = user.lastName
+                    isUser = true
+                } else {
+                    firstName = nil
+                    lastName = nil
+                    isUser = false
+                }
+                if let person = TellomiDiscoverMention.mentionPerson(
+                    username: peer.addressName,
+                    firstName: firstName,
+                    lastName: lastName,
+                    isUser: isUser,
+                    isDeleted: peer.isDeleted,
+                    isSelf: peer.id == selfId
+                ) {
+                    people.append(person)
+                }
             }
             self.people = people
             self.showSuggestions(force: true)
             self.relayout()
         })
-    }
-
-    private static func displayName(_ user: TelegramUser) -> String {
-        let first = user.firstName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let last = user.lastName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !first.isEmpty && !last.isEmpty {
-            return first + " " + last
-        }
-        if !first.isEmpty {
-            return first
-        }
-        return last
     }
 
     private func refreshLink() {

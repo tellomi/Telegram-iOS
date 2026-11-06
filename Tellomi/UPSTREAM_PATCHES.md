@@ -890,3 +890,15 @@ Following and nearby ignore the switch (`tellomiDiscoverFeedRequestPersonalized`
 `recommend_mode` is still parsed and does not decide the switch or the query. The example payload in the feed tests uses `recommend_mode=editorial_chronological` and `personalization_toggle_visible=false`.
 
 **Engine gap.** content-engine is private (`tellomi/content-engine`); this checkout cannot read it. iOS and Android already send `personalized=false`. Nothing in teamgram applies that query. Until content-engine treats `personalized=false` as an order that is not based on the person and treats a missing query as the personalized order, turning the switch off changes the request and clears the cached page, and the returned order can stay the same. This change does not edit content-engine or the Android repo.
+
+## Discover mention candidates
+
+Compose `@` suggestions are still the local contacts plus every peer in any chat-list group. The screen used to read that set with `account.postbox.transaction` (`getContactPeerIds` and `chatListGetAllPeerIds()`). A release build rejects that file: `PostboxImportCheck` runs before `Make.py` compiles, and the file is not on `AllowedImporters.txt` or `AllowedPostboxAccess.txt`. The read is now `TelegramEngine.Contacts.peersFromContactsAndChatList`, one local transaction inside TelegramCore. It is not `messages.chatListPeers`, which stops at a count and goes through the view tracker. A missing peer record is still skipped. The account, a non-user, a deleted user, and a name that fails `validUsername` are still left out of the list. That choice is `TellomiDiscoverMention.mentionPerson`, including the trimmed first-and-last display name. A leading `@` on the input is stored without it; `addressName` does not have one. A mention is still only characters inside `text` on `POST /v1/feed/posts`. The allowlists are not extended. `FeedScreen` no longer depends on `//submodules/Postbox` (that package is not in Postbox's `clients` group).
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Contacts/TelegramEngineContacts.swift` | `peersFromContactsAndChatList`. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverComposeController.swift` | Loads the list through that method and `mentionPerson`. Drops `import Postbox`. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/BUILD` | Drops the Postbox dependency. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverMention.swift` | `mentionPerson`. |
+| `submodules/TellomiDiscover/Tests/TellomiDiscoverMentionTests.swift` | Self, non-users, deleted users, invalid names, and the display name. |
