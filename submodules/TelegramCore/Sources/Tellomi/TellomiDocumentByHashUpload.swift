@@ -296,7 +296,7 @@ private func tellomiRequestDocumentByHash(network: Network, sha256: Data, size: 
         return reusable
     }
     |> `catch` { error -> Signal<Api.Document?, NoError> in
-        Logger.shared.log("TellomiDocumentByHash", "fail-open \(error.errorDescription)")
+        Logger.shared.log("TellomiDocumentByHash", "fail-open \(error.errorDescription ?? "")")
         return .single(nil)
     }
 }
