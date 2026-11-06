@@ -24,8 +24,9 @@ public struct TellomiDiscoverPost: Equatable {
     public var poll: TellomiDiscoverPoll?
     public var linkPreview: TellomiDiscoverLink.Preview?
     public var images: [TellomiDiscoverImageMedia]
+    public var moderation: TellomiDiscoverCardModeration
 
-    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil, images: [TellomiDiscoverImageMedia] = []) {
+    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil, images: [TellomiDiscoverImageMedia] = [], moderation: TellomiDiscoverCardModeration = .published) {
         self.id = id
         self.text = text
         self.authorName = authorName
@@ -48,6 +49,7 @@ public struct TellomiDiscoverPost: Equatable {
         self.poll = poll
         self.linkPreview = linkPreview
         self.images = images
+        self.moderation = moderation
     }
 }
 
@@ -302,7 +304,10 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         authorName: card.authorName,
         authorHandle: card.authorHandle,
         tellomiNumber: card.tellomiNumber,
-        unavailable: card.state != "ok",
+        unavailable: {
+            let moderation = tellomiDiscoverCardModeration(card.state)
+            return moderation == .hidden || moderation == .unknown
+        }(),
         aiGenerated: card.aiGenerated,
         badge: card.badge,
         likeCount: card.likeCount,
@@ -318,7 +323,8 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         reposted: card.reposted,
         poll: card.poll,
         linkPreview: card.linkPreview,
-        images: card.images
+        images: card.images,
+        moderation: tellomiDiscoverCardModeration(card.state)
     )
 }
 
@@ -329,7 +335,7 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
     guard let identifier = stringValue(entry["id"]).flatMap(tellomiDiscoverPostId) else {
         return nil
     }
-    let state = stringValue(entry["state"]) ?? "ok"
+    let state = stringValue(entry["state"]) ?? ""
     let body = objectValue(entry["card"])
     let author = objectValue(body?["author"])
     let stats = objectValue(entry["stats"])

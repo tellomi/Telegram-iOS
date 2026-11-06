@@ -43,31 +43,61 @@ public struct TellomiDiscoverHTTPResult: Equatable {
     }
 }
 
+private final class TellomiDiscoverCancelBox {
+    var impl: () -> Void = {}
+    var cancelled = false
+
+    func cancel() {
+        self.cancelled = true
+        self.impl()
+    }
+}
+
 public final class TellomiDiscoverLoader {
     private let now: () -> Int64
     private let fetchCredential: (@escaping (Result<TellomiDiscoverCredential, TellomiDiscoverClientError>) -> Void) -> Void
     private let http: (TellomiDiscoverHTTPCall, @escaping (Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) -> Void) -> Void
+    private let startHTTP: ((TellomiDiscoverHTTPCall, @escaping (Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) -> Void) -> (() -> Void))?
     private var credential: TellomiDiscoverCredential?
     private var generation = 0
+    private var signedOut = false
+    private var imageTasks: [TellomiDiscoverCancelBox] = []
 
     public init(
         now: @escaping () -> Int64,
         credential: TellomiDiscoverCredential? = nil,
         fetchCredential: @escaping (@escaping (Result<TellomiDiscoverCredential, TellomiDiscoverClientError>) -> Void) -> Void,
-        http: @escaping (TellomiDiscoverHTTPCall, @escaping (Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) -> Void) -> Void
+        http: @escaping (TellomiDiscoverHTTPCall, @escaping (Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) -> Void) -> Void,
+        startHTTP: ((TellomiDiscoverHTTPCall, @escaping (Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) -> Void) -> (() -> Void))? = nil
     ) {
         self.now = now
         self.credential = credential
         self.fetchCredential = fetchCredential
         self.http = http
+        self.startHTTP = startHTTP
     }
 
     public func cancel() {
         self.generation += 1
+        let tasks = self.imageTasks
+        self.imageTasks.removeAll()
+        for task in tasks {
+            task.cancel()
+        }
+    }
+
+    /// Logout. Image and feed calls already in flight are cancelled, and a later `performImage` does not send.
+    public func signOut() {
+        self.signedOut = true
+        self.credential = nil
+        self.cancel()
     }
 
     public func run(loggedIn: Bool, configuration: TellomiDiscoverConfiguration, operation: TellomiDiscoverOperation, completion: @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) {
         let ticket = self.generation
+        if loggedIn {
+            self.signedOut = false
+        }
         guard loggedIn else {
             completion(.failure(.signedOut))
             return
@@ -121,23 +151,27 @@ public final class TellomiDiscoverLoader {
     /// Tus upload. OPTIONS is unauthenticated. Every other call uses the discover credential,
     /// and only when the URL is the feed origin's upload path. A 401 drops the credential and
     /// retries once.
-    public func performImage(loggedIn: Bool, configuration: TellomiDiscoverConfiguration, call: TellomiDiscoverImageWireCall, completion: @escaping (Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) -> Void) {
-        guard loggedIn else {
+    @discardableResult
+    public func performImage(loggedIn: Bool, configuration: TellomiDiscoverConfiguration, call: TellomiDiscoverImageWireCall, completion: @escaping (Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) -> Void) -> () -> Void {
+        let box = TellomiDiscoverCancelBox()
+        let ticket = self.generation
+        guard loggedIn, !self.signedOut, ticket == self.generation else {
             completion(.failure(.signedOut))
-            return
+            return { box.cancel() }
         }
+        self.imageTasks.append(box)
         guard configuration.enabled, let baseURL = configuration.baseURL, tellomiDiscoverImageWireTarget(call, base: baseURL) else {
             completion(.failure(.unavailable))
-            return
+            return { box.cancel() }
         }
         if !call.authorizes {
-            self.sendImage(token: "", call: call, retryUnauthorized: false, completion: completion)
-            return
+            self.sendImage(token: "", call: call, retryUnauthorized: false, box: box, ticket: ticket, completion: completion)
+            return { box.cancel() }
         }
         let current = self.credential
         if current == nil || tellomiDiscoverCredentialNeedsRefresh(expires: current?.expires ?? 0, now: self.now()) {
             self.fetchCredential { [weak self] result in
-                guard let self else {
+                guard let self, !box.cancelled, !self.signedOut, ticket == self.generation else {
                     return
                 }
                 switch result {
@@ -147,20 +181,25 @@ public final class TellomiDiscoverLoader {
                         return
                     }
                     self.credential = credential
-                    self.sendImage(token: credential.token, call: call, retryUnauthorized: true, completion: completion)
+                    self.sendImage(token: credential.token, call: call, retryUnauthorized: true, box: box, ticket: ticket, completion: completion)
                 case let .failure(error):
                     completion(.failure(error))
                 }
             }
-            return
+            return { box.cancel() }
         }
-        self.sendImage(token: current?.token ?? "", call: call, retryUnauthorized: true, completion: completion)
+        self.sendImage(token: current?.token ?? "", call: call, retryUnauthorized: true, box: box, ticket: ticket, completion: completion)
+        return { box.cancel() }
     }
 
-    private func sendImage(token: String, call: TellomiDiscoverImageWireCall, retryUnauthorized: Bool, completion: @escaping (Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) -> Void) {
+    private func sendImage(token: String, call: TellomiDiscoverImageWireCall, retryUnauthorized: Bool, box: TellomiDiscoverCancelBox, ticket: Int, completion: @escaping (Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) -> Void) {
+        guard !box.cancelled, !self.signedOut, ticket == self.generation else {
+            completion(.failure(.signedOut))
+            return
+        }
         let httpCall = TellomiDiscoverHTTPCall(method: call.method, url: call.url, body: call.body, token: call.authorizes ? token : "", authorizes: call.authorizes, contentType: call.headers["Content-Type"], extraHeaders: call.headers)
-        self.http(httpCall) { [weak self] result in
-            guard let self else {
+        let finish: (Result<TellomiDiscoverHTTPResult, TellomiDiscoverClientError>) -> Void = { [weak self] result in
+            guard let self, !box.cancelled, !self.signedOut, ticket == self.generation else {
                 return
             }
             switch result {
@@ -172,7 +211,7 @@ public final class TellomiDiscoverLoader {
                         return
                     }
                     self.fetchCredential { [weak self] refreshed in
-                        guard let self else {
+                        guard let self, !box.cancelled, !self.signedOut, ticket == self.generation else {
                             return
                         }
                         switch refreshed {
@@ -182,7 +221,7 @@ public final class TellomiDiscoverLoader {
                                 return
                             }
                             self.credential = credential
-                            self.sendImage(token: credential.token, call: call, retryUnauthorized: false, completion: completion)
+                            self.sendImage(token: credential.token, call: call, retryUnauthorized: false, box: box, ticket: ticket, completion: completion)
                         case let .failure(error):
                             completion(.failure(error))
                         }
@@ -193,6 +232,12 @@ public final class TellomiDiscoverLoader {
             case let .failure(error):
                 completion(.failure(error))
             }
+        }
+        if let startHTTP = self.startHTTP {
+            box.impl = startHTTP(httpCall, finish)
+        } else {
+            self.http(httpCall, finish)
+            box.impl = {}
         }
     }
 
@@ -552,7 +597,9 @@ public func tellomiDiscoverPostSummary(post: TellomiDiscoverPost, copy: TellomiD
         }
     }
     var body: String
-    if post.unavailable {
+    if post.moderation == .pending {
+        body = post.text
+    } else if post.unavailable {
         body = copy.unavailable
     } else {
         body = post.text

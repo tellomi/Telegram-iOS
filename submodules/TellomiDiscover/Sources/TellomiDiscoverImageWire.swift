@@ -120,19 +120,43 @@ public func tellomiDiscoverImageURL(image: TellomiDiscoverImageMedia, mediaBaseU
     return joined
 }
 
+public enum TellomiDiscoverCardModeration: Equatable {
+    case published
+    case pending
+    case hidden
+    case unknown
+}
+
+public func tellomiDiscoverCardModeration(_ state: String) -> TellomiDiscoverCardModeration {
+    switch state {
+    case "ok":
+        return .published
+    case "pending":
+        return .pending
+    case "unavailable":
+        return .hidden
+    default:
+        return .unknown
+    }
+}
+
 public enum TellomiDiscoverImagePreviewSource: Equatable {
     case remote([URL])
     case local
     case none
 }
 
-/// Before review, cards are not `ok` and carry no displayable media. The author's local bytes stay.
-/// After review, an `ok` card uses its remote URLs and the local bytes are no longer the source.
-public func tellomiDiscoverImagePreviewSource(cardState: String, remoteURLs: [URL], hasLocalBytes: Bool) -> TellomiDiscoverImagePreviewSource {
-    if cardState == "ok" {
+/// `published` uses remote URLs. `pending` keeps the author's local bytes and never fetches.
+/// `hidden` and `unknown` fetch nothing and are not treated as a public post.
+public func tellomiDiscoverImagePreviewSource(moderation: TellomiDiscoverCardModeration, remoteURLs: [URL], hasLocalBytes: Bool) -> TellomiDiscoverImagePreviewSource {
+    switch moderation {
+    case .published:
         return remoteURLs.isEmpty ? .none : .remote(remoteURLs)
+    case .pending:
+        return hasLocalBytes ? .local : .none
+    case .hidden, .unknown:
+        return .none
     }
-    return hasLocalBytes ? .local : .none
 }
 
 public final class TellomiDiscoverLocalPreviewBook {
@@ -141,21 +165,30 @@ public final class TellomiDiscoverLocalPreviewBook {
     public init() {
     }
 
-    public func keep(postId: String, images: [Data]) {
+    public func keep(account: String, postId: String, images: [Data]) {
+        let account = account.trimmingCharacters(in: .whitespacesAndNewlines)
         let id = postId.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = images.filter { !$0.isEmpty }
-        guard !id.isEmpty, !images.isEmpty else {
+        guard !account.isEmpty, !id.isEmpty, !images.isEmpty else {
             return
         }
-        self.stored[id] = images
+        self.stored[self.key(account, id)] = images
     }
 
-    public func images(for postId: String) -> [Data] {
-        return self.stored[postId] ?? []
+    public func images(account: String, postId: String) -> [Data] {
+        return self.stored[self.key(account, postId)] ?? []
     }
 
-    public func drop(postId: String) {
-        self.stored.removeValue(forKey: postId)
+    public func drop(account: String, postId: String) {
+        self.stored.removeValue(forKey: self.key(account, postId))
+    }
+
+    public func dropAll() {
+        self.stored.removeAll()
+    }
+
+    private func key(_ account: String, _ postId: String) -> String {
+        return account + "\n" + postId
     }
 }
 
@@ -282,6 +315,9 @@ public struct TellomiDiscoverImageUploadSession: Equatable {
     private var lastSent: Int
     private var transportStrikes: Int
     private var discarding: Bool
+    /// True after a create POST has been handed to the transport. A lost 201 leaves no Location.
+    public private(set) var createSent: Bool
+    private var resumeHeadAfterWait: Bool
 
     public init(length: Int) {
         self.step = .options
@@ -294,6 +330,13 @@ public struct TellomiDiscoverImageUploadSession: Equatable {
         self.lastSent = 0
         self.transportStrikes = 0
         self.discarding = false
+        self.createSent = false
+        self.resumeHeadAfterWait = false
+    }
+
+    /// The server may already have an upload, but this client never received its Location.
+    public var mayBeOrphaned: Bool {
+        return self.createSent && self.location == nil && self.step == .failed(.transport)
     }
 
     public mutating func call(base: URL, bytes: Data) -> TellomiDiscoverImageWireCall? {
@@ -313,6 +356,7 @@ public struct TellomiDiscoverImageUploadSession: Equatable {
             }
             var headers = tus
             headers["Upload-Length"] = String(self.length)
+            self.createSent = true
             return self.sending(TellomiDiscoverImageWireCall(method: "POST", url: url, body: nil, authorizes: true, headers: headers))
         case .patch:
             guard let url = self.location, self.offset < self.length, self.offset <= bytes.count else {
@@ -383,7 +427,8 @@ public struct TellomiDiscoverImageUploadSession: Equatable {
             return
         }
         if self.location != nil, self.step == .patch || self.step == .head {
-            self.step = .head
+            self.resumeHeadAfterWait = true
+            self.step = .wait(seconds: tellomiDiscoverImageRetryDelay(strike: self.transportStrikes))
             return
         }
         self.step = .failed(.transport)
@@ -393,7 +438,12 @@ public struct TellomiDiscoverImageUploadSession: Equatable {
         guard case .wait = self.step else {
             return
         }
-        self.step = .create
+        if self.resumeHeadAfterWait {
+            self.resumeHeadAfterWait = false
+            self.step = .head
+        } else {
+            self.step = .create
+        }
     }
 
     /// Continue an authorized upload after a new credential, or start a replacement after 415.
@@ -420,7 +470,14 @@ public struct TellomiDiscoverImageUploadSession: Equatable {
 
     public mutating func cancel() {
         switch self.step {
-        case .done, .cancelled, .voided:
+        case .cancelled, .voided:
+            return
+        case .done:
+            if self.location == nil {
+                self.step = .cancelled
+            } else {
+                self.step = .delete
+            }
             return
         default:
             break
@@ -464,6 +521,7 @@ public struct TellomiDiscoverImageUploadSession: Equatable {
         if result.status == 429 {
             let header = tellomiDiscoverHeader(result.headers, "Retry-After").flatMap(Int.init)
             let seconds = header.flatMap { $0 > 0 ? $0 : nil } ?? TellomiDiscoverImageContract.retryAfterSeconds
+            self.resumeHeadAfterWait = false
             self.step = .wait(seconds: seconds)
             return
         }
@@ -627,17 +685,123 @@ private func tellomiDiscoverJPEGSize(_ data: Data) -> TellomiDiscoverImageSize? 
 }
 
 private func tellomiDiscoverWebPSize(_ data: Data) -> TellomiDiscoverImageSize? {
-    let bytes = [UInt8](data.prefix(30))
-    guard bytes.count >= 30, String(bytes: bytes[0 ..< 4], encoding: .ascii) == "RIFF", String(bytes: bytes[8 ..< 12], encoding: .ascii) == "WEBP", String(bytes: bytes[12 ..< 16], encoding: .ascii) == "VP8X" else {
+    let bytes = [UInt8](data)
+    guard bytes.count >= 12, String(bytes: bytes[0 ..< 4], encoding: .ascii) == "RIFF", String(bytes: bytes[8 ..< 12], encoding: .ascii) == "WEBP" else {
         return nil
     }
-    let width = 1 + Int(bytes[24]) + (Int(bytes[25]) << 8) + (Int(bytes[26]) << 16)
-    let height = 1 + Int(bytes[27]) + (Int(bytes[28]) << 8) + (Int(bytes[29]) << 16)
-    return TellomiDiscoverImageSize(kind: "webp", width: width, height: height)
+    var index = 12
+    while index + 8 <= bytes.count {
+        let type = String(bytes: bytes[index ..< index + 4], encoding: .ascii) ?? ""
+        let size = Int(bytes[index + 4]) | (Int(bytes[index + 5]) << 8) | (Int(bytes[index + 6]) << 16) | (Int(bytes[index + 7]) << 24)
+        let start = index + 8
+        let end = start + size
+        guard size >= 0, end <= bytes.count else {
+            return nil
+        }
+        if type == "VP8X", size >= 10 {
+            let width = 1 + Int(bytes[start + 4]) + (Int(bytes[start + 5]) << 8) + (Int(bytes[start + 6]) << 16)
+            let height = 1 + Int(bytes[start + 7]) + (Int(bytes[start + 8]) << 8) + (Int(bytes[start + 9]) << 16)
+            return TellomiDiscoverImageSize(kind: "webp", width: width, height: height)
+        }
+        if type == "VP8 ", size >= 10, bytes[start] & 1 == 0, bytes[start + 3] == 0x9D, bytes[start + 4] == 0x01, bytes[start + 5] == 0x2A {
+            let width = (Int(bytes[start + 6]) | (Int(bytes[start + 7]) << 8)) & 0x3FFF
+            let height = (Int(bytes[start + 8]) | (Int(bytes[start + 9]) << 8)) & 0x3FFF
+            return TellomiDiscoverImageSize(kind: "webp", width: width, height: height)
+        }
+        if type == "VP8L", size >= 5, bytes[start] == 0x2F {
+            let packed = Int(bytes[start + 1]) | (Int(bytes[start + 2]) << 8) | (Int(bytes[start + 3]) << 16) | (Int(bytes[start + 4]) << 24)
+            let width = (packed & 0x3FFF) + 1
+            let height = ((packed >> 14) & 0x3FFF) + 1
+            return TellomiDiscoverImageSize(kind: "webp", width: width, height: height)
+        }
+        index = end + (size & 1)
+    }
+    return nil
 }
 
 private func tellomiDiscoverBigEndian(_ bytes: [UInt8], _ offset: Int) -> Int {
     return (Int(bytes[offset]) << 24) + (Int(bytes[offset + 1]) << 16) + (Int(bytes[offset + 2]) << 8) + Int(bytes[offset + 3])
+}
+
+public enum TellomiDiscoverImageResidue: Equatable {
+    case none
+    /// Completed or in-progress upload that is not yet attached to a post.
+    case delete(URL)
+    /// Create POST was sent and the 201 never arrived. There is no Location to delete.
+    case possibleOrphan
+}
+
+public enum TellomiDiscoverImagePause: Equatable {
+    case resumeFromOffset
+    case orphanedCreate
+    case stopped
+}
+
+public func tellomiDiscoverImageEnterBackground(_ session: inout TellomiDiscoverImageUploadSession) -> TellomiDiscoverImagePause {
+    switch session.step {
+    case .patch, .head:
+        session.transportFailed()
+        return .resumeFromOffset
+    case .create, .options, .wait, .delete:
+        session.transportFailed()
+        return session.mayBeOrphaned ? .orphanedCreate : .stopped
+    case .done, .failed, .voided, .cancelled:
+        return .stopped
+    }
+}
+
+public func tellomiDiscoverImageShouldResume(_ session: TellomiDiscoverImageUploadSession) -> Bool {
+    switch session.step {
+    case .head, .patch:
+        return session.location != nil
+    case .options, .create, .delete, .wait, .done, .failed, .voided, .cancelled:
+        return false
+    }
+}
+
+/// Closing the composer or cancelling one image. An attached post is left on the server.
+/// Bytes are not written to a file by this client; the caller drops the in-memory copy.
+public func tellomiDiscoverImageRetryDelay(strike: Int) -> Int {
+    let shift = min(max(strike - 1, 0), 3)
+    return min(8, 1 << shift)
+}
+
+public func tellomiDiscoverImageResidue(session: TellomiDiscoverImageUploadSession, attached: Bool, publishUncertain: Bool = false) -> TellomiDiscoverImageResidue {
+    if attached || publishUncertain {
+        return .none
+    }
+    if let location = session.location {
+        return .delete(location)
+    }
+    if session.mayBeOrphaned {
+        return .possibleOrphan
+    }
+    return .none
+}
+
+public func tellomiDiscoverImageDeleteCall(location: URL, base: URL) -> TellomiDiscoverImageWireCall? {
+    guard tellomiDiscoverAllowedMediaLocation(location.absoluteString, base: base) != nil else {
+        return nil
+    }
+    return TellomiDiscoverImageWireCall(method: "DELETE", url: location, body: nil, authorizes: true, headers: ["Tus-Resumable": TellomiDiscoverImageContract.tusVersion])
+}
+
+public enum TellomiDiscoverImageMemoryEvent: Equatable {
+    case background
+    case foreground
+    case close
+    case cancel
+}
+
+/// Background keeps the bytes in memory so a later HEAD can resume. Close and cancel drop them.
+/// Nothing in this path returns a file URL.
+public func tellomiDiscoverImageByteCount(after event: TellomiDiscoverImageMemoryEvent, current: Int) -> Int {
+    switch event {
+    case .background, .foreground:
+        return current
+    case .close, .cancel:
+        return 0
+    }
 }
 
 private func tellomiDiscoverCreatedMediaKey(_ data: Data) -> String? {

@@ -36,11 +36,18 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     private let feedConfiguration: TellomiDiscoverConfiguration?
     private let loader: TellomiDiscoverLoader?
     private let previews: TellomiDiscoverLocalPreviewBook?
+    private let previewAccount: String
     private var imageBytes: [String: Data] = [:]
     private var imageSessions: [String: TellomiDiscoverImageUploadSession] = [:]
     private var imagePictures: [String: UIImage] = [:]
     private var imageGeneration: [String: Int] = [:]
     private var imageFlight: String?
+    private var imageCancel: (() -> Void)?
+    private var imageSuspended = false
+    private var imageAttached = false
+    private var publishUncertain = false
+    private var imageReleased = false
+    private var backgroundObservers: [NSObjectProtocol] = []
     private var imageNotice: String?
     private let imageButton = UIButton(type: .system)
     private var imageRows: [TellomiDiscoverImageRow] = []
@@ -91,7 +98,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     private var linkSettled = false
     private var linkHolding = false
 
-    init(context: AccountContext, textLimit: Int, quoteOf: String? = nil, quotePreview: String = "", publish: @escaping (TellomiDiscoverComposeRequest, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void, mediaUpload: Bool = false, configuration: TellomiDiscoverConfiguration? = nil, loader: TellomiDiscoverLoader? = nil, previews: TellomiDiscoverLocalPreviewBook? = nil) {
+    init(context: AccountContext, textLimit: Int, quoteOf: String? = nil, quotePreview: String = "", publish: @escaping (TellomiDiscoverComposeRequest, @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) -> Void, published: @escaping () -> Void, mediaUpload: Bool = false, configuration: TellomiDiscoverConfiguration? = nil, loader: TellomiDiscoverLoader? = nil, previews: TellomiDiscoverLocalPreviewBook? = nil, previewAccount: String = "") {
         self.context = context
         self.textLimit = textLimit
         self.quoteOf = quoteOf.flatMap(tellomiDiscoverPostId)
@@ -102,6 +109,7 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.feedConfiguration = configuration
         self.loader = loader
         self.previews = previews
+        self.previewAccount = previewAccount
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
         let copy = TellomiDiscoverCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: self.presentationData.strings.primaryComponent.dict, secondary: self.presentationData.strings.secondaryComponent?.dict))
@@ -127,6 +135,17 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         self.peopleDisposable?.dispose()
         self.linkWork?.cancel()
         TellomiDiscoverLocalVideo.discard(self.videoURL)
+        for observer in self.backgroundObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        self.releaseUnattachedImages()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if self.isMovingFromParent || self.isBeingDismissed {
+            self.releaseUnattachedImages()
+        }
     }
 
     override func loadDisplayNode() {
@@ -185,6 +204,13 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         if self.imagesEnabled {
             _ = self.imagePublish.useVerifiedContract()
         }
+        let center = NotificationCenter.default
+        self.backgroundObservers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.imagesEnteredBackground()
+        })
+        self.backgroundObservers.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.imagesEnteredForeground()
+        })
         self.displayNode.view.addSubview(self.scrollView)
         self.scrollView.addSubview(self.quoteLabel)
         self.scrollView.addSubview(self.textView)
@@ -422,11 +448,15 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
             case let .success(decoded):
                 if case let .created(created) = decoded, created.state != "ok" {
                     let datas = self.imagePublish.items.compactMap { self.imageBytes[$0.localId] }
-                    self.previews?.keep(postId: created.id, images: datas)
+                    self.previews?.keep(account: self.previewAccount, postId: created.id, images: datas)
                 }
+                self.imageAttached = true
                 self.published()
                 self.navigationController?.popViewController(animated: true)
             case let .failure(error):
+                if error == .unavailable || error == .unreadable {
+                    self.publishUncertain = true
+                }
                 self.sendError = error
                 self.apply()
             }
@@ -1160,6 +1190,9 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     }
 
     private func advanceImage(_ localId: String) {
+        guard !self.imageSuspended, !self.imageReleased else {
+            return
+        }
         guard var session = self.imageSessions[localId], let bytes = self.imageBytes[localId], let configuration = self.feedConfiguration, let base = configuration.baseURL, let loader = self.loader else {
             self.imageFlight = nil
             return
@@ -1186,14 +1219,16 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
         _ = self.imagePublish.noteSent(localId: localId, sent: session.offset)
         self.imageGeneration[localId, default: 0] += 1
         let generation = self.imageGeneration[localId] ?? 0
-        loader.performImage(loggedIn: true, configuration: configuration, call: call) { [weak self] result in
-            guard let self, self.imageGeneration[localId] == generation else {
+        self.imageCancel = loader.performImage(loggedIn: true, configuration: configuration, call: call) { [weak self] result in
+            guard let self, self.imageGeneration[localId] == generation, !self.imageReleased else {
                 return
             }
             var session = self.imageSessions[localId] ?? session
             switch result {
             case .failure:
-                session.transportFailed()
+                if !self.imageSuspended {
+                    session.transportFailed()
+                }
             case let .success(response):
                 session.receive(response, base: base)
             }
@@ -1230,6 +1265,19 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
     }
 
     private func cancelImage(_ localId: String) {
+        if let session = self.imageSessions[localId], case .done = session.step, self.imageAttached || self.publishUncertain {
+            self.imageSessions[localId] = nil
+            self.imageBytes[localId] = nil
+            self.imagePictures[localId] = nil
+            _ = self.imagePublish.cancel(localId: localId)
+            if self.imageFlight == localId {
+                self.imageFlight = nil
+            }
+            self.syncImageRows(titles: self.imageTitles())
+            self.apply()
+            self.relayout()
+            return
+        }
         guard var session = self.imageSessions[localId] else {
             _ = self.imagePublish.cancel(localId: localId)
             self.imageBytes[localId] = nil
@@ -1268,6 +1316,57 @@ final class TellomiDiscoverComposeController: ViewController, UITextViewDelegate
             self.advanceImage(localId)
         }
         self.apply()
+    }
+
+    private func imagesEnteredBackground() {
+        guard !self.imageReleased else {
+            return
+        }
+        self.imageSuspended = true
+        self.imageCancel?()
+        self.imageCancel = nil
+        for localId in Array(self.imageSessions.keys) {
+            guard var session = self.imageSessions[localId] else {
+                continue
+            }
+            _ = tellomiDiscoverImageEnterBackground(&session)
+            self.imageSessions[localId] = session
+            _ = tellomiDiscoverImageByteCount(after: .background, current: self.imageBytes[localId]?.count ?? 0)
+        }
+    }
+
+    private func imagesEnteredForeground() {
+        guard !self.imageReleased else {
+            return
+        }
+        self.imageSuspended = false
+        self.imageFlight = nil
+        self.pumpImages()
+    }
+
+    private func releaseUnattachedImages() {
+        guard !self.imageReleased else {
+            return
+        }
+        self.imageReleased = true
+        self.imageSuspended = true
+        self.imageCancel?()
+        self.imageCancel = nil
+        for localId in self.imageSessions.keys {
+            self.imageGeneration[localId, default: 0] += 1
+        }
+        if let configuration = self.feedConfiguration, let base = configuration.baseURL, let loader = self.loader {
+            for session in self.imageSessions.values {
+                if case let .delete(location) = tellomiDiscoverImageResidue(session: session, attached: self.imageAttached, publishUncertain: self.publishUncertain), let call = tellomiDiscoverImageDeleteCall(location: location, base: base) {
+                    _ = loader.performImage(loggedIn: true, configuration: configuration, call: call) { _ in }
+                }
+            }
+        }
+        self.imageBytes = [:]
+        self.imagePictures = [:]
+        self.imageSessions = [:]
+        self.imageFlight = nil
+        _ = tellomiDiscoverImageByteCount(after: .close, current: 1)
     }
 }
 
