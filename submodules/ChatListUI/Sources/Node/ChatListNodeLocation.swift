@@ -238,14 +238,14 @@ public func chatListViewForLocation(chatListLocation: ChatListControllerLocation
                 return chatListNodeViewUpdateWithCommunitySummaries(account: account, update: update)
             }
         case let .scroll(index, sourceIndex, scrollPosition, animated, _):
-            guard case let .chatList(index) = index else {
+            guard case let .chatList(chatListIndex) = index else {
                 return .never()
             }
             
-            let directionHint: ListViewScrollToItemDirectionHint = sourceIndex > .chatList(index) ? .Down : .Up
+            let directionHint: ListViewScrollToItemDirectionHint = sourceIndex > .chatList(chatListIndex) ? .Down : .Up
             let chatScrollPosition: ChatListNodeViewScrollPosition = .index(index: index, position: scrollPosition, directionHint: directionHint, animated: animated)
             var first = true
-            return account.viewTracker.aroundChatListView(groupId: groupId._asGroup(), filterPredicate: filterPredicate, index: index, count: 80, shouldLoadCanMessagePeer: shouldLoadCanMessagePeer)
+            return account.viewTracker.aroundChatListView(groupId: groupId._asGroup(), filterPredicate: filterPredicate, index: chatListIndex, count: 80, shouldLoadCanMessagePeer: shouldLoadCanMessagePeer)
             |> map { view, updateType -> ChatListNodeViewUpdate in
                 let genericType: ViewUpdateType
                 let scrollPosition: ChatListNodeViewScrollPosition? = first ? chatScrollPosition : nil
