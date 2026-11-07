@@ -9,6 +9,7 @@ import AccountContext
 import UniversalMediaPlayer
 import TelegramAudio
 import TelegramPresentationData
+import TelegramUIPreferences
 
 private struct AccountTasks {
     let stateSynchronization: Bool
@@ -1147,7 +1148,8 @@ public final class SharedWakeupManager {
                     account.shouldBeServiceTaskMaster.set(.single(.never))
                 }
                 account.shouldExplicitelyKeepWorkerConnections.set(.single(tasks.backgroundAudio || tasks.backgroundLocation || tasks.importantTasks.pendingStoryCount != 0 || tasks.importantTasks.pendingMessageCount != 0))
-                account.shouldKeepOnlinePresence.set(.single(primary && self.inForeground))
+                let secretView = TellomiSecretViewSessions.shared.suppressesOnline(accountPeerId: account.peerId.toInt64())
+                account.shouldKeepOnlinePresence.set(.single(primary && self.inForeground && !secretView))
                 account.shouldKeepBackgroundDownloadConnections.set(.single(tasks.backgroundDownloads))
             }
             
