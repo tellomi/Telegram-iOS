@@ -2269,7 +2269,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
     }
 }
 
-func roundVideoTranscriptPhase(_ state: AudioTranscriptionButtonComponent.TranscriptionState) -> RoundVideoTranscriptPhase {
+public func roundVideoTranscriptPhase(_ state: AudioTranscriptionButtonComponent.TranscriptionState) -> RoundVideoTranscriptPhase {
     switch state {
     case .collapsed:
         return .collapsed
@@ -2282,7 +2282,7 @@ func roundVideoTranscriptPhase(_ state: AudioTranscriptionButtonComponent.Transc
     }
 }
 
-func roundVideoTranscriptionState(_ phase: RoundVideoTranscriptPhase) -> AudioTranscriptionButtonComponent.TranscriptionState {
+public func roundVideoTranscriptionState(_ phase: RoundVideoTranscriptPhase) -> AudioTranscriptionButtonComponent.TranscriptionState {
     switch phase {
     case .collapsed:
         return .collapsed
