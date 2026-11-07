@@ -1,0 +1,145 @@
+# Pull-request tests on the standard GitHub-hosted xcode-27 runner.
+#
+# Public repositories are not billed for this runner. It is the 3-core
+# arm64 image (not xcode-27-xlarge). The job prints the live OS, Xcode,
+# memory, disk, and simulators, then runs only the test targets that exist
+# on the pull request. It does not sign, upload an IPA, or call TestFlight.
+# A push to master does not start it. workflow_dispatch is omitted: the
+# integration token cannot create that event (HTTP 403, actions=write).
+
+name: PR tests
+
+on:
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: xcode-27
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
+
+      - name: Record this runner
+        run: |
+          set -euo pipefail
+          echo "runner image provisioner follows"
+          sw_vers
+          uname -m
+          sysctl -n hw.memsize hw.ncpu
+          df -h /
+          echo "xcode apps:"
+          ls -1 /Applications | grep -E '^Xcode' || true
+          echo "simulators:"
+          xcrun simctl list devices available || true
+          product="$(sw_vers -productVersion)"
+          [[ "${product%%.*}" == "27" ]]
+          candidate="/Applications/Xcode_27.1.app"
+          if [[ ! -d "${candidate}" ]]; then
+            echo "Xcode 27.1 is not installed. versions.json requires it."
+            exit 1
+          fi
+          sudo xcode-select -s "${candidate}/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -version | head -n 1 | grep -q '^Xcode 27.1'
+
+      - name: Pinned Bazel
+        run: |
+          set -euo pipefail
+          spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
+          version="${spec%%:*}"
+          want="${spec##*:}"
+          name="bazel-${version}-darwin-arm64"
+          dest="${RUNNER_TEMP}/${name}"
+          curl -fsSL -o "${dest}" "https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
+          got="$(shasum -a 256 "${dest}" | awk '{print $1}')"
+          [[ "${got}" == "${want}" ]]
+          chmod +x "${dest}"
+          echo "BAZEL=${dest}" >> "${GITHUB_ENV}"
+          "${dest}" --version
+
+      - name: Write the configuration repository
+        run: |
+          set -euo pipefail
+          python3 .github/proof_configure.py \
+            --bazel "${BAZEL}" \
+            --configuration build-system/appstore-configuration.json \
+            --bazel-user-root /private/var/tmp/_bazel_prtests
+          test -f build-input/configuration-repository/variables.bzl
+          test -f build-input/configuration-repository/MODULE.bazel
+
+      - name: Run the tests this pull request contains
+        run: |
+          set -euo pipefail
+          # Host swift_test targets, then the simulator unit test. A label
+          # that this commit does not declare is skipped. A declared target
+          # that fails fails the job. Feed proof is not in this list.
+          host=(
+            //submodules/ChatListUI:ChatListScrollAnchorTests
+            //submodules/TellomiWallpapers:TellomiWallpapersTests
+            //submodules/TelegramUIPreferences:TellomiTabNavigationDecisionsTests
+            //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
+          )
+          ios=(
+            //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
+          )
+          present() {
+            local label="$1"
+            local err="${RUNNER_TEMP}/query.err"
+            if "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests query "${label}" >"${RUNNER_TEMP}/query.out" 2>"${err}"; then
+              return 0
+            fi
+            if grep -E -q 'no such target|no such package' "${err}"; then
+              echo "skip ${label}"
+              return 1
+            fi
+            cat "${err}"
+            exit 1
+          }
+          run_host=()
+          for label in "${host[@]}"; do
+            if present "${label}"; then
+              run_host+=("${label}")
+            fi
+          done
+          run_ios=()
+          for label in "${ios[@]}"; do
+            if present "${label}"; then
+              run_ios+=("${label}")
+            fi
+          done
+          if (( ${#run_host[@]} == 0 && ${#run_ios[@]} == 0 )); then
+            echo "no test targets were found"
+            exit 1
+          fi
+          fail=0
+          if (( ${#run_host[@]} > 0 )); then
+            for label in "${run_host[@]}"; do
+              if ! "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc; then
+                fail=1
+              fi
+            done
+          fi
+          if (( ${#run_ios[@]} > 0 )); then
+            for label in "${run_ios[@]}"; do
+              if ! "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64; then
+                fail=1
+              fi
+            done
+          fi
+          test ! -f bazel-bin/Telegram/Telegram.ipa
+          exit "${fail}"
