@@ -1096,6 +1096,37 @@ A failure or an empty completion closes the progress, stops a video export, and 
 | `submodules/TelegramUI/Components/TabBarLayout/BUILD` | Simulator pin is iPhone 17 / iOS 27.0. |
 | `submodules/TellomiWallpapers/Tests/TellomiWallpapersTests.swift` | Compare names and colors separately. A tuple array does not satisfy `XCTAssertEqual` on Xcode 27.1. |
 
+## Round video transcription
+
+Tapping transcribe on a round video used to treat any stored transcript, including an error or an empty result, as a reason to replace the circle with the file row. That path sets the video node's alpha to zero and `canAttachContent = true`, which stops the player from attaching. With no text to show, the circle stays a blank disc and the duration, mute, time, and button go with it. A later open of the chat repeats that layout.
+
+A non-empty transcript is now the only case that replaces the video. Failure, an empty result, a still-pending request, and cancel leave the circle and its controls in place. The request is not started again by itself. The expanded mask uses the larger of the bubble and the new content size, so the text is not clipped back to the circle.
+
+| File | Change |
+| --- | --- |
+| `RoundVideoTranscriptionDecision.swift` | When the circle stays and when it may be replaced. |
+| `ChatMessageInteractiveInstantVideoNode.swift` | Applies that decision. Cancel stops an in-progress request. A failure restores the video. |
+| `ChatMessageInstantVideoBubbleContentNode.swift` | Expands only when the decision replaces the video. The mask is not stuck on the old circle. |
+| `RoundVideoTranscriptionDecisionTests.swift` | Success, pending, failure, empty, cancel, and no automatic retry. |
+
+## View-once, media timers, and conversation TTL
+
+The iOS client already separates these timers. This records what each one does to the message, the cache, and `readMessageContents`. No production database or file is touched. The tests use only the values below.
+
+A cloud view-once photo, video, voice, or round video is an `AutoclearTimeoutMessageAttribute` whose timeout is `0x7fffffff`. A cloud self-destruct photo or video is the same attribute with a timeout of at most 60 seconds. Voice and round video use that view-once value too; playback start and the secret-media gallery call the same consume function. The conversation TTL is an `AutoremoveTimeoutMessageAttribute` and is not secret media once it is longer than 60 seconds. A secret chat stores both its media timer and its conversation timer as `AutoremoveTimeoutMessageAttribute`. Compose and peer info still call `createSecretChat`.
+
+Opening an incoming view-once or media-timer message starts the countdown and queues `messages.readMessageContents` (a channel uses `channels.readMessageContents`). It does not replace the media and does not delete the cache. The sender's copy is ignored because the message is not incoming. A secret chat queues `readMessagesContent` on the secret-chat operation log instead of the cloud RPC. An incoming cloud conversation TTL already begins at the message date.
+
+When the local timer fires, a cloud view-once or media timer keeps the message and stores `TelegramMediaExpiredContent`. The video, its thumbnail, and a voice track stay in `mediaBox`. A cloud conversation TTL deletes the message row and also leaves the cache. A secret chat deletes the row and force-removes those resource ids. None of the three calls `readMessageContents` or marks the file id invalid. A later holder of the old id can still read the cache or ask the server. That is a different step from the placeholder.
+
+A failed cloud `readMessageContents` is swallowed and the operation log entry is then removed, so that report is not retried. The local placeholder does not wait for the RPC. Another device applies the remote consume by inserting the placeholder for view-once, without deleting the cache.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Tellomi/EphemeralMediaLifecycle.swift` | The five kinds and the four effects: placeholder, row removal, cache removal, server report. |
+| `submodules/TelegramCore/Tests/EphemeralMediaLifecycleTests.swift` | Synthetic cases for sender, recipient, expiry, a failed report, and a stale resource id. |
+| `submodules/TelegramCore/BUILD` | Host test `EphemeralMediaLifecycleTests`. |
+
 ## Open in 高德, 百度, and 腾讯
 
 The Open In sheet already lists 高德, 百度, and 腾讯 when `canOpenURL` says they are installed, then Google Maps under the same check, with Apple Maps always first. TestFlight 14.0.4 build 71 contains that code (`118e9b2560` is an ancestor of `eb90bf0e2d`). A pin, a venue, and a live location all use `OpenInItem.location`. Directions and the share action use the same list. The watch app still opens Apple Maps only.
