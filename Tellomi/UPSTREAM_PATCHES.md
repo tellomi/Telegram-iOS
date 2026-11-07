@@ -981,3 +981,21 @@ The actions are the upstream ones. On the main list, the leading side is read/un
 | `submodules/ChatListUI/Sources/Node/ChatListItem.swift` | Comment on the nil lookup. The MingCute names are unchanged. |
 | `Tellomi/Icons/test_chat_list_swipe.py` | Catalog name, circle-versus-capsule, actions, and the upstream gesture thresholds. |
 | `build-system/Make/ChatListSwipeCheck.py`, `Make.py` | `build` and `test` run that check next to the icon-size check. |
+
+## Chat history scroll
+
+Scrolling into older messages, then waiting for the next history fetch, could replace the rows on screen with nothing. The list anchors an empty-to-full replace at index 0. Index 0 is the newest message, so the chat jumps back to the edge it was opened on.
+
+A history navigation (`ChatHistoryLocation.Navigation`, the visible edge asking for another page, and `applyHole` re-anchoring on the visible message) subscribes to `aroundMessageHistoryView`. A message that is stored but still inside a hole produces an empty loading view. `.Scroll` keeps that frame as `.Loading`. `.Navigation` published it as the first `.UpdateVisible` snapshot. `ChatHistoryListNode` applied that snapshot and deleted every row. `CoreVirtualListView` anchors a collection with no surviving identity at index 0.
+
+The empty loading snapshot is no longer that anchored frame. `first` stays unset until a view has entries. The node keeps the rows already on screen only when the snapshot belongs to the same load that displayed them (`historyEmptyLoadingDecision`). `beginChatHistoryTransitions` — including `updateChatLocation` — bumps `historyLoadGeneration` before the new subscription emits, and a snapshot from an older subscription is dropped. A newer load applies the empty frame, so the previous chat's messages are not left up. A finished empty chat (`isLoading == false`) still clears.
+
+The ranged-hole close that refused a page whose ids sat outside the request was removed. Refusing the close left the hole in place while `addMessages` still stored the page, and the hole is requested again after the completed entry expires. That does not converge. `Holes.swift` is back to the upstream range close.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Sources/ChatHistoryViewForLocation.swift` | An empty loading navigation view does not consume the first anchored frame. |
+| `submodules/TelegramUI/Sources/ChatHistoryEmptyLoadingDecision.swift` | Same-load empty frame keeps the rows. A new load applies it. |
+| `submodules/TelegramUI/Sources/ChatHistoryListNode.swift` | Uses that decision. Each history subscription has a generation. |
+| `submodules/TelegramUI/Tests/ChatHistoryEmptyLoadingDecisionTests.swift` | Same load, chat switch, empty previous, finished empty chat, stale subscription. |
+| `submodules/TelegramUI/BUILD` | Host test `ChatHistoryEmptyLoadingDecisionTests`. |
