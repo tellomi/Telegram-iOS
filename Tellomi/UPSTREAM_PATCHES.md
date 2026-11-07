@@ -1033,6 +1033,27 @@ The email code field called `applyField` without the dark flag, so the fill stay
 | `submodules/ChatListUI/Sources/ChatListController.swift` | Skips the setup screen from `getPassword` plus the local peer. Does not dismiss the suggestion. |
 | `submodules/AuthorizationUI/Tests/TellomiLoginFieldColorsTests.swift`, `submodules/TelegramUIPreferences/Tests/TellomiSettingsDecisionsTests.swift` | Contrast and the email-channel decision. |
 
+## Theme colors, chat themes, and wallpapers
+
+Compared with the theme picker and color grid as they stood before the solid-wallpaper change (`cd95502432`, stacked on the fork of Telegram-iOS). The later comparison pin `279f89e4d4` (Telegram master, 2026-10-28) still ships that color grid, the four built-in themes, and a wallpaper that is a fill or an embedded pattern. It does not ship the one-color grid.
+
+Tellomi had replaced that grid with one solid and no gradients, dropped Classic and Tinted from the picker, and pointed the default wallpaper at a bundled pattern file (`tm_doodle`, access hash 0). `drawThemeImage` only paints `.color` and `.gradient` without a file. A `.file` preview waits on a document download. `ChatWallpaperBuiltin0.jpg` is not in the tree, so `.builtin` draws nothing. Chat theme tiles used the sticker file and left the emoticon blank when that file was missing.
+
+teamgram `account.getWallPapers` (`app/bff/accountassets/wallcatalog.go`) returns `wallPaperNoFile` fills, ids `9100000001`–`9100000007`. A one-color paper was stored as `.color` and the id was dropped, so install sent `inputWallPaperNoFile` id 0. `account.getChatThemes` (`chatthemes.go`) returns an emoticon and a day/night accent and no document and no wallpaper. The client does not call Telegram production for these.
+
+The color grid is the 27 solids and 9 gradients again, separate for light and dark. The picker lists Classic, Tinted, Day, and Night. The default wallpaper is that gradient (Day stays white, as upstream). A saved wallpaper is not rewritten. The grid no longer substitutes the doodle or invents file wallpapers when the server list is empty or the fetch fails. A no-file solid with an id is painted as two stops of that color and the id is what gets saved. A chat theme with no sticker still shows its emoticon, and a theme with no wallpaper previews its accent as a fill.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiWallpapers/Sources/ThemeSurfaceRestore.swift` | Palettes, picker order, no-file paint, empty fetch, emoticon and accent preview. |
+| `submodules/TellomiWallpapers/Tests/ThemeSurfaceRestoreTests.swift` | Light/dark palettes, picker order, id kept, empty and failed fetch, emoticon, accent fill, color round-trip. |
+| `DefaultDayPresentationTheme.swift`, `DefaultDarkPresentationTheme.swift`, `DefaultDarkTintedPresentationTheme.swift` | Default wallpaper is a fill. `.builtin` is not rewritten to the doodle. |
+| `ThemeColorsGridController.swift` | Reads the restored palettes. |
+| `ThemeGridControllerNode.swift` | Does not inject file wallpapers or replace the built-in slot. |
+| `ThemePickerController.swift`, `ThemeSettingsController.swift` | Classic, Tinted, Day, Night. |
+| `Wallpaper.swift` | `wallPaperNoFile` keeps its id. |
+| `ChatThemeScreen.swift` | Emoticon text and accent fill when the document and wallpaper are absent. |
+
 ## Pull request tests
 
 `.github/workflows/pr-tests.yml` runs on pull requests on the standard `xcode-27` runner. It does not run on a master push and does not upload. The tab-bar layout test asks for iPhone 17 on iOS 27.0, which that image has. iOS 26.5 is not installed there.
