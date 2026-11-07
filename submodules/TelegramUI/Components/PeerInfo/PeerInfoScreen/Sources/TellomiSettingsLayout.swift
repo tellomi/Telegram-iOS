@@ -28,7 +28,7 @@ func tellomiSettingsHomeItems(data: PeerInfoScreenData?, context: AccountContext
             PeerInfoScreenHeaderItem(id: "tellomi.header.\(group.rawValue)", text: copy.title(for: group))
         ]
         for row in rows {
-            items.append(tellomiSettingsHomeRow(row, source: source, context: context, presentationData: presentationData, interaction: interaction, copy: copy))
+            items.append(tellomiSettingsHomeRow(row, source: source, data: data, loginEmailPattern: loginEmailPattern, context: context, presentationData: presentationData, interaction: interaction, copy: copy))
         }
         if group == .general, let proxy = tellomiSettingsDisclosure(source, .proxy, id: 0) {
             let proxyItem = tellomiRelocatedDisclosure(proxy, id: "tellomi.proxy")
@@ -69,7 +69,7 @@ private func tellomiDisclosure(id: String, text: String, icon: UIImage?, label: 
     return PeerInfoScreenDisclosureItem(id: id, label: label, text: text, icon: icon, action: action)
 }
 
-private func tellomiSettingsHomeRow(_ row: TellomiSettingsHomeRow, source: [(AnyHashable, [PeerInfoScreenItem])], context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, copy: TellomiSettingsCopy) -> PeerInfoScreenItem {
+private func tellomiSettingsHomeRow(_ row: TellomiSettingsHomeRow, source: [(AnyHashable, [PeerInfoScreenItem])], data: PeerInfoScreenData?, loginEmailPattern: String?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, copy: TellomiSettingsCopy) -> PeerInfoScreenItem {
     switch row {
     case .profile:
         if let item = tellomiSettingsDisclosure(source, .myProfile, id: 0) {
