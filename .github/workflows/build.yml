@@ -1,4 +1,9 @@
-# Unsigned release build of the iOS app. Publishes a GitHub Release on master.
+# Simulator package of the iOS app. Signing, the IPA, and the GitHub Release
+# run only for a workflow_dispatch with package_release. A push to master
+# does not package or publish. A push that only changes .github does not
+# start this workflow at all: paths-ignore skips it when every changed file
+# is under .github, which is how a .github-only merge stays off this job.
+# Unsigned FeedScreen compile verification is the Proof compile workflow.
 #
 # Runner: xcode-27 (GitHub-hosted, macOS 27, arm64). macos-13 was removed in
 # December 2025, so this job queued forever and never received a machine.
@@ -29,9 +34,16 @@ name: CI
 on:
   push:
     branches: [ master ]
+    paths-ignore:
+      - '.github/**'
 
   workflow_dispatch:
     inputs:
+      package_release:
+        description: 'Sign, package the simulator IPA, and publish the GitHub Release. Ordinary pushes do not.'
+        type: boolean
+        required: false
+        default: false
       runner:
         description: 'runs-on as JSON. Empty uses vars.IOS_CI_RUNNER, else "xcode-27". Self-hosted Mac Studio: ["self-hosted","macOS","tellomi-mac"]'
         required: false
@@ -47,9 +59,13 @@ permissions:
 
 jobs:
   build:
-    # Default stays xcode-27. Override per dispatch (inputs.runner) or for
-    # every run, including pushes to master, with the repository variable
-    # IOS_CI_RUNNER (JSON, e.g. ["self-hosted","macOS","tellomi-mac"]).
+    # Packaging is the explicit release batch. A master push matches this
+    # workflow only when it changes something outside .github, and even then
+    # this job does not run, so it does not sign, copy an IPA, or publish.
+    if: github.event_name == 'workflow_dispatch' && inputs.package_release
+    # Default stays xcode-27. Override per dispatch (inputs.runner) or with
+    # the repository variable IOS_CI_RUNNER
+    # (JSON, e.g. ["self-hosted","macOS","tellomi-mac"]).
     runs-on: ${{ fromJSON(github.event.inputs.runner || vars.IOS_CI_RUNNER || '"xcode-27"') }}
     env:
       ALLOW_XCODE_MISMATCH: ${{ github.event.inputs.allow_xcode_mismatch || vars.IOS_CI_ALLOW_XCODE_MISMATCH || 'false' }}
@@ -260,11 +276,12 @@ jobs:
 
       # actions/create-release@v1 and actions/upload-release-asset@v1 run on
       # Node 12, which current GitHub images reject. gh is on the image.
-      # workflow_dispatch of a non-master ref (a proof run) must not publish.
+      # Only the explicit package batch on master publishes. A push, and a
+      # dispatch that leaves package_release off, do not reach this step.
       # The integration token sometimes cannot create releases (HTTP 403).
       # That must not fail the compile. Any other error still fails the job.
       - name: Publish GitHub Release
-        if: github.ref == 'refs/heads/master'
+        if: github.event_name == 'workflow_dispatch' && inputs.package_release && github.ref == 'refs/heads/master'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

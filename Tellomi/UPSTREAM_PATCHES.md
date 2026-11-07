@@ -627,6 +627,25 @@ The Calls tab already hides from a long-press on its icon (`CallListController.t
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | New module `TellomiFeedScreen`. Empty Discover tab (D-37). Not `NewsScreen`. Long-press hides it (D-38). `TellomiFeedScreenNode` imports `TelegramUIPreferences` so it can read `TellomiTabCopy`. Opening a post from a link retries for about a second when the screen is not in a navigation stack yet. |
 | `submodules/TelegramUI/BUILD` | Depends on that module. |
 
+## Main tab bar: Discover, Chats, Me
+
+A fresh install still shows Discover (发现), Chats (聊天), and the settings controller. The settings tab's label is Me (我). The settings page, its rows, and `Settings_Title` stay. Chats uses the tab copy, not a rewrite of `DialogList_Title`. The back button on the chat list still uses `DialogList_Title`.
+
+The navigation-bar switches and the calls-list Show Calls Tab switch are unchanged. They still appear, they still write `TellomiTabSettings` and `CallListSettings`, and `tellomiRootTabOrder` still inserts Discover, Calls, Contacts, and News from those values. Chats and Settings stay in the bar. Long-press hide on Discover and Contacts is unchanged. `ios_killswitch_disable_tellomi_tabs` = `1` still builds the upstream bar. Decision recorded 2026-11-07: do not hide or disable those switches, and do not change what they store. How the switches should relate to the three-tab default is left for a later change.
+
+Labels share one font. Dynamic Type scales that font from 10pt caption2, capped at 13pt so the title stays under the icon in the 56pt item. One scale then shrinks every title together so the slots stay equal and the text is not clipped, down to 0.7. Below that the existing weighted widths remain. VoiceOver's label is the drawn title, and the selected tab includes the selected trait. Icon and title frames use the same y for every item of a given title height.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | Tab order moved here unchanged. Me label and the accessibility label. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabSettings.swift` | Order functions moved out so the host test can compile them. Stored flags remain. |
+| `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | Fresh order is Discover, Chats, Settings. Switches still insert and remove tabs. Me is not the settings page title. |
+| `submodules/ChatListUI/Sources/ChatListController.swift` | Tab title is the Chats copy. The back item stays `DialogList_Title`. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings tab label is Me. A profile that is not the settings tab keeps `Settings_Title`. |
+| `submodules/TelegramUI/Components/TabBarLayout/Sources/TabBarItemsLayout.swift` | Shared title scale, shared title frame, selected accessibility trait. |
+| `submodules/TelegramUI/Components/TabBarLayout/Tests/TabBarItemsLayoutTests.swift` | Narrow 320pt bar stays equal. Scale and baseline. |
+| `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Applies that font, and exposes one accessibility element per tab. |
+
 ## DC addresses from help.getConfig (M7 / D-33)
 
 `Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
@@ -925,6 +944,32 @@ Master CI on `969315d5df` failed `//submodules/ChatListUI:ChatListUI` while buil
 | `submodules/ChatListUI/Sources/Node/ChatListNodeLocation.swift` | The scroll position keeps the engine index. The view tracker still receives the unwrapped `ChatListIndex`. |
 | `submodules/ChatListUI/Sources/Node/ChatListViewTransition.swift` | Both scroll comparisons use the engine index directly. |
 
+## Discover image publish
+
+D-10 multi-image publish now follows the content-engine contract verified at `99fb6ce` on 2026-11-06. No upstream file is edited.
+
+Limits, from that contract and not from the Android client: `media_keys` accepts at most 10 keys, in order, and `OPTIONS /v1/feed/media/uploads` advertises `Tus-Max-Size: 20971520`. The picker stays closed unless `GET /v1/capabilities` includes `media_upload`. A post with no images still sends the previous text, quote, and poll body and does not wait on an upload.
+
+Upload is tus 1.0.0. `OPTIONS` is sent without the discover credential. `POST`, `PATCH`, `HEAD`, and `DELETE` use the existing Bearer credential and only after the URL is checked as this feed origin's `/v1/feed/media/uploads` path. `Location` on another host, an `http` URL, a URL with a user, or a path that escapes the upload prefix is refused and the credential is not attached. JPEG, PNG, and WebP keep their compressed image data. GPS IFDs and XMP GPS fields are removed before upload; a file with no location metadata is not rewritten. Orientation tag `0x0112` stays. HEIC is transcoded to JPEG without copying source properties. `415` voids the upload. `409` reads the offset with `HEAD` and resumes. `429` waits for `Retry-After` (60 when the header is missing). `DELETE` cancels an upload that is not attached to a post.
+
+The post detail lays text, images, link, poll, and comments out in one scrollable stack, so ten images stay reachable. Closing the composer cancels the in-flight URLSession task, drops the in-memory bytes, and deletes a known unattached Location. It does not write a temporary image file. Background cancels the socket and waits with backoff before `HEAD`. A lost create response and an uncertain publish response do not invent a delete. Logout calls `signOut`, which cancels image tasks and stops a later `performImage`, and clears the preview book. Previews are keyed by account and post id. Removing a finished image before the post is sent deletes that unattached upload. After the post is sent, or when the publish response was lost, the local row can be dropped without deleting the server key. A missing or unknown card state is not treated as `ok`. `pending` stays distinct from `unavailable` and does not fetch remote media.
+
+`URLSession` redirects go through `TellomiDiscoverRedirectGate`. Any target off the original https origin or outside the original path prefix is refused, so the Bearer token is not forwarded. EXIF IFD walks stop at depth 8, 256 entries, a seen-offset set, and checked lengths, so a cycle or a deep chain is rejected. `signOut` stays set until `noteSignedIn(account:)`. `run(loggedIn: true)` from an already-open detail does not clear it. This client does not switch Discover picking over to `MediaEditorScreen` or `TGMediaAssetsController`: those own story editing and re-encode to JPEG. `ImageCompression.compressImageToJPEG` is not used: it always writes JPEG and would change PNG and WebP. Video upload stays out of this change.
+
+`POST /v1/feed/posts` adds `media_keys`. Text may be empty when keys are present. `client_nonce` is unchanged across retries. `operation_id` is not sent: `write_idempotency` is recognized, and this contract does not define a value for that field. `400 invalid_media` fails the whole post and does not rotate the nonce. `401 credential_expired` is the existing unauthorized refresh.
+
+Visibility is not rewritten. This client still sends `public`, `contacts`, `close_friends`, `include`, and `exclude`. The server enum is `public`, `friends`, `include`, `exclude`, and `only_me`. `contacts` and `close_friends` are sent as those strings and work only when `ENGINE_DISCOVER_RELATIONS` is on. They are not mapped to `friends` or `only_me`. `include` and `exclude` still require `audience`.
+
+Before review, cards are not `ok`. The author's pending post has no `media_keys` in the card, so the compose screen keeps the local bytes on the post id and the detail shows that preview. After review, `media[]` is `{type:image,key,w,h}` and an optional `url`. A present https `url` is used. Otherwise `feed/config` `media_base_url` is joined with the key. No public host is invented. Video is still not uploaded.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverImagePublish.swift` | Selection, upload phases, cancel, retry, and the publish gate. |
+| `submodules/TellomiDiscover/Tests/TellomiDiscoverImagePublishTests.swift` | Caps, incomplete send, cancel, nonce, and the unchanged text body. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverImagePrivacy.swift` | Strips GPS from JPEG, PNG, and WebP without re-encoding the image. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverDetailLayout.swift` | Scroll stack so ten images stay reachable above the poll and link. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiDiscoverComposeController.swift` | Picker, upload, and release on close, background, and cancel. |
+
 ## Lock-screen sender avatar
 
 A message notification on the lock screen and in Notification Center was drawing the Tellomi app icon. Upstream Telegram draws the sender's photo there, or the colored letter avatar when the peer has no photo. The notification service already does the same work as upstream: `peerAvatar` builds an `INImage` from the cached profile photo (or the letter avatar), `addSenderInfo` puts it on an `INSendMessageIntent`, and `generate` calls `UNNotificationContent.updating(from:)`. `Avatar/TellomiMark` is not on this path. It is only the in-app fallback for service users 777000 and 333000 when they have no photo.
@@ -940,3 +985,113 @@ The key is now signed when the main provisioning profile contains it. `prepare_a
 | `build-system/example-configuration/variables.bzl` | The checked-in example sets the flag true. |
 | `Tellomi/extension-suffixes.json`, `Tellomi/prepare_appstore_signing.py` | The main App ID requests `USERNOTIFICATIONS_COMMUNICATION`. A downloaded profile without the entitlement is reported and does not fail the signing run. |
 | `docs/TELLOMI.md` | The entitlement is no longer listed as absent. |
+
+## Chat list swipe buttons
+
+Checked against TelegramMessenger/Telegram-iOS `279f89e4d4f63f17227bf877dc3d8990f22ecd58` (master, "Bump version", 2026-10-28). `ItemListRevealOptionsNode.swift` and `ItemListRevealMotion.swift` match that tree. The circle-or-capsule choice is `ItemListRevealOptionLayoutMetrics.metrics` (upstream since `c64653ed`, merged here as `91eb779ae2` on 2026-05-14). A row at least `50 + 4 + ceil(11pt line height)` tall, with an icon, draws a 50×50 circle, corner radius 25. A shorter row, or an action with no icon, draws a 60×32 capsule, corner radius 16, and an iconless action puts the title inside the capsule. That capsule is the upstream iconless branch. It is not an iOS version of `UISwipeActionsConfiguration`, and it is not a Tellomi theme.
+
+`ChatListItem.swift` differs from that upstream file only in the swipe icons. Upstream plays `anim_mute`, `anim_delete`, `anim_archive`, `anim_unread`, and the other reveal Lotties. Tellomi keeps the MingCute PDFs from the icon pass (`599d6869aa`). Those imagesets sit in `Chat List/Swipe`. Every other imageset folder in `Images.xcassets` sets `provides-namespace`. `Swipe` did not, so the compiled name was `Chat List/Mute` (and the same for the other fourteen) while `swipeIcon` asks for `Chat List/Swipe/Mute`. `imageNamed` returned nil, `swipeIcon` returned `.none`, and `metrics(for:hasVisualIcons:)` took the capsule at every row height. Mute, delete, archive, unread, and pin all went through that one lookup.
+
+The actions are the upstream ones. On the main list, the leading side is read/unread and pin/unpin, and the trailing side is mute/unmute, delete, and archive. The archive list's trailing side is pin/unpin, delete, and unarchive, and its leading side is empty. A folder that excludes archived chats still offers archive. Full-swipe distance, the destructive confirmation (`width - 29`), the other confirmation (`width * 0.525`), the arming threshold (`width * 0.75`), and the 414/375 edge zones are the upstream `ItemListRevealMotion` values. The leading side uses `leftInset` and the trailing side uses `rightInset`. Light and dark still use `theme.list.itemDisclosureActions`. The MingCute drawings stay; the Lottie clips are not put back. The glyph page stays 30×30, which is under the circle's 40pt icon cap. Upstream's Lottie is scaled by an extra 1.5 and draws larger than the circle. That is the remaining difference.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Images.xcassets/Chat List/Swipe/Contents.json` | `provides-namespace`, same as `Chat List/Search` and `Chat List/Tabs`. |
+| `submodules/ChatListUI/Sources/Node/ChatListItem.swift` | Comment on the nil lookup. The MingCute names are unchanged. |
+| `Tellomi/Icons/test_chat_list_swipe.py` | Catalog name, circle-versus-capsule, actions, and the upstream gesture thresholds. |
+| `build-system/Make/ChatListSwipeCheck.py`, `Make.py` | `build` and `test` run that check next to the icon-size check. |
+
+## Chat list scroll anchor
+
+Opening a chat marks it read. That refresh, and a sort that follows, was sending the chat list back to the first row. PR 71 stopped `adjustScrollToFirstItem` while `visibleContentOffset()` still said the list was scrolled down. Two later paths still win. A clear drops every row, `UIScrollView` clamps the offset to 0, and the next frame's offset is `.none` or `.known(0)`, so the guard thinks the user is at the top. A delete-and-insert that leaves no surviving row is laid out from index 0 even when that guard skips the explicit scroll (`ListView` insertion with no anchor is index 0). Both happen while the chat is still open, which is why the list behind the chat is already at the top before the pop.
+
+The list remembers the row at the viewport edge and that row's distance from the top. A refresh, an unread update, or a reorder of the same folder scrolls to that row. An empty frame does not replace the memory with the clamped 0. The first population of an empty list, a folder change, and a second tap on the Chats tab still go to the top. Swipe circles (PR 97) only name the reveal icons; they do not move the list.
+
+| File | Change |
+| --- | --- |
+| `submodules/ChatListUI/Sources/Node/ChatListScrollAnchor.swift` | Anchor capture and the keep-or-top decision. |
+| `submodules/ChatListUI/Sources/Node/ChatListNode.swift` | Saves the row from the visible nodes. Applies the decision instead of always scrolling to row 0. Folder changes and `scrollToPosition` (the Chats tab) clear it. |
+| `submodules/ChatListUI/Tests/ChatListScrollAnchorTests.swift` | Scrolled list, open chat, unread reorder, clamped offset, badge-only update, sort, refresh, folder, Chats tab, first population. |
+| `submodules/ChatListUI/BUILD` | Host `swift_test` `ChatListScrollAnchorTests`. |
+
+## Chat history scroll
+
+Scrolling into older messages, then waiting for the next history fetch, could replace the rows on screen with nothing. The list anchors an empty-to-full replace at index 0. Index 0 is the newest message, so the chat jumps back to the edge it was opened on.
+
+A history navigation (`ChatHistoryLocation.Navigation`, the visible edge asking for another page, and `applyHole` re-anchoring on the visible message) subscribes to `aroundMessageHistoryView`. A message that is stored but still inside a hole produces an empty loading view. `.Scroll` keeps that frame as `.Loading`. `.Navigation` published it as the first `.UpdateVisible` snapshot. `ChatHistoryListNode` applied that snapshot and deleted every row. `CoreVirtualListView` anchors a collection with no surviving identity at index 0.
+
+The empty loading snapshot is no longer that anchored frame. `first` stays unset until a view has entries. The node keeps the rows already on screen only when the snapshot belongs to the same load that displayed them (`historyEmptyLoadingDecision`). `beginChatHistoryTransitions` — including `updateChatLocation` — bumps `historyLoadGeneration` before the new subscription emits, and a snapshot from an older subscription is dropped. A newer load applies the empty frame, so the previous chat's messages are not left up. A finished empty chat (`isLoading == false`) still clears.
+
+The ranged-hole close that refused a page whose ids sat outside the request was removed. Refusing the close left the hole in place while `addMessages` still stored the page, and the hole is requested again after the completed entry expires. That does not converge. `Holes.swift` is back to the upstream range close.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Sources/ChatHistoryViewForLocation.swift` | An empty loading navigation view does not consume the first anchored frame. |
+| `submodules/TelegramUI/Sources/ChatHistoryEmptyLoadingDecision.swift` | Same-load empty frame keeps the rows. A new load applies it. |
+| `submodules/TelegramUI/Sources/ChatHistoryListNode.swift` | Uses that decision. Each history subscription has a generation. |
+| `submodules/TelegramUI/Tests/ChatHistoryEmptyLoadingDecisionTests.swift` | Same load, chat switch, empty previous, finished empty chat, stale subscription. |
+| `submodules/TelegramUI/BUILD` | Host test `ChatHistoryEmptyLoadingDecisionTests`. |
+
+## Email sign-in versus native login email, and dark login fields
+
+A Tellomi email account signs in with that address in `auth.sendCode` / `auth.signIn` / `auth.signUp` `phone_number`. The device remembers it because `user` has no sign-in email field. That address is not `account.password.login_email_pattern` and not the cloud-password recovery email (`email_unconfirmed_pattern` / `account.passwordSettings.email`).
+
+`account.getPassword.login_email_pattern` is read, not written, for an email-only account. The pending teamgram change (PR 227, `2f791858`, not merged) puts a mask of `users.email` there even when there is no cloud password. `users.phone` stays NULL. Recovery stays on `email_unconfirmed_pattern` / `user_passwords.email`. `emailVerifyPurposeLoginChange` to any other address is `EMAIL_NOT_ALLOWED` before a message is sent; it does not change `users.email`, `user.id`, or sessions. A phone account can still open the native login-email screen. A mask is shown as a mask and is not stored as the full address. A device cache cannot hide a real phone account's email row, and a missing cache cannot hide a server mask. `SETUP_LOGIN_EMAIL` is not presented when that decision says the account already has an identity email. The suggestion is not dismissed.
+
+The email code field called `applyField` without the dark flag, so the fill stayed `#F2F3F5` while dark mode set the digits to white. The nickname field assigned the value with `itemPlaceholderTextColor`, which is `#4d4d4d` in the default dark theme, on the dark fill `#2C2C2E`. Both pairs are below 3:1. Field fill, text, caret, placeholder, and error now come from `tellomiLoginFieldColors`. The name screen follows a system appearance change with the rest of the login flow.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiLoginFieldColors.swift` | Shared field colors and the contrast helpers. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Palette field colors read that helper. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryControllerNode.swift` | Email code fill follows dark. Digits, caret, placeholder, and error use the palette. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSignUpController.swift`, `AuthorizationSequenceSignUpControllerNode.swift`, `AuthorizationSequenceController.swift` | Nickname text is the field color, not the placeholder gray. Appearance changes reach this screen. |
+| `submodules/TelegramUIPreferences/Sources/TellomiSettingsDecisions.swift` | Sign-in address versus native login email versus recovery email. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/TellomiSettingsLayout.swift`, `PeerInfoSettingsItems.swift`, `PeerInfoScreenSettingsActions.swift`, `PeerInfoScreen.swift` | Settings reads `login_email_pattern`. A mask is not stored. A phone account still opens the native screen. |
+| `submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift` | Privacy → login email does not start LoginChange for an email-only identity. |
+| `submodules/ChatListUI/Sources/ChatListController.swift` | Skips the setup screen from `getPassword` plus the local peer. Does not dismiss the suggestion. |
+| `submodules/AuthorizationUI/Tests/TellomiLoginFieldColorsTests.swift`, `submodules/TelegramUIPreferences/Tests/TellomiSettingsDecisionsTests.swift` | Contrast and the email-channel decision. |
+
+## Theme colors, chat themes, and wallpapers
+
+Compared with the theme picker and color grid as they stood before the solid-wallpaper change (`cd95502432`, stacked on the fork of Telegram-iOS). The later comparison pin `279f89e4d4` (Telegram master, 2026-10-28) still ships that color grid, the four built-in themes, and a wallpaper that is a fill or an embedded pattern. It does not ship the one-color grid.
+
+Tellomi had replaced that grid with one solid and no gradients, dropped Classic and Tinted from the picker, and pointed the default wallpaper at a bundled pattern file (`tm_doodle`, access hash 0). `drawThemeImage` only paints `.color` and `.gradient` without a file. A `.file` preview waits on a document download. `ChatWallpaperBuiltin0.jpg` is not in the tree, so `.builtin` draws nothing. Chat theme tiles used the sticker file and left the emoticon blank when that file was missing.
+
+teamgram `account.getWallPapers` (`app/bff/accountassets/wallcatalog.go`) returns `wallPaperNoFile` fills, ids `9100000001`–`9100000007`. A one-color paper was stored as `.color` and the id was dropped, so install sent `inputWallPaperNoFile` id 0. `account.getChatThemes` (`chatthemes.go`) returns an emoticon and a day/night accent and no document and no wallpaper. The client does not call Telegram production for these.
+
+The color grid is the 27 solids and 9 gradients again, separate for light and dark. The picker lists Classic, Tinted, Day, and Night. The default wallpaper is that gradient (Day stays white, as upstream). A saved wallpaper is not rewritten. The grid no longer substitutes the doodle or invents file wallpapers when the server list is empty or the fetch fails. A no-file solid with an id is painted as two stops of that color and the id is what gets saved. A chat theme with no sticker still shows its emoticon, and a theme with no wallpaper previews its accent as a fill.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiWallpapers/Sources/ThemeSurfaceRestore.swift` | Palettes, picker order, no-file paint, empty fetch, emoticon and accent preview. |
+| `submodules/TellomiWallpapers/Tests/ThemeSurfaceRestoreTests.swift` | Light/dark palettes, picker order, id kept, empty and failed fetch, emoticon, accent fill, color round-trip. |
+| `DefaultDayPresentationTheme.swift`, `DefaultDarkPresentationTheme.swift`, `DefaultDarkTintedPresentationTheme.swift` | Default wallpaper is a fill. `.builtin` is not rewritten to the doodle. |
+| `ThemeColorsGridController.swift` | Reads the restored palettes. |
+| `ThemeGridControllerNode.swift` | Does not inject file wallpapers or replace the built-in slot. |
+| `ThemePickerController.swift`, `ThemeSettingsController.swift` | Classic, Tinted, Day, Night. |
+| `Wallpaper.swift` | `wallPaperNoFile` keeps its id. |
+| `ChatThemeScreen.swift` | Emoticon text and accent fill when the document and wallpaper are absent. |
+
+## Sticker upload failure
+
+Creating a sticker calls `MediaEditorScreen.uploadSticker`. The signal can fail (`UploadStickerError`, including a server 400 from `messages.uploadMedia` or `stickers.createStickerSet`) or complete without a success value. The subscription had no error callback, so the "Uploading…" progress stayed up. teamgram PR 230 describes that server failure. This change does not deploy the server and does not change the upload or create calls.
+
+A failure or an empty completion closes the progress, stops a video export, and shows the existing unknown-error text with Cancel and Retry. Retry starts one new upload when the user taps it. Cancel on the progress still closes that screen and drops the subscription. A failure after cancel does not show the alert and does not count as success. Nothing retries on its own.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/MediaEditorScreen/Sources/StickerUploadOutcome.swift` | Terminal states. Failure is not success and does not retry itself. |
+| `submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift` | `error` and `completed` close the progress and offer one user retry. |
+| `submodules/TelegramUI/Components/MediaEditorScreen/Tests/StickerUploadOutcomeTests.swift` | Those states. |
+| `submodules/TelegramUI/Components/MediaEditorScreen/BUILD` | Host test `StickerUploadOutcomeTests`. |
+
+## Pull request tests
+
+`.github/workflows/pr-tests.yml` runs on pull requests on the standard `xcode-27` runner. It does not run on a master push and does not upload. The tab-bar layout test asks for iPhone 17 on iOS 27.0, which that image has. iOS 26.5 is not installed there.
+
+| File | Change |
+| --- | --- |
+| `.github/workflows/pr-tests.yml` | Host tests that the pull request declares, plus the tab-bar simulator test. |
+| `submodules/TelegramUI/Components/TabBarLayout/BUILD` | Simulator pin is iPhone 17 / iOS 27.0. |
+| `submodules/TellomiWallpapers/Tests/TellomiWallpapersTests.swift` | Compare names and colors separately. A tuple array does not satisfy `XCTAssertEqual` on Xcode 27.1. |

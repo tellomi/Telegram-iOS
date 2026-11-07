@@ -13,6 +13,7 @@ swift_library(
     ],
     deps = [
         "//submodules/TellomiDiscover:TellomiDiscover",
+        "//submodules/TellomiWallpapers:TellomiWallpapers",
         "//submodules/TellomiLinks:TellomiLinks",
         "//submodules/TelegramApi:TelegramApi",
         "//submodules/MtProtoKit:MtProtoKit",

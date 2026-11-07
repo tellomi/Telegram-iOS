@@ -23,8 +23,10 @@ public struct TellomiDiscoverPost: Equatable {
     public var reposted: Bool
     public var poll: TellomiDiscoverPoll?
     public var linkPreview: TellomiDiscoverLink.Preview?
+    public var images: [TellomiDiscoverImageMedia]
+    public var moderation: TellomiDiscoverCardModeration
 
-    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil) {
+    public init(id: String, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, unavailable: Bool, aiGenerated: Bool, badge: String?, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], shareable: Bool = false, reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil, images: [TellomiDiscoverImageMedia] = [], moderation: TellomiDiscoverCardModeration = .published, liked: Bool = false, likesHidden: Bool = false) {
         self.id = id
         self.text = text
         self.authorName = authorName
@@ -46,18 +48,33 @@ public struct TellomiDiscoverPost: Equatable {
         self.reposted = reposted
         self.poll = poll
         self.linkPreview = linkPreview
+        self.images = images
+        self.moderation = moderation
+        self.liked = liked
+        self.likesHidden = likesHidden
     }
+
+    public var liked: Bool
+    public var likesHidden: Bool
 }
 
 public struct TellomiDiscoverComment: Equatable {
     public var id: String
     public var text: String
     public var authorName: String
+    public var state: String
+    public var own: Bool
+    public var parentId: String?
+    public var postId: String?
 
-    public init(id: String, text: String, authorName: String) {
+    public init(id: String, text: String, authorName: String, state: String = "ok", own: Bool = false, parentId: String? = nil, postId: String? = nil) {
         self.id = id
         self.text = text
         self.authorName = authorName
+        self.state = state
+        self.own = own
+        self.parentId = parentId
+        self.postId = postId
     }
 }
 
@@ -78,14 +95,17 @@ public struct TellomiDiscoverEngineConfig: Equatable {
     public var recommendMode: String?
     public var personalizationToggleVisible: Bool
     public var postTextChars: Int
+    /// `media_base_url` when it is an https URL. Absent or invalid stays nil.
+    public var mediaBaseURL: URL?
 
-    public init(enabled: Bool, region: String?, tabs: [TellomiDiscoverFeedKind], recommendMode: String?, personalizationToggleVisible: Bool, postTextChars: Int) {
+    public init(enabled: Bool, region: String?, tabs: [TellomiDiscoverFeedKind], recommendMode: String?, personalizationToggleVisible: Bool, postTextChars: Int, mediaBaseURL: URL? = nil) {
         self.enabled = enabled
         self.region = region
         self.tabs = tabs
         self.recommendMode = recommendMode
         self.personalizationToggleVisible = personalizationToggleVisible
         self.postTextChars = postTextChars
+        self.mediaBaseURL = mediaBaseURL
     }
 }
 
@@ -136,8 +156,11 @@ public struct TellomiDiscoverCard: Equatable {
     public var reposted: Bool
     public var poll: TellomiDiscoverPoll?
     public var linkPreview: TellomiDiscoverLink.Preview?
+    public var images: [TellomiDiscoverImageMedia]
+    public var liked: Bool
+    public var likesHidden: Bool
 
-    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil) {
+    public init(id: String, state: String, version: Int?, text: String, authorName: String, authorHandle: String?, tellomiNumber: String?, authorId: String?, badge: String?, aiGenerated: Bool, edited: Bool, shareable: Bool, likeCount: Int, commentCount: Int, repostCount: Int, imageCount: Int, quoteState: String?, quoteText: String?, ipRegionLabel: String?, city: String?, comments: [TellomiDiscoverComment] = [], reposted: Bool = false, poll: TellomiDiscoverPoll? = nil, linkPreview: TellomiDiscoverLink.Preview? = nil, images: [TellomiDiscoverImageMedia] = [], liked: Bool = false, likesHidden: Bool = false) {
         self.id = id
         self.state = state
         self.version = version
@@ -162,6 +185,9 @@ public struct TellomiDiscoverCard: Equatable {
         self.reposted = reposted
         self.poll = poll
         self.linkPreview = linkPreview
+        self.images = images
+        self.liked = liked
+        self.likesHidden = likesHidden
     }
 }
 
@@ -221,13 +247,15 @@ public func tellomiDiscoverParseEngineConfig(_ data: Data) -> TellomiDiscoverEng
     }
     let limits = objectValue(object["limits"])
     let textChars = intValue(limits?["post_text_chars"]) ?? tellomiDiscoverPostTextLimit
+    let mediaBase = stringValue(object["media_base_url"]).flatMap(tellomiDiscoverMediaBaseURL)
     return TellomiDiscoverEngineConfig(
         enabled: enabled,
         region: stringValue(object["region"]),
         tabs: tabs,
         recommendMode: stringValue(object["recommend_mode"]),
         personalizationToggleVisible: boolValue(object["personalization_toggle_visible"]) ?? false,
-        postTextChars: textChars > 0 ? textChars : tellomiDiscoverPostTextLimit
+        postTextChars: textChars > 0 ? textChars : tellomiDiscoverPostTextLimit,
+        mediaBaseURL: mediaBase
     )
 }
 
@@ -293,7 +321,10 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         authorName: card.authorName,
         authorHandle: card.authorHandle,
         tellomiNumber: card.tellomiNumber,
-        unavailable: card.state != "ok",
+        unavailable: {
+            let moderation = tellomiDiscoverCardModeration(card.state)
+            return moderation == .hidden || moderation == .unknown
+        }(),
         aiGenerated: card.aiGenerated,
         badge: card.badge,
         likeCount: card.likeCount,
@@ -308,7 +339,11 @@ public func tellomiDiscoverDisplayPost(_ card: TellomiDiscoverCard) -> TellomiDi
         shareable: card.shareable,
         reposted: card.reposted,
         poll: card.poll,
-        linkPreview: card.linkPreview
+        linkPreview: card.linkPreview,
+        images: card.images,
+        moderation: tellomiDiscoverCardModeration(card.state),
+        liked: card.liked,
+        likesHidden: card.likesHidden
     )
 }
 
@@ -319,7 +354,7 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
     guard let identifier = stringValue(entry["id"]).flatMap(tellomiDiscoverPostId) else {
         return nil
     }
-    let state = stringValue(entry["state"]) ?? "ok"
+    let state = stringValue(entry["state"]) ?? ""
     let body = objectValue(entry["card"])
     let author = objectValue(body?["author"])
     let stats = objectValue(entry["stats"])
@@ -350,7 +385,10 @@ private func parseCard(_ json: TellomiJSON) -> TellomiDiscoverCard? {
         comments: parseComments(entry["comments"]),
         reposted: boolValue(me?["reposted"]) ?? false,
         poll: parsePoll(labels: body?["poll"], tally: entry["poll"]),
-        linkPreview: storedLinkPreview(card: body, entry: entry)
+        linkPreview: storedLinkPreview(card: body, entry: entry),
+        images: parseImages(body?["media"]),
+        liked: boolValue(me?["liked"]) ?? false,
+        likesHidden: boolValue(stats?["likes_hidden"]) ?? false
     )
 }
 
@@ -404,6 +442,77 @@ private func parsePoll(labels: TellomiJSON?, tally: TellomiJSON?) -> TellomiDisc
     return TellomiDiscoverPoll(options: options, voted: voted)
 }
 
+public func tellomiDiscoverParseCommentCreated(_ data: Data) -> TellomiDiscoverCommentCreated? {
+    guard let object = objectValue(TellomiJSON.parse(data)) else {
+        return nil
+    }
+    guard let id = stringValue(object["id"]).flatMap(tellomiDiscoverPostId), let state = stringValue(object["state"]), !state.isEmpty, let version = intValue(object["version"]) else {
+        return nil
+    }
+    var held: Bool?
+    if object.keys.contains("held") {
+        guard let value = boolValue(object["held"]) else {
+            return nil
+        }
+        held = value
+    }
+    return TellomiDiscoverCommentCreated(id: id, state: state, version: version, held: held)
+}
+
+public func tellomiDiscoverParseCommentPage(_ data: Data, postId: String) -> TellomiDiscoverCommentPage? {
+    guard let object = objectValue(TellomiJSON.parse(data)), let values = object["comments"], case let .array(items) = values else {
+        return nil
+    }
+    if items.count > tellomiDiscoverCommentPageLimit {
+        return nil
+    }
+    var cursor: String?
+    if object.keys.contains("cursor") {
+        guard let raw = stringValue(object["cursor"]) else {
+            return nil
+        }
+        cursor = raw.isEmpty ? nil : raw
+    }
+    let expected = tellomiDiscoverPostId(postId)
+    var comments: [TellomiDiscoverComment] = []
+    for item in items {
+        guard let entry = objectValue(item) else {
+            return nil
+        }
+        guard let comment = parsePublicComment(entry, expectedPost: expected) else {
+            continue
+        }
+        comments.append(comment)
+    }
+    return TellomiDiscoverCommentPage(comments: comments, cursor: cursor)
+}
+
+private func parsePublicComment(_ entry: [String: TellomiJSON], expectedPost: String?) -> TellomiDiscoverComment? {
+    guard let id = stringValue(entry["id"]).flatMap(tellomiDiscoverPostId) else {
+        return nil
+    }
+    if let state = stringValue(entry["state"]), state != "ok" {
+        return nil
+    }
+    if let rawPost = stringValue(entry["post_id"]) {
+        guard let post = tellomiDiscoverPostId(rawPost), expectedPost == nil || expectedPost == post else {
+            return nil
+        }
+    }
+    if entry.keys.contains("parent_id") {
+        guard let parent = stringValue(entry["parent_id"]), tellomiDiscoverClientNonce(parent) else {
+            return nil
+        }
+    }
+    let card = objectValue(entry["card"])
+    let author = objectValue(card?["author"])
+    let text = stringValue(card?["text"]) ?? stringValue(entry["text"]) ?? ""
+    let name = stringValue(author?["display_name"]) ?? ""
+    let own = boolValue(objectValue(entry["me"])?["author"]) ?? false
+    let parent = stringValue(entry["parent_id"])
+    return TellomiDiscoverComment(id: id, text: text, authorName: name, state: stringValue(entry["state"]) ?? "ok", own: own, parentId: parent, postId: stringValue(entry["post_id"]).flatMap(tellomiDiscoverPostId))
+}
+
 public func tellomiDiscoverParseVote(_ data: Data) -> TellomiDiscoverVoteTally? {
     guard let object = objectValue(TellomiJSON.parse(data)) else {
         return nil
@@ -437,6 +546,25 @@ private func parseComments(_ json: TellomiJSON?) -> [TellomiDiscoverComment] {
         ))
     }
     return comments
+}
+
+private func parseImages(_ json: TellomiJSON?) -> [TellomiDiscoverImageMedia] {
+    guard let json, case let .array(values) = json else {
+        return []
+    }
+    var images: [TellomiDiscoverImageMedia] = []
+    for value in values {
+        guard let object = objectValue(value) else {
+            continue
+        }
+        let kind = (stringValue(object["type"]) ?? "").lowercased()
+        guard kind == "image", let key = stringValue(object["key"]).flatMap(tellomiDiscoverMediaKey), let width = intValue(object["w"]), let height = intValue(object["h"]), tellomiDiscoverImagePixelsAllowed(width: width, height: height) else {
+            continue
+        }
+        let url = stringValue(object["url"]).flatMap(tellomiDiscoverMediaBaseURL)
+        images.append(TellomiDiscoverImageMedia(key: key, width: width, height: height, url: url))
+    }
+    return images
 }
 
 private func imageCount(_ json: TellomiJSON?) -> Int {

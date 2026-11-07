@@ -12,6 +12,7 @@ import AlertUI
 import PresentationDataUtils
 import MediaResources
 import WallpaperResources
+import TellomiWallpapers
 
 import AccountContext
 import ContextUI
@@ -908,13 +909,17 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
         }
         
         var defaultThemes: [PresentationThemeReference] = []
-        if presentationData.autoNightModeTriggered {
-            defaultThemes.append(.builtin(.night))
-        } else {
-            defaultThemes.append(contentsOf: [
-                .builtin(.day),
-                .builtin(.night)
-            ])
+        for builtin in themePickerBuiltinOrder(autoNight: presentationData.autoNightModeTriggered) {
+            switch builtin {
+            case .dayClassic:
+                defaultThemes.append(.builtin(.dayClassic))
+            case .nightAccent:
+                defaultThemes.append(.builtin(.nightAccent))
+            case .day:
+                defaultThemes.append(.builtin(.day))
+            case .night:
+                defaultThemes.append(.builtin(.night))
+            }
         }
         
         let cloudThemes: [PresentationThemeReference] = cloudThemes.map { .cloud(PresentationCloudTheme(theme: $0, resolvedWallpaper: nil, creatorAccountId: $0.isCreator ? context.account.id : nil)) }.filter { !removedThemeIndexes.contains($0.index) }
@@ -926,7 +931,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
         availableThemes.append(contentsOf: cloudThemes)
         
         var chatThemes = cloudThemes.filter { $0.emoticon != nil }
-        chatThemes.insert(.builtin(.day), at: 0)
+        chatThemes.insert(.builtin(.dayClassic), at: 0)
         
         let nightMode = nightModePreview || presentationData.autoNightModeTriggered
         

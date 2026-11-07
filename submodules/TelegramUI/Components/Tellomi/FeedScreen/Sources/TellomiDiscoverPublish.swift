@@ -13,14 +13,14 @@ func tellomiRunDiscoverPublish(context: AccountContext, loader: TellomiDiscoverL
         completion(.failure(loggedIn ? .disabled : .signedOut))
         return
     }
-    let step = tellomiDiscoverPublishStep(text: request.text, visibility: request.visibility, userIds: request.userIds, selfUserId: selfUserId, clientNonce: request.nonce, textLimit: textLimit, token: nil, now: Int64(Date().timeIntervalSince1970), city: city, quoteOf: request.quoteOf, pollOptions: request.pollOptions, linkPreview: request.linkPreview)
+    let step = tellomiDiscoverPublishStep(text: request.text, visibility: request.visibility, userIds: request.userIds, selfUserId: selfUserId, clientNonce: request.nonce, textLimit: textLimit, token: nil, now: Int64(Date().timeIntervalSince1970), city: city, quoteOf: request.quoteOf, pollOptions: request.pollOptions, linkPreview: request.linkPreview, mediaKeys: request.mediaKeys)
     switch step {
     case .ready:
-        loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: request.text, visibility: request.visibility, audienceToken: nil, clientNonce: request.nonce, textLimit: textLimit, city: city, quoteOf: request.quoteOf, pollOptions: request.pollOptions, linkPreview: request.linkPreview), completion: completion)
+        loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: request.text, visibility: request.visibility, audienceToken: nil, clientNonce: request.nonce, textLimit: textLimit, city: city, quoteOf: request.quoteOf, pollOptions: request.pollOptions, linkPreview: request.linkPreview, mediaKeys: request.mediaKeys), completion: completion)
     case let .needsAudienceToken(kind, ids):
         let disposable = (tellomiDiscoverAudienceToken(account: context.account, kind: kind, userIds: ids)
         |> deliverOnMainQueue).start(next: { token in
-            loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: request.text, visibility: request.visibility, audienceToken: token.token, clientNonce: request.nonce, textLimit: textLimit, city: city, quoteOf: request.quoteOf, pollOptions: request.pollOptions, linkPreview: request.linkPreview), completion: completion)
+            loader.run(loggedIn: true, configuration: configuration, operation: .publish(text: request.text, visibility: request.visibility, audienceToken: token.token, clientNonce: request.nonce, textLimit: textLimit, city: city, quoteOf: request.quoteOf, pollOptions: request.pollOptions, linkPreview: request.linkPreview, mediaKeys: request.mediaKeys), completion: completion)
         }, error: { error in
             completion(.failure(tellomiDiscoverClientError(for: error)))
         })

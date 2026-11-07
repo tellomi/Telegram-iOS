@@ -440,6 +440,7 @@ public final class TabBarComponent: Component {
         private var selectionGestureState: (start: CGFloat, current: CGFloat, itemLength: CGFloat, itemId: AnyHashable)?
         private var overrideSelectedItemId: AnyHashable?
         private var pendingDoubleTapItem: (id: AnyHashable, previouslySelectedId: AnyHashable?, timer: Foundation.Timer)?
+        private var tabAccessibilityElements: [UIAccessibilityElement] = []
 
         public var currentSearchNode: ASDisplayNode? {
             return self.searchView?.searchBarNode
@@ -467,6 +468,12 @@ public final class TabBarComponent: Component {
             self.tabSelectionRecognizer = tabSelectionRecognizer
             self.contextGestureContainerView.addGestureRecognizer(tabSelectionRecognizer)
             
+            if #available(iOS 17.0, *) {
+                self.registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (view: Self, _: UITraitCollection) in
+                    view.state?.updated(transition: .immediate)
+                }
+            }
+
             self.contextGestureContainerView.shouldBegin = { [weak self] point in
                 guard let self, let component = self.component else {
                     return false
@@ -668,6 +675,16 @@ public final class TabBarComponent: Component {
             
             self.state?.updated()
         }
+
+        public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+            super.traitCollectionDidChange(previousTraitCollection)
+            guard #unavailable(iOS 17.0) else {
+                return
+            }
+            if previousTraitCollection?.preferredContentSizeCategory != self.traitCollection.preferredContentSizeCategory {
+                self.state?.updated(transition: .immediate)
+            }
+        }
         
         func update(component: TabBarComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             let innerInset: CGFloat = 4.0
@@ -692,45 +709,57 @@ public final class TabBarComponent: Component {
 
             let barHeight: CGFloat = 56.0 + innerInset * 2.0
 
-            var unboundItemWidths: [CGFloat] = []
-            var validIds: [AnyHashable] = []
-            for index in 0 ..< component.items.count {
-                let item = component.items[index]
-                validIds.append(item.id)
-                
-                let measureItemView: ComponentView<Empty>
-                if let current = self.measureItemViews[item.id] {
-                    measureItemView = current
-                } else {
-                    measureItemView = ComponentView()
-                    self.measureItemViews[item.id] = measureItemView
-                }
-                
-                let itemSize = measureItemView.update(
-                    transition: .immediate,
-                    component: AnyComponent(ItemComponent(
-                        item: item,
-                        theme: component.theme,
-                        isSearchActive: false,
-                        showsTitle: true,
-                        isSelected: false,
-                        tintSelectedItem: true,
-                        isUnconstrained: true
-                    )),
-                    environment: {},
-                    containerSize: CGSize(width: 200.0, height: 56.0)
-                )
-                unboundItemWidths.append(itemSize.width)
-            }
-            
             var availableLength: CGFloat = availableSize.width
             if search != nil {
                 availableLength -= barHeight + 8.0
             }
+
+            let dynamicTitlePointSize = tabBarClampedTitlePointSize(dynamicPointSize: UIFontMetrics(forTextStyle: .caption2).scaledValue(for: tabBarTitleBasePointSize, compatibleWith: self.traitCollection))
+            func measureUnboundWidths(titlePointSize: CGFloat) -> [CGFloat] {
+                var widths: [CGFloat] = []
+                for item in component.items {
+                    let measureItemView: ComponentView<Empty>
+                    if let current = self.measureItemViews[item.id] {
+                        measureItemView = current
+                    } else {
+                        measureItemView = ComponentView()
+                        self.measureItemViews[item.id] = measureItemView
+                    }
+                    let itemSize = measureItemView.update(
+                        transition: .immediate,
+                        component: AnyComponent(ItemComponent(
+                            item: item,
+                            theme: component.theme,
+                            isSearchActive: false,
+                            showsTitle: true,
+                            isSelected: false,
+                            tintSelectedItem: true,
+                            isUnconstrained: true,
+                            titlePointSize: titlePointSize
+                        )),
+                        environment: {},
+                        containerSize: CGSize(width: 200.0, height: 56.0)
+                    )
+                    widths.append(itemSize.width)
+                }
+                return widths
+            }
+
+            var titlePointSize = dynamicTitlePointSize
+            var unboundItemWidths = measureUnboundWidths(titlePointSize: titlePointSize)
+            if component.axis == .horizontal && !component.isCompact && !unboundItemWidths.isEmpty {
+                let equalLength = floorToScreenPixels((availableLength - tabBarInnerInset * 2.0) / CGFloat(unboundItemWidths.count))
+                if let scale = tabBarEqualTitleScale(titleWidths: unboundItemWidths, equalSlotWidth: equalLength), scale < 1 {
+                    titlePointSize = dynamicTitlePointSize * scale
+                    unboundItemWidths = measureUnboundWidths(titlePointSize: titlePointSize)
+                }
+            }
+            let validIds: [AnyHashable] = component.items.map(\.id)
             let itemsLayout = tabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, unboundItemWidths: unboundItemWidths, availableLength: availableLength)
             let tabsSize = itemsLayout.size
 
             var selectedItemFrame: CGRect?
+            var accessibilityRows: [(frame: CGRect, title: String, isSelected: Bool)] = []
             for index in 0 ..< component.items.count {
                 let item = component.items[index]
                 
@@ -772,7 +801,8 @@ public final class TabBarComponent: Component {
                         showsTitle: !component.isCompact,
                         isSelected: false,
                         tintSelectedItem: component.tintSelectedItem,
-                        isUnconstrained: false
+                        isUnconstrained: false,
+                        titlePointSize: titlePointSize
                     )),
                     environment: {},
                     containerSize: itemSize
@@ -786,7 +816,8 @@ public final class TabBarComponent: Component {
                         showsTitle: !component.isCompact,
                         isSelected: true,
                         tintSelectedItem: component.tintSelectedItem,
-                        isUnconstrained: false
+                        isUnconstrained: false,
+                        titlePointSize: titlePointSize
                     )),
                     environment: {},
                     containerSize: itemSize
@@ -801,7 +832,9 @@ public final class TabBarComponent: Component {
 
                     if itemComponentView.superview == nil {
                         itemComponentView.isUserInteractionEnabled = false
+                        itemComponentView.isAccessibilityElement = false
                         selectedItemComponentView.isUserInteractionEnabled = false
+                        selectedItemComponentView.isAccessibilityElement = false
 
                         self.liquidLensView.contentView.addSubview(itemComponentView)
                         self.liquidLensView.selectedContentView.addSubview(selectedItemComponentView)
@@ -837,6 +870,14 @@ public final class TabBarComponent: Component {
                         selectedItemComponentView.playSelectionAnimation()
                     }
                 }
+                let displayedTitle: String
+                switch item.content {
+                case let .tabBarItem(tabBarItem):
+                    displayedTitle = tabBarItem.title ?? ""
+                case let .customItem(customItem):
+                    displayedTitle = customItem.title
+                }
+                accessibilityRows.append((itemFrame, displayedTitle, isItemSelected))
             }
             
             var removeIds: [AnyHashable] = []
@@ -862,6 +903,16 @@ public final class TabBarComponent: Component {
 
             transition.setFrame(view: self.contextGestureContainerView, frame: tabsFrame)
             transition.setFrame(view: self.liquidLensView, frame: CGRect(origin: CGPoint(), size: tabsSize))
+
+            self.isAccessibilityElement = false
+            self.tabAccessibilityElements = accessibilityRows.map { row in
+                let element = UIAccessibilityElement(accessibilityContainer: self)
+                element.accessibilityLabel = row.title
+                element.accessibilityTraits = tabBarItemAccessibilityTraits(isSelected: row.isSelected)
+                element.accessibilityFrameInContainerSpace = row.frame.offsetBy(dx: tabsFrame.minX, dy: tabsFrame.minY)
+                return element
+            }
+            self.accessibilityElements = self.tabAccessibilityElements
             
             var lensSize: CGSize = tabsSize
             var lensSelectionFrame = tabBarLensSelectionFrame(
@@ -956,8 +1007,9 @@ private final class ItemComponent: Component {
     let isSelected: Bool
     let tintSelectedItem: Bool
     let isUnconstrained: Bool
+    let titlePointSize: CGFloat
     
-    init(item: TabBarComponent.Item, theme: PresentationTheme, isSearchActive: Bool, showsTitle: Bool, isSelected: Bool, tintSelectedItem: Bool, isUnconstrained: Bool) {
+    init(item: TabBarComponent.Item, theme: PresentationTheme, isSearchActive: Bool, showsTitle: Bool, isSelected: Bool, tintSelectedItem: Bool, isUnconstrained: Bool, titlePointSize: CGFloat) {
         self.item = item
         self.theme = theme
         self.isSearchActive = isSearchActive
@@ -965,6 +1017,7 @@ private final class ItemComponent: Component {
         self.isSelected = isSelected
         self.tintSelectedItem = tintSelectedItem
         self.isUnconstrained = isUnconstrained
+        self.titlePointSize = titlePointSize
     }
     
     static func ==(lhs: ItemComponent, rhs: ItemComponent) -> Bool {
@@ -987,6 +1040,9 @@ private final class ItemComponent: Component {
             return false
         }
         if lhs.isUnconstrained != rhs.isUnconstrained {
+            return false
+        }
+        if lhs.titlePointSize != rhs.titlePointSize {
             return false
         }
         return true
@@ -1293,12 +1349,12 @@ private final class ItemComponent: Component {
             let titleSize = self.title.update(
                 transition: .immediate,
                 component: AnyComponent(MultilineTextComponent(
-                    text: .plain(NSAttributedString(string: title, font: Font.semibold(10.0), textColor: (component.isSelected && component.tintSelectedItem) ? component.theme.rootController.tabBar.selectedTextColor : component.theme.rootController.tabBar.textColor))
+                    text: .plain(NSAttributedString(string: title, font: Font.semibold(component.titlePointSize), textColor: (component.isSelected && component.tintSelectedItem) ? component.theme.rootController.tabBar.selectedTextColor : component.theme.rootController.tabBar.textColor))
                 )),
                 environment: {},
                 containerSize: CGSize(width: availableSize.width, height: 100.0)
             )
-            let titleFrame = CGRect(origin: CGPoint(x: floor((availableSize.width - titleSize.width) * 0.5), y: availableSize.height - 8.0 - titleSize.height), size: titleSize)
+            let titleFrame = tabBarTitleFrame(itemSize: availableSize, titleSize: titleSize)
             if let titleView = self.title.view {
                 if titleView.superview == nil {
                     self.contextContainerView.contentView.addSubview(titleView)

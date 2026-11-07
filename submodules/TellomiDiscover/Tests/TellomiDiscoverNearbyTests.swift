@@ -99,7 +99,7 @@ final class TellomiDiscoverNearbyTests: XCTestCase {
         guard case .failure(.hidden) = tellomiDiscoverDecodeHTTP(operation: nearby, result: TellomiDiscoverHTTPResult(status: 404, body: Data(#"{"error":"feed_hidden"}"#.utf8))) else {
             return XCTFail("expected feed_hidden to stay hidden")
         }
-        let publish = TellomiDiscoverOperation.publish(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: "cn:chengdu", quoteOf: nil, pollOptions: nil)
+        let publish = TellomiDiscoverOperation.publish(text: "hi", visibility: .everyone, audienceToken: nil, clientNonce: self.nonce, textLimit: 500, city: "cn:chengdu", quoteOf: nil, pollOptions: nil, linkPreview: nil, mediaKeys: nil)
         guard case .failure(.invalidCity) = tellomiDiscoverDecodeHTTP(operation: publish, result: TellomiDiscoverHTTPResult(status: 400, body: Data(#"{"error":"invalid_city"}"#.utf8))) else {
             return XCTFail("expected invalid_city")
         }

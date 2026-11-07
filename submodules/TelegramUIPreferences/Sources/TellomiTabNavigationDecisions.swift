@@ -3,6 +3,9 @@ import TellomiLinks
 
 public struct TellomiTabCopy: Equatable {
     public var feed: String
+    public var chats: String
+    /// Tab-bar label of the existing settings controller. Not `Settings_Title`, and not the page title.
+    public var me: String
     public var hideFeed: String
     public var hideContacts: String
     public var navigationTitle: String
@@ -17,6 +20,8 @@ public struct TellomiTabCopy: Equatable {
         }
         return TellomiTabCopy(
             feed: text("Tellomi.Discover.Feed", "Discover", "发现", "發現"),
+            chats: text("Tellomi.Tabs.Chats", "Chats", "聊天", "聊天"),
+            me: text("Tellomi.Tabs.Me", "Me", "我", "我"),
             hideFeed: text("Tellomi.Discover.HideFeed", "Hide Discover", "隐藏发现", "隱藏發現"),
             hideContacts: text("Tellomi.Discover.HideContacts", "Hide Contacts", "隐藏联系人", "隱藏聯絡人"),
             navigationTitle: text("Tellomi.Discover.NavigationTitle", "Navigation Bar", "导航栏", "導覽列"),
@@ -25,6 +30,97 @@ public struct TellomiTabCopy: Equatable {
             feedEmptyText: text("Tellomi.Discover.FeedEmptyText", "Posts will show up here.", "帖子会显示在这里。", "貼文會顯示在這裡。"),
             feedPostUnavailable: text("Tellomi.Discover.FeedPostUnavailable", "This post can't be opened yet.", "这条帖子暂时无法打开。", "這則貼文暫時無法打開。")
         )
+    }
+}
+
+public enum TellomiRootTab: Equatable {
+    case feed
+    case chats
+    case calls
+    case contacts
+    /// Upstream News. Off unless the parked feed API and the dev flag both say so.
+    /// It sits in front of Settings so the settings controller stays last.
+    case news
+    case settings
+}
+
+/// Chats and Settings are always present. Discover, Calls, Contacts, and News follow their switches.
+/// The kill switch does not call this: that path keeps the upstream controllers.
+public func tellomiRootTabOrder(showFeedTab: Bool, showCallsTab: Bool, showContactsTab: Bool, showNewsTab: Bool) -> [TellomiRootTab] {
+    var tabs: [TellomiRootTab] = []
+    if showFeedTab {
+        tabs.append(.feed)
+    }
+    tabs.append(.chats)
+    if showCallsTab {
+        tabs.append(.calls)
+    }
+    if showContactsTab {
+        tabs.append(.contacts)
+    }
+    if showNewsTab {
+        tabs.append(.news)
+    }
+    tabs.append(.settings)
+    return tabs
+}
+
+/// Restoring an account switch still lands on the settings controller. Otherwise the bar opens on Chats.
+public func tellomiStartupTabIndex(order: [TellomiRootTab], restoreSettings: Bool) -> Int {
+    if restoreSettings, let index = order.lastIndex(of: .settings) {
+        return index
+    }
+    return order.firstIndex(of: .chats) ?? 0
+}
+
+public enum TellomiTabControllerKind: Equatable {
+    case feed
+    case chats
+    case calls
+    case contacts
+    case news
+    case settings
+}
+
+/// Index of a controller in the built bar. Nil when that controller is not a tab.
+/// Selection uses this kind, not a hard-coded upstream slot.
+public func tellomiTabIndex(of kind: TellomiTabControllerKind, order: [TellomiRootTab]) -> Int? {
+    let tab: TellomiRootTab
+    switch kind {
+    case .feed:
+        tab = .feed
+    case .chats:
+        tab = .chats
+    case .calls:
+        tab = .calls
+    case .contacts:
+        tab = .contacts
+    case .news:
+        tab = .news
+    case .settings:
+        tab = .settings
+    }
+    return order.firstIndex(of: tab)
+}
+
+/// The settings controller's tab label. `pageTitle` is what the page already shows and is not replaced.
+public func tellomiSettingsTabBarTitle(copy: TellomiTabCopy, pageTitle: String) -> String {
+    let _ = pageTitle
+    return copy.me
+}
+
+public func tellomiSettingsPageTitle(_ pageTitle: String) -> String {
+    return pageTitle
+}
+
+/// VoiceOver reads the same string the tab draws.
+public func tellomiTabBarAccessibilityLabel(title: String) -> String {
+    return title
+}
+
+public func tellomiProductTabLabels(copy: TellomiTabCopy) -> [(title: String, accessibilityLabel: String)] {
+    return [copy.feed, copy.chats, copy.me].map { title in
+        return (title, tellomiTabBarAccessibilityLabel(title: title))
     }
 }
 

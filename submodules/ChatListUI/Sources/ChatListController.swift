@@ -343,7 +343,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             switch self.location {
             case let .chatList(groupId):
                 if groupId == .root {
-                    self.tabBarItem.title = self.presentationData.strings.DialogList_Title
+                    self.tabBarItem.title = tellomiChatsTabTitle(self.presentationData)
                     
                     let icon: UIImage?
                     let selectedIcon: UIImage?
@@ -930,7 +930,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     private func updateThemeAndStrings() {
         if case .chatList(.root) = self.location {
-            self.tabBarItem.title = self.presentationData.strings.DialogList_Title
+            self.tabBarItem.title = tellomiChatsTabTitle(self.presentationData)
             let backBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.DialogList_Title, style: .plain, target: nil, action: nil)
             backBarButtonItem.accessibilityLabel = self.presentationData.strings.Common_Back
             self.navigationItem.backBarButtonItem = backBarButtonItem
@@ -2578,8 +2578,35 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         guard let strongSelf = self, currentValues.contains(.setupLoginEmail) || currentValues.contains(.setupLoginEmailBlocking) else {
                             return
                         }
-                        if let navigationController = strongSelf.navigationController as? NavigationController {
+                        if strongSelf.navigationController is NavigationController {
                             let blocking = currentValues.contains(.setupLoginEmailBlocking)
+                            let peerId = strongSelf.context.account.peerId
+                            let password = strongSelf.context.engine.auth.twoStepAuthData()
+                            |> map(Optional.init)
+                            |> `catch` { _ -> Signal<TwoStepAuthData?, NoError> in
+                                return .single(nil)
+                            }
+                            |> take(1)
+                            let _ = (combineLatest(
+                                strongSelf.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId)),
+                                password
+                            )
+                            |> deliverOnMainQueue).start(next: { [weak self] peer, password in
+                                guard let strongSelf = self, let navigationController = strongSelf.navigationController as? NavigationController else {
+                                    return
+                                }
+                                let phone: String?
+                                if case let .user(user) = peer {
+                                    phone = user.phone
+                                } else {
+                                    phone = nil
+                                }
+                                // A mask from getPassword counts. A recovery pattern does not.
+                                // The suggestion is not dismissed and the account is not rewritten.
+                                let channels = TellomiEmailChannels(phone: phone, cachedSignInAddress: tellomiStoredAccountLoginEmail(peerId: peerId), loginEmailPattern: password?.loginEmailPattern, recoveryEmailPattern: nil)
+                                if !tellomiShouldPresentNativeLoginEmailSetup(channels) {
+                                    return
+                                }
                             let controller = strongSelf.context.sharedContext.makeLoginEmailSetupController(context: strongSelf.context, blocking: blocking, emailPattern: nil, canAutoDismissIfNeeded: true, navigationController: navigationController, completion: {
                                 let _ = context.engine.notices.dismissServerProvidedSuggestion(suggestion: blocking ? ServerProvidedSuggestion.setupLoginEmailBlocking.id : ServerProvidedSuggestion.setupLoginEmail.id).startStandalone()
                             }, dismiss: {
@@ -2593,6 +2620,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                                 controller.navigationPresentation = .flatModal
                             }
                             navigationController.pushViewController(controller)
+                            })
                         }
                     })
                     return
@@ -7579,6 +7607,10 @@ private final class AdsInfoContextReferenceContentSource: ContextReferenceConten
     func transitionInfo() -> ContextControllerReferenceViewInfo? {
         return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: mainWindowScreenBounds.inset(by: self.insets), insets: self.contentInsets)
     }
+}
+
+private func tellomiChatsTabTitle(_ presentationData: PresentationData) -> String {
+    return TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)).chats
 }
 
 public struct ChatListNavigationTarget {

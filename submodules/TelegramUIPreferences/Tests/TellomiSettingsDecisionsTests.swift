@@ -121,4 +121,47 @@ final class TellomiSettingsDecisionsTests: XCTestCase {
         XCTAssertEqual(TellomiSettingsURLs.terms, "https://tellomi.cn/legal/terms/")
         XCTAssertEqual(TellomiSettingsURLs.privacy, "https://tellomi.cn/legal/privacy/")
     }
+
+    func testEmailIdentityMatrix() {
+        XCTAssertTrue(tellomiEmailMatchesLoginPattern(fullAddress: "User@Tellomi.app", pattern: "u***@tellomi.app"))
+        XCTAssertFalse(tellomiEmailMatchesLoginPattern(fullAddress: "other@tellomi.app", pattern: "u***@tellomi.app"))
+        XCTAssertFalse(tellomiEmailMatchesLoginPattern(fullAddress: "user@other.app", pattern: "u***@tellomi.app"))
+        XCTAssertTrue(tellomiLoginEmailPatternIsMask("u***@tellomi.app"))
+        XCTAssertFalse(tellomiLoginEmailPatternIsMask("user@tellomi.app"))
+
+        let fresh = TellomiEmailChannels(phone: nil, cachedSignInAddress: "owner@tellomi.cn", loginEmailPattern: "o***@tellomi.cn", recoveryEmailPattern: nil)
+        XCTAssertEqual(tellomiSettingsEmailAction(fresh), .showIdentity(display: "owner@tellomi.cn", fullAddress: "owner@tellomi.cn"))
+        XCTAssertFalse(tellomiShouldPresentNativeLoginEmailSetup(fresh))
+
+        let reinstall = TellomiEmailChannels(phone: nil, cachedSignInAddress: nil, loginEmailPattern: "o***@tellomi.cn", recoveryEmailPattern: "r***@x.com")
+        XCTAssertEqual(tellomiSettingsEmailAction(reinstall), .showIdentity(display: "o***@tellomi.cn", fullAddress: nil))
+        XCTAssertFalse(tellomiShouldPresentNativeLoginEmailSetup(reinstall))
+
+        let staleCache = TellomiEmailChannels(phone: nil, cachedSignInAddress: "old@tellomi.cn", loginEmailPattern: "n***@tellomi.cn", recoveryEmailPattern: nil)
+        XCTAssertEqual(tellomiSettingsEmailAction(staleCache), .showIdentity(display: "n***@tellomi.cn", fullAddress: nil))
+
+        let legacyPhoneField = TellomiEmailChannels(phone: "owner@tellomi.cn", cachedSignInAddress: nil, loginEmailPattern: nil, recoveryEmailPattern: "r***@x.com")
+        XCTAssertEqual(tellomiSettingsEmailAction(legacyPhoneField), .showIdentity(display: "owner@tellomi.cn", fullAddress: "owner@tellomi.cn"))
+
+        let phoneAccount = TellomiEmailChannels(phone: "8613800138000", cachedSignInAddress: "owner@tellomi.cn", loginEmailPattern: nil, recoveryEmailPattern: "r***@x.com")
+        XCTAssertEqual(tellomiSettingsEmailAction(phoneAccount), .phoneAccountLoginEmail(pattern: nil))
+        XCTAssertTrue(tellomiShouldPresentNativeLoginEmailSetup(phoneAccount))
+
+        let phoneWithPattern = TellomiEmailChannels(phone: "8613800138000", cachedSignInAddress: nil, loginEmailPattern: "a***@x.com", recoveryEmailPattern: nil)
+        XCTAssertEqual(tellomiSettingsEmailAction(phoneWithPattern), .phoneAccountLoginEmail(pattern: "a***@x.com"))
+        XCTAssertFalse(tellomiShouldPresentNativeLoginEmailSetup(phoneWithPattern))
+
+        let recoveryOnly = TellomiEmailChannels(phone: nil, cachedSignInAddress: nil, loginEmailPattern: nil, recoveryEmailPattern: "r***@x.com")
+        XCTAssertEqual(tellomiSettingsEmailAction(recoveryOnly), .phoneAccountLoginEmail(pattern: nil))
+        XCTAssertTrue(tellomiShouldPresentNativeLoginEmailSetup(recoveryOnly))
+
+        let deviceOnly = TellomiEmailChannels(phone: nil, cachedSignInAddress: "owner@tellomi.cn", loginEmailPattern: nil, recoveryEmailPattern: nil)
+        XCTAssertEqual(tellomiSettingsEmailAction(deviceOnly), .showIdentity(display: "owner@tellomi.cn", fullAddress: "owner@tellomi.cn"))
+
+        let copy = TellomiSettingsCopy.resolve(languageCode: "zh-Hans")
+        XCTAssertEqual(copy.bindEmail, "绑定邮箱")
+        XCTAssertTrue(copy.signInEmailBody.contains("不是云密码的恢复邮箱"))
+        XCTAssertTrue(copy.signInEmailMaskBody.contains("不是完整地址"))
+        XCTAssertTrue(copy.signInEmailMaskBody.contains("不会改账号"))
+    }
 }

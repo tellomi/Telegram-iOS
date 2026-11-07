@@ -290,7 +290,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         
         self.textField.textField.delegate = self
         
-        TellomiLoginChrome.applyField(self.tellomiFieldBackground)
+        TellomiLoginChrome.applyField(self.tellomiFieldBackground, dark: self.theme.overallDarkAppearance)
         self.tellomiFieldBackground.isHidden = true
         self.sentToastBackground.backgroundColor = UIColor(rgb: 0x3A3A3C)
         self.sentToastBackground.cornerRadius = 18.0
@@ -838,14 +838,18 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                     self.textField.isHidden = false
                     self.textSeparatorNode.isHidden = true
                     self.tellomiFieldBackground.isHidden = false
+                    let fieldPalette = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance)
+                    TellomiLoginChrome.applyField(self.tellomiFieldBackground, dark: self.theme.overallDarkAppearance)
                     self.textField.textField.font = Font.regular(17.0)
                     self.textField.textField.keyboardType = .numberPad
-                    self.textField.textField.tintColor = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).accent
+                    self.textField.textField.textColor = fieldPalette.fieldText
+                    self.textField.textField.tintColor = fieldPalette.accent
+                    self.textField.textField.keyboardAppearance = self.theme.rootController.keyboardColor.keyboardAppearance
                     if #available(iOSApplicationExtension 12.0, iOS 12.0, *) {
                         self.textField.textField.textContentType = .oneTimeCode
                     }
                     let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
-                    self.textField.textField.attributedPlaceholder = NSAttributedString(string: copy.codePlaceholder, font: Font.regular(17.0), textColor: TellomiLoginChrome.placeholder)
+                    self.textField.textField.attributedPlaceholder = NSAttributedString(string: copy.codePlaceholder, font: Font.regular(17.0), textColor: fieldPalette.placeholder)
                     items.append(AuthorizationLayoutItem(node: self.textField, size: CGSize(width: maximumWidth - 48.0, height: 52.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 28.0, maxValue: 28.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
                 default:
                     self.codeInputView.isHidden = false
@@ -1150,6 +1154,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.textField.textField.textColor = palette.fieldText
         self.textField.textField.tintColor = palette.accent
         self.textField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        TellomiLoginChrome.applyField(self.tellomiFieldBackground, dark: theme.overallDarkAppearance)
         if self.tellomiCodeChrome {
             self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance))
         }
@@ -1285,7 +1290,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             shown = text
         }
         let alignment: NSTextAlignment = self.tellomiCodeChrome ? .left : .center
-        let errorColor = self.tellomiCodeChrome ? TellomiLoginChrome.error : self.theme.list.itemDestructiveColor
+        let errorColor = self.tellomiCodeChrome ? TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).error : self.theme.list.itemDestructiveColor
         self.errorTextNode.attributedText = NSAttributedString(string: shown, font: Font.regular(13.0), textColor: errorColor, paragraphAlignment: alignment)
         self.tellomiStickyError = tellomiEmail
         if self.tellomiCodeChrome {

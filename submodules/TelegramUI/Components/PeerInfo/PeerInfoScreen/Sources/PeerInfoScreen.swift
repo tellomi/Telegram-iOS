@@ -2691,6 +2691,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     deinit {
         self.dataDisposable?.dispose()
         self.walletStickersPreloadDisposable.dispose()
+        self.tellomiLoginEmailPatternDisposable.dispose()
         self.hiddenMediaDisposable?.dispose()
         self.activeActionDisposable.dispose()
         self.logoutConfirmationDisposable.dispose()
@@ -2726,6 +2727,23 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     
     override func didLoad() {
         super.didLoad()
+
+        if self.isSettings {
+            self.tellomiLoginEmailPatternDisposable.set((self.twoStepAuthData.get()
+            |> deliverOnMainQueue).start(next: { [weak self] data in
+                guard let self else {
+                    return
+                }
+                let pattern = data?.loginEmailPattern
+                guard pattern != self.tellomiLoginEmailPattern else {
+                    return
+                }
+                self.tellomiLoginEmailPattern = pattern
+                if let (layout, navigationHeight) = self.validLayout {
+                    self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: .immediate, additive: false)
+                }
+            }))
+        }
                 
         self.view.disablesInteractiveTransitionGestureRecognizerNow = { [weak self] in
             if let strongSelf = self {
@@ -2786,6 +2804,8 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     }
     
     private let walletStickersPreloadDisposable = MetaDisposable()
+    private let tellomiLoginEmailPatternDisposable = MetaDisposable()
+    private var tellomiLoginEmailPattern: String?
     private var preloadedWalletCard: WalletCard?
     private let shareThemePreloadDisposable = MetaDisposable()
     private var didPreloadShareTheme = false
@@ -5669,7 +5689,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             insets.left += sideInsets.sectionLeft
             insets.right += sideInsets.sectionRight
             
-            let items = self.isSettings ? tellomiSettingsHomeItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isExpanded: self.headerNode.isAvatarExpanded) : infoItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, reactionSourceMessageId: self.reactionSourceMessageId, canDeleteReaction: self.canDeleteReaction, callMessages: self.callMessages, chatLocation: self.chatLocation, isOpenedFromChat: self.isOpenedFromChat, isMyProfile: self.isMyProfile)
+            let items = self.isSettings ? tellomiSettingsHomeItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isExpanded: self.headerNode.isAvatarExpanded, loginEmailPattern: self.tellomiLoginEmailPattern) : infoItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, reactionSourceMessageId: self.reactionSourceMessageId, canDeleteReaction: self.canDeleteReaction, callMessages: self.callMessages, chatLocation: self.chatLocation, isOpenedFromChat: self.isOpenedFromChat, isMyProfile: self.isMyProfile)
             
             contentHeight += headerHeight
             if !((self.isSettings || self.isMyProfile) && self.state.isEditing) {
@@ -5744,7 +5764,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             }
             
             var validEditingSections: [AnyHashable] = []
-            let editItems = (self.isSettings || self.isMyProfile) ? settingsEditingItems(data: self.data, state: self.state, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isMyProfile: self.isMyProfile) : editingItems(data: self.data, boostStatus: self.boostStatus, state: self.state, chatLocation: self.chatLocation, context: self.context, presentationData: self.presentationData, interaction: self.interaction)
+            let editItems = (self.isSettings || self.isMyProfile) ? settingsEditingItems(data: self.data, state: self.state, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isMyProfile: self.isMyProfile, loginEmailPattern: self.tellomiLoginEmailPattern) : editingItems(data: self.data, boostStatus: self.boostStatus, state: self.state, chatLocation: self.chatLocation, context: self.context, presentationData: self.presentationData, interaction: self.interaction)
 
             for (sectionId, sectionItems) in editItems {
                 var insets = UIEdgeInsets()
@@ -6856,7 +6876,15 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
                 if accountTabBarAvatarBadge > 0 {
                     otherAccountsBadge = compactNumericCountString(Int(accountTabBarAvatarBadge), decimalSeparator: presentationData.dateTimeFormat.decimalSeparator)
                 }
-                return (presentationData.strings.Settings_Title, accountTabBarAvatar?.0 ?? icon, accountTabBarAvatar?.1 ?? selectedIcon, notificationsWarning || phoneNumberWarning || passwordWarning ? "!" : otherAccountsBadge, accountTabBarAvatar != nil, presentationData.reduceMotion)
+                let pageTitle = presentationData.strings.Settings_Title
+                let tabTitle: String
+                if isSettings {
+                    let copy = TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
+                    tabTitle = tellomiSettingsTabBarTitle(copy: copy, pageTitle: pageTitle)
+                } else {
+                    tabTitle = pageTitle
+                }
+                return (tabTitle, accountTabBarAvatar?.0 ?? icon, accountTabBarAvatar?.1 ?? selectedIcon, notificationsWarning || phoneNumberWarning || passwordWarning ? "!" : otherAccountsBadge, accountTabBarAvatar != nil, presentationData.reduceMotion)
             }
             
             self.tabBarItemDisposable = (tabBarItem |> deliverOnMainQueue).startStrict(next: { [weak self] title, image, selectedImage, badgeValue, isAvatar, reduceMotion in
