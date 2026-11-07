@@ -114,6 +114,28 @@ final class AuthorizationSequenceSignUpController: ViewController {
         })]), in: .window(.root))
     }
     
+    private func presentTellomiLanguage() {
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
+        let current = tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode)
+        var rows: [TellomiChoiceRow] = []
+        for info in tellomiBuiltinInterfaceLanguages() {
+            let checked = tellomiLanguageCodesMatch(info.languageCode, current)
+            let code = info.languageCode
+            rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
+                guard let self, let plan = tellomiLanguageApplyPlan(selectedCode: code, currentCode: current) else {
+                    return
+                }
+                let code = plan.code
+                tellomiRememberInterfaceLanguage(code)
+                if self.isNodeLoaded {
+                    self.controllerNode.updateStrings(self.presentationData.strings)
+                }
+            }))
+        }
+        let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.presentationData.theme.overallDarkAppearance)
+        self.present(prompt, in: .window(.root))
+    }
+
     @objc private func moreButtonPressed() {
         self.moreButtonNode.buttonPressed()
     }
@@ -126,6 +148,12 @@ final class AuthorizationSequenceSignUpController: ViewController {
         
         let nop: ((ContextMenuActionItem.Action) -> Void)? = nil
         items.append(.action(ContextMenuActionItem(text: presentationData.strings.Login_Announce_Info, textLayout: .multiline, textFont: .small, icon: { _ in return nil }, action: nop)))
+        items.append(.action(ContextMenuActionItem(text: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(presentationData.strings)), icon: { _ in
+            return nil
+        }, action: { [weak self] _, dismiss in
+            dismiss(.default)
+            self?.presentTellomiLanguage()
+        })))
         items.append(.separator)
         items.append(.action(ContextMenuActionItem(text: presentationData.strings.Login_Announce_Notify, icon: { theme in
             if !announceSignUp {

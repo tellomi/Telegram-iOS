@@ -62,7 +62,9 @@ swift_test(
     name = "TellomiLoginFieldColorsTests",
     srcs = [
         "Sources/TellomiLoginFieldColors.swift",
+        "Sources/TellomiLoginDecisions.swift",
         "Tests/TellomiLoginFieldColorsTests.swift",
+        "Tests/TellomiLoginFlowDecisionsTests.swift",
     ],
     copts = [
         "-warnings-as-errors",

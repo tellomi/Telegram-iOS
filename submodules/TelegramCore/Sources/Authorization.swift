@@ -8,11 +8,22 @@ import MtProtoKit
 public enum AuthorizationCodeRequestError {
     case invalidPhoneNumber
     case limitExceeded
+    /// `420 FLOOD_WAIT_X`. A short resend pause, not the daily code cap.
+    case floodWait(Int32)
     case generic(info: (Int, String)?)
+    /// `400 PHONE_NUMBER_FLOOD`. On this server that is the 11th code of the day.
     case phoneLimitExceeded
     case phoneBanned
     case timeout
     case appOutdated
+}
+
+func tellomiFloodWaitSeconds(_ description: String) -> Int32 {
+    let prefix = "FLOOD_WAIT_"
+    if description.hasPrefix(prefix), let seconds = Int32(description.dropFirst(prefix.count)), seconds > 0 {
+        return seconds
+    }
+    return 60
 }
 
 /// The user from `auth.authorization` is the account peer. The first screen reads it
@@ -273,7 +284,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
         }
         |> `catch` { error -> Signal<(SendCodeResult, UnauthorizedAccount), AuthorizationCodeRequestError> in
             if error.errorDescription.hasPrefix("FLOOD_WAIT") {
-                return .fail(.limitExceeded)
+                return .fail(.floodWait(tellomiFloodWaitSeconds(error.errorDescription)))
             } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
                 return .fail(.invalidPhoneNumber)
             } else if error.errorDescription == "PHONE_NUMBER_FLOOD" {
@@ -462,7 +473,7 @@ private func internalResendAuthorizationCode(accountManager: AccountManager<Tele
     return account.network.request(Api.functions.auth.resendCode(flags: flags, phoneNumber: number, phoneCodeHash: hash, reason: mappedReason), automaticFloodWait: false)
     |> mapError { error -> AuthorizationCodeRequestError in
         if error.errorDescription.hasPrefix("FLOOD_WAIT") {
-            return .limitExceeded
+            return .floodWait(tellomiFloodWaitSeconds(error.errorDescription))
         } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
             return .invalidPhoneNumber
         } else if error.errorDescription == "PHONE_NUMBER_FLOOD" {
@@ -593,7 +604,7 @@ public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccou
                         return account.network.request(Api.functions.auth.resendCode(flags: 0, phoneNumber: number, phoneCodeHash: hash, reason: nil), automaticFloodWait: false)
                         |> mapError { error -> AuthorizationCodeRequestError in
                             if error.errorDescription.hasPrefix("FLOOD_WAIT") {
-                                return .limitExceeded
+                                return .floodWait(tellomiFloodWaitSeconds(error.errorDescription))
                             } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
                                 return .invalidPhoneNumber
                             } else if error.errorDescription == "PHONE_NUMBER_FLOOD" {

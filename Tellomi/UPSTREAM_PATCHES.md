@@ -1124,6 +1124,40 @@ A failure or an empty completion closes the progress, stops a video export, and 
 | `submodules/TelegramUI/Components/TabBarLayout/BUILD` | Simulator pin is iPhone 17 / iOS 27.0. |
 | `submodules/TellomiWallpapers/Tests/TellomiWallpapersTests.swift` | Compare names and colors separately. A tuple array does not satisfy `XCTAssertEqual` on Xcode 27.1. |
 
+## Login and sign-up contrast
+
+The login chrome had its own hex palette. On the default day theme that left the unchecked agreement ring at `#C7C7CC` on white (about 1.7:1), the placeholder at `#B0B0B6` on `#F2F3F5` (about 1.9:1), disabled button text at `#8E8E93` on `#E5E5E5` (about 2.6:1), the code-box border at `#E5E5E5` on the field fill, and 13pt secondary copy under 4.5:1. The default dark theme's placeholder `#4D4D4D` fails on a dark fill, and `itemInputField` `#0F0F0F` sits on black at about 1.1:1. Links used the same black or white as body text instead of the accent. The agreement sentence used the light secondary color in both appearances.
+
+Colors now start from the authorization theme (`intro.startButtonColor`, `list.itemAccentColor`, `itemInputField`, `itemCheckColors`, separators, destructive) and move only far enough to clear WCAG AA: 4.5:1 for text, 3:1 for strokes, the checkbox, and code-box borders. The day field fill stays `#F2F2F7`. A dark field that does not separate from the page is lightened until it does. The primary button stays the intro start color (black in day, white at night) with a label that clears 4.5:1, including the disabled pair. Focus draws a 2pt accent border on the rounded fields and the password underline. The agreement circle is 22pt inside the existing 44pt control, with a tick that clears the fill. Titles that the layout measures use an unlimited line count and the capped Dynamic Type font. Sign-in, sign-up, email, code, and password requests are unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiLoginFieldColors.swift` | Theme tokens, contrast floor, surface colors. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Palette and buttons read the theme. Field border and code-box theme. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginSurfaces.swift` | Checkbox, chevron, divider, and rows use that palette. |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Sentence colors follow the theme in both appearances. |
+| Authorization sequence phone, code, sign-up, password, recovery, email, splash, and reset nodes | Same palette, focus border, wrapping titles. |
+| `submodules/AuthorizationUI/Tests/TellomiLoginFieldColorsTests.swift` | AA pairs for both appearances, and the old pairs still fail. |
+| `.github/workflows/login-auth-ui.yml` | Pull-request host test and unsigned simulator compile. No TestFlight. |
+
+## Login language, calling codes, and the daily code limit
+
+The globe opened the language card, then waited for `langpack.getLanguage` before rewriting the page, and the download had no error handler. The login sentences for 简体 / 繁體 / English are already in the app, so the choice is stored and the current screen lays out before the request. The login connection is known to answer `langpack.getLanguages`, `getLangPack`, `getStrings`, and `getDifference`. The download's first call is the separate method `langpack.getLanguage` (`0x6a596502`). If that one fails, the client still requests `getLangPack` for the chosen code (base `en`). A failed download no longer leaves the welcome button dimmed.
+
+The country list and a pasted number accept `TellomiCallingCodePolicy.allowedCallingCodes`, which is `{86}`. Assign that set to add codes later. Any other calling code is put back to +86 and the screen says only mainland China is available. The full country table stays loaded so a pasted `+66…` is still recognized as foreign.
+
+On server 235 the 11th code of the day is `400 PHONE_NUMBER_FLOOD`. A resend inside 60 seconds is `420 FLOOD_WAIT_X`. `PHONE_NUMBER_FLOOD` shows the daily cap (10) and leaves resend off. `FLOOD_WAIT_X` shows the wait in seconds and pauses resend only for that long. It does not say the day is used up, and it does not keep the button off.
+
+| File | Change |
+| --- | --- |
+| `TellomiLoginLocale.swift`, phone, code, and sign-up controllers | Remember the language and redraw, then download. |
+| `Localizations.swift` | `getLanguage` failure still downloads `getLangPack`. |
+| `TellomiLoginDecisions.swift` | Switch plan, daily cap versus `FLOOD_WAIT`, paste decision, phone titles. |
+| `AuthorizationSequenceSplashController.swift` | A failed pack download still opens the phone screen. |
+| `TellomiCallingCodePolicy.swift`, country list, phone entry | Whitelist, picker filter, paste notice. |
+| `Authorization.swift` | `FLOOD_WAIT_X` is `floodWait(seconds)`. `PHONE_NUMBER_FLOOD` stays the day cap. |
+| `AuthorizationSequenceController.swift`, code entry node | Different alerts. Resend pauses, then turns back on. |
+
 ## Round video transcription
 
 Tapping transcribe on a round video used to treat any stored transcript, including an error or an empty result, as a reason to replace the circle with the file row. That path sets the video node's alpha to zero and `canAttachContent = true`, which stops the player from attaching. With no text to show, the circle stays a blank disc and the duration, mute, time, and button go with it. A later open of the chat repeats that layout.

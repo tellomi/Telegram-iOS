@@ -109,10 +109,18 @@ public enum DownloadAndApplyLocalizationError {
 }
 
 func _internal_downloadAndApplyLocalization(accountManager: AccountManager<TelegramAccountManagerTypes>, postbox: Postbox, network: Network, languageCode: String) -> Signal<Void, DownloadAndApplyLocalizationError> {
-    return _internal_requestLocalizationPreview(network: network, identifier: languageCode)
+    // Preview is `langpack.getLanguage`. The login connection already answers
+    // `getLanguages`, `getLangPack`, `getStrings`, and `getDifference`. If this
+    // one method is missing, still download the pack for the code the user picked.
+    let preview = _internal_requestLocalizationPreview(network: network, identifier: languageCode)
     |> mapError { _ -> DownloadAndApplyLocalizationError in
         return .generic
     }
+    |> `catch` { _ -> Signal<LocalizationInfo, DownloadAndApplyLocalizationError> in
+        let base: String? = languageCode.lowercased() == "en" ? nil : "en"
+        return .single(LocalizationInfo(languageCode: languageCode, baseLanguageCode: base, customPluralizationCode: nil, title: languageCode, localizedTitle: languageCode, isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: ""))
+    }
+    return preview
     |> mapToSignal { preview -> Signal<Void, DownloadAndApplyLocalizationError> in
         var primaryAndSecondaryLocalizations: [Signal<Localization, DownloadLocalizationError>] = []
         primaryAndSecondaryLocalizations.append(_internal_downloadLocalization(network: network, languageCode: preview.languageCode))

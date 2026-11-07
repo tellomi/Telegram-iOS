@@ -7,41 +7,65 @@ import SolidRoundedButtonNode
 import TelegramPresentationData
 import TextFormat
 
+func tellomiDisclosureChevron(color: UIColor) -> UIImage? {
+    return generateImage(CGSize(width: 10.0, height: 6.0), rotatedContext: { size, context in
+        context.clear(CGRect(origin: CGPoint(), size: size))
+        context.setFillColor(color.cgColor)
+        context.move(to: CGPoint())
+        context.addLine(to: CGPoint(x: size.width, y: 0.0))
+        context.addLine(to: CGPoint(x: size.width / 2.0, y: size.height))
+        context.closePath()
+        context.fillPath()
+    })
+}
+
 func tellomiSymbol(_ name: String, pointSize: CGFloat, weight: UIImage.SymbolWeight = .regular) -> UIImage? {
     let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: weight)
     return UIImage(systemName: name, withConfiguration: configuration)
 }
 
-func tellomiCheckboxImage(checked: Bool, dark: Bool = false) -> UIImage? {
-    let diameter: CGFloat = 18.0
-    let palette = TellomiLoginChrome.palette(dark: dark)
+/// Drawn size of the agreement circle. The control around it stays 44pt.
+let tellomiCheckboxSide: CGFloat = 22.0
+
+func tellomiCheckboxImage(checked: Bool, palette: TellomiLoginChrome.Palette) -> UIImage? {
+    let diameter = tellomiCheckboxSide
     return generateImage(CGSize(width: diameter, height: diameter), rotatedContext: { size, context in
         context.clear(CGRect(origin: CGPoint(), size: size))
         let rect = CGRect(x: 1.0, y: 1.0, width: size.width - 2.0, height: size.height - 2.0)
         if checked {
             context.setFillColor(palette.checkbox.cgColor)
             context.fillEllipse(in: rect)
-            // Dark mode draws a white disc. A white tick on it disappears.
-            let tick = dark ? UIColor(rgb: 0x111111) : UIColor.white
-            context.setStrokeColor(tick.cgColor)
-            context.setLineWidth(1.6)
+            context.setStrokeColor(palette.checkboxTick.cgColor)
+            context.setLineWidth(2.0)
             context.setLineCap(.round)
             context.setLineJoin(.round)
-            context.move(to: CGPoint(x: 5.0, y: 9.2))
-            context.addLine(to: CGPoint(x: 7.6, y: 12.0))
-            context.addLine(to: CGPoint(x: 13.0, y: 6.2))
+            let scale = diameter / 18.0
+            context.move(to: CGPoint(x: 5.0 * scale, y: 9.2 * scale))
+            context.addLine(to: CGPoint(x: 7.6 * scale, y: 12.0 * scale))
+            context.addLine(to: CGPoint(x: 13.0 * scale, y: 6.2 * scale))
             context.strokePath()
         } else {
-            context.setStrokeColor(UIColor(rgb: 0xC7C7CC).cgColor)
-            context.setLineWidth(1.5)
-            context.strokeEllipse(in: rect.insetBy(dx: 0.5, dy: 0.5))
+            context.setStrokeColor(palette.checkboxStroke.cgColor)
+            context.setLineWidth(2.0)
+            context.strokeEllipse(in: rect.insetBy(dx: 0.75, dy: 0.75))
         }
     })
 }
 
+func tellomiCheckboxImage(checked: Bool, dark: Bool = false) -> UIImage? {
+    return tellomiCheckboxImage(checked: checked, palette: TellomiLoginChrome.palette(dark: dark))
+}
+
 func tellomiMailIcon(dark: Bool) -> UIImage? {
-    let ink = TellomiLoginChrome.palette(dark: dark).rowText
-    return tellomiSymbol("envelope", pointSize: 16.0)?.withTintColor(ink, renderingMode: .alwaysOriginal)
+    return tellomiMailIcon(palette: TellomiLoginChrome.palette(dark: dark))
+}
+
+func tellomiMailIcon(theme: PresentationTheme) -> UIImage? {
+    return tellomiMailIcon(palette: TellomiLoginChrome.palette(theme: theme))
+}
+
+func tellomiMailIcon(palette: TellomiLoginChrome.Palette) -> UIImage? {
+    return tellomiSymbol("envelope", pointSize: 16.0)?.withTintColor(palette.rowText, renderingMode: .alwaysOriginal)
 }
 
 /// Circle plus the agreement sentence. The circle is a 44pt control, so the
@@ -59,6 +83,7 @@ final class TellomiAgreementRow: ASDisplayNode {
     private var centered = false
     private var measuredText = CGSize()
     private var dark = false
+    private var palette = TellomiLoginChrome.palette(dark: false)
     private var checked = false
     private var labelTapInstalled = false
     private var reportingHeight = false
@@ -74,7 +99,7 @@ final class TellomiAgreementRow: ASDisplayNode {
         self.label.isAccessibilityElement = true
         self.label.accessibilityTraits = .staticText
         self.label.accessibilityIdentifier = "Auth.Login.Agreement"
-        self.checkbox.image = tellomiCheckboxImage(checked: false)
+        self.checkbox.image = tellomiCheckboxImage(checked: false, palette: self.palette)
         self.checkbox.isUserInteractionEnabled = false
         self.checkboxButton.accessibilityTraits = [.button]
         self.checkboxButton.accessibilityIdentifier = "Auth.Agreement.Checkbox"
@@ -89,12 +114,19 @@ final class TellomiAgreementRow: ASDisplayNode {
 
     func setChecked(_ checked: Bool) {
         self.checked = checked
-        self.checkbox.image = tellomiCheckboxImage(checked: checked, dark: self.dark)
+        self.checkbox.image = tellomiCheckboxImage(checked: checked, palette: self.palette)
         self.checkboxButton.accessibilityValue = checked ? "1" : "0"
     }
 
     func setDark(_ dark: Bool) {
         self.dark = dark
+        self.palette = TellomiLoginChrome.palette(dark: dark)
+        self.setChecked(self.checked)
+    }
+
+    func apply(theme: PresentationTheme) {
+        self.dark = theme.overallDarkAppearance
+        self.palette = TellomiLoginChrome.palette(theme: theme)
         self.setChecked(self.checked)
     }
 
@@ -137,7 +169,7 @@ final class TellomiAgreementRow: ASDisplayNode {
     }
 
     private func textWidth(in rowWidth: CGFloat) -> CGFloat {
-        return max(1.0, rowWidth - 18.0 - 8.0)
+        return max(1.0, rowWidth - tellomiCheckboxSide - 8.0)
     }
 
     private func rowHeight(for text: CGSize) -> CGFloat {
@@ -226,7 +258,7 @@ final class TellomiAgreementRow: ASDisplayNode {
     override func layout() {
         super.layout()
         self.installLabelIfNeeded()
-        let rowWidth = self.bounds.width > 1.0 ? self.bounds.width : (self.measuredText.width + 18.0 + 8.0)
+        let rowWidth = self.bounds.width > 1.0 ? self.bounds.width : (self.measuredText.width + tellomiCheckboxSide + 8.0)
         let measured = self.measureText(rowWidth: rowWidth)
         self.measuredText = measured
         let needed = self.rowHeight(for: measured)
@@ -241,7 +273,7 @@ final class TellomiAgreementRow: ASDisplayNode {
     private func placeContents(rowWidth: CGFloat, measured: CGSize) {
         self.installLabelIfNeeded()
         self.applyLabelText()
-        let box: CGFloat = 18.0
+        let box = tellomiCheckboxSide
         let gap: CGFloat = 8.0
         let textY: CGFloat = 13.0
         let textWidth = self.textWidth(in: rowWidth)
@@ -305,7 +337,14 @@ final class TellomiSocialRowNode: HighlightableButtonNode {
     }
 
     func applyPalette(dark: Bool) {
-        let palette = TellomiLoginChrome.palette(dark: dark)
+        self.apply(palette: TellomiLoginChrome.palette(dark: dark))
+    }
+
+    func apply(theme: PresentationTheme) {
+        self.apply(palette: TellomiLoginChrome.palette(theme: theme))
+    }
+
+    private func apply(palette: TellomiLoginChrome.Palette) {
         self.backgroundColor = palette.rowBackground
         self.borderColor = palette.rowBorder.cgColor
         if let title = self.accessibilityLabel {
@@ -345,16 +384,36 @@ final class TellomiOrDividerNode: ASDisplayNode {
     }
 
     func setTitle(_ title: String) {
-        self.label.attributedText = NSAttributedString(string: title, font: Font.regular(13.0), textColor: TellomiLoginChrome.secondaryText)
+        let existing = self.label.attributedText.flatMap { text -> UIColor? in
+            guard text.length > 0 else {
+                return nil
+            }
+            return text.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? UIColor
+        }
+        self.setTitle(title, color: existing ?? TellomiLoginChrome.palette(dark: false).secondaryText)
+    }
+
+    func setTitle(_ title: String, color: UIColor) {
+        self.label.attributedText = NSAttributedString(string: title, font: Font.regular(13.0), textColor: color)
         self.isAccessibilityElement = true
         self.accessibilityLabel = title
         self.accessibilityTraits = [.staticText]
     }
 
     func applyPalette(dark: Bool) {
-        let color = TellomiLoginChrome.palette(dark: dark).rowBorder
-        self.left.backgroundColor = color
-        self.right.backgroundColor = color
+        self.apply(palette: TellomiLoginChrome.palette(dark: dark))
+    }
+
+    func apply(theme: PresentationTheme) {
+        self.apply(palette: TellomiLoginChrome.palette(theme: theme))
+    }
+
+    private func apply(palette: TellomiLoginChrome.Palette) {
+        self.left.backgroundColor = palette.rowBorder
+        self.right.backgroundColor = palette.rowBorder
+        if let title = self.accessibilityLabel {
+            self.setTitle(title, color: palette.secondaryText)
+        }
     }
 
     override func layout() {

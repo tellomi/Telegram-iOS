@@ -164,11 +164,16 @@ public func tellomiEmptyStoredLanguageCode(_ settings: LocalizationSettings?) ->
 }
 
 public func tellomiStartInterfaceLanguageDownload(account: UnauthorizedAccount, accountManager: AccountManager<TelegramAccountManagerTypes>, languageCode: String, disposable: MetaDisposable, applied: @escaping (PresentationStrings) -> Void) {
+    // The login pages for 简体 / 繁體 / English are bundled. Remember the choice
+    // before the request so the current screen can redraw without waiting on
+    // langpack.getLanguage / getLangPack. A missing server pack must not undo that.
+    tellomiRememberInterfaceLanguage(languageCode)
     disposable.set((tellomiDownloadAndApplyInterfaceLanguage(account: account, accountManager: accountManager, languageCode: languageCode)
     |> deliverOnMainQueue).start(next: { strings in
         tellomiRememberInterfaceLanguage(languageCode)
         tellomiNoteAppliedPack(strings)
         applied(strings)
+    }, error: { _ in
     }))
 }
 

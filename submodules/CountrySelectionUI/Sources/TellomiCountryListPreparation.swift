@@ -18,6 +18,9 @@ private func tellomiCountryListKey(locale: Locale?, countries: [Country]) -> Str
     hasher.combine(countries.count)
     hasher.combine(countries.first?.id ?? "")
     hasher.combine(countries.last?.id ?? "")
+    for code in TellomiCallingCodePolicy.allowedCallingCodes.sorted() {
+        hasher.combine(code)
+    }
     return String(hasher.finalize())
 }
 
@@ -77,9 +80,12 @@ func tellomiCountryNamesAndCodes(countries: [Country], locale: Locale) -> [((Str
         if let englishCountryName = usEnglishLocale.localizedString(forRegionCode: country.id), let countryName = locale.localizedString(forRegionCode: country.id) {
             var codes: [Int] = []
             for codeValue in country.countryCodes {
-                if let code = Int(codeValue.code) {
+                if let code = Int(codeValue.code), TellomiCallingCodePolicy.allows(Int32(code)) {
                     codes.append(code)
                 }
+            }
+            if codes.isEmpty {
+                continue
             }
             result.append(((englishCountryName, countryName), country.id, codes))
         }
