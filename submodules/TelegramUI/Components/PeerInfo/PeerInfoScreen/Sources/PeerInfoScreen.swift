@@ -130,6 +130,10 @@ public enum PeerInfoAvatarEditingMode {
     case fallback
 }
 
+private final class TellomiShownMeTabAvatar {
+    var image: (UIImage, UIImage)?
+}
+
 enum PeerInfoBotCommand {
     case settings
     case help
@@ -6771,7 +6775,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
             
             let accountTabBarAvatar: Signal<(UIImage, UIImage)?, NoError> = combineLatest(self.accountsAndPeers.get(), context.sharedContext.presentationData)
             |> map { primaryAndOther, presentationData -> (Account, EnginePeer, PresentationTheme)? in
-                if let primary = primaryAndOther.0, !primaryAndOther.1.isEmpty {
+                if tellomiMeTabShowsAccountAvatar(hasAccountPeer: primaryAndOther.0 != nil), let primary = primaryAndOther.0 {
                     return (primary.0.account, primary.1, presentationData.theme)
                 } else {
                     return nil
@@ -6783,13 +6787,18 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
                     let size = CGSize(width: 31.0, height: 31.0)
                     let inset: CGFloat = 3.0
                     if let signal = peerAvatarImage(account: primary.0, peerReference: PeerReference(primary.1), authorOfMessage: nil, representation: primary.1.profileImageRepresentations.first, displayDimensions: size, inset: 3.0, emptyColor: nil, synchronousLoad: false) {
+                        let shown = TellomiShownMeTabAvatar()
                         return signal
                         |> map { imageVersions -> (UIImage, UIImage)? in
+                            let incoming: (UIImage, UIImage)?
                             if let image = imageVersions?.0 {
-                                return (image.withRenderingMode(.alwaysOriginal), image.withRenderingMode(.alwaysOriginal))
+                                incoming = (image.withRenderingMode(.alwaysOriginal), image.withRenderingMode(.alwaysOriginal))
                             } else {
-                                return nil
+                                incoming = nil
                             }
+                            let resolved = tellomiMeTabAvatar(shown: shown.image, incoming: incoming)
+                            shown.image = resolved
+                            return resolved
                         }
                     } else {
                         return Signal { subscriber in

@@ -153,4 +153,12 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertEqual(labels.map(\.accessibilityLabel), labels.map(\.title))
         XCTAssertEqual(tellomiTabBarAccessibilityLabel(title: "我"), "我")
     }
+
+    func testMeTabAvatarDoesNotWaitForAnotherAccountOrAMiss() {
+        XCTAssertTrue(tellomiMeTabShowsAccountAvatar(hasAccountPeer: true))
+        XCTAssertFalse(tellomiMeTabShowsAccountAvatar(hasAccountPeer: false))
+        XCTAssertEqual(tellomiMeTabAvatar(shown: "photo", incoming: nil as String?), "photo")
+        XCTAssertEqual(tellomiMeTabAvatar(shown: "photo", incoming: "next"), "next")
+        XCTAssertNil(tellomiMeTabAvatar(shown: nil as String?, incoming: nil))
+    }
 }
