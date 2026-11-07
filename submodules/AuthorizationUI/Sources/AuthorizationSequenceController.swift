@@ -253,7 +253,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 var actions: [TextAlertAction] = []
                                 switch error {
                                     case .limitExceeded:
-                                        text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
+                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .invalidPhoneNumber where emailLogin:
                                         text = emailCopy.invalid
@@ -267,8 +267,11 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             }
                                             strongSelf.sharedContext.applicationBindings.openUrl(TellomiLoginChrome.helpURL)
                                         }))
+                                    case .floodWait(let seconds):
+                                        text = tellomiLoginResendWaitText(strongSelf.presentationData.strings, seconds: seconds)
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .phoneLimitExceeded:
-                                        text = strongSelf.presentationData.strings.Login_PhoneFloodError
+                                        text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .appOutdated:
                                         text = strongSelf.presentationData.strings.Login_ErrorAppOutdated
@@ -351,7 +354,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             let text: String
                             switch error {
                             case .limitExceeded:
-                                text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
+                                text = strongSelf.presentationData.strings.Login_CodeFloodError
                             case .generic, .invalidEmailAddress, .codeExpired, .invalidEmailToken, .invalidCode:
                                 text = strongSelf.presentationData.strings.Login_UnknownError
                             }
@@ -445,7 +448,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                              let text: String
                                              switch error {
                                              case .limitExceeded:
-                                                 text = tellomiLoginCodeFloodText(self.presentationData.strings)
+                                                 text = self.presentationData.strings.Login_CodeFloodError
                                              case .generic, .alreadyInProgress:
                                                  text = self.presentationData.strings.Login_UnknownError
                                              case .codeExpired:
@@ -491,7 +494,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         switch error {
                                             case .limitExceeded:
                                                 resetCode = true
-                                                text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
+                                                text = strongSelf.presentationData.strings.Login_CodeFloodError
                                             case .invalidCode:
                                                 resetCode = true
                                                 text = strongSelf.presentationData.strings.Login_InvalidCodeError
@@ -606,7 +609,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         switch error {
                                             case .limitExceeded:
                                                 resetCode = true
-                                                text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
+                                                text = strongSelf.presentationData.strings.Login_CodeFloodError
                                             case .invalidCode:
                                                 resetCode = true
                                                 text = strongSelf.presentationData.strings.Login_InvalidCodeError
@@ -717,12 +720,15 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             let text: String
             switch error {
             case .limitExceeded:
-                controller.tellomiBlockFurtherResends()
-                text = tellomiLoginCodeFloodText(self.presentationData.strings)
+                text = self.presentationData.strings.Login_CodeFloodError
+            case .floodWait(let seconds):
+                controller.tellomiPauseResend(seconds: seconds)
+                text = tellomiLoginResendWaitText(self.presentationData.strings, seconds: seconds)
             case .invalidPhoneNumber:
                 text = self.presentationData.strings.Login_InvalidPhoneError
             case .phoneLimitExceeded:
-                text = self.presentationData.strings.Login_PhoneFloodError
+                controller.tellomiBlockFurtherResends()
+                text = tellomiLoginCodeFloodText(self.presentationData.strings)
             case .appOutdated:
                 text = self.presentationData.strings.Login_ErrorAppOutdated
                 let updateUrl = self.presentationData.strings.InviteText_URL
@@ -844,7 +850,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     let text: String
                     switch error {
                         case .limitExceeded:
-                            text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
+                            text = strongSelf.presentationData.strings.Login_CodeFloodError
                         case .generic, .codeExpired:
                             text = strongSelf.presentationData.strings.Login_UnknownError
                         case .timeout:
@@ -912,7 +918,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         let text: String
                         switch error {
                             case .limitExceeded:
-                                text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
+                                text = strongSelf.presentationData.strings.Login_CodeFloodError
                             case .generic, .codeExpired:
                                 text = strongSelf.presentationData.strings.Login_UnknownError
                             case .invalidCode:
@@ -950,7 +956,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 let text: String
                                 switch error {
                                     case .limitExceeded:
-                                        text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
+                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
                                     case .invalidCode:
                                         text = strongSelf.presentationData.strings.Login_InvalidCodeError
                                     case .generic:
@@ -1319,7 +1325,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         var actions = [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]
         switch error {
         case .limitExceeded:
-            text = tellomiLoginCodeFloodText(self.presentationData.strings)
+            text = self.presentationData.strings.Login_CodeFloodError
         case .codeExpired:
             text = self.presentationData.strings.Login_CodeExpiredError
         case .invalidFirstName:

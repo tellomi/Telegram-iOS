@@ -1114,19 +1114,18 @@ Colors now start from the authorization theme (`intro.startButtonColor`, `list.i
 
 ## Login language, calling codes, and the daily code limit
 
-The globe on the phone and code screens opened the language card, then waited for `langpack.getLanguage` and `langpack.getLangPack` before rewriting the page. `tellomiStartInterfaceLanguageDownload` had no error handler, so a missing or failing pack left the labels as they were. The 简体 / 繁體 / English login sentences are already in the app. The choice is stored in `TellomiPreferredInterfaceLanguage` and the current screen lays out again before the request. A later pack, if the server has one, still replaces `localizationSettings`. Start on the welcome screen no longer stays dimmed when that download fails: it continues into the phone screen.
-
-Unauthorized `downloadAndApplyLocalization` is the stock call. It needs, on the login connection, `langpack.getLanguages`, `langpack.getLanguage`, `langpack.getLangPack`, and `langpack.getStrings`, with `lang_pack` taken from `initConnection` (`ios`). `langpack.getDifference` fills an empty pack after sign-in. Without those methods the rest of the app stays on `en.lproj`. The login pages for Chinese and English do not.
+The globe opened the language card, then waited for `langpack.getLanguage` before rewriting the page, and the download had no error handler. The login sentences for 简体 / 繁體 / English are already in the app, so the choice is stored and the current screen lays out before the request. The login connection is known to answer `langpack.getLanguages`, `getLangPack`, `getStrings`, and `getDifference`. The download's first call is the separate method `langpack.getLanguage` (`0x6a596502`). If that one fails, the client still requests `getLangPack` for the chosen code (base `en`). A failed download no longer leaves the welcome button dimmed.
 
 The country list and a pasted number accept `TellomiCallingCodePolicy.allowedCallingCodes`, which is `{86}`. Assign that set to add codes later. Any other calling code is put back to +86 and the screen says only mainland China is available. The full country table stays loaded so a pasted `+66…` is still recognized as foreign.
 
-`PHONE_CODE_FLOOD` was falling through to the generic error. It is now the same limit as `FLOOD_WAIT`, and the login alert says the day is capped at 10 codes. After that error the resend control stays off. The one-second countdown does not send another code.
+On server 235 the 11th code of the day is `400 PHONE_NUMBER_FLOOD`. A resend inside 60 seconds is `420 FLOOD_WAIT_X`. `PHONE_NUMBER_FLOOD` shows the daily cap (10) and leaves resend off. `FLOOD_WAIT_X` shows the wait in seconds and pauses resend only for that long. It does not say the day is used up, and it does not keep the button off.
 
 | File | Change |
 | --- | --- |
 | `TellomiLoginLocale.swift`, phone, code, and sign-up controllers | Remember the language and redraw, then download. |
-| `TellomiLoginDecisions.swift` | Switch plan, flood classification, flood sentence. |
+| `Localizations.swift` | `getLanguage` failure still downloads `getLangPack`. |
+| `TellomiLoginDecisions.swift` | Switch plan, daily cap versus `FLOOD_WAIT`, paste decision, phone titles. |
 | `AuthorizationSequenceSplashController.swift` | A failed pack download still opens the phone screen. |
 | `TellomiCallingCodePolicy.swift`, country list, phone entry | Whitelist, picker filter, paste notice. |
-| `Authorization.swift` | `PHONE_CODE_FLOOD` maps to the code-limit error. |
-| `AuthorizationSequenceController.swift`, code entry node | Alert text and a resend that does not fire again. |
+| `Authorization.swift` | `FLOOD_WAIT_X` is `floodWait(seconds)`. `PHONE_NUMBER_FLOOD` stays the day cap. |
+| `AuthorizationSequenceController.swift`, code entry node | Different alerts. Resend pauses, then turns back on. |

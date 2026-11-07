@@ -1502,6 +1502,34 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         }
     }
 
+    /// `FLOOD_WAIT_X` pauses resend for those seconds, then the button works again.
+    func tellomiPauseResend(seconds: Int32) {
+        guard !self.tellomiResendBlocked else {
+            return
+        }
+        self.currentTimeoutTime = max(1, seconds)
+        let disposable = ((Signal<Int, NoError>.single(1) |> delay(1.0, queue: Queue.mainQueue())) |> restart).startStrict(next: { [weak self] _ in
+            guard let self else {
+                return
+            }
+            guard let remaining = self.currentTimeoutTime, remaining > 0 else {
+                self.countdownDisposable.set(nil)
+                return
+            }
+            self.currentTimeoutTime = remaining - 1
+            if let layoutArguments = self.layoutArguments {
+                self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
+            }
+            if self.currentTimeoutTime == 0 {
+                self.countdownDisposable.set(nil)
+            }
+        })
+        self.countdownDisposable.set(disposable)
+        if let layoutArguments = self.layoutArguments {
+            self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
+        }
+    }
+
     @objc private func missingCodePressed() {
         self.openHelp?()
     }

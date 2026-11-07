@@ -205,12 +205,15 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         
         self.phoneInputNode.countryCodeUpdated = { [weak self] code, name in
             if let strongSelf = self {
-                if strongSelf.tellomiCompact, !strongSelf.tellomiRestoringCallingCode, let numeric = Int32(code), !TellomiCallingCodePolicy.allows(numeric) {
-                    strongSelf.tellomiRestoringCallingCode = true
-                    strongSelf.phoneInputNode.number = "+86"
-                    strongSelf.tellomiRestoringCallingCode = false
-                    strongSelf.tellomiUnsupportedCallingCode?()
-                    return
+                if strongSelf.tellomiCompact, !strongSelf.tellomiRestoringCallingCode, let numeric = Int32(code) {
+                    let decision = tellomiPastedCallingCode(recognized: numeric, allowed: TellomiCallingCodePolicy.allowedCallingCodes, fallback: 86)
+                    if decision.rejected {
+                        strongSelf.tellomiRestoringCallingCode = true
+                        strongSelf.phoneInputNode.number = "+\(decision.code)"
+                        strongSelf.tellomiRestoringCallingCode = false
+                        strongSelf.tellomiUnsupportedCallingCode?()
+                        return
+                    }
                 }
                 if let name = name {
                     strongSelf.preferredCountryIdForCode[code] = name

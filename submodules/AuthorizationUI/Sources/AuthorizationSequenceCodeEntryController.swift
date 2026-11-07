@@ -381,6 +381,10 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         self.controllerNode.tellomiBlockFurtherResends()
     }
 
+    func tellomiPauseResend(seconds: Int32) {
+        self.controllerNode.tellomiPauseResend(seconds: seconds)
+    }
+
     func applyTellomiStrings(_ strings: PresentationStrings) {
         self.strings = strings
         tellomiNoteAppliedPack(strings)

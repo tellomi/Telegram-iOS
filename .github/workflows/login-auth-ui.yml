@@ -41,7 +41,8 @@ jobs:
             exit 1
           fi
           sudo xcode-select -s "${candidate}/Contents/Developer"
-          xcodebuild -version | head -n 1 | grep -q '^Xcode 27.1'
+          xcodebuild -version > "${RUNNER_TEMP}/xcode.txt"
+          sed -n '1p' "${RUNNER_TEMP}/xcode.txt" | grep -q '^Xcode 27.1'
 
       - name: Pinned Bazel
         run: |
