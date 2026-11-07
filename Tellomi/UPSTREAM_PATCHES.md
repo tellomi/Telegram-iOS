@@ -646,6 +646,16 @@ Labels share one font. Dynamic Type scales that font from 10pt caption2, capped 
 | `submodules/TelegramUI/Components/TabBarLayout/Tests/TabBarItemsLayoutTests.swift` | Narrow 320pt bar stays equal. Scale and baseline. |
 | `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Applies that font, and exposes one accessibility element per tab. |
 
+The glass bar was drawing each icon at its bitmap size and the title in semibold up to 13pt at the bottom of the 56pt item. Upstream `TabBarNode` draws the 30pt Contacts/Chats/Settings PDFs at the top of a 45pt block that starts 3pt down, with a medium 10pt title under the icon. Icons larger than 30pt, including Discover, are fitted into that 30pt box. The title is medium 10pt on that same block. Tab order and the navigation switches are unchanged.
+
+The Me tab photo was requested only when another account was signed in (`activeAccountsAndPeers` leaves the primary out of the other-account list). One account kept the settings glyph. A download that had not finished yet also replaced a photo that was already drawn. The photo is now requested whenever the account peer exists, and a missing frame keeps the last photo. The file is the same profile photo the profile screen downloads. No server change is required.
+
+| File | Change |
+| --- | --- |
+| `TabBarItemsLayout.swift` | Upstream icon box, origin, and title position. |
+| `TabBarComponent.swift` | Uses that box and medium 10pt. |
+| `PeerInfoScreen.swift` | Me tab photo does not wait for a second account, and a miss keeps the last photo. |
+
 ## DC addresses from help.getConfig (M7 / D-33)
 
 `Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
