@@ -1073,6 +1073,19 @@ The color grid is the 27 solids and 9 gradients again, separate for light and da
 | `Wallpaper.swift` | `wallPaperNoFile` keeps its id. |
 | `ChatThemeScreen.swift` | Emoticon text and accent fill when the document and wallpaper are absent. |
 
+## Sticker upload failure
+
+Creating a sticker calls `MediaEditorScreen.uploadSticker`. The signal can fail (`UploadStickerError`, including a server 400 from `messages.uploadMedia` or `stickers.createStickerSet`) or complete without a success value. The subscription had no error callback, so the "Uploading…" progress stayed up. teamgram PR 230 describes that server failure. This change does not deploy the server and does not change the upload or create calls.
+
+A failure or an empty completion closes the progress, stops a video export, and shows the existing unknown-error text with Cancel and Retry. Retry starts one new upload when the user taps it. Cancel on the progress still closes that screen and drops the subscription. A failure after cancel does not show the alert and does not count as success. Nothing retries on its own.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/MediaEditorScreen/Sources/StickerUploadOutcome.swift` | Terminal states. Failure is not success and does not retry itself. |
+| `submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift` | `error` and `completed` close the progress and offer one user retry. |
+| `submodules/TelegramUI/Components/MediaEditorScreen/Tests/StickerUploadOutcomeTests.swift` | Those states. |
+| `submodules/TelegramUI/Components/MediaEditorScreen/BUILD` | Host test `StickerUploadOutcomeTests`. |
+
 ## Pull request tests
 
 `.github/workflows/pr-tests.yml` runs on pull requests on the standard `xcode-27` runner. It does not run on a master push and does not upload. The tab-bar layout test asks for iPhone 17 on iOS 27.0, which that image has. iOS 26.5 is not installed there.

@@ -5125,6 +5125,11 @@ public final class MediaEditorScreenImpl: ViewController, MediaEditorScreen, UID
                 self.saveTooltip = tooltipController
             }
         }
+
+        func dismissEditProgress() {
+            self.saveTooltip?.dismiss()
+            self.saveTooltip = nil
+        }
         
         private func updateSourceLoadState(_ state: MediaEditorSourceLoadState) {
             guard let controller = self.controller else {
@@ -8371,9 +8376,18 @@ public final class MediaEditorScreenImpl: ViewController, MediaEditorScreen, UID
             isUpdate = true
         }
         
-        self.updateEditProgress(0.0, cancel: { [weak self] in
+        final class StickerUploadSessionBox {
+            var session = StickerUploadSession.started
+        }
+        let uploadState = StickerUploadSessionBox()
+        let cancelUpload: () -> Void = { [weak self] in
+            let _ = stickerUploadReduce(&uploadState.session, .userCancelled)
+            self?.videoExport?.cancel()
+            self?.videoExport = nil
+            self?.exportDisposable.set(nil)
             self?.stickerUploadDisposable.set(nil)
-        })
+        }
+        self.updateEditProgress(0.0, cancel: cancelUpload)
         
         enum PrepareStickerStatus {
             case progress(Float)
@@ -8500,13 +8514,15 @@ public final class MediaEditorScreenImpl: ViewController, MediaEditorScreen, UID
             
             switch status {
             case let .progress(progress):
-                self.updateEditProgress(progress, cancel: { [weak self] in
-                    self?.videoExport?.cancel()
-                    self?.videoExport = nil
-                    self?.exportDisposable.set(nil)
-                    self?.stickerUploadDisposable.set(nil)
-                })
+                let effect = stickerUploadReduce(&uploadState.session, .progress(progress))
+                if case let .updateProgress(value) = effect {
+                    self.updateEditProgress(value, cancel: cancelUpload)
+                }
             case let .complete(resource, _):
+                let effect = stickerUploadReduce(&uploadState.session, .succeeded)
+                guard case .commitSuccess = effect else {
+                    return
+                }
                 let rawResource = resource._asResource() as! TelegramMediaResource
                 let navigationController = self.effectiveNavigationController as? NavigationController
 
@@ -8554,7 +8570,50 @@ public final class MediaEditorScreenImpl: ViewController, MediaEditorScreen, UID
                     })
                 })
             }
+        }, error: { [weak self] _ in
+            let effect = stickerUploadReduce(&uploadState.session, .failed)
+            guard case .stopLoadingAndOfferRetry = effect, let self else {
+                return
+            }
+            self.videoExport?.cancel()
+            self.videoExport = nil
+            self.exportDisposable.set(nil)
+            self.dismissEditProgress()
+            self.presentStickerUploadFailure(retry: { [weak self] in
+                self?.uploadSticker(file, action: action)
+            })
+        }, completed: { [weak self] in
+            let effect = stickerUploadReduce(&uploadState.session, .completedWithoutValue)
+            guard case .stopLoadingAndOfferRetry = effect, let self else {
+                return
+            }
+            self.videoExport?.cancel()
+            self.videoExport = nil
+            self.exportDisposable.set(nil)
+            self.dismissEditProgress()
+            self.presentStickerUploadFailure(retry: { [weak self] in
+                self?.uploadSticker(file, action: action)
+            })
         }))
+    }
+
+    private func dismissEditProgress() {
+        self.node.dismissEditProgress()
+    }
+
+    private func presentStickerUploadFailure(retry: @escaping () -> Void) {
+        let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+        let alertController = textAlertController(
+            context: self.context,
+            forceTheme: defaultDarkColorPresentationTheme,
+            title: nil,
+            text: presentationData.strings.Login_UnknownError,
+            actions: [
+                TextAlertAction(type: .genericAction, title: presentationData.strings.Common_Cancel, action: {}),
+                TextAlertAction(type: .defaultAction, title: presentationData.strings.ChatImportActivity_Retry, action: retry)
+            ]
+        )
+        self.present(alertController, in: .window(.root))
     }
     
     private var videoExport: MediaEditorVideoExport? {
