@@ -1746,9 +1746,9 @@ plist_fragment(
         <string>firefox</string>
         <string>touch-http</string>
         <string>yandexbrowser-open-url</string>
-        <string>vimeo</string>
-        <string>vine</string>
-        <string>coub</string>
+        <string>iosamap</string>
+        <string>baidumap</string>
+        <string>qqmap</string>
         <string>uber</string>
         <string>citymapper</string>
         <string>lyft</string>
@@ -1767,9 +1767,6 @@ plist_fragment(
         <string>yangomaps</string>
         <string>vivaldi</string>
         <string>rizogo</string>
-        <string>iosamap</string>
-        <string>baidumap</string>
-        <string>qqmap</string>
     </array>
     <key>LSRequiresIPhoneOS</key>
     <true/>

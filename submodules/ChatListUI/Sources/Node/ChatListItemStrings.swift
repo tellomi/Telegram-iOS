@@ -568,5 +568,8 @@ public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: 
     if richTextPreview?.string != messageText {
         richTextPreview = nil
     }
+    if TellomiChatLockDirectory.shared.isLocked(accountPeerId: accountPeerId.toInt64(), chatPeerId: chatPeer.peerId.toInt64()) {
+        return (peer, true, tellomiChatLockConcealedText(languageCode: strings.primaryComponent.languageCode), [], nil, nil, nil)
+    }
     return (peer, hideAuthor, messageText, messageEntities, spoilers, customEmojiRanges, richTextPreview)
 }
