@@ -646,6 +646,15 @@ Labels share one font. Dynamic Type scales that font from 10pt caption2, capped 
 | `submodules/TelegramUI/Components/TabBarLayout/Tests/TabBarItemsLayoutTests.swift` | Narrow 320pt bar stays equal. Scale and baseline. |
 | `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Applies that font, and exposes one accessibility element per tab. |
 
+## Reaction pills
+
+A builtin reaction was drawn at twice the 20×20 slot, and the layer was not clipped. Telegram's own reaction files are padded, so that 2× layer still looks about 20pt. These files are full-bleed, so the glyph filled 40pt, left the 30pt pill, and left the bubble. The reactor avatar beside it is the existing 24pt view and is unchanged. The list, the count, and the pill height stay. Builtin icons are now the slot size and clipped. Custom emoji stays 1.25× and clipped. Stars stays 1.25×. The server does not need `imageSize` or a custom-emoji attribute for the frame.
+
+| File | Change |
+| --- | --- |
+| `ReactionIconMetrics.swift` | Slot, scale, and clip for each reaction kind. |
+| `ReactionButtonListComponent.swift` | The icon layer uses that frame. |
+
 ## DC addresses from help.getConfig (M7 / D-33)
 
 `Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
