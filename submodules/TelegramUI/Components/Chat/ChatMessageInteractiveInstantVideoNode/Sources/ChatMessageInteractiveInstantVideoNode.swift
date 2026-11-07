@@ -606,7 +606,18 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
             
             var updatedAudioTranscriptionState: AudioTranscriptionButtonComponent.TranscriptionState?
             let transcribedText = transcribedText(message: EngineMessage(item.message))
-            let transcriptLayout = roundVideoTranscriptLayout(phase: roundVideoTranscriptPhase(audioTranscriptionState), fact: roundVideoTranscriptFact(transcribedText))
+            let transcriptFact: RoundVideoTranscriptFact
+            if let transcribedText {
+                switch transcribedText {
+                case let .success(text, isPending):
+                    transcriptFact = roundVideoTranscriptFact(nonEmptyText: text, isPending: isPending, failed: false)
+                case .error:
+                    transcriptFact = roundVideoTranscriptFact(nonEmptyText: nil, isPending: false, failed: true)
+                }
+            } else {
+                transcriptFact = roundVideoTranscriptFact(nonEmptyText: nil, isPending: false, failed: false)
+            }
+            let transcriptLayout = roundVideoTranscriptLayout(phase: roundVideoTranscriptPhase(audioTranscriptionState), fact: transcriptFact)
             if transcriptLayout.phase != roundVideoTranscriptPhase(audioTranscriptionState) {
                 updatedAudioTranscriptionState = audioTranscriptionState(transcriptLayout.phase)
             }
