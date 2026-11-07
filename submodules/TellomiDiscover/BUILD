@@ -17,6 +17,18 @@ swift_library(
 # Host tests. The feed screen's UIKit is not in this target.
 # `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/TellomiDiscover:TellomiDiscoverTests`
 swift_test(
+    name = "TellomiChatLinkPreviewTests",
+    srcs = glob([
+        "Sources/**/*.swift",
+    ]) + [
+        "Tests/TellomiChatLinkPreviewTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
+    ],
+)
+
+swift_test(
     name = "TellomiDiscoverTests",
     srcs = glob([
         "Sources/**/*.swift",
