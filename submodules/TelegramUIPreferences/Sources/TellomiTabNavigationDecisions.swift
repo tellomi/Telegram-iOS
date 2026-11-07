@@ -108,8 +108,7 @@ public func tellomiMeTabRootIsProfile(bottomNavigationEnabled: Bool) -> Bool {
     return bottomNavigationEnabled
 }
 
-/// The Me tab draws the signed-in account's photo whenever that peer record exists.
-/// Another signed-in account is not required.
+/// The Me tab shows the signed-in account photo once that peer exists. A second account is not required.
 public func tellomiMeTabShowsAccountAvatar(hasAccountPeer: Bool) -> Bool {
     return hasAccountPeer
 }

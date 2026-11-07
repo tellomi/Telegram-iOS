@@ -574,6 +574,19 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             BuildConfig.keychainAccessGroup(baseAppBundleId: baseAppBundleId)
         })
         let maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
+        if let appGroupUrl = maybeAppGroupUrl {
+            TellomiChatLockDirectory.shared.setIndexPath(tellomiChatLockIndexPath(rootPath: rootPathForBasePath(appGroupUrl.path)))
+        }
+        TellomiChatLockKeychain.load()
+        TellomiAppPasscodeBridge.hasPasscode = {
+            return (try? PasscodeCredentialStore.shared.protectionSettings().enabled) == true
+        }
+        TellomiAppPasscodeBridge.verify = { code in
+            guard let settings = try? PasscodeCredentialStore.shared.protectionSettings(), settings.enabled, let reference = settings.passcode else {
+                return false
+            }
+            return (try? PasscodeCredentialStore.shared.verify(code, reference: reference, scope: .settings)) != nil
+        }
         
         let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
         self.buildConfig = buildConfig

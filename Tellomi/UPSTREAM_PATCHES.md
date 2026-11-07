@@ -646,6 +646,16 @@ Labels share one font. Dynamic Type scales that font from 10pt caption2, capped 
 | `submodules/TelegramUI/Components/TabBarLayout/Tests/TabBarItemsLayoutTests.swift` | Narrow 320pt bar stays equal. Scale and baseline. |
 | `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Applies that font, and exposes one accessibility element per tab. |
 
+The glass bar was drawing each icon at its bitmap size and the title in semibold up to 13pt at the bottom of the 56pt item. Upstream `TabBarNode` draws the 30pt Contacts/Chats/Settings PDFs at the top of a 45pt block that starts 3pt down, with a medium 10pt title under the icon. Icons larger than 30pt, including Discover, are fitted into that 30pt box. The title is medium 10pt on that same block. Tab order and the navigation switches are unchanged.
+
+The Me tab photo was requested only when another account was signed in (`activeAccountsAndPeers` leaves the primary out of the other-account list). One account kept the settings glyph. A download that had not finished yet also replaced a photo that was already drawn. The photo is now requested whenever the account peer exists, and a missing frame keeps the last photo. The file is the same profile photo the profile screen downloads. No server change is required.
+
+| File | Change |
+| --- | --- |
+| `TabBarItemsLayout.swift` | Upstream icon box, origin, and title position. |
+| `TabBarComponent.swift` | Uses that box and medium 10pt. |
+| `PeerInfoScreen.swift` | Me tab photo does not wait for a second account, and a miss keeps the last photo. |
+
 The Me tab opens the existing My Profile screen (`isMyProfile`), the same one Settings → 资料 pushes. It is not a new page. The header, phone, username, birthday, bio, and stories pane are that screen's. While it is the tab root it has no back button, and its navigation bar has the settings gear, which pushes the existing settings screen. The settings screen, its 资料 row, the navigation switches, long-press account switching, and `ios_killswitch_disable_tellomi_tabs` stay. The kill switch still builds the settings screen as the last tab. The Me tab icon is the signed-in account photo whenever that peer record exists; another account is not required. A frame that has not downloaded yet keeps the photo already drawn.
 
 | File | Change |
@@ -1104,3 +1114,69 @@ A failure or an empty completion closes the progress, stops a video export, and 
 | `.github/workflows/pr-tests.yml` | Host tests that the pull request declares, plus the tab-bar simulator test. |
 | `submodules/TelegramUI/Components/TabBarLayout/BUILD` | Simulator pin is iPhone 17 / iOS 27.0. |
 | `submodules/TellomiWallpapers/Tests/TellomiWallpapersTests.swift` | Compare names and colors separately. A tuple array does not satisfy `XCTAssertEqual` on Xcode 27.1. |
+
+## Round video transcription
+
+Tapping transcribe on a round video used to treat any stored transcript, including an error or an empty result, as a reason to replace the circle with the file row. That path sets the video node's alpha to zero and `canAttachContent = true`, which stops the player from attaching. With no text to show, the circle stays a blank disc and the duration, mute, time, and button go with it. A later open of the chat repeats that layout.
+
+A non-empty transcript is now the only case that replaces the video. Failure, an empty result, a still-pending request, and cancel leave the circle and its controls in place. The request is not started again by itself. The expanded mask uses the larger of the bubble and the new content size, so the text is not clipped back to the circle.
+
+| File | Change |
+| --- | --- |
+| `RoundVideoTranscriptionDecision.swift` | When the circle stays and when it may be replaced. |
+| `ChatMessageInteractiveInstantVideoNode.swift` | Applies that decision. Cancel stops an in-progress request. A failure restores the video. |
+| `ChatMessageInstantVideoBubbleContentNode.swift` | Expands only when the decision replaces the video. The mask is not stuck on the old circle. |
+| `RoundVideoTranscriptionDecisionTests.swift` | Success, pending, failure, empty, cancel, and no automatic retry. |
+
+## View-once, media timers, and conversation TTL
+
+The iOS client already separates these timers. This records what each one does to the message, the cache, and `readMessageContents`. No production database or file is touched. The tests use only the values below.
+
+A cloud view-once photo, video, voice, or round video is an `AutoclearTimeoutMessageAttribute` whose timeout is `0x7fffffff`. A cloud self-destruct photo or video is the same attribute with a timeout of at most 60 seconds. Voice and round video use that view-once value too; playback start and the secret-media gallery call the same consume function. The conversation TTL is an `AutoremoveTimeoutMessageAttribute` and is not secret media once it is longer than 60 seconds. A secret chat stores both its media timer and its conversation timer as `AutoremoveTimeoutMessageAttribute`. Compose and peer info still call `createSecretChat`.
+
+Opening an incoming view-once or media-timer message starts the countdown and queues `messages.readMessageContents` (a channel uses `channels.readMessageContents`). It does not replace the media and does not delete the cache. The sender's copy is ignored because the message is not incoming. A secret chat queues `readMessagesContent` on the secret-chat operation log instead of the cloud RPC. An incoming cloud conversation TTL already begins at the message date.
+
+When the local timer fires, a cloud view-once or media timer keeps the message and stores `TelegramMediaExpiredContent`. The video, its thumbnail, and a voice track stay in `mediaBox`. A cloud conversation TTL deletes the message row and also leaves the cache. A secret chat deletes the row and force-removes those resource ids. None of the three calls `readMessageContents` or marks the file id invalid. A later holder of the old id can still read the cache or ask the server. That is a different step from the placeholder.
+
+A failed cloud `readMessageContents` is swallowed and the operation log entry is then removed, so that report is not retried. The local placeholder does not wait for the RPC. Another device applies the remote consume by inserting the placeholder for view-once, without deleting the cache.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Tellomi/EphemeralMediaLifecycle.swift` | The five kinds and the four effects: placeholder, row removal, cache removal, server report. |
+| `submodules/TelegramCore/Tests/EphemeralMediaLifecycleTests.swift` | Synthetic cases for sender, recipient, expiry, a failed report, and a stale resource id. |
+| `submodules/TelegramCore/BUILD` | Host test `EphemeralMediaLifecycleTests`. |
+
+## Open in 高德, 百度, and 腾讯
+
+The Open In sheet already lists 高德, 百度, and 腾讯 when `canOpenURL` says they are installed, then Google Maps under the same check, with Apple Maps always first. TestFlight 14.0.4 build 71 contains that code (`118e9b2560` is an ancestor of `eb90bf0e2d`). A pin, a venue, and a live location all use `OpenInItem.location`. Directions and the share action use the same list. The watch app still opens Apple Maps only.
+
+`canOpenURL` was still false for the three Chinese apps. This binary is linked with the iOS 27 SDK, and that SDK only answers `canOpenURL` for the first 25 `LSApplicationQueriesSchemes` entries. `TelegramInfoPlist` had 41 entries. `comgooglemaps-x-callback` was second, so Google Maps showed. `iosamap`, `baidumap`, and `qqmap` were 39–41, so an installed 高德, 百度, or 腾讯 stayed hidden. The sheet was Apple Maps plus Google Maps.
+
+Those three schemes now replace `vimeo`, `vine`, and `coub` inside the first 25. Nothing in this repo calls `canOpenURL` for those three. The Chinese schemes are no longer repeated at the end. `Info.plist` and `InfoBazel.plist` use the same placement. The Bazel app links `TelegramInfoPlist`.
+
+Coordinates are unchanged. Telegram stores WGS-84. 高德 is `iosamap://` with `dev=1`. 百度 is `baidumap://` with `coord_type=wgs84`. 腾讯 `qqmap://` is converted to GCJ-02 here. Apple Maps receives the stored WGS-84 point.
+
+| File | Change |
+| --- | --- |
+| `Telegram/BUILD` | `iosamap`, `baidumap`, `qqmap` sit inside the first 25 query schemes. |
+| `Telegram/Telegram-iOS/Info.plist`, `InfoBazel.plist` | The same placement. |
+| `TellomiMapOpenIn.swift` | The 25-scheme window. |
+| `TellomiMapOpenInTests.swift` | The shipped order shows the four map schemes. The previous order hides the three Chinese ones. |
+
+## Secret view and a per-chat PIN
+
+The chat list long-press menu adds 秘密查看 and 设置密码. The default bar and the navigation switches are unchanged.
+
+Secret view opens that chat without `messages.readHistory`, `channels.readHistory`, `readMessageContents`, `readMentions`, or `readReactions`. It does not clear the unread count. It does not send typing, sticker, or recording activity. While it is open, that account's online presence stays off, including the foreground refresh. Leaving the chat ends the session and restores presence only for the primary account. A banner reads 秘密查看中. The unread badge is still there because the read index is not applied.
+
+The chat PIN is 4 to 8 digits. The stored value is a salted SHA-256 in the app data-protection keychain (`kSecUseDataProtectionKeychain`, service `app.tellomi.chat.chat-lock`), not the macOS login keychain and not the server. Face ID or Touch ID is optional and does not replace the PIN. A lock is per account and per chat. List rows, search rows that use the same preview, notification text, and the external share text become 已锁定. Opening asks for the PIN first. Forgetting the PIN does not unlock the chat and does not contact the server. If the existing app passcode is on, that passcode can authorize a new chat PIN. Otherwise the chat stays locked.
+
+| File | Change |
+| --- | --- |
+| `TellomiChatPrivacy.swift` | The reports a secret view blocks, the salted PIN, and the per-account lock directory. |
+| `TellomiChatLockKeychain.swift` | Data-protection keychain load, save, and remove. |
+| `TellomiChatLockPrompt.swift` | Set, change, remove, unlock, biometrics, and the forgot-password alert. |
+| `ChatContextMenus.swift` | The two long-press actions. |
+| `ChatController.swift`, `NavigateToChatController.swift`, `ChatHistoryListNode.swift` | Secret view stays unread and shows the banner. A locked chat asks for the PIN before it opens. |
+| `SharedWakeupManager.swift` | Online presence stays off during secret view. |
+| `ChatListItemStrings.swift`, `ShareController.swift`, `NotificationService.swift` | Hidden preview text. |
