@@ -308,7 +308,7 @@ public final class TellomiFeedScreen: ViewController {
                     self.pendingPostId = nil
                     self.postPresentAttempts = 0
                     self.postPresentRetryQueued = false
-                    let controller = TellomiDiscoverPostController(context: self.context, postId: id, loader: self.loader, configuration: configuration, loggedIn: loggedIn, mediaUpload: self.mediaUpload, mediaBaseURL: self.mediaBaseURL, previews: self.localPreviews, previewAccount: self.previewAccount)
+                    let controller = TellomiDiscoverPostController(context: self.context, postId: id, loader: self.loader, configuration: configuration, loggedIn: loggedIn, surface: self.kind.rawValue, mediaUpload: self.mediaUpload, mediaBaseURL: self.mediaBaseURL, previews: self.localPreviews, previewAccount: self.previewAccount)
                     self.push(controller)
                 } else if !self.postPresentRetryQueued, self.postPresentAttempts < self.postPresentAttemptLimit {
                     self.postPresentAttempts += 1

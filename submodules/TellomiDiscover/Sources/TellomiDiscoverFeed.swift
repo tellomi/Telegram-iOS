@@ -403,6 +403,16 @@ public enum TellomiDiscoverOperation: Equatable {
     case vote(postId: String, option: Int)
     /// `POST /v1/feed/reports`. Official option id plus `detail`. Not a TL report.
     case report(target: TellomiDiscoverReportTarget, option: String, detail: String)
+    /// `PUT /v1/feed/posts/{id}/like?surface=`. Not a story reaction.
+    case like(postId: String, surface: String)
+    /// `DELETE /v1/feed/posts/{id}/like?surface=`.
+    case unlike(postId: String, surface: String)
+    /// `GET /v1/feed/posts/{id}/comments`.
+    case comments(postId: String, cursor: String?)
+    /// `POST /v1/feed/posts/{id}/comments`. Text only. No media and no operation id.
+    case comment(postId: String, text: String, parentId: String?, clientNonce: String)
+    /// `DELETE /v1/feed/posts/{commentId}`. The caller's own comment, not the post.
+    case deleteComment(String)
 }
 
 public struct TellomiDiscoverHTTPCall: Equatable {
@@ -505,6 +515,41 @@ public func tellomiDiscoverHTTPCall(base: URL, operation: TellomiDiscoverOperati
             return nil
         }
         return TellomiDiscoverHTTPCall(method: "POST", url: url, body: body, token: trimmedToken, authorizes: true, contentType: "application/json")
+    case let .like(postId, surface):
+        guard let postId = tellomiDiscoverPostId(postId), let url = tellomiDiscoverURL(base: base, path: "/v1/feed/posts/\(postId)/like", query: [URLQueryItem(name: "surface", value: tellomiDiscoverLikeSurface(surface))]) else {
+            return nil
+        }
+        return TellomiDiscoverHTTPCall(method: "PUT", url: url, body: nil, token: trimmedToken, authorizes: true, contentType: nil)
+    case let .unlike(postId, surface):
+        guard let postId = tellomiDiscoverPostId(postId), let url = tellomiDiscoverURL(base: base, path: "/v1/feed/posts/\(postId)/like", query: [URLQueryItem(name: "surface", value: tellomiDiscoverLikeSurface(surface))]) else {
+            return nil
+        }
+        return TellomiDiscoverHTTPCall(method: "DELETE", url: url, body: nil, token: trimmedToken, authorizes: true, contentType: nil)
+    case let .comments(postId, cursor):
+        guard let postId = tellomiDiscoverPostId(postId) else {
+            return nil
+        }
+        var query: [URLQueryItem] = []
+        if let cursor, !cursor.isEmpty {
+            query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        guard let url = tellomiDiscoverURL(base: base, path: "/v1/feed/posts/\(postId)/comments", query: query) else {
+            return nil
+        }
+        return TellomiDiscoverHTTPCall(method: "GET", url: url, body: nil, token: trimmedToken, authorizes: true, contentType: nil)
+    case let .comment(postId, text, parentId, nonce):
+        guard let postId = tellomiDiscoverPostId(postId), let body = tellomiDiscoverCommentBody(text: text, parentId: parentId, nonce: nonce) else {
+            return nil
+        }
+        guard let url = tellomiDiscoverURL(base: base, path: "/v1/feed/posts/\(postId)/comments", query: []) else {
+            return nil
+        }
+        return TellomiDiscoverHTTPCall(method: "POST", url: url, body: body, token: trimmedToken, authorizes: true, contentType: "application/json")
+    case let .deleteComment(commentId):
+        guard let commentId = tellomiDiscoverPostId(commentId), let url = tellomiDiscoverURL(base: base, path: "/v1/feed/posts/\(commentId)", query: []) else {
+            return nil
+        }
+        return TellomiDiscoverHTTPCall(method: "DELETE", url: url, body: nil, token: trimmedToken, authorizes: true, contentType: nil)
     }
 }
 

@@ -17,6 +17,15 @@ public enum TellomiDiscoverClientError: Equatable, Error {
     /// `GET /v1/feed/nearby` answered 404, 405, or 501. The route is not deployed.
     case nearbyUnavailable
     case unreadable
+    case invalidText
+    case invalidNonce
+    case invalidParent
+    case commentsClosed
+    case replyNotAllowed
+    case harassmentGuard
+    case notCommentable
+    case badCursor
+    case profileRequired
 }
 
 public enum TellomiDiscoverDecoded: Equatable {
@@ -29,6 +38,8 @@ public enum TellomiDiscoverDecoded: Equatable {
     case reported
     case acknowledged
     case voted(TellomiDiscoverVoteTally)
+    case commentPage(TellomiDiscoverCommentPage)
+    case commentCreated(TellomiDiscoverCommentCreated)
 }
 
 public struct TellomiDiscoverHTTPResult: Equatable {
@@ -119,6 +130,7 @@ public final class TellomiDiscoverLoader {
 
     private func issue(ticket: Int, configuration: TellomiDiscoverConfiguration, operation: TellomiDiscoverOperation, retryUnauthorized: Bool, completion: @escaping (Result<TellomiDiscoverDecoded, TellomiDiscoverClientError>) -> Void) {
         guard ticket == self.generation else {
+            completion(.failure(.signedOut))
             return
         }
         guard let baseURL = configuration.baseURL else {
@@ -137,6 +149,7 @@ public final class TellomiDiscoverLoader {
         if current == nil || tellomiDiscoverCredentialNeedsRefresh(expires: current?.expires ?? 0, now: self.now()) {
             self.fetchCredential { [weak self] result in
                 guard let self, ticket == self.generation else {
+                    completion(.failure(.signedOut))
                     return
                 }
                 switch result {
@@ -260,6 +273,7 @@ public final class TellomiDiscoverLoader {
         }
         self.http(call) { [weak self] result in
             guard let self, ticket == self.generation else {
+                completion(.failure(.signedOut))
                 return
             }
             switch result {
@@ -311,6 +325,17 @@ private func tellomiDiscoverLocalFailure(_ operation: TellomiDiscoverOperation) 
         return nil
     case let .report(target, option, detail):
         return tellomiDiscoverReportBody(target: target, option: option, detail: detail) == nil ? .unavailable : nil
+    case let .like(postId, _), let .unlike(postId, _):
+        return tellomiDiscoverPostId(postId) == nil ? .notFound : nil
+    case let .comments(postId, _):
+        return tellomiDiscoverPostId(postId) == nil ? .notFound : nil
+    case let .comment(postId, text, parentId, nonce):
+        if tellomiDiscoverPostId(postId) == nil {
+            return .notFound
+        }
+        return tellomiDiscoverCommentError(text: text, parentId: parentId, nonce: nonce)
+    case let .deleteComment(commentId):
+        return tellomiDiscoverPostId(commentId) == nil ? .notFound : nil
     }
 }
 
@@ -324,6 +349,9 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
     if result.status == 400, tellomiDiscoverErrorCode(result.body) == "invalid_media" {
         return .failure(.invalidMedia)
     }
+    if let mapped = tellomiDiscoverReactError(status: result.status, code: tellomiDiscoverErrorCode(result.body)) {
+        return .failure(mapped)
+    }
     if result.status == 401, tellomiDiscoverErrorCode(result.body) == "credential_expired" {
         return .failure(.unauthorized)
     }
@@ -335,7 +363,7 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
         break
     case 204:
         switch operation {
-        case .repost, .unrepost:
+        case .repost, .unrepost, .like, .unlike, .deleteComment:
             return .success(.acknowledged)
         default:
             return .failure(.unavailable)
@@ -387,6 +415,18 @@ public func tellomiDiscoverDecodeHTTP(operation: TellomiDiscoverOperation, resul
             return .failure(.unreadable)
         }
         return .success(.voted(tally))
+    case let .comments(postId, _):
+        guard let page = tellomiDiscoverParseCommentPage(result.body, postId: postId) else {
+            return .failure(.unreadable)
+        }
+        return .success(.commentPage(page))
+    case .comment:
+        guard let created = tellomiDiscoverParseCommentCreated(result.body) else {
+            return .failure(.unreadable)
+        }
+        return .success(.commentCreated(created))
+    case .like, .unlike, .deleteComment:
+        return .failure(.unavailable)
     }
 }
 
@@ -570,7 +610,7 @@ public struct TellomiDiscoverCopy: Equatable {
             return self.invalidCity
         case .nearbyUnavailable:
             return self.nearbyUnavailable
-        case .signedOut, .notPublishable, .invalidMedia, .hidden, .unavailable, .unauthorized, .notFound, .unreadable:
+        case .signedOut, .notPublishable, .invalidMedia, .hidden, .unavailable, .unauthorized, .notFound, .unreadable, .invalidText, .invalidNonce, .invalidParent, .commentsClosed, .replyNotAllowed, .harassmentGuard, .notCommentable, .badCursor, .profileRequired:
             return self.failed
         }
     }
