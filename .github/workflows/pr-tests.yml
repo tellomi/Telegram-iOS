@@ -54,8 +54,8 @@ jobs:
             exit 1
           fi
           sudo xcode-select -s "${candidate}/Contents/Developer"
-          xcodebuild -version
-          xcodebuild -version | head -n 1 | grep -q '^Xcode 27.1'
+          xcodebuild -version > "${RUNNER_TEMP}/xcode-version.txt"
+          grep -q '^Xcode 27.1' "${RUNNER_TEMP}/xcode-version.txt"
 
       - name: Pinned Bazel
         run: |
@@ -92,10 +92,16 @@ jobs:
             //submodules/ChatListUI:ChatListScrollAnchorTests
             //submodules/TellomiWallpapers:TellomiWallpapersTests
             //submodules/TelegramUIPreferences:TellomiTabNavigationDecisionsTests
+            //submodules/TelegramUI/Components/Chat/ChatMessageInteractiveInstantVideoNode:RoundVideoTranscriptionDecisionTests
+            //submodules/TelegramUIPreferences:TellomiChatPrivacyTests
+            //submodules/Components/ReactionButtonListComponent:ReactionIconMetricsTests
             //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
+            //submodules/TelegramCore:EphemeralMediaLifecycleTests
+            //submodules/OpenInExternalAppUI:TellomiMapOpenInTests
           )
           ios=(
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
+            //submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode:PeerInfoPaneNodeTests
           )
           present() {
             local label="$1"

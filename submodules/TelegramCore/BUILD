@@ -68,6 +68,17 @@ ios_test_runner(
 # Host test. The decision does not touch the session.
 # `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/TelegramCore:TellomiSignUpAvatarTests`
 swift_test(
+    name = "EphemeralMediaLifecycleTests",
+    srcs = [
+        "Sources/Tellomi/EphemeralMediaLifecycle.swift",
+        "Tests/EphemeralMediaLifecycleTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
+    ],
+)
+
+swift_test(
     name = "TellomiSignUpAvatarTests",
     srcs = [
         "Sources/Tellomi/TellomiSignUpAvatar.swift",

@@ -5,6 +5,7 @@ import AsyncDisplayKit
 import TelegramCore
 import SwiftSignalKit
 import TelegramPresentationData
+import TelegramUIPreferences
 import AccountContext
 import ContactListUI
 import CallListUI
@@ -236,7 +237,8 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             sharedContext.switchingData = (nil, nil, nil)
         }
         
-        let accountSettingsController = PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil, peerId: self.context.account.peerId, avatarInitiallyExpanded: false, isOpenedFromChat: false, reactionSourceMessageId: nil, callMessages: [], isSettings: true)
+        let meTabIsProfile = tellomiMeTabRootIsProfile(bottomNavigationEnabled: tellomiBottomNavigationEnabled(appConfiguration: self.context.currentAppConfiguration.with { $0 }))
+        let accountSettingsController = PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil, peerId: self.context.account.peerId, avatarInitiallyExpanded: false, isOpenedFromChat: false, reactionSourceMessageId: nil, callMessages: [], isSettings: !meTabIsProfile, isMyProfile: meTabIsProfile, tellomiTabRoot: meTabIsProfile)
         accountSettingsController.tabBarItemDebugTapAction = { [weak self] in
             guard let strongSelf = self else {
                 return

@@ -35,6 +35,18 @@ final class TabBarItemsLayoutTests: XCTestCase {
         XCTAssertEqual(tabBarClampedTitlePointSize(dynamicPointSize: 22.0), 13.0)
     }
 
+    func test_iconsFitTheUpstreamThirtyPointSlotAndTitlesSitUnderThem() {
+        let chats = tabBarUpstreamIconFrame(itemWidth: 104.0, imageSize: CGSize(width: 30.0, height: 30.0))
+        let discover = tabBarUpstreamIconFrame(itemWidth: 104.0, imageSize: CGSize(width: 48.0, height: 48.0))
+        XCTAssertEqual(chats, CGRect(x: 37.0, y: 3.0, width: 30.0, height: 30.0))
+        XCTAssertEqual(discover.size, CGSize(width: 30.0, height: 30.0))
+        XCTAssertEqual(discover.minY, chats.minY)
+        let title = tabBarUpstreamTitleFrame(itemWidth: 104.0, titleSize: CGSize(width: 24.0, height: 12.0))
+        XCTAssertEqual(title.minY, 35.0)
+        XCTAssertEqual(title.midX, 52.0, accuracy: 0.6)
+        XCTAssertEqual(tabBarUpstreamTitlePointSize, 10.0)
+    }
+
     func test_titleFramesShareABaselineAndSelectionIsATrait() {
         let item = CGSize(width: 104.0, height: 56.0)
         let discover = tabBarTitleFrame(itemSize: item, titleSize: CGSize(width: 36.0, height: 12.0))

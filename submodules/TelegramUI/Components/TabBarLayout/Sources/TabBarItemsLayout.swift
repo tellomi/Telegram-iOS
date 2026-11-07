@@ -117,6 +117,31 @@ public func tabBarLensSelectionFrame(axis: TabBarAxis, barSize: CGSize, selected
     }
 }
 
+/// Upstream `TabBarNode` draws Contacts/Chats/Settings from a 30pt PDF in a 45pt block
+/// whose top is 3pt below the bar. A larger bitmap is fitted into that 30pt box.
+public let tabBarUpstreamIconPointSize: CGFloat = 30.0
+public let tabBarUpstreamItemContentOriginY: CGFloat = 3.0
+public let tabBarUpstreamItemContentHeight: CGFloat = 45.0
+public let tabBarUpstreamTitlePointSize: CGFloat = 10.0
+public let tabBarUpstreamTitleBottomInset: CGFloat = 1.0
+
+public func tabBarUpstreamIconFrame(itemWidth: CGFloat, imageSize: CGSize) -> CGRect {
+    let longest = max(imageSize.width, imageSize.height)
+    let scale: CGFloat
+    if longest > tabBarUpstreamIconPointSize && longest > 0 {
+        scale = tabBarUpstreamIconPointSize / longest
+    } else {
+        scale = 1
+    }
+    let fitted = CGSize(width: floor(imageSize.width * scale), height: floor(imageSize.height * scale))
+    return CGRect(x: floor((itemWidth - fitted.width) / 2.0), y: tabBarUpstreamItemContentOriginY, width: fitted.width, height: fitted.height)
+}
+
+public func tabBarUpstreamTitleFrame(itemWidth: CGFloat, titleSize: CGSize) -> CGRect {
+    let y = tabBarUpstreamItemContentOriginY + tabBarUpstreamItemContentHeight - tabBarUpstreamTitleBottomInset - titleSize.height
+    return CGRect(x: floor((itemWidth - titleSize.width) / 2.0), y: y, width: titleSize.width, height: titleSize.height)
+}
+
 /// Title frame inside one item. Same title height means the same baseline across items.
 public func tabBarTitleFrame(itemSize: CGSize, titleSize: CGSize) -> CGRect {
     return CGRect(x: floor((itemSize.width - titleSize.width) * 0.5), y: itemSize.height - 8.0 - titleSize.height, width: titleSize.width, height: titleSize.height)
