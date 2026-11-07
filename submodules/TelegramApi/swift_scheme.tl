@@ -2757,6 +2757,7 @@ messages.requestSimpleWebView#413a3e73 flags:# from_switch_webview:flags.1?true 
 messages.sendWebViewResultMessage#a4314f5 bot_query_id:string result:InputBotInlineResult = WebViewMessageSent;
 messages.sendWebViewData#dc0242c8 bot:InputUser random_id:long button_text:string data:string = Updates;
 messages.transcribeAudio#269e9a49 peer:InputPeer msg_id:int = messages.TranscribedAudio;
+messages.transcribeDraft#7e11da47 audio:bytes = messages.TranscribedAudio;
 messages.rateTranscribedAudio#7f1d072f peer:InputPeer msg_id:int transcription_id:long good:Bool = Bool;
 messages.getCustomEmojiDocuments#d9ab0f54 document_id:Vector<long> = Vector<Document>;
 messages.getEmojiStickers#fbfca18f hash:long = messages.AllStickers;

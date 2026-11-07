@@ -139,6 +139,7 @@ public func updateChatTranslationStateInteractively(engine: TelegramEngine, peer
 private let languageRecognizer = NLLanguageRecognizer()
 
 public func translateMessageIds(context: AccountContext, messageIds: [EngineMessage.Id], fromLang: String?, toLang: String) -> Signal<Never, NoError> {
+    let toLang = tellomiTranslationTargetAccepted(toLang) ? toLang : "zh"
     return context.account.postbox.transaction { transaction -> Signal<Never, NoError> in
         var messageIdsToTranslate: [EngineMessage.Id] = []
         var messageIdsSet = Set<EngineMessage.Id>()
@@ -191,14 +192,16 @@ public func translateMessageIds(context: AccountContext, messageIds: [EngineMess
             }
         }
         
-        let _ = TranslationConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
-        switch tellomiTranslationRoute(from: fromLang, to: toLang, enabled: true, healthy: true) {
+        let appData = context.currentAppConfiguration.with { $0 }.data
+        let enabled = tellomiAutoTranslationAvailable(auto: appData?["translations_auto_enabled"] as? String)
+        let target = tellomiTranslationTargetAccepted(toLang) ? toLang : "zh"
+        switch tellomiTranslationRoute(from: fromLang, to: target, enabled: enabled, healthy: true) {
         case .server:
             break
         case .refused, .unavailable:
             return .complete()
         }
-        return context.engine.messages.translateMessages(messageIds: messageIdsToTranslate, fromLang: fromLang, toLang: "zh", enableLocalIfPossible: tellomiTranslationAllowsLocalEngine())
+        return context.engine.messages.translateMessages(messageIds: messageIdsToTranslate, fromLang: fromLang, toLang: target, enableLocalIfPossible: tellomiTranslationAllowsLocalEngine())
         |> `catch` { _ -> Signal<Never, NoError> in
             return .complete()
         }
@@ -249,8 +252,9 @@ public func chatTranslationState(context: AccountContext, peerId: EnginePeer.Id,
             |> mapToSignal { cached in
                 let currentTime = Int32(CFAbsoluteTimeGetCurrent() + kCFAbsoluteTimeIntervalSince1970)
                 if let cached, let timestamp = cached.timestamp, cached.baseLang == baseLang && currentTime - timestamp < 60 * 60 {
-                    if !dontTranslateLanguages.contains(cached.fromLang) {
-                        return .single(cached)
+                    if cached.fromLang == "en" && !dontTranslateLanguages.contains(cached.fromLang) {
+                        let target = tellomiTranslationTargetAccepted(cached.toLang) ? cached.toLang : "zh"
+                        return .single(cached.withToLang(target))
                     } else {
                         return .single(nil)
                     }
@@ -356,11 +360,11 @@ public func chatTranslationState(context: AccountContext, peerId: EnginePeer.Id,
                                 baseLang: baseLang,
                                 fromLang: fromLang,
                                 timestamp: currentTime,
-                                toLang: cached?.toLang,
-                                isEnabled: isEnabled
+                                toLang: "zh",
+                                isEnabled: isEnabled && fromLang == "en"
                             )
                             let _ = updateChatTranslationState(engine: context.engine, peerId: peerId, threadId: threadId, state: state).start()
-                            if !dontTranslateLanguages.contains(fromLang) {
+                            if fromLang == "en" && !dontTranslateLanguages.contains(fromLang) {
                                 return state
                             } else {
                                 return nil

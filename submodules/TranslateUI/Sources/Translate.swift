@@ -173,13 +173,13 @@ public func normalizeTranslationLanguage(_ code: String) -> String {
 }
 
 public func canTranslateChats(context: AccountContext) -> Bool {
-    let value = context.currentAppConfiguration.with { $0.data?[TellomiFeatureGate.translateKey] }
-    return tellomiSelfHostedTranslationEnabled(explicitlyDisabled: tellomiTranslationDisabledValue(value))
+    let data = context.currentAppConfiguration.with { $0 }.data
+    return tellomiAutoTranslationAvailable(auto: data?["translations_auto_enabled"] as? String)
 }
 
 public func canTranslateText(context: AccountContext, text: String, showTranslate: Bool, showTranslateIfTopical: Bool = false, ignoredLanguages: [String]?) -> (canTranslate: Bool, language: String?) {
-    let value = context.currentAppConfiguration.with { $0.data?[TellomiFeatureGate.translateKey] }
-    guard tellomiSelfHostedTranslationEnabled(explicitlyDisabled: tellomiTranslationDisabledValue(value)) else {
+    let data = context.currentAppConfiguration.with { $0 }.data
+    guard tellomiManualTranslationAvailable(manual: data?["translations_manual_enabled"] as? String, flag: data?[TellomiFeatureGate.translateKey] as Any?) else {
         return (false, nil)
     }
     guard showTranslate || showTranslateIfTopical, text.count > 0 else {
