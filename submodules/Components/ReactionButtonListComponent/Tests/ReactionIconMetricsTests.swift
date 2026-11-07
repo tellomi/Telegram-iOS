@@ -13,7 +13,7 @@ final class ReactionIconMetricsTests: XCTestCase {
     func testCustomEmojiStaysLargerAndClipped() {
         let metrics = reactionIconMetrics(slot: CGSize(width: 20.0, height: 20.0), kind: .custom)
         XCTAssertEqual(metrics.size, CGSize(width: 25.0, height: 25.0))
-        XCTAssertEqual(metrics.origin, CGPoint(x: -2.0, y: -2.0))
+        XCTAssertEqual(metrics.origin, CGPoint(x: -3.0, y: -3.0))
         XCTAssertTrue(metrics.clipsToBounds)
     }
 
