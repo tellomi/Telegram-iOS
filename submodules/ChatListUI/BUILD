@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
 load("@build_bazel_rules_apple//apple:ios.bzl", "ios_unit_test")
 load("@build_bazel_rules_apple//apple/testing/default_runner:ios_test_runner.bzl", "ios_test_runner")
 
@@ -147,7 +147,10 @@ swift_library(
 swift_library(
     name = "ChatListUITestsLib",
     testonly = True,
-    srcs = glob(["Tests/**/*.swift"]),
+    srcs = glob(
+        ["Tests/**/*.swift"],
+        exclude = ["Tests/ChatListScrollAnchorTests.swift"],
+    ),
     deps = [
         ":ChatListUI",
         "//submodules/TelegramCore:TelegramCore",
@@ -157,6 +160,19 @@ swift_library(
         "//submodules/TelegramStringFormatting:TelegramStringFormatting",
         "//submodules/TextFormat:TextFormat",
         "//submodules/AppBundle:AppBundle",
+    ],
+)
+
+# Host test: the anchor decision does not need UIKit. Run with
+# `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/ChatListUI:ChatListScrollAnchorTests`.
+swift_test(
+    name = "ChatListScrollAnchorTests",
+    srcs = [
+        "Sources/Node/ChatListScrollAnchor.swift",
+        "Tests/ChatListScrollAnchorTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
     ],
 )
 
