@@ -619,7 +619,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
             }
             let transcriptLayout = roundVideoTranscriptLayout(phase: roundVideoTranscriptPhase(audioTranscriptionState), fact: transcriptFact)
             if transcriptLayout.phase != roundVideoTranscriptPhase(audioTranscriptionState) {
-                updatedAudioTranscriptionState = audioTranscriptionState(transcriptLayout.phase)
+                updatedAudioTranscriptionState = roundVideoTranscriptionState(transcriptLayout.phase)
             }
             
             var updatedTranscriptionText: TranscribedText?
@@ -2282,7 +2282,7 @@ func roundVideoTranscriptPhase(_ state: AudioTranscriptionButtonComponent.Transc
     }
 }
 
-func audioTranscriptionState(_ phase: RoundVideoTranscriptPhase) -> AudioTranscriptionButtonComponent.TranscriptionState {
+func roundVideoTranscriptionState(_ phase: RoundVideoTranscriptPhase) -> AudioTranscriptionButtonComponent.TranscriptionState {
     switch phase {
     case .collapsed:
         return .collapsed
