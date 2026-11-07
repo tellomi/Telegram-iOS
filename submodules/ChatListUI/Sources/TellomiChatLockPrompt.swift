@@ -50,7 +50,7 @@ func tellomiPresentChatLock(context: AccountContext, host: UIViewController, pee
     host.present(alert, animated: true)
 }
 
-func tellomiUnlockChatIfNeeded(context: AccountContext, host: UIViewController, peerId: EnginePeer.Id, languageCode: String, proceed: @escaping () -> Void) {
+public func tellomiUnlockChatIfNeeded(context: AccountContext, host: UIViewController, peerId: EnginePeer.Id, languageCode: String, proceed: @escaping () -> Void) {
     let accountPeerId = context.account.peerId.toInt64()
     let chatPeerId = peerId.toInt64()
     guard let record = TellomiChatLockDirectory.shared.record(accountPeerId: accountPeerId, chatPeerId: chatPeerId) else {
