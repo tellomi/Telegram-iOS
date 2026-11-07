@@ -93,6 +93,7 @@ jobs:
             //submodules/TellomiWallpapers:TellomiWallpapersTests
             //submodules/TelegramUIPreferences:TellomiTabNavigationDecisionsTests
             //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
+            //submodules/OpenInExternalAppUI:TellomiMapOpenInTests
           )
           ios=(
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
