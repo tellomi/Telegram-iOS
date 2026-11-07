@@ -343,7 +343,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             switch self.location {
             case let .chatList(groupId):
                 if groupId == .root {
-                    self.tabBarItem.title = self.presentationData.strings.DialogList_Title
+                    self.tabBarItem.title = tellomiChatsTabTitle(self.presentationData)
                     
                     let icon: UIImage?
                     let selectedIcon: UIImage?
@@ -930,7 +930,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     private func updateThemeAndStrings() {
         if case .chatList(.root) = self.location {
-            self.tabBarItem.title = self.presentationData.strings.DialogList_Title
+            self.tabBarItem.title = tellomiChatsTabTitle(self.presentationData)
             let backBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.DialogList_Title, style: .plain, target: nil, action: nil)
             backBarButtonItem.accessibilityLabel = self.presentationData.strings.Common_Back
             self.navigationItem.backBarButtonItem = backBarButtonItem
@@ -7607,6 +7607,10 @@ private final class AdsInfoContextReferenceContentSource: ContextReferenceConten
     func transitionInfo() -> ContextControllerReferenceViewInfo? {
         return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: mainWindowScreenBounds.inset(by: self.insets), insets: self.contentInsets)
     }
+}
+
+private func tellomiChatsTabTitle(_ presentationData: PresentationData) -> String {
+    return TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)).chats
 }
 
 public struct ChatListNavigationTarget {

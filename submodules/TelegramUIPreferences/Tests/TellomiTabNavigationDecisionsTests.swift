@@ -4,6 +4,8 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
     func testDiscoverEmptyStateCopyIsTellomiTabCopy() {
         let chinese = TellomiTabCopy.resolve(languageCode: "zh-Hans")
         XCTAssertEqual(chinese.feed, "发现")
+        XCTAssertEqual(chinese.chats, "聊天")
+        XCTAssertEqual(chinese.me, "我")
         XCTAssertEqual(chinese.hideFeed, "隐藏发现")
         XCTAssertEqual(chinese.hideContacts, "隐藏联系人")
         XCTAssertEqual(chinese.navigationTitle, "导航栏")
@@ -13,6 +15,8 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
 
         let english = TellomiTabCopy.resolve(languageCode: "en")
         XCTAssertEqual(english.feed, "Discover")
+        XCTAssertEqual(english.chats, "Chats")
+        XCTAssertEqual(english.me, "Me")
         XCTAssertEqual(english.hideFeed, "Hide Discover")
         XCTAssertEqual(english.hideContacts, "Hide Contacts")
         XCTAssertEqual(english.navigationTitle, "Navigation Bar")
@@ -26,6 +30,9 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "en-US").feed, "Discover")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "de").feedPostUnavailable, "This post can't be opened yet.")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").feed, "發現")
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").chats, "聊天")
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").me, "我")
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hans").navigationFooter, "聊天和设置始终显示，不能关闭。")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "ja").feed, "Discover")
         let japanese = ["Tellomi.Discover.Feed": "発見"]
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "ja", pack: japanese).feed, "発見")
@@ -101,5 +108,49 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
             tellomiContactsControllerRead(navigationEnabled: true, tabBarReady: false, tabVisible: false, pushedPageExists: true),
             .owned
         )
+    }
+
+    func testDefaultTabsAreDiscoverChatsThenSettingsAndSwitchesStillInsertTabs() {
+        let fresh = tellomiRootTabOrder(showFeedTab: true, showCallsTab: false, showContactsTab: false, showNewsTab: false)
+        XCTAssertEqual(fresh, [.feed, .chats, .settings])
+        XCTAssertEqual(tellomiTabIndex(of: .feed, order: fresh), 0)
+        XCTAssertEqual(tellomiTabIndex(of: .chats, order: fresh), 1)
+        XCTAssertEqual(tellomiTabIndex(of: .settings, order: fresh), 2)
+        XCTAssertNil(tellomiTabIndex(of: .calls, order: fresh))
+        XCTAssertNil(tellomiTabIndex(of: .contacts, order: fresh))
+        XCTAssertNil(tellomiTabIndex(of: .news, order: fresh))
+        XCTAssertEqual(tellomiStartupTabIndex(order: fresh, restoreSettings: false), 1)
+        XCTAssertEqual(tellomiStartupTabIndex(order: fresh, restoreSettings: true), 2)
+
+        let hiddenFeed = tellomiRootTabOrder(showFeedTab: false, showCallsTab: false, showContactsTab: false, showNewsTab: false)
+        XCTAssertEqual(hiddenFeed, [.chats, .settings])
+        XCTAssertNil(tellomiTabIndex(of: .feed, order: hiddenFeed))
+        XCTAssertEqual(tellomiTabIndex(of: .chats, order: hiddenFeed), 0)
+        XCTAssertEqual(tellomiTabIndex(of: .settings, order: hiddenFeed), 1)
+
+        let withOptionalTabs = tellomiRootTabOrder(showFeedTab: true, showCallsTab: true, showContactsTab: true, showNewsTab: true)
+        XCTAssertEqual(withOptionalTabs, [.feed, .chats, .calls, .contacts, .news, .settings])
+        XCTAssertEqual(tellomiTabIndex(of: .calls, order: withOptionalTabs), 2)
+        XCTAssertEqual(tellomiTabIndex(of: .contacts, order: withOptionalTabs), 3)
+        XCTAssertEqual(tellomiTabIndex(of: .news, order: withOptionalTabs), 4)
+        XCTAssertEqual(tellomiTabIndex(of: .settings, order: withOptionalTabs), 5)
+        XCTAssertEqual(tellomiStartupTabIndex(order: withOptionalTabs, restoreSettings: false), 1)
+        XCTAssertEqual(tellomiStartupTabIndex(order: withOptionalTabs, restoreSettings: true), 5)
+    }
+
+    func testTheSettingsTabLabelDoesNotReplaceThePageTitle() {
+        let chinese = TellomiTabCopy.resolve(languageCode: "zh-Hans")
+        XCTAssertEqual(tellomiSettingsTabBarTitle(copy: chinese, pageTitle: "设置"), "我")
+        XCTAssertEqual(tellomiSettingsPageTitle("设置"), "设置")
+        XCTAssertNotEqual(tellomiSettingsTabBarTitle(copy: chinese, pageTitle: "设置"), tellomiSettingsPageTitle("设置"))
+
+        let english = TellomiTabCopy.resolve(languageCode: "en")
+        XCTAssertEqual(tellomiSettingsTabBarTitle(copy: english, pageTitle: "Settings"), "Me")
+        XCTAssertEqual(tellomiSettingsPageTitle("Settings"), "Settings")
+
+        let labels = tellomiProductTabLabels(copy: chinese)
+        XCTAssertEqual(labels.map(\.title), ["发现", "聊天", "我"])
+        XCTAssertEqual(labels.map(\.accessibilityLabel), labels.map(\.title))
+        XCTAssertEqual(tellomiTabBarAccessibilityLabel(title: "我"), "我")
     }
 }
