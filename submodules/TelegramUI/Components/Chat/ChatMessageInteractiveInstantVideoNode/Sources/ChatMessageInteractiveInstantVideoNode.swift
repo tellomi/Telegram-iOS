@@ -606,14 +606,20 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
             
             var updatedAudioTranscriptionState: AudioTranscriptionButtonComponent.TranscriptionState?
             let transcribedText = transcribedText(message: EngineMessage(item.message))
-            
-            switch audioTranscriptionState {
-            case .inProgress:
-                if transcribedText != nil {
-                    updatedAudioTranscriptionState = .expanded
+            let transcriptFact: RoundVideoTranscriptFact
+            if let transcribedText {
+                switch transcribedText {
+                case let .success(text, isPending):
+                    transcriptFact = roundVideoTranscriptFact(nonEmptyText: text, isPending: isPending, failed: false)
+                case .error:
+                    transcriptFact = roundVideoTranscriptFact(nonEmptyText: nil, isPending: false, failed: true)
                 }
-            default:
-                break
+            } else {
+                transcriptFact = roundVideoTranscriptFact(nonEmptyText: nil, isPending: false, failed: false)
+            }
+            let transcriptLayout = roundVideoTranscriptLayout(phase: roundVideoTranscriptPhase(audioTranscriptionState), fact: transcriptFact)
+            if transcriptLayout.phase != roundVideoTranscriptPhase(audioTranscriptionState) {
+                updatedAudioTranscriptionState = roundVideoTranscriptionState(transcriptLayout.phase)
             }
             
             var updatedTranscriptionText: TranscribedText?
@@ -1813,7 +1819,12 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
             return
         }
         
-        if !item.context.isPremium, case .inProgress = self.audioTranscriptionState {
+        if case .inProgress = self.audioTranscriptionState {
+            self.transcribeDisposable?.dispose()
+            self.transcribeDisposable = nil
+            self.audioTranscriptionState = .collapsed
+            self.requestUpdateLayout(true)
+            self.updateTranscriptionExpanded?(self.audioTranscriptionState)
             return
         }
         
@@ -1881,19 +1892,44 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                 self.audioTranscriptionState = .inProgress
                 self.requestUpdateLayout(true)
                 
+                final class RoundVideoTranscriptSessionBox {
+                    var session = RoundVideoTranscriptSession.waiting
+                }
+                let transcriptSession = RoundVideoTranscriptSessionBox()
+                let restoreVideo: (RoundVideoTranscriptSignalEffect) -> Void = { [weak self] effect in
+                    guard let self, effect == .restoreVideo else {
+                        return
+                    }
+                    self.audioTranscriptionState = .collapsed
+                    self.requestUpdateLayout(true)
+                    self.updateTranscriptionExpanded?(self.audioTranscriptionState)
+                }
                 self.transcribeDisposable = (item.context.engine.messages.transcribeAudio(messageId: item.message.id)
                 |> deliverOnMainQueue).startStrict(next: { [weak self] result in
                     guard let strongSelf = self else {
                         return
                     }
-                    strongSelf.transcribeDisposable?.dispose()
-                    strongSelf.transcribeDisposable = nil
+                    let event: RoundVideoTranscriptSignalEvent
+                    switch result {
+                    case .success:
+                        event = .reportedSuccess
+                    case .error:
+                        event = .reportedFailure
+                    }
+                    restoreVideo(roundVideoTranscriptReduce(&transcriptSession.session, event))
                     
                     if let item = strongSelf.item, !item.associatedData.isPremium && !item.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
                         Queue.mainQueue().after(0.1, {
                             let _ = strongSelf.presentAudioTranscriptionTooltip(finished: true)
                         })
                     }
+                }, completed: { [weak self] in
+                    guard let strongSelf = self else {
+                        return
+                    }
+                    restoreVideo(roundVideoTranscriptReduce(&transcriptSession.session, .finished))
+                    strongSelf.transcribeDisposable?.dispose()
+                    strongSelf.transcribeDisposable = nil
                 })
             }
         }
@@ -1988,6 +2024,9 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
     }
     
     public func animateTo(_ animateToFile: AnimateFileNodeDescription, animator: ControlledTransitionAnimator) {
+        guard animateToFile.statusNode != nil else {
+            return
+        }
         let duration: Double = 0.2
         
         animateToFile.node.alpha = 1.0
@@ -2227,5 +2266,31 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
             }
         }
         return nil
+    }
+}
+
+public func roundVideoTranscriptPhase(_ state: AudioTranscriptionButtonComponent.TranscriptionState) -> RoundVideoTranscriptPhase {
+    switch state {
+    case .collapsed:
+        return .collapsed
+    case .inProgress:
+        return .inProgress
+    case .expanded:
+        return .expanded
+    case .locked:
+        return .locked
+    }
+}
+
+public func roundVideoTranscriptionState(_ phase: RoundVideoTranscriptPhase) -> AudioTranscriptionButtonComponent.TranscriptionState {
+    switch phase {
+    case .collapsed:
+        return .collapsed
+    case .inProgress:
+        return .inProgress
+    case .expanded:
+        return .expanded
+    case .locked:
+        return .locked
     }
 }
