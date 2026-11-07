@@ -72,6 +72,16 @@ jobs:
           echo "BAZEL=${dest}" >> "${GITHUB_ENV}"
           "${dest}" --version
 
+      - name: Write the configuration repository
+        run: |
+          set -euo pipefail
+          python3 .github/proof_configure.py \
+            --bazel "${BAZEL}" \
+            --configuration build-system/appstore-configuration.json \
+            --bazel-user-root /private/var/tmp/_bazel_prtests
+          test -f build-input/configuration-repository/variables.bzl
+          test -f build-input/configuration-repository/MODULE.bazel
+
       - name: Run the tests this pull request contains
         run: |
           set -euo pipefail
