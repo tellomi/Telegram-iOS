@@ -982,6 +982,19 @@ The actions are the upstream ones. On the main list, the leading side is read/un
 | `Tellomi/Icons/test_chat_list_swipe.py` | Catalog name, circle-versus-capsule, actions, and the upstream gesture thresholds. |
 | `build-system/Make/ChatListSwipeCheck.py`, `Make.py` | `build` and `test` run that check next to the icon-size check. |
 
+## Chat list scroll anchor
+
+Opening a chat marks it read. That refresh, and a sort that follows, was sending the chat list back to the first row. PR 71 stopped `adjustScrollToFirstItem` while `visibleContentOffset()` still said the list was scrolled down. Two later paths still win. A clear drops every row, `UIScrollView` clamps the offset to 0, and the next frame's offset is `.none` or `.known(0)`, so the guard thinks the user is at the top. A delete-and-insert that leaves no surviving row is laid out from index 0 even when that guard skips the explicit scroll (`ListView` insertion with no anchor is index 0). Both happen while the chat is still open, which is why the list behind the chat is already at the top before the pop.
+
+The list remembers the row at the viewport edge and that row's distance from the top. A refresh, an unread update, or a reorder of the same folder scrolls to that row. An empty frame does not replace the memory with the clamped 0. The first population of an empty list, a folder change, and a second tap on the Chats tab still go to the top. Swipe circles (PR 97) only name the reveal icons; they do not move the list.
+
+| File | Change |
+| --- | --- |
+| `submodules/ChatListUI/Sources/Node/ChatListScrollAnchor.swift` | Anchor capture and the keep-or-top decision. |
+| `submodules/ChatListUI/Sources/Node/ChatListNode.swift` | Saves the row from the visible nodes. Applies the decision instead of always scrolling to row 0. Folder changes and `scrollToPosition` (the Chats tab) clear it. |
+| `submodules/ChatListUI/Tests/ChatListScrollAnchorTests.swift` | Scrolled list, open chat, unread reorder, clamped offset, badge-only update, sort, refresh, folder, Chats tab, first population. |
+| `submodules/ChatListUI/BUILD` | Host `swift_test` `ChatListScrollAnchorTests`. |
+
 ## Chat history scroll
 
 Scrolling into older messages, then waiting for the next history fetch, could replace the rows on screen with nothing. The list anchors an empty-to-full replace at index 0. Index 0 is the newest message, so the chat jumps back to the edge it was opened on.
