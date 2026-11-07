@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   app:
-    if: github.head_ref == 'cursor/integrate-latest-a9df'
+    if: github.head_ref == 'cursor/integrate-release-a9df'
     runs-on: xcode-27
     timeout-minutes: 360
     env:
