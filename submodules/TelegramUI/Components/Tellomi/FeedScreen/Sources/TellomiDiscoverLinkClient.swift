@@ -115,6 +115,13 @@ enum TellomiDiscoverLinkClient {
         }
     }
 
+    private static func touch(_ order: inout [String], _ key: String) {
+        if let index = order.firstIndex(of: key) {
+            order.remove(at: index)
+        }
+        order.append(key)
+    }
+
     private static func fetch(_ pageURL: String) -> TellomiDiscoverLink.Preview? {
         if let page = TellomiDiscoverLinkFetch.loadPage(pageURL) {
             return page.preview

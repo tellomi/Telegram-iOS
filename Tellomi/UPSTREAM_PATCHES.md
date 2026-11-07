@@ -683,6 +683,7 @@ A builtin reaction was drawn at twice the 20×20 slot, and the layer was not cli
 | `swift_scheme.tl` | `inputMediaWebPage` flags 3–6. |
 | `TellomiChatLinkPreview.swift` | Internal versus client route, limits, and the hidden author. |
 | `TellomiDiscoverLinkFetch.swift` | The phone's GET, shared with Discover. |
+| `TellomiDiscoverLinkClient.swift` | The in-memory card cache marks a hit as newest. |
 | `WebpagePreview.swift` | External links skip `getWebPagePreview`. |
 | `PendingMessageUploadedContent.swift` | Sends the client fields and the uploaded photo. |
 
