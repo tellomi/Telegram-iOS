@@ -216,8 +216,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         contactsController.switchToChatsController = {  [weak self] in
             self?.openChatsController(activateSearch: false)
         }
-        let tellomiTabs = tellomiAppendRootTabs(&controllers, root: self, context: self.context, contacts: contactsController, calls: callListController, chats: chatListController, news: newsController, showCallsTab: showCallsTab, showNewsTab: showNewsTab)
-        if !tellomiTabs {
+        if !tellomiAppendRootTabs(&controllers, root: self, context: self.context, contacts: contactsController, calls: callListController, chats: chatListController, news: newsController, showCallsTab: showCallsTab, showNewsTab: showNewsTab) {
             controllers.append(contactsController)
             if showCallsTab {
                 controllers.append(callListController)
@@ -248,13 +247,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         controllers.append(accountSettingsController)
                 
         let chatsIndex = controllers.firstIndex(where: { $0 === chatListController }) ?? 0
-        let selectedIndex: Int
-        if tellomiTabs {
-            selectedIndex = tellomiStartupTabIndex(order: tellomiRootTabOrder(showFeedTab: true, showCallsTab: showCallsTab, showContactsTab: false, showNewsTab: showNewsTab), restoreSettings: restoreSettignsController != nil)
-        } else {
-            selectedIndex = restoreSettignsController != nil ? (controllers.count - 1) : chatsIndex
-        }
-        tabBarController.setControllers(controllers, selectedIndex: selectedIndex)
+        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : chatsIndex)
         
         self.contactsController = contactsController
         self.callListController = callListController

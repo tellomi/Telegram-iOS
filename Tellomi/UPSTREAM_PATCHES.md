@@ -629,25 +629,19 @@ The Calls tab already hides from a long-press on its icon (`CallListController.t
 
 ## Main tab bar: Discover, Chats, Me
 
-The product bar is three tabs, in this order: Discover (发现), Chats (聊天), Me (我). Me is the existing settings controller. Its page, rows, and `Settings_Title` stay. Only the tab label changes. Chats uses the tab copy, not a rewrite of `DialogList_Title`. The back button on the chat list still uses `DialogList_Title`.
+A fresh install still shows Discover (发现), Chats (聊天), and the settings controller. The settings tab's label is Me (我). The settings page, its rows, and `Settings_Title` stay. Chats uses the tab copy, not a rewrite of `DialogList_Title`. The back button on the chat list still uses `DialogList_Title`.
 
-Calls, Contacts, and News are not inserted, whatever the saved visibility flags say. Selection is by controller kind (`tellomiTabIndex`), and startup still opens Chats, or the settings controller when an account switch is restoring it. `ios_killswitch_disable_tellomi_tabs` = `1` still builds the upstream bar and does not use this order.
+The navigation-bar switches and the calls-list Show Calls Tab switch are unchanged. They still appear, they still write `TellomiTabSettings` and `CallListSettings`, and `tellomiRootTabOrder` still inserts Discover, Calls, Contacts, and News from those values. Chats and Settings stay in the bar. Long-press hide on Discover and Contacts is unchanged. `ios_killswitch_disable_tellomi_tabs` = `1` still builds the upstream bar. Decision recorded 2026-11-07: do not hide or disable those switches, and do not change what they store. How the switches should relate to the three-tab default is left for a later change.
 
-Contacts still open as a pushed page (`openContacts`). Recent calls still open from Settings. The navigation-bar settings page lists the three tabs as always on. It no longer offers switches that would hide Discover or add Calls or Contacts. Long-press on Discover no longer hides it. The calls list opened from Settings still has Show Calls Tab; that switch writes `CallListSettings` and still affects the upstream bar when the kill switch is on. It does not add a tab while the product bar is on.
-
-Labels share one font. Dynamic Type scales that font from 10pt caption2, capped at 13pt so the title stays under the icon in the 56pt item. One scale then shrinks every title together so the three slots stay equal and the text is not clipped, down to 0.7. Below that the existing weighted widths remain. VoiceOver's label is the drawn title, and the selected tab includes the selected trait. Icon and title frames use the same y for every item of a given title height.
+Labels share one font. Dynamic Type scales that font from 10pt caption2, capped at 13pt so the title stays under the icon in the 56pt item. One scale then shrinks every title together so the slots stay equal and the text is not clipped, down to 0.7. Below that the existing weighted widths remain. VoiceOver's label is the drawn title, and the selected tab includes the selected trait. Icon and title frames use the same y for every item of a given title height.
 
 | File | Change |
 | --- | --- |
-| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | Fixed order, startup index, tab index by kind, Me label, accessibility label. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | Tab order moved here unchanged. Me label and the accessibility label. |
 | `submodules/TelegramUIPreferences/Sources/TellomiTabSettings.swift` | Order functions moved out so the host test can compile them. Stored flags remain. |
-| `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | Order ignores visibility flags. Me is not the settings page title. Accessibility label matches the title. |
-| `submodules/TelegramUI/Sources/TellomiBottomNavigation.swift` | Appends Discover and Chats only. Settings is still appended by the caller. |
-| `submodules/TelegramUI/Sources/TelegramRootController.swift` | Startup index comes from `tellomiStartupTabIndex` when the product bar is on. |
+| `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | Fresh order is Discover, Chats, Settings. Switches still insert and remove tabs. Me is not the settings page title. |
 | `submodules/ChatListUI/Sources/ChatListController.swift` | Tab title is the Chats copy. The back item stays `DialogList_Title`. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings tab label is Me. A profile that is not the settings tab keeps `Settings_Title`. |
-| `submodules/SettingsUI/Sources/TellomiNavigationSettingsController.swift` | Three locked rows: 发现, 聊天, 我. |
-| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreen.swift` | No long-press hide. |
 | `submodules/TelegramUI/Components/TabBarLayout/Sources/TabBarItemsLayout.swift` | Shared title scale, shared title frame, selected accessibility trait. |
 | `submodules/TelegramUI/Components/TabBarLayout/Tests/TabBarItemsLayoutTests.swift` | Narrow 320pt bar stays equal. Scale and baseline. |
 | `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Applies that font, and exposes one accessibility element per tab. |

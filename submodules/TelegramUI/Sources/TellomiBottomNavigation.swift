@@ -31,8 +31,7 @@ func tellomiFeedScreen(root: TelegramRootController, context: AccountContext) ->
     return screen
 }
 
-/// Fills the bar with Discover and Chats. The caller appends the settings controller last,
-/// which is the Me tab. Calls, Contacts, and News are not inserted.
+/// Fills the bar in product order, without Settings. The caller appends Settings last.
 /// Returns false when the kill switch is on so the upstream appends run.
 func tellomiAppendRootTabs(_ controllers: inout [ViewController], root: TelegramRootController, context: AccountContext, contacts: ContactsController, calls: CallListController, chats: ChatListController, news: NewsScreen?, showCallsTab: Bool, showNewsTab: Bool) -> Bool {
     guard tellomiBottomNavigationEnabled(appConfiguration: context.currentAppConfiguration.with { $0 }) else {

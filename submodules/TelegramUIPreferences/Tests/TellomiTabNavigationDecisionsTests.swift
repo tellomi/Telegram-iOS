@@ -20,7 +20,7 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertEqual(english.hideFeed, "Hide Discover")
         XCTAssertEqual(english.hideContacts, "Hide Contacts")
         XCTAssertEqual(english.navigationTitle, "Navigation Bar")
-        XCTAssertEqual(english.navigationFooter, "Discover, Chats, and Me always stay in the bar.")
+        XCTAssertEqual(english.navigationFooter, "Chats and Settings always stay in the bar.")
         XCTAssertEqual(english.feedEmptyTitle, "Nothing here yet")
         XCTAssertEqual(english.feedEmptyText, "Posts will show up here.")
         XCTAssertEqual(english.feedPostUnavailable, "This post can't be opened yet.")
@@ -32,7 +32,7 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").feed, "發現")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").chats, "聊天")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").me, "我")
-        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hans").navigationFooter, "发现、聊天和我始终显示，不能关闭。")
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hans").navigationFooter, "聊天和设置始终显示，不能关闭。")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "ja").feed, "Discover")
         let japanese = ["Tellomi.Discover.Feed": "発見"]
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "ja", pack: japanese).feed, "発見")
@@ -110,25 +110,32 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         )
     }
 
-    func testTheProductBarIsDiscoverChatsThenSettings() {
-        let flags: [(Bool, Bool, Bool, Bool)] = [
-            (true, false, false, false),
-            (false, true, true, true),
-            (false, false, false, false),
-            (true, true, true, true)
-        ]
-        for flag in flags {
-            let order = tellomiRootTabOrder(showFeedTab: flag.0, showCallsTab: flag.1, showContactsTab: flag.2, showNewsTab: flag.3)
-            XCTAssertEqual(order, [.feed, .chats, .settings])
-            XCTAssertEqual(tellomiTabIndex(of: .feed, order: order), 0)
-            XCTAssertEqual(tellomiTabIndex(of: .chats, order: order), 1)
-            XCTAssertEqual(tellomiTabIndex(of: .settings, order: order), 2)
-            XCTAssertNil(tellomiTabIndex(of: .calls, order: order))
-            XCTAssertNil(tellomiTabIndex(of: .contacts, order: order))
-            XCTAssertNil(tellomiTabIndex(of: .news, order: order))
-            XCTAssertEqual(tellomiStartupTabIndex(order: order, restoreSettings: false), 1)
-            XCTAssertEqual(tellomiStartupTabIndex(order: order, restoreSettings: true), 2)
-        }
+    func testDefaultTabsAreDiscoverChatsThenSettingsAndSwitchesStillInsertTabs() {
+        let fresh = tellomiRootTabOrder(showFeedTab: true, showCallsTab: false, showContactsTab: false, showNewsTab: false)
+        XCTAssertEqual(fresh, [.feed, .chats, .settings])
+        XCTAssertEqual(tellomiTabIndex(of: .feed, order: fresh), 0)
+        XCTAssertEqual(tellomiTabIndex(of: .chats, order: fresh), 1)
+        XCTAssertEqual(tellomiTabIndex(of: .settings, order: fresh), 2)
+        XCTAssertNil(tellomiTabIndex(of: .calls, order: fresh))
+        XCTAssertNil(tellomiTabIndex(of: .contacts, order: fresh))
+        XCTAssertNil(tellomiTabIndex(of: .news, order: fresh))
+        XCTAssertEqual(tellomiStartupTabIndex(order: fresh, restoreSettings: false), 1)
+        XCTAssertEqual(tellomiStartupTabIndex(order: fresh, restoreSettings: true), 2)
+
+        let hiddenFeed = tellomiRootTabOrder(showFeedTab: false, showCallsTab: false, showContactsTab: false, showNewsTab: false)
+        XCTAssertEqual(hiddenFeed, [.chats, .settings])
+        XCTAssertNil(tellomiTabIndex(of: .feed, order: hiddenFeed))
+        XCTAssertEqual(tellomiTabIndex(of: .chats, order: hiddenFeed), 0)
+        XCTAssertEqual(tellomiTabIndex(of: .settings, order: hiddenFeed), 1)
+
+        let withOptionalTabs = tellomiRootTabOrder(showFeedTab: true, showCallsTab: true, showContactsTab: true, showNewsTab: true)
+        XCTAssertEqual(withOptionalTabs, [.feed, .chats, .calls, .contacts, .news, .settings])
+        XCTAssertEqual(tellomiTabIndex(of: .calls, order: withOptionalTabs), 2)
+        XCTAssertEqual(tellomiTabIndex(of: .contacts, order: withOptionalTabs), 3)
+        XCTAssertEqual(tellomiTabIndex(of: .news, order: withOptionalTabs), 4)
+        XCTAssertEqual(tellomiTabIndex(of: .settings, order: withOptionalTabs), 5)
+        XCTAssertEqual(tellomiStartupTabIndex(order: withOptionalTabs, restoreSettings: false), 1)
+        XCTAssertEqual(tellomiStartupTabIndex(order: withOptionalTabs, restoreSettings: true), 5)
     }
 
     func testTheSettingsTabLabelDoesNotReplaceThePageTitle() {

@@ -2,10 +2,9 @@ import Foundation
 import SwiftSignalKit
 import TelegramCore
 
-/// Stored visibility for Discover and Contacts (M2 / D-5, D-6).
-/// The product bar does not read these flags: it is always Discover, Chats, Me.
+/// Device-wide visibility for the Discover and Contacts tabs (M2 / D-5, D-6).
+/// Chats and Settings are not stored: they stay in the bar (D-7).
 /// Calls stay on `CallListSettings`. A missing record is the fresh-install default.
-/// The kill switch still builds the upstream bar and does not use this order.
 public struct TellomiTabSettings: Equatable, Codable {
     public var showFeedTab: Bool
     public var showContactsTab: Bool

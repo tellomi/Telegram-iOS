@@ -25,7 +25,7 @@ public struct TellomiTabCopy: Equatable {
             hideFeed: text("Tellomi.Discover.HideFeed", "Hide Discover", "隐藏发现", "隱藏發現"),
             hideContacts: text("Tellomi.Discover.HideContacts", "Hide Contacts", "隐藏联系人", "隱藏聯絡人"),
             navigationTitle: text("Tellomi.Discover.NavigationTitle", "Navigation Bar", "导航栏", "導覽列"),
-            navigationFooter: text("Tellomi.Discover.NavigationFooter", "Discover, Chats, and Me always stay in the bar.", "发现、聊天和我始终显示，不能关闭。", "發現、聊天和我始終顯示，不能關閉。"),
+            navigationFooter: text("Tellomi.Discover.NavigationFooter", "Chats and Settings always stay in the bar.", "聊天和设置始终显示，不能关闭。", "聊天和設定始終顯示，不能關閉。"),
             feedEmptyTitle: text("Tellomi.Discover.FeedEmptyTitle", "Nothing here yet", "还没有内容", "還沒有內容"),
             feedEmptyText: text("Tellomi.Discover.FeedEmptyText", "Posts will show up here.", "帖子会显示在这里。", "貼文會顯示在這裡。"),
             feedPostUnavailable: text("Tellomi.Discover.FeedPostUnavailable", "This post can't be opened yet.", "这条帖子暂时无法打开。", "這則貼文暫時無法打開。")
@@ -38,17 +38,31 @@ public enum TellomiRootTab: Equatable {
     case chats
     case calls
     case contacts
-    /// Upstream News. The product bar does not show it. The kill switch still can.
+    /// Upstream News. Off unless the parked feed API and the dev flag both say so.
+    /// It sits in front of Settings so the settings controller stays last.
     case news
     case settings
 }
 
-/// The product bar is Discover, Chats, then the settings controller labeled Me.
-/// The visibility flags do not add or remove items. The kill switch does not call this:
-/// that path keeps the upstream controllers.
+/// Chats and Settings are always present. Discover, Calls, Contacts, and News follow their switches.
+/// The kill switch does not call this: that path keeps the upstream controllers.
 public func tellomiRootTabOrder(showFeedTab: Bool, showCallsTab: Bool, showContactsTab: Bool, showNewsTab: Bool) -> [TellomiRootTab] {
-    let _ = (showFeedTab, showCallsTab, showContactsTab, showNewsTab)
-    return [.feed, .chats, .settings]
+    var tabs: [TellomiRootTab] = []
+    if showFeedTab {
+        tabs.append(.feed)
+    }
+    tabs.append(.chats)
+    if showCallsTab {
+        tabs.append(.calls)
+    }
+    if showContactsTab {
+        tabs.append(.contacts)
+    }
+    if showNewsTab {
+        tabs.append(.news)
+    }
+    tabs.append(.settings)
+    return tabs
 }
 
 /// Restoring an account switch still lands on the settings controller. Otherwise the bar opens on Chats.
