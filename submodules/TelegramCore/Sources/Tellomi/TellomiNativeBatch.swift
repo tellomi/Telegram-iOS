@@ -138,6 +138,39 @@ public func tellomiTranslationAllowsAlternativeEngine() -> Bool {
     return false
 }
 
+public enum TellomiSideTranslateButton: Equatable {
+    case hidden
+    case translate
+    case restore
+}
+
+/// The button sits beside an incoming English message. Whole-chat translation, selection,
+/// and secret chats keep the row they already have.
+public func tellomiSideTranslateButton(isIncoming: Bool, isSecret: Bool, isSelecting: Bool, showTranslate: Bool, manualAvailable: Bool, detectedLanguage: String?, isShowingThisMessage: Bool, wholeChatTranslation: Bool) -> TellomiSideTranslateButton {
+    if !isIncoming || isSecret || isSelecting || wholeChatTranslation || !showTranslate || !manualAvailable {
+        return .hidden
+    }
+    if isShowingThisMessage {
+        return .restore
+    }
+    if tellomiNormalizeTranslationLanguage(detectedLanguage) == "en" {
+        return .translate
+    }
+    return .hidden
+}
+
+/// Place the button in the gap beside the bubble. A share button already in that gap keeps its own y.
+public func tellomiSideTranslateOrigin(bubbleX: Double, bubbleY: Double, bubbleWidth: Double, bubbleHeight: Double, buttonSide: Double, shareMinY: Double?, incoming: Bool) -> (x: Double, y: Double) {
+    let x = incoming ? bubbleX + bubbleWidth + 8.0 : bubbleX - buttonSide - 8.0
+    let y: Double
+    if let shareMinY {
+        y = shareMinY - buttonSide - 4.0
+    } else {
+        y = bubbleY + bubbleHeight - buttonSide - 1.0
+    }
+    return (x, max(bubbleY, y))
+}
+
 public func tellomiTranslationUnavailableText(languageCode: String) -> String {
     let code = languageCode.lowercased()
     if code.hasPrefix("zh") {

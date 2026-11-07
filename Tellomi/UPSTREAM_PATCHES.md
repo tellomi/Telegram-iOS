@@ -680,6 +680,8 @@ Translation stays on the native language screen: Show Translate, Translate Entir
 
 Dictation is the third position of the existing mic switch (voice, video, dictation). Voice send in the voice position is unchanged. Releasing a dictation recording calls `messages.transcribeDraft#7e11da47` with the in-memory OGG, at most 8 MB, and inserts only the returned text into the draft. It does not call `messages.sendMessage`, `messages.sendMedia`, or `messages.transcribeAudio`, and it does not write the audio into the chat database or object storage. `pending` is ignored. `USER_ID_INVALID`, `MEDIA_EMPTY`, `AUDIO_TOO_LONG`, `TRANSCRIPTION_UNAVAILABLE`, and an unknown method show a prompt; `TRANSCRIPTION_FAILED` shows 听写失败. Production `5354817` does not have this method, so the prompt is 听写服务暂不可用 until the server that includes it is deployed. The next server deploy is also expected to include the round-video protocol fix `bad916ac`; this client does not require those fields while production is still `5354817`.
 
+An incoming English message can show a translate button in the gap to the right of the bubble, the same gap the share button already uses. It follows Show Translate and the self-hosted manual switch. It hides during selection and while whole-chat translation is already on. Tapping it uses the same translate calls and shows Chinese in place; tapping again restores the original. The long-press Translate action stays.
+
 The navigation screen gains 隐藏底栏文字. It hides labels and keeps the icons, the default 发现 / 聊天 / 我 order, and the existing switches.
 
 `PHONE_NUMBER_FLOOD` is the daily cap of 10 codes. `FLOOD_WAIT` is a short resend wait and is not that cap.
@@ -691,6 +693,7 @@ The navigation screen gains 隐藏底栏文字. It hides labels and keeps the ic
 | `Translate.swift`, `ChatTranslation.swift` | Server-only English to Chinese. No Apple or alternative path. |
 | `ChatControllerMediaRecording.swift` | Dictation inserts text and leaves voice send alone. |
 | `LocalizationListControllerNode.swift` | The three native rows stay, and a down service says 翻译服务暂不可用. |
+| `ChatMessageBubbleItemNode.swift` | Side translate button, outside the bubble's text measure. |
 | `TellomiTabSettings.swift`, `TellomiNavigationSettingsController.swift`, `TabBarComponent.swift` | Hide tab labels. |
 
 ## DC addresses from help.getConfig (M7 / D-33)

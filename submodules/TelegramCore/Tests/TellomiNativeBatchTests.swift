@@ -48,4 +48,22 @@ final class TellomiNativeBatchTests: XCTestCase {
         XCTAssertEqual(tellomiDraftTranscriptionError("TRANSCRIPTION_UNAVAILABLE"), .unavailable)
         XCTAssertEqual(tellomiDraftTranscriptionError("METHOD_INVALID"), .unavailable)
     }
+
+    func testSideTranslateButtonStaysOffTheBubbleLayout() {
+        XCTAssertEqual(tellomiSideTranslateButton(isIncoming: true, isSecret: false, isSelecting: false, showTranslate: true, manualAvailable: true, detectedLanguage: "en", isShowingThisMessage: false, wholeChatTranslation: false), .translate)
+        XCTAssertEqual(tellomiSideTranslateButton(isIncoming: true, isSecret: false, isSelecting: false, showTranslate: true, manualAvailable: true, detectedLanguage: "en", isShowingThisMessage: true, wholeChatTranslation: false), .restore)
+        XCTAssertEqual(tellomiSideTranslateButton(isIncoming: true, isSecret: false, isSelecting: false, showTranslate: true, manualAvailable: true, detectedLanguage: "zh", isShowingThisMessage: false, wholeChatTranslation: false), .hidden)
+        XCTAssertEqual(tellomiSideTranslateButton(isIncoming: false, isSecret: false, isSelecting: false, showTranslate: true, manualAvailable: true, detectedLanguage: "en", isShowingThisMessage: false, wholeChatTranslation: false), .hidden)
+        XCTAssertEqual(tellomiSideTranslateButton(isIncoming: true, isSecret: false, isSelecting: true, showTranslate: true, manualAvailable: true, detectedLanguage: "en", isShowingThisMessage: false, wholeChatTranslation: false), .hidden)
+        XCTAssertEqual(tellomiSideTranslateButton(isIncoming: true, isSecret: false, isSelecting: false, showTranslate: false, manualAvailable: true, detectedLanguage: "en", isShowingThisMessage: false, wholeChatTranslation: false), .hidden)
+        XCTAssertEqual(tellomiSideTranslateButton(isIncoming: true, isSecret: false, isSelecting: false, showTranslate: true, manualAvailable: false, detectedLanguage: "en", isShowingThisMessage: false, wholeChatTranslation: false), .hidden)
+        XCTAssertEqual(tellomiSideTranslateButton(isIncoming: true, isSecret: false, isSelecting: false, showTranslate: true, manualAvailable: true, detectedLanguage: "en", isShowingThisMessage: false, wholeChatTranslation: true), .hidden)
+
+        let alone = tellomiSideTranslateOrigin(bubbleX: 40, bubbleY: 10, bubbleWidth: 180, bubbleHeight: 60, buttonSide: 30, shareMinY: nil, incoming: true)
+        XCTAssertEqual(alone.x, 228)
+        XCTAssertEqual(alone.y, 39)
+        let stacked = tellomiSideTranslateOrigin(bubbleX: 40, bubbleY: 10, bubbleWidth: 180, bubbleHeight: 60, buttonSide: 30, shareMinY: 40, incoming: true)
+        XCTAssertEqual(stacked.x, 228)
+        XCTAssertLessThan(stacked.y + 30, 40)
+    }
 }
