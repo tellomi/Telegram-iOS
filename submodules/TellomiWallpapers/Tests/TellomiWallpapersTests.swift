@@ -19,7 +19,8 @@ final class TellomiWallpapersTests: XCTestCase {
             ("石墨", 0x5F6B7A),
         ]
         XCTAssertEqual(TellomiAccentColors.all.count, 12)
-        XCTAssertEqual(TellomiAccentColors.all.map { ($0.name, $0.rgb) }, expected)
+        XCTAssertEqual(TellomiAccentColors.all.map(\.name), expected.map(\.0))
+        XCTAssertEqual(TellomiAccentColors.all.map(\.rgb), expected.map(\.1))
         XCTAssertEqual(TellomiAccentColors.defaultColor, 0x3390EC)
         XCTAssertEqual(Set(TellomiAccentColors.all.map(\.rgb)).count, 12)
     }
