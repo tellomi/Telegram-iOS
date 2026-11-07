@@ -154,6 +154,13 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertEqual(tellomiTabBarAccessibilityLabel(title: "我"), "我")
     }
 
+    func testMeTabRootIsTheExistingProfileUnlessTheKillSwitchIsOn() {
+        XCTAssertTrue(tellomiMeTabRootIsProfile(bottomNavigationEnabled: true))
+        XCTAssertFalse(tellomiMeTabRootIsProfile(bottomNavigationEnabled: false))
+        XCTAssertTrue(tellomiMeTabShowsAccountAvatar(hasAccountPeer: true))
+        XCTAssertFalse(tellomiMeTabShowsAccountAvatar(hasAccountPeer: false))
+    }
+
     func testMeTabAvatarDoesNotWaitForAnotherAccountOrAMiss() {
         XCTAssertTrue(tellomiMeTabShowsAccountAvatar(hasAccountPeer: true))
         XCTAssertFalse(tellomiMeTabShowsAccountAvatar(hasAccountPeer: false))

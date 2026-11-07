@@ -100,6 +100,7 @@ jobs:
           )
           ios=(
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
+            //submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode:PeerInfoPaneNodeTests
           )
           present() {
             local label="$1"
