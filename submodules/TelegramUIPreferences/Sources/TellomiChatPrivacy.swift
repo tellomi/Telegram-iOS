@@ -86,7 +86,7 @@ public struct TellomiChatLockRecord: Equatable, Codable {
     }
 }
 
-public enum TellomiChatLockFailure: Equatable {
+public enum TellomiChatLockFailure: Error, Equatable {
     case pinNotNumeric
     case wrongPin
     case notLocked
