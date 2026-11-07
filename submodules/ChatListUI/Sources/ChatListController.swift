@@ -2578,7 +2578,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         guard let strongSelf = self, currentValues.contains(.setupLoginEmail) || currentValues.contains(.setupLoginEmailBlocking) else {
                             return
                         }
-                        if let navigationController = strongSelf.navigationController as? NavigationController {
+                        if strongSelf.navigationController is NavigationController {
                             let blocking = currentValues.contains(.setupLoginEmailBlocking)
                             let peerId = strongSelf.context.account.peerId
                             let password = strongSelf.context.engine.auth.twoStepAuthData()
