@@ -88,26 +88,18 @@ public func tellomiStockWallpapers() -> [TelegramWallpaper] {
 }
 
 public func tellomiAvailableSolidColors(dark: Bool) -> [UInt32] {
-    return [TellomiWallpaperPresets.solidColor(dark: dark)]
+    return ThemeWallpaperPalette.solids(dark: dark)
 }
 
 public func tellomiAvailableGradients(dark: Bool) -> [[UInt32]] {
-    return dark ? [] : []
+    return ThemeWallpaperPalette.gradients(dark: dark)
 }
 
 public func tellomiEffectiveChatWallpaper(_ wallpaper: TelegramWallpaper, dark: Bool, hasSavedWallpaper: Bool) -> TelegramWallpaper {
-    if case let .color(color) = wallpaper, hasSavedWallpaper, !TellomiWallpaperMigration.replacesSavedColor(color) {
-        return wallpaper
-    }
-    let isBuiltinToken: Bool
-    if case .builtin = wallpaper {
-        isBuiltinToken = true
-    } else {
-        isBuiltinToken = false
-    }
-    if isBuiltinToken && TellomiWallpaperMigration.replacesWithBundledDefault(hasSavedWallpaper: hasSavedWallpaper, isBuiltinToken: true) {
-        return tellomiDefaultWallpaper(dark: dark)
-    }
+    // The bundled doodle is a cloud file with access hash 0. Preview waits on
+    // that download and stays blank. `.builtin` is the embedded pattern, and a
+    // saved color or gradient is already a fill. Neither is rewritten.
+    let _ = (dark, hasSavedWallpaper)
     return wallpaper
 }
 
@@ -181,10 +173,10 @@ public func customizeDefaultDayTheme(theme: PresentationTheme, editing: Bool, ti
                     }
                 }
 
-                suggestedWallpaper = tellomiDefaultWallpaper(dark: false)
+                suggestedWallpaper = .gradient(TelegramWallpaper.Gradient(id: nil, colors: defaultBuiltinWallpaperGradientColors.map(\.rgb), settings: WallpaperSettings()))
             } else {
                 bubbleColors = [UIColor(rgb: TellomiBubbleColors.incomingLight).rgb]
-                suggestedWallpaper = tellomiDefaultWallpaper(dark: false)
+                suggestedWallpaper = .gradient(TelegramWallpaper.Gradient(id: nil, colors: defaultBuiltinWallpaperGradientColors.map(\.rgb), settings: WallpaperSettings()))
                 outgoingAccent = outgoingAccentColor
             }
         }
@@ -1095,7 +1087,7 @@ public func makeDefaultDayPresentationTheme(extendingThemeReference: Presentatio
     )
 
     let chat = PresentationThemeChat(
-        defaultWallpaper: tellomiDefaultWallpaper(dark: false),
+        defaultWallpaper: day ? .color(0xffffff) : .gradient(TelegramWallpaper.Gradient(id: nil, colors: defaultBuiltinWallpaperGradientColors.map(\.rgb), settings: WallpaperSettings())),
         animateMessageColors: false,
         message: day ? messageDay : message,
         serviceMessage: day ? serviceMessageDay : serviceMessage,

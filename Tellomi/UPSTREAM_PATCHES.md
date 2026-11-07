@@ -627,6 +627,25 @@ The Calls tab already hides from a long-press on its icon (`CallListController.t
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | New module `TellomiFeedScreen`. Empty Discover tab (D-37). Not `NewsScreen`. Long-press hides it (D-38). `TellomiFeedScreenNode` imports `TelegramUIPreferences` so it can read `TellomiTabCopy`. Opening a post from a link retries for about a second when the screen is not in a navigation stack yet. |
 | `submodules/TelegramUI/BUILD` | Depends on that module. |
 
+## Main tab bar: Discover, Chats, Me
+
+A fresh install still shows Discover (发现), Chats (聊天), and the settings controller. The settings tab's label is Me (我). The settings page, its rows, and `Settings_Title` stay. Chats uses the tab copy, not a rewrite of `DialogList_Title`. The back button on the chat list still uses `DialogList_Title`.
+
+The navigation-bar switches and the calls-list Show Calls Tab switch are unchanged. They still appear, they still write `TellomiTabSettings` and `CallListSettings`, and `tellomiRootTabOrder` still inserts Discover, Calls, Contacts, and News from those values. Chats and Settings stay in the bar. Long-press hide on Discover and Contacts is unchanged. `ios_killswitch_disable_tellomi_tabs` = `1` still builds the upstream bar. Decision recorded 2026-11-07: do not hide or disable those switches, and do not change what they store. How the switches should relate to the three-tab default is left for a later change.
+
+Labels share one font. Dynamic Type scales that font from 10pt caption2, capped at 13pt so the title stays under the icon in the 56pt item. One scale then shrinks every title together so the slots stay equal and the text is not clipped, down to 0.7. Below that the existing weighted widths remain. VoiceOver's label is the drawn title, and the selected tab includes the selected trait. Icon and title frames use the same y for every item of a given title height.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | Tab order moved here unchanged. Me label and the accessibility label. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabSettings.swift` | Order functions moved out so the host test can compile them. Stored flags remain. |
+| `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | Fresh order is Discover, Chats, Settings. Switches still insert and remove tabs. Me is not the settings page title. |
+| `submodules/ChatListUI/Sources/ChatListController.swift` | Tab title is the Chats copy. The back item stays `DialogList_Title`. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings tab label is Me. A profile that is not the settings tab keeps `Settings_Title`. |
+| `submodules/TelegramUI/Components/TabBarLayout/Sources/TabBarItemsLayout.swift` | Shared title scale, shared title frame, selected accessibility trait. |
+| `submodules/TelegramUI/Components/TabBarLayout/Tests/TabBarItemsLayoutTests.swift` | Narrow 320pt bar stays equal. Scale and baseline. |
+| `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Applies that font, and exposes one accessibility element per tab. |
+
 ## DC addresses from help.getConfig (M7 / D-33)
 
 `Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
@@ -982,6 +1001,19 @@ The actions are the upstream ones. On the main list, the leading side is read/un
 | `Tellomi/Icons/test_chat_list_swipe.py` | Catalog name, circle-versus-capsule, actions, and the upstream gesture thresholds. |
 | `build-system/Make/ChatListSwipeCheck.py`, `Make.py` | `build` and `test` run that check next to the icon-size check. |
 
+## Chat list scroll anchor
+
+Opening a chat marks it read. That refresh, and a sort that follows, was sending the chat list back to the first row. PR 71 stopped `adjustScrollToFirstItem` while `visibleContentOffset()` still said the list was scrolled down. Two later paths still win. A clear drops every row, `UIScrollView` clamps the offset to 0, and the next frame's offset is `.none` or `.known(0)`, so the guard thinks the user is at the top. A delete-and-insert that leaves no surviving row is laid out from index 0 even when that guard skips the explicit scroll (`ListView` insertion with no anchor is index 0). Both happen while the chat is still open, which is why the list behind the chat is already at the top before the pop.
+
+The list remembers the row at the viewport edge and that row's distance from the top. A refresh, an unread update, or a reorder of the same folder scrolls to that row. An empty frame does not replace the memory with the clamped 0. The first population of an empty list, a folder change, and a second tap on the Chats tab still go to the top. Swipe circles (PR 97) only name the reveal icons; they do not move the list.
+
+| File | Change |
+| --- | --- |
+| `submodules/ChatListUI/Sources/Node/ChatListScrollAnchor.swift` | Anchor capture and the keep-or-top decision. |
+| `submodules/ChatListUI/Sources/Node/ChatListNode.swift` | Saves the row from the visible nodes. Applies the decision instead of always scrolling to row 0. Folder changes and `scrollToPosition` (the Chats tab) clear it. |
+| `submodules/ChatListUI/Tests/ChatListScrollAnchorTests.swift` | Scrolled list, open chat, unread reorder, clamped offset, badge-only update, sort, refresh, folder, Chats tab, first population. |
+| `submodules/ChatListUI/BUILD` | Host `swift_test` `ChatListScrollAnchorTests`. |
+
 ## Chat history scroll
 
 Scrolling into older messages, then waiting for the next history fetch, could replace the rows on screen with nothing. The list anchors an empty-to-full replace at index 0. Index 0 is the newest message, so the chat jumps back to the edge it was opened on.
@@ -1019,6 +1051,27 @@ The email code field called `applyField` without the dark flag, so the fill stay
 | `submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift` | Privacy → login email does not start LoginChange for an email-only identity. |
 | `submodules/ChatListUI/Sources/ChatListController.swift` | Skips the setup screen from `getPassword` plus the local peer. Does not dismiss the suggestion. |
 | `submodules/AuthorizationUI/Tests/TellomiLoginFieldColorsTests.swift`, `submodules/TelegramUIPreferences/Tests/TellomiSettingsDecisionsTests.swift` | Contrast and the email-channel decision. |
+
+## Theme colors, chat themes, and wallpapers
+
+Compared with the theme picker and color grid as they stood before the solid-wallpaper change (`cd95502432`, stacked on the fork of Telegram-iOS). The later comparison pin `279f89e4d4` (Telegram master, 2026-10-28) still ships that color grid, the four built-in themes, and a wallpaper that is a fill or an embedded pattern. It does not ship the one-color grid.
+
+Tellomi had replaced that grid with one solid and no gradients, dropped Classic and Tinted from the picker, and pointed the default wallpaper at a bundled pattern file (`tm_doodle`, access hash 0). `drawThemeImage` only paints `.color` and `.gradient` without a file. A `.file` preview waits on a document download. `ChatWallpaperBuiltin0.jpg` is not in the tree, so `.builtin` draws nothing. Chat theme tiles used the sticker file and left the emoticon blank when that file was missing.
+
+teamgram `account.getWallPapers` (`app/bff/accountassets/wallcatalog.go`) returns `wallPaperNoFile` fills, ids `9100000001`–`9100000007`. A one-color paper was stored as `.color` and the id was dropped, so install sent `inputWallPaperNoFile` id 0. `account.getChatThemes` (`chatthemes.go`) returns an emoticon and a day/night accent and no document and no wallpaper. The client does not call Telegram production for these.
+
+The color grid is the 27 solids and 9 gradients again, separate for light and dark. The picker lists Classic, Tinted, Day, and Night. The default wallpaper is that gradient (Day stays white, as upstream). A saved wallpaper is not rewritten. The grid no longer substitutes the doodle or invents file wallpapers when the server list is empty or the fetch fails. A no-file solid with an id is painted as two stops of that color and the id is what gets saved. A chat theme with no sticker still shows its emoticon, and a theme with no wallpaper previews its accent as a fill.
+
+| File | Change |
+| --- | --- |
+| `submodules/TellomiWallpapers/Sources/ThemeSurfaceRestore.swift` | Palettes, picker order, no-file paint, empty fetch, emoticon and accent preview. |
+| `submodules/TellomiWallpapers/Tests/ThemeSurfaceRestoreTests.swift` | Light/dark palettes, picker order, id kept, empty and failed fetch, emoticon, accent fill, color round-trip. |
+| `DefaultDayPresentationTheme.swift`, `DefaultDarkPresentationTheme.swift`, `DefaultDarkTintedPresentationTheme.swift` | Default wallpaper is a fill. `.builtin` is not rewritten to the doodle. |
+| `ThemeColorsGridController.swift` | Reads the restored palettes. |
+| `ThemeGridControllerNode.swift` | Does not inject file wallpapers or replace the built-in slot. |
+| `ThemePickerController.swift`, `ThemeSettingsController.swift` | Classic, Tinted, Day, Night. |
+| `Wallpaper.swift` | `wallPaperNoFile` keeps its id. |
+| `ChatThemeScreen.swift` | Emoticon text and accent fill when the document and wallpaper are absent. |
 
 ## Sticker upload failure
 

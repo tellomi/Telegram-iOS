@@ -90,44 +90,8 @@ public func tellomiBottomNavigationEnabled(appConfiguration: AppConfiguration) -
     return true
 }
 
-public enum TellomiRootTab: Equatable {
-    case feed
-    case chats
-    case calls
-    case contacts
-    /// Upstream News. Off unless the parked feed API and the dev flag both say so.
-    /// It sits in front of Settings so `controllers.count - 1` is still Settings.
-    case news
-    case settings
-}
-
-/// D-4 / D-42. Chats and Settings are always present (D-7).
-public func tellomiRootTabOrder(showFeedTab: Bool, showCallsTab: Bool, showContactsTab: Bool, showNewsTab: Bool) -> [TellomiRootTab] {
-    var tabs: [TellomiRootTab] = []
-    if showFeedTab {
-        tabs.append(.feed)
-    }
-    tabs.append(.chats)
-    if showCallsTab {
-        tabs.append(.calls)
-    }
-    if showContactsTab {
-        tabs.append(.contacts)
-    }
-    if showNewsTab {
-        tabs.append(.news)
-    }
-    tabs.append(.settings)
-    return tabs
-}
-
-/// D-8. Restoring an account switch still lands on Settings, which is last.
-public func tellomiStartupTabIndex(order: [TellomiRootTab], restoreSettings: Bool) -> Int {
-    if restoreSettings, let index = order.lastIndex(of: .settings) {
-        return index
-    }
-    return order.firstIndex(of: .chats) ?? 0
-}
+// Tab order, the startup index, and the bar labels live in TellomiTabNavigationDecisions.swift
+// so the host test can compile them without TelegramCore.
 
 private struct TellomiTabVisibility: Equatable {
     var showFeedTab: Bool

@@ -937,7 +937,7 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
     )
 
     let chat = PresentationThemeChat(
-        defaultWallpaper: tellomiDefaultWallpaper(dark: true),
+        defaultWallpaper: .gradient(TelegramWallpaper.Gradient(id: nil, colors: defaultDarkWallpaperGradientColors.map(\.rgb), settings: WallpaperSettings())),
         animateMessageColors: false,
         message: message,
         serviceMessage: serviceMessage,

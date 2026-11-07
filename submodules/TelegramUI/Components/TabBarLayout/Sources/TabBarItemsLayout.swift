@@ -117,6 +117,46 @@ public func tabBarLensSelectionFrame(axis: TabBarAxis, barSize: CGSize, selected
     }
 }
 
+/// Title frame inside one item. Same title height means the same baseline across items.
+public func tabBarTitleFrame(itemSize: CGSize, titleSize: CGSize) -> CGRect {
+    return CGRect(x: floor((itemSize.width - titleSize.width) * 0.5), y: itemSize.height - 8.0 - titleSize.height, width: titleSize.width, height: titleSize.height)
+}
+
+public let tabBarTitleBasePointSize: CGFloat = 10.0
+/// The item is 56pt. Past this size the title covers the icon, so Dynamic Type stops here and then only shrinks.
+public let tabBarTitleMaximumPointSize: CGFloat = 13.0
+/// How far a shared title size may shrink so three labels still share one width.
+public let tabBarTitleMinimumScale: CGFloat = 0.7
+
+public func tabBarClampedTitlePointSize(dynamicPointSize: CGFloat) -> CGFloat {
+    return min(tabBarTitleMaximumPointSize, dynamicPointSize)
+}
+
+/// Scale that keeps every measured title inside an equal slot, or nil when `minimumScale` still overflows.
+/// One means they already fit. The caller then keeps one font so the baselines stay together.
+public func tabBarEqualTitleScale(titleWidths: [CGFloat], equalSlotWidth: CGFloat, minimumScale: CGFloat = tabBarTitleMinimumScale) -> CGFloat? {
+    guard equalSlotWidth > 0, !titleWidths.isEmpty else {
+        return 1
+    }
+    let widest = titleWidths.max() ?? 0
+    if widest <= equalSlotWidth + 0.5 {
+        return 1
+    }
+    let scale = equalSlotWidth / widest
+    if scale + 0.0001 < minimumScale {
+        return nil
+    }
+    return scale
+}
+
+public func tabBarItemAccessibilityTraits(isSelected: Bool) -> UIAccessibilityTraits {
+    var traits: UIAccessibilityTraits = [.button]
+    if isSelected {
+        traits.insert(.selected)
+    }
+    return traits
+}
+
 /// The item under `point`, or the nearest one by distance along the axis when it is outside every item.
 /// Nil when there are no items.
 public func tabBarItemIndex(at point: CGPoint, axis: TabBarAxis, itemFrames: [CGRect]) -> Int? {

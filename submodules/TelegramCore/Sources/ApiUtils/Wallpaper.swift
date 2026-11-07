@@ -1,6 +1,7 @@
 import Foundation
 import Postbox
 import SwiftSignalKit
+import TellomiWallpapers
 internal import TelegramApi
 
 
@@ -85,18 +86,17 @@ extension TelegramWallpaper {
                 let (id, _, settings) = (wallPaperNoFileData.id, wallPaperNoFileData.flags, wallPaperNoFileData.settings)
                 if let settings = settings, case let .wallPaperSettings(wallPaperSettingsData) = settings {
                     let (_, backgroundColor, secondBackgroundColor, thirdBackgroundColor, fourthBackgroundColor, _, rotation, emoticon) = (wallPaperSettingsData.flags, wallPaperSettingsData.backgroundColor, wallPaperSettingsData.secondBackgroundColor, wallPaperSettingsData.thirdBackgroundColor, wallPaperSettingsData.fourthBackgroundColor, wallPaperSettingsData.intensity, wallPaperSettingsData.rotation, wallPaperSettingsData.emoticon)
-                    if id == 0, let emoticon = emoticon {
-                        self = .emoticon(emoticon)
-                        return
-                    }
                     let colors: [UInt32] = ([backgroundColor, secondBackgroundColor, thirdBackgroundColor, fourthBackgroundColor] as [Int32?]).compactMap({ color -> UInt32? in
                         return color.flatMap(UInt32.init(bitPattern:))
                     })
-                    if colors.count > 1 {
+                    switch nofileWallpaperPaint(id: id, colors: colors, rotation: rotation, emoticon: emoticon) {
+                    case let .emoticon(emoticon):
+                        self = .emoticon(emoticon)
+                    case let .solid(color):
+                        self = .color(color)
+                    case let .fill(id, colors, rotation):
                         self = .gradient(TelegramWallpaper.Gradient(id: id, colors: colors, settings: WallpaperSettings(rotation: rotation)))
-                    } else if colors.count == 1 {
-                        self = .color(UInt32(bitPattern: colors[0]))
-                    } else {
+                    case .missing:
                         self = .color(0xffffff)
                     }
                 } else {
