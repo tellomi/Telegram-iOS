@@ -205,10 +205,11 @@ final class TellomiSignUpAgreement: NSObject {
         self.changed?(agreed)
     }
 
-    func text(theme _: PresentationTheme) -> NSAttributedString {
+    func text(theme: PresentationTheme) -> NSAttributedString {
         let font = TellomiLoginChrome.scaledFont(size: 13.0)
-        let body = TellomiLoginChrome.secondaryText
-        let accent = TellomiLoginChrome.palette(dark: self.appliedTheme?.overallDarkAppearance ?? false).link
+        let palette = TellomiLoginChrome.palette(theme: theme)
+        let body = palette.secondaryText
+        let accent = palette.link
         let result = NSMutableAttributedString()
         func toggle(_ s: String, color: UIColor) {
             result.append(NSAttributedString(string: s, attributes: [.font: font, .foregroundColor: color, TellomiSignUpAgreement.toggleAttribute: true]))
