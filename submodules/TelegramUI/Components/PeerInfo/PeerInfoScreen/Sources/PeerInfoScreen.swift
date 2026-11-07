@@ -2132,6 +2132,17 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 }
             case .qrCode:
                 strongSelf.openQrCode(fromNavigationButton: true)
+            case .settings:
+                strongSelf.controller?.push(PeerInfoScreenImpl(
+                    context: strongSelf.context,
+                    updatedPresentationData: strongSelf.controller?.updatedPresentationData,
+                    peerId: strongSelf.context.account.peerId,
+                    avatarInitiallyExpanded: false,
+                    isOpenedFromChat: false,
+                    reactionSourceMessageId: nil,
+                    callMessages: [],
+                    isSettings: true
+                ))
             case .postStory:
                 var sourceFrame: CGRect?
                 if let source {
@@ -5535,7 +5546,9 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             standaloneSearchImage: PresentationResourcesRootController.navigationCompactSearchWhiteIcon(theme),
             searchWithTagsImage: PresentationResourcesRootController.navigationCompactTagsSearchWhiteIcon(theme),
             searchLabel: strings.Common_Search,
-            moreLabel: strings.Common_More
+            moreLabel: strings.Common_More,
+            settingsImage: UIImage(bundleImageName: "Chat List/Tabs/IconSettings"),
+            settingsLabel: strings.Settings_Title
         )
         self.cachedNavigationItemResources = (theme, strings, resources)
         return resources
@@ -6137,6 +6150,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             navigationFlags.isEditing = self.state.isEditing
             navigationFlags.isSettings = self.isSettings
             navigationFlags.isMyProfile = self.isMyProfile
+            navigationFlags.tellomiTabRoot = self.controller?.tellomiTabRoot == true
             navigationFlags.canEdit = peerInfoCanEdit(peer: self.data?.peer, chatLocation: self.chatLocation, threadData: self.data?.threadData, cachedData: self.data?.cachedData, isContact: self.data?.isContact)
             if let data = self.data, !data.isPremiumRequiredForStoryPosting || data.accountIsPremium, case let .channel(channel) = data.peer, channel.hasPermission(.postStories) {
                 navigationFlags.channelCanPostStories = true
@@ -6555,6 +6569,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
     private let callMessages: [EngineMessage]
     let isSettings: Bool
     let isMyProfile: Bool
+    let tellomiTabRoot: Bool
     private let hintGroupInCommon: EnginePeer.Id?
     private weak var requestsContext: PeerInvitationImportersContext?
     private weak var profileGiftsContext: ProfileGiftsContext?
@@ -6660,6 +6675,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
         switchToGroupsInCommon: Bool = false,
         switchToStoryFolder: Int64? = nil,
         switchToMediaTarget: PeerInfoSwitchToMediaTarget? = nil,
+        tellomiTabRoot: Bool = false
     ) {
         self.context = context
         self.updatedPresentationData = updatedPresentationData
@@ -6671,6 +6687,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
         self.callMessages = callMessages
         self.isSettings = isSettings
         self.isMyProfile = isMyProfile
+        self.tellomiTabRoot = tellomiTabRoot
         self.hintGroupInCommon = hintGroupInCommon
         self.requestsContext = requestsContext
         self.profileGiftsContext = profileGiftsContext
@@ -6771,7 +6788,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
             
             let accountTabBarAvatar: Signal<(UIImage, UIImage)?, NoError> = combineLatest(self.accountsAndPeers.get(), context.sharedContext.presentationData)
             |> map { primaryAndOther, presentationData -> (Account, EnginePeer, PresentationTheme)? in
-                if let primary = primaryAndOther.0, !primaryAndOther.1.isEmpty {
+                if tellomiMeTabShowsAccountAvatar(hasAccountPeer: primaryAndOther.0 != nil), let primary = primaryAndOther.0 {
                     return (primary.0.account, primary.1, presentationData.theme)
                 } else {
                     return nil
@@ -6878,7 +6895,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
                 }
                 let pageTitle = presentationData.strings.Settings_Title
                 let tabTitle: String
-                if isSettings {
+                if isSettings || tellomiTabRoot {
                     let copy = TellomiTabCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
                     tabTitle = tellomiSettingsTabBarTitle(copy: copy, pageTitle: pageTitle)
                 } else {

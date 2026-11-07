@@ -103,6 +103,17 @@ public func tellomiTabIndex(of kind: TellomiTabControllerKind, order: [TellomiRo
     return order.firstIndex(of: tab)
 }
 
+/// The product bar's last tab is the existing My Profile screen. The kill switch keeps the settings screen.
+public func tellomiMeTabRootIsProfile(bottomNavigationEnabled: Bool) -> Bool {
+    return bottomNavigationEnabled
+}
+
+/// The Me tab draws the signed-in account's photo whenever that peer record exists.
+/// Another signed-in account is not required.
+public func tellomiMeTabShowsAccountAvatar(hasAccountPeer: Bool) -> Bool {
+    return hasAccountPeer
+}
+
 /// The settings controller's tab label. `pageTitle` is what the page already shows and is not replaced.
 public func tellomiSettingsTabBarTitle(copy: TellomiTabCopy, pageTitle: String) -> String {
     let _ = pageTitle
