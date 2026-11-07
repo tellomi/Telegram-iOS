@@ -709,9 +709,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         if params?.tellomiSecretView == true, let peerId = chatLocation.peerId {
             TellomiSecretViewSessions.shared.begin(accountPeerId: context.account.peerId.toInt64(), chatPeerId: peerId.toInt64())
             context.account.shouldKeepOnlinePresence.set(.single(false))
-            let _ = (context.sharedContext.activeAccountContexts |> take(1) |> deliverOnMainQueue).start(next: { [weak self] accounts in
-                self?.tellomiSecretViewRestoresPresence = accounts.primary?.account.id == context.account.id
-            })
         }
 
         var useSharedAnimationPhase = false
@@ -769,6 +766,12 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         self.moreBarButton.isUserInteractionEnabled = true
         
         super.init(context: context, navigationBarPresentationData: navigationBarPresentationData)
+
+        if self.tellomiSecretView {
+            let _ = (context.sharedContext.activeAccountContexts |> take(1) |> deliverOnMainQueue).start(next: { [weak self] accounts in
+                self?.tellomiSecretViewRestoresPresence = accounts.primary?.account.id == context.account.id
+            })
+        }
         
         self._hasGlassStyle = true
         
