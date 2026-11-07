@@ -94,6 +94,7 @@ jobs:
             //submodules/TelegramUIPreferences:TellomiTabNavigationDecisionsTests
             //submodules/TelegramUI/Components/Chat/ChatMessageInteractiveInstantVideoNode:RoundVideoTranscriptionDecisionTests
             //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
+            //submodules/TelegramCore:EphemeralMediaLifecycleTests
           )
           ios=(
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
