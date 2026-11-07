@@ -122,6 +122,10 @@ import SideColumnLayout
 import NavigationBarNode
 import NavigationExpansionTransition
 
+private final class TellomiShownMeTabAvatar {
+    var image: (UIImage, UIImage)?
+}
+
 public enum PeerInfoAvatarEditingMode {
     case generic
     case accept
@@ -6800,13 +6804,18 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
                     let size = CGSize(width: 31.0, height: 31.0)
                     let inset: CGFloat = 3.0
                     if let signal = peerAvatarImage(account: primary.0, peerReference: PeerReference(primary.1), authorOfMessage: nil, representation: primary.1.profileImageRepresentations.first, displayDimensions: size, inset: 3.0, emptyColor: nil, synchronousLoad: false) {
+                        let shown = TellomiShownMeTabAvatar()
                         return signal
                         |> map { imageVersions -> (UIImage, UIImage)? in
+                            let incoming: (UIImage, UIImage)?
                             if let image = imageVersions?.0 {
-                                return (image.withRenderingMode(.alwaysOriginal), image.withRenderingMode(.alwaysOriginal))
+                                incoming = (image.withRenderingMode(.alwaysOriginal), image.withRenderingMode(.alwaysOriginal))
                             } else {
-                                return nil
+                                incoming = nil
                             }
+                            let resolved = tellomiMeTabAvatar(shown: shown.image, incoming: incoming)
+                            shown.image = resolved
+                            return resolved
                         }
                     } else {
                         return Signal { subscriber in

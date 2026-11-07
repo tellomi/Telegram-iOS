@@ -114,6 +114,11 @@ public func tellomiMeTabShowsAccountAvatar(hasAccountPeer: Bool) -> Bool {
     return hasAccountPeer
 }
 
+/// A photo that has not arrived yet does not replace one already drawn.
+public func tellomiMeTabAvatar<Image>(shown: Image?, incoming: Image?) -> Image? {
+    return incoming ?? shown
+}
+
 /// The settings controller's tab label. `pageTitle` is what the page already shows and is not replaced.
 public func tellomiSettingsTabBarTitle(copy: TellomiTabCopy, pageTitle: String) -> String {
     let _ = pageTitle

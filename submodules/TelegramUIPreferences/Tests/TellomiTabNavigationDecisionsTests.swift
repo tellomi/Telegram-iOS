@@ -159,5 +159,8 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertFalse(tellomiMeTabRootIsProfile(bottomNavigationEnabled: false))
         XCTAssertTrue(tellomiMeTabShowsAccountAvatar(hasAccountPeer: true))
         XCTAssertFalse(tellomiMeTabShowsAccountAvatar(hasAccountPeer: false))
+        XCTAssertEqual(tellomiMeTabAvatar(shown: "photo", incoming: nil as String?), "photo")
+        XCTAssertEqual(tellomiMeTabAvatar(shown: "photo", incoming: "next"), "next")
+        XCTAssertNil(tellomiMeTabAvatar(shown: nil as String?, incoming: nil))
     }
 }

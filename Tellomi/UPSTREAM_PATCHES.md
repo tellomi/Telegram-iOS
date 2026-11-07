@@ -646,7 +646,7 @@ Labels share one font. Dynamic Type scales that font from 10pt caption2, capped 
 | `submodules/TelegramUI/Components/TabBarLayout/Tests/TabBarItemsLayoutTests.swift` | Narrow 320pt bar stays equal. Scale and baseline. |
 | `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Applies that font, and exposes one accessibility element per tab. |
 
-The Me tab opens the existing My Profile screen (`isMyProfile`), the same one Settings → 资料 pushes. It is not a new page. While that screen is the tab root it has no back button, and its navigation bar has a Settings button that pushes the existing settings screen. The settings screen, its 资料 row, the navigation switches, long-press account switching, and `ios_killswitch_disable_tellomi_tabs` stay. The kill switch still builds the settings screen as the last tab. The Me tab icon is the signed-in account photo whenever that peer record exists; another account is not required.
+The Me tab opens the existing My Profile screen (`isMyProfile`), the same one Settings → 资料 pushes. It is not a new page. The header, phone, username, birthday, bio, and stories pane are that screen's. While it is the tab root it has no back button, and its navigation bar has the settings gear, which pushes the existing settings screen. The settings screen, its 资料 row, the navigation switches, long-press account switching, and `ios_killswitch_disable_tellomi_tabs` stay. The kill switch still builds the settings screen as the last tab. The Me tab icon is the signed-in account photo whenever that peer record exists; another account is not required. A frame that has not downloaded yet keeps the photo already drawn.
 
 | File | Change |
 | --- | --- |
