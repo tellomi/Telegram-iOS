@@ -1,0 +1,117 @@
+# Full Bazel build of //Telegram:Telegram, including the share and notification
+# extensions. This is the TestFlight release_arm64 build step without the
+# upload. It runs only for the integration pull request. It does not call
+# altool and does not publish a build.
+
+name: App compile
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tellomi-app-compile-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    if: github.head_ref == 'cursor/integrate-app-compile-a9df'
+    runs-on: xcode-27
+    timeout-minutes: 360
+    env:
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_P8_BASE64 }}
+      APPLE_DIST_CERT_P12_BASE64: ${{ secrets.APPLE_DIST_CERT_P12_BASE64 }}
+      APPLE_DIST_CERT_P12_PASSWORD: ${{ secrets.APPLE_DIST_CERT_P12_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
+
+      - name: Check marketing version
+        run: python3 Tellomi/check_marketing_version.py
+
+      - name: Select Xcode from versions.json
+        run: |
+          set -euo pipefail
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [ ! -d "$CANDIDATE" ]; then
+            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
+            ls -1 /Applications | grep -E '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select -s "${CANDIDATE}/Contents/Developer"
+          xcodebuild -version
+
+      - name: Restore Bazel cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /Users/runner/telegram-bazel-cache
+          key: tellomi-bazel-none
+          restore-keys: |
+            tellomi-bazel-
+
+      - name: Prepare signing and build number
+        run: |
+          set -euo pipefail
+          python3 Tellomi/prepare_appstore_signing.py \
+            --configuration build-system/appstore-configuration.json \
+            --configuration-out "${RUNNER_TEMP}/tellomi-configuration.json" \
+            --output "${RUNNER_TEMP}/tellomi-signing" \
+            --cert-dir "${GITHUB_WORKSPACE}/tellomi-distribution-cert" \
+            --build-number-out "${RUNNER_TEMP}/build-number.txt" \
+            --build-number-floor "${{ github.run_number }}"
+          echo "BUILD_NUMBER=$(tr -d '[:space:]' < "${RUNNER_TEMP}/build-number.txt")" >> "${GITHUB_ENV}"
+
+      - name: Import signing certificate
+        run: |
+          set -euo pipefail
+          python3 build-system/Make/ImportCertificates.py \
+            --path "${RUNNER_TEMP}/tellomi-signing/certs"
+
+      - name: Build release IPA
+        run: |
+          set -euo pipefail
+          python3 -u build-system/Make/Make.py \
+            --overrideXcodeVersion \
+            --cacheDir /Users/runner/telegram-bazel-cache \
+            build \
+            --configurationPath "${RUNNER_TEMP}/tellomi-configuration.json" \
+            --codesigningInformationPath "${RUNNER_TEMP}/tellomi-signing" \
+            --configuration release_arm64 \
+            --buildNumber "${BUILD_NUMBER}"
+          test -f bazel-bin/Telegram/Telegram.ipa
+          python3 - << 'PY'
+          import plistlib
+          import zipfile
+          archive = zipfile.ZipFile("bazel-bin/Telegram/Telegram.ipa")
+          ids = []
+          for name in archive.namelist():
+              if "/PlugIns/" in name and name.endswith("Info.plist"):
+                  info = plistlib.loads(archive.read(name))
+                  ids.append(info.get("CFBundleIdentifier", ""))
+          print("plugins:", ", ".join(ids))
+          required = ["app.tellomi.chat.Share", "app.tellomi.chat.NotificationService"]
+          missing = [item for item in required if item not in ids]
+          if missing:
+              raise SystemExit("IPA is missing " + ", ".join(missing))
+          PY
+          echo "Built bazel-bin/Telegram/Telegram.ipa with share and notification extensions. Not uploaded."
+
+      - name: Save Bazel cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /Users/runner/telegram-bazel-cache
+          key: tellomi-bazel-${{ github.run_id }}-${{ github.run_attempt }}
