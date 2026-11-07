@@ -92,6 +92,7 @@ jobs:
             //submodules/ChatListUI:ChatListScrollAnchorTests
             //submodules/TellomiWallpapers:TellomiWallpapersTests
             //submodules/TelegramUIPreferences:TellomiTabNavigationDecisionsTests
+            //submodules/TelegramUI/Components/Chat/ChatMessageInteractiveInstantVideoNode:RoundVideoTranscriptionDecisionTests
             //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
             //submodules/TelegramCore:EphemeralMediaLifecycleTests
           )
