@@ -213,9 +213,10 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
             let checked = tellomiLanguageCodesMatch(info.languageCode, current)
             let code = info.languageCode
             rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
-                guard let self, !checked else {
+                guard let self, let plan = tellomiLanguageApplyPlan(selectedCode: code, currentCode: current) else {
                     return
                 }
+                let code = plan.code
                 guard let account = self.tellomiUnauthorizedAccount else {
                     tellomiRememberInterfaceLanguage(code)
                     self.refreshTellomiLanguage()
@@ -224,6 +225,7 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
                 tellomiStartInterfaceLanguageDownload(account: account, accountManager: self.sharedContext.accountManager, languageCode: code, disposable: self.tellomiLanguageDownloadDisposable, applied: { [weak self] strings in
                     self?.applyTellomiStrings(strings)
                 })
+                self.applyTellomiStrings(self.strings)
             }))
         }
         let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.theme.overallDarkAppearance)
@@ -371,6 +373,18 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
         self.loginWithCode?(code)
     }
     
+    var tellomiResendIsActive: Bool {
+        return self.controllerNode.tellomiResendIsActive
+    }
+
+    func tellomiBlockFurtherResends() {
+        self.controllerNode.tellomiBlockFurtherResends()
+    }
+
+    func tellomiPauseResend(seconds: Int32) {
+        self.controllerNode.tellomiPauseResend(seconds: seconds)
+    }
+
     func applyTellomiStrings(_ strings: PresentationStrings) {
         self.strings = strings
         tellomiNoteAppliedPack(strings)
