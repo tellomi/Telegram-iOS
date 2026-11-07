@@ -15,6 +15,28 @@ let tellomiTencentMapsOpenInIdentifier = "tencentMaps"
 let tellomiAmapURLScheme = "iosamap"
 let tellomiBaiduMapURLScheme = "baidumap"
 let tellomiTencentMapURLScheme = "qqmap"
+let tellomiGoogleMapsURLScheme = "comgooglemaps-x-callback"
+
+/// Apps linked against the iOS 27 SDK only get an answer from `canOpenURL` for the first 25
+/// `LSApplicationQueriesSchemes` entries. Later entries stay false even when the app is installed.
+let tellomiCanOpenURLSchemeLimit = 25
+
+let tellomiInstalledMapQuerySchemes = [
+    tellomiAmapURLScheme,
+    tellomiBaiduMapURLScheme,
+    tellomiTencentMapURLScheme,
+    tellomiGoogleMapsURLScheme,
+]
+
+func tellomiSchemesVisibleToCanOpenURL(_ schemes: [String]) -> [String] {
+    return Array(schemes.prefix(tellomiCanOpenURLSchemeLimit))
+}
+
+/// Schemes in `tellomiInstalledMapQuerySchemes` that this order leaves outside the query window.
+func tellomiInstalledMapSchemesHiddenFromCanOpenURL(_ schemes: [String]) -> [String] {
+    let visible = tellomiSchemesVisibleToCanOpenURL(schemes)
+    return tellomiInstalledMapQuerySchemes.filter { !visible.contains($0) }
+}
 
 let tellomiAmapAppStoreIdentifier: Int64 = 461703208
 let tellomiBaiduMapsAppStoreIdentifier: Int64 = 452186370
