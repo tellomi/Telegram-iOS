@@ -1,7 +1,6 @@
 import AccountContext
 import AppBundle
 import AsyncDisplayKit
-import ContextUI
 import Display
 import Foundation
 import SwiftSignalKit
@@ -76,8 +75,6 @@ public final class TellomiFeedScreen: ViewController {
         self.loader = tellomiDiscoverMakeLoader(account: context.account)
 
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
-
-        self.tabBarItemContextActionType = .always
 
         self.loggedOutDisposable = (context.account.loggedOut
         |> deliverOnMainQueue).start(next: { [weak self] loggedOut in
@@ -251,29 +248,6 @@ public final class TellomiFeedScreen: ViewController {
         self.appliedLayout = layout
         let navigationHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
         self.feedNode.updateLayout(size: layout.size, topInset: navigationHeight, bottomInset: layout.intrinsicInsets.bottom, transition: transition)
-    }
-
-    override public func tabBarItemContextAction(sourceView: ContextExtractedContentContainingView, gesture: ContextGesture) {
-        guard tellomiBottomNavigationEnabled(appConfiguration: self.context.currentAppConfiguration.with { $0 }) else {
-            return
-        }
-        let copy = TellomiTabCopy.resolve(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: self.stringPack())
-        let items: [ContextMenuItem] = [
-            .action(ContextMenuActionItem(text: copy.hideFeed, icon: { theme in
-                return generateTintedImage(image: UIImage(bundleImageName: "Peer Info/HideIcon"), color: theme.contextMenu.primaryColor)
-            }, action: { [weak self] controller, _ in
-                controller?.dismiss(completion: {
-                    guard let self else {
-                        return
-                    }
-                    let _ = updateTellomiTabSettingsInteractively(accountManager: self.context.sharedContext.accountManager, { settings in
-                        return settings.withUpdatedShowFeedTab(false)
-                    }).start()
-                })
-            }))
-        ]
-        let contextController = makeContextController(presentationData: self.presentationData, source: .reference(TellomiFeedTabBarContextReferenceContentSource(controller: self, sourceView: sourceView)), items: .single(ContextController.Items(content: .list(items))), recognizer: nil, gesture: gesture)
-        self.context.sharedContext.mainWindow?.presentInGlobalOverlay(contextController)
     }
 
     private func stringPack() -> [String: String] {
@@ -726,25 +700,4 @@ private func tellomiDiscoverConfigField(_ value: JSONElement?) -> TellomiDiscove
         return .number(value.doubleValue)
     }
     return .missing
-}
-
-private final class TellomiFeedTabBarContextReferenceContentSource: ContextReferenceContentSource {
-    let keepInPlace: Bool = true
-
-    private let controller: ViewController
-    private let sourceView: ContextExtractedContentContainingView
-
-    init(controller: ViewController, sourceView: ContextExtractedContentContainingView) {
-        self.controller = controller
-        self.sourceView = sourceView
-    }
-
-    func transitionInfo() -> ContextControllerReferenceViewInfo? {
-        let _ = self.controller
-        return ContextControllerReferenceViewInfo(
-            referenceView: self.sourceView.contentView,
-            contentAreaInScreenSpace: mainWindowScreenBounds,
-            actionsPosition: .top
-        )
-    }
 }

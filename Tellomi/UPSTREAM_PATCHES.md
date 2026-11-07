@@ -627,6 +627,31 @@ The Calls tab already hides from a long-press on its icon (`CallListController.t
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | New module `TellomiFeedScreen`. Empty Discover tab (D-37). Not `NewsScreen`. Long-press hides it (D-38). `TellomiFeedScreenNode` imports `TelegramUIPreferences` so it can read `TellomiTabCopy`. Opening a post from a link retries for about a second when the screen is not in a navigation stack yet. |
 | `submodules/TelegramUI/BUILD` | Depends on that module. |
 
+## Main tab bar: Discover, Chats, Me
+
+The product bar is three tabs, in this order: Discover (发现), Chats (聊天), Me (我). Me is the existing settings controller. Its page, rows, and `Settings_Title` stay. Only the tab label changes. Chats uses the tab copy, not a rewrite of `DialogList_Title`. The back button on the chat list still uses `DialogList_Title`.
+
+Calls, Contacts, and News are not inserted, whatever the saved visibility flags say. Selection is by controller kind (`tellomiTabIndex`), and startup still opens Chats, or the settings controller when an account switch is restoring it. `ios_killswitch_disable_tellomi_tabs` = `1` still builds the upstream bar and does not use this order.
+
+Contacts still open as a pushed page (`openContacts`). Recent calls still open from Settings. The navigation-bar settings page lists the three tabs as always on. It no longer offers switches that would hide Discover or add Calls or Contacts. Long-press on Discover no longer hides it. The calls list opened from Settings still has Show Calls Tab; that switch writes `CallListSettings` and still affects the upstream bar when the kill switch is on. It does not add a tab while the product bar is on.
+
+Labels share one font. Dynamic Type scales that font from 10pt caption2, capped at 13pt so the title stays under the icon in the 56pt item. One scale then shrinks every title together so the three slots stay equal and the text is not clipped, down to 0.7. Below that the existing weighted widths remain. VoiceOver's label is the drawn title, and the selected tab includes the selected trait. Icon and title frames use the same y for every item of a given title height.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | Fixed order, startup index, tab index by kind, Me label, accessibility label. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabSettings.swift` | Order functions moved out so the host test can compile them. Stored flags remain. |
+| `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | Order ignores visibility flags. Me is not the settings page title. Accessibility label matches the title. |
+| `submodules/TelegramUI/Sources/TellomiBottomNavigation.swift` | Appends Discover and Chats only. Settings is still appended by the caller. |
+| `submodules/TelegramUI/Sources/TelegramRootController.swift` | Startup index comes from `tellomiStartupTabIndex` when the product bar is on. |
+| `submodules/ChatListUI/Sources/ChatListController.swift` | Tab title is the Chats copy. The back item stays `DialogList_Title`. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings tab label is Me. A profile that is not the settings tab keeps `Settings_Title`. |
+| `submodules/SettingsUI/Sources/TellomiNavigationSettingsController.swift` | Three locked rows: 发现, 聊天, 我. |
+| `submodules/TelegramUI/Components/Tellomi/FeedScreen/Sources/TellomiFeedScreen.swift` | No long-press hide. |
+| `submodules/TelegramUI/Components/TabBarLayout/Sources/TabBarItemsLayout.swift` | Shared title scale, shared title frame, selected accessibility trait. |
+| `submodules/TelegramUI/Components/TabBarLayout/Tests/TabBarItemsLayoutTests.swift` | Narrow 320pt bar stays equal. Scale and baseline. |
+| `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Applies that font, and exposes one accessibility element per tab. |
+
 ## DC addresses from help.getConfig (M7 / D-33)
 
 `Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
