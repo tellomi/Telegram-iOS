@@ -12,6 +12,7 @@ import AlertUI
 import PresentationDataUtils
 import MediaResources
 import WallpaperResources
+import TellomiWallpapers
 
 import AccountContext
 import ContextUI
@@ -1119,13 +1120,17 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
         }
         
         var defaultThemes: [PresentationThemeReference] = []
-        if presentationData.autoNightModeTriggered {
-            defaultThemes.append(.builtin(.night))
-        } else {
-            defaultThemes.append(contentsOf: [
-                .builtin(.day),
-                .builtin(.night)
-            ])
+        for builtin in themePickerBuiltinOrder(autoNight: presentationData.autoNightModeTriggered) {
+            switch builtin {
+            case .dayClassic:
+                defaultThemes.append(.builtin(.dayClassic))
+            case .nightAccent:
+                defaultThemes.append(.builtin(.nightAccent))
+            case .day:
+                defaultThemes.append(.builtin(.day))
+            case .night:
+                defaultThemes.append(.builtin(.night))
+            }
         }
         
         let cloudThemes: [PresentationThemeReference] = cloudThemes.map { .cloud(PresentationCloudTheme(theme: $0, resolvedWallpaper: nil, creatorAccountId: $0.isCreator ? context.account.id : nil)) }.filter { !removedThemeIndexes.contains($0.index) }
@@ -1137,7 +1142,7 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
         availableThemes.append(contentsOf: cloudThemes)
         
         var chatThemes = cloudThemes.filter { $0.emoticon != nil }
-        chatThemes.insert(.builtin(.day), at: 0)
+        chatThemes.insert(.builtin(.dayClassic), at: 0)
         
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(presentationData.strings.Appearance_Title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: themeSettingsControllerEntries(presentationData: presentationData, presentationThemeSettings: settings, chatSettings: chatSettings, mediaSettings: mediaSettings, themeReference: themeReference, availableThemes: availableThemes, availableAppIcons: availableAppIcons, currentAppIconName: currentAppIconName, isPremium: isPremium, chatThemes: chatThemes, animatedEmojiStickers: animatedEmojiStickers, accountPeer: accountPeer, nameColors: context.peerNameColors), style: .blocks, ensureVisibleItemTag: focusOnItemTag, animateChanges: false)

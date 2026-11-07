@@ -20,6 +20,7 @@ swift_test(
     name = "TellomiWallpapersTests",
     srcs = [
         "Tests/TellomiWallpapersTests.swift",
+        "Tests/ThemeSurfaceRestoreTests.swift",
     ],
     copts = [
         "-warnings-as-errors",
