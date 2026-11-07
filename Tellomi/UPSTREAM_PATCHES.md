@@ -1126,3 +1126,20 @@ A failed cloud `readMessageContents` is swallowed and the operation log entry is
 | `submodules/TelegramCore/Sources/Tellomi/EphemeralMediaLifecycle.swift` | The five kinds and the four effects: placeholder, row removal, cache removal, server report. |
 | `submodules/TelegramCore/Tests/EphemeralMediaLifecycleTests.swift` | Synthetic cases for sender, recipient, expiry, a failed report, and a stale resource id. |
 | `submodules/TelegramCore/BUILD` | Host test `EphemeralMediaLifecycleTests`. |
+
+## Open in 高德, 百度, and 腾讯
+
+The Open In sheet already lists 高德, 百度, and 腾讯 when `canOpenURL` says they are installed, then Google Maps under the same check, with Apple Maps always first. TestFlight 14.0.4 build 71 contains that code (`118e9b2560` is an ancestor of `eb90bf0e2d`). A pin, a venue, and a live location all use `OpenInItem.location`. Directions and the share action use the same list. The watch app still opens Apple Maps only.
+
+`canOpenURL` was still false for the three Chinese apps. This binary is linked with the iOS 27 SDK, and that SDK only answers `canOpenURL` for the first 25 `LSApplicationQueriesSchemes` entries. `TelegramInfoPlist` had 41 entries. `comgooglemaps-x-callback` was second, so Google Maps showed. `iosamap`, `baidumap`, and `qqmap` were 39–41, so an installed 高德, 百度, or 腾讯 stayed hidden. The sheet was Apple Maps plus Google Maps.
+
+Those three schemes now replace `vimeo`, `vine`, and `coub` inside the first 25. Nothing in this repo calls `canOpenURL` for those three. The Chinese schemes are no longer repeated at the end. `Info.plist` and `InfoBazel.plist` use the same placement. The Bazel app links `TelegramInfoPlist`.
+
+Coordinates are unchanged. Telegram stores WGS-84. 高德 is `iosamap://` with `dev=1`. 百度 is `baidumap://` with `coord_type=wgs84`. 腾讯 `qqmap://` is converted to GCJ-02 here. Apple Maps receives the stored WGS-84 point.
+
+| File | Change |
+| --- | --- |
+| `Telegram/BUILD` | `iosamap`, `baidumap`, `qqmap` sit inside the first 25 query schemes. |
+| `Telegram/Telegram-iOS/Info.plist`, `InfoBazel.plist` | The same placement. |
+| `TellomiMapOpenIn.swift` | The 25-scheme window. |
+| `TellomiMapOpenInTests.swift` | The shipped order shows the four map schemes. The previous order hides the three Chinese ones. |
