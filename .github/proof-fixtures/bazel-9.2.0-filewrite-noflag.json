@@ -1,0 +1,92 @@
+{
+  "artifacts": [{
+    "id": 1,
+    "pathFragmentId": 1
+  }, {
+    "id": 2,
+    "pathFragmentId": 5
+  }, {
+    "id": 3,
+    "pathFragmentId": 6
+  }, {
+    "id": 4,
+    "pathFragmentId": 7
+  }],
+  "actions": [{
+    "targetId": 1,
+    "actionKey": "4422f442ec223c47c6b503a3d25860acc406026bf372721c6c7147e09aff2452",
+    "mnemonic": "FileWrite",
+    "configurationId": 1,
+    "outputIds": [1],
+    "primaryOutputId": 1,
+    "executionPlatform": "@@platforms//host:host"
+  }, {
+    "targetId": 1,
+    "actionKey": "f026b2d7b2d85dcb39d88975a0cf5ad24ad5ff9aa38c64b863fa4cc3c118bf83",
+    "mnemonic": "FileWrite",
+    "configurationId": 1,
+    "outputIds": [2],
+    "primaryOutputId": 2,
+    "executionPlatform": "@@platforms//host:host"
+  }, {
+    "targetId": 1,
+    "actionKey": "826a8d25bb5548f681e594d0f56f2f5091085f20a7a7031d553d19e045ab253f",
+    "mnemonic": "FileWrite",
+    "configurationId": 1,
+    "outputIds": [3],
+    "primaryOutputId": 3,
+    "executionPlatform": "@@platforms//host:host"
+  }, {
+    "targetId": 1,
+    "actionKey": "255527118f0ec2729ba420c5f1e099c6c85982f3b155c7babee19af4e22e3a37",
+    "mnemonic": "FileWrite",
+    "configurationId": 1,
+    "outputIds": [4],
+    "primaryOutputId": 4,
+    "executionPlatform": "@@platforms//host:host",
+    "isExecutable": true
+  }],
+  "targets": [{
+    "id": 1,
+    "label": "//:out",
+    "ruleClassId": 1
+  }],
+  "configuration": [{
+    "id": 1,
+    "mnemonic": "k8-fastbuild",
+    "platformName": "k8",
+    "checksum": "a7a71fd16b14112464272f754633480c74c664f2488224c592ebf2dfc7a06b18"
+  }],
+  "ruleClasses": [{
+    "id": 1,
+    "name": "write_files"
+  }],
+  "pathFragments": [{
+    "id": 4,
+    "label": "bazel-out"
+  }, {
+    "id": 3,
+    "label": "k8-fastbuild",
+    "parentId": 4
+  }, {
+    "id": 2,
+    "label": "bin",
+    "parentId": 3
+  }, {
+    "id": 1,
+    "label": "out.empty",
+    "parentId": 2
+  }, {
+    "id": 5,
+    "label": "out.txt",
+    "parentId": 2
+  }, {
+    "id": 6,
+    "label": "out.space",
+    "parentId": 2
+  }, {
+    "id": 7,
+    "label": "out.sh",
+    "parentId": 2
+  }]
+}
