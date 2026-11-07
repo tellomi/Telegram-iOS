@@ -126,10 +126,20 @@ jobs:
             echo "no test targets were found"
             exit 1
           fi
+          fail=0
           if (( ${#run_host[@]} > 0 )); then
-            "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${run_host[@]}" --test_output=errors --announce_rc
+            for label in "${run_host[@]}"; do
+              if ! "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc; then
+                fail=1
+              fi
+            done
           fi
           if (( ${#run_ios[@]} > 0 )); then
-            "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${run_ios[@]}" --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64
+            for label in "${run_ios[@]}"; do
+              if ! "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64; then
+                fail=1
+              fi
+            done
           fi
           test ! -f bazel-bin/Telegram/Telegram.ipa
+          exit "${fail}"
