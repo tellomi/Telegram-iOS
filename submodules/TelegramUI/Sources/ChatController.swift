@@ -469,6 +469,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     }
     var stickerSettings: ChatInterfaceStickerSettings
     var stickerSettingsDisposable: Disposable?
+    var tellomiTranslationSettingsDisposable: Disposable?
     
     var applicationInForegroundDisposable: Disposable?
     var applicationInFocusDisposable: Disposable?
@@ -6927,6 +6928,28 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             }
         })
         
+        self.tellomiTranslationSettingsDisposable = (context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.translationSettings])
+        |> deliverOnMainQueue).startStrict(next: { [weak self] sharedData in
+            guard let self else {
+                return
+            }
+            let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.translationSettings]?.get(TranslationSettings.self) ?? TranslationSettings.defaultSettings
+            let appData = self.context.currentAppConfiguration.with { $0 }.data
+            let manual = tellomiManualTranslationAvailable(manual: appData?["translations_manual_enabled"] as? String, flag: appData?[TellomiFeatureGate.translateKey] as Any?)
+            let enabled = settings.showTranslate && manual
+            guard self.controllerInteraction?.tellomiShowsSideTranslate != enabled else {
+                return
+            }
+            self.controllerInteraction?.tellomiShowsSideTranslate = enabled
+            if self.isNodeLoaded {
+                self.chatDisplayNode.historyNode.forEachItemNode { node in
+                    if let itemNode = node as? ChatMessageBubbleItemNode, let messageId = itemNode.item?.message.id {
+                        let _ = self.controllerInteraction?.requestMessageUpdate(messageId, false, nil)
+                    }
+                }
+            }
+        })
+
         self.stickerSettingsDisposable = combineLatest(queue: Queue.mainQueue(),
             context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.stickerSettings]),
             self.disableStickerAnimationsPromise.get(),
@@ -7154,6 +7177,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         self.choosingStickerActivityDisposable?.dispose()
         self.automaticMediaDownloadSettingsDisposable?.dispose()
         self.stickerSettingsDisposable?.dispose()
+        self.tellomiTranslationSettingsDisposable?.dispose()
         self.searchQuerySuggestionState?.1.dispose()
         self.recorderDataDisposable.dispose()
         self.displaySendWhenOnlineTipDisposable.dispose()
