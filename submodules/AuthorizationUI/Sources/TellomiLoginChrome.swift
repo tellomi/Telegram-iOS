@@ -4,23 +4,12 @@ import AsyncDisplayKit
 import Display
 import TelegramPresentationData
 import SolidRoundedButtonNode
+import CodeInputView
 
-/// Shared login chrome. Primary buttons are black on white; the pink in the
-/// owner mockups is layout only. See Tellomi/UPSTREAM_PATCHES.md.
+/// Shared login chrome. Colors come from the authorization theme
+/// (`intro` and `list`) and are lifted when a pair misses WCAG AA.
+/// See Tellomi/UPSTREAM_PATCHES.md.
 enum TellomiLoginChrome {
-    static let buttonBackground = UIColor(rgb: 0x111111)
-    static let buttonForeground = UIColor.white
-    static let buttonDisabledBackground = UIColor(rgb: 0xE5E5E5)
-    static let buttonDisabledForeground = UIColor(rgb: 0x8E8E93)
-    static let link = UIColor(rgb: 0x111111)
-    static let error = UIColor(rgb: 0xFF3B30)
-    /// Caret and focused field. Same black as the primary button.
-    static let accent = UIColor(rgb: 0x111111)
-    static let checkbox = UIColor(rgb: 0x111111)
-    static let fieldFill = UIColor(rgb: 0xF2F3F5)
-    static let secondaryText = UIColor(rgb: 0x8A8A8E)
-    static let placeholder = UIColor(rgb: 0xB0B0B6)
-    static let rowBorder = UIColor(rgb: 0xE6E6E6)
     /// Terms, privacy, and the carrier note all open on this host, in Safari.
     static let legalURL = "https://tellomi.cn/legal"
     static let helpURL = "https://tellomi.cn/help/"
@@ -67,60 +56,92 @@ enum TellomiLoginChrome {
         let error: UIColor
         let accent: UIColor
         let checkbox: UIColor
+        let checkboxTick: UIColor
+        let checkboxStroke: UIColor
         let fieldFill: UIColor
         let fieldText: UIColor
+        let fieldBorder: UIColor
         let secondaryText: UIColor
         let placeholder: UIColor
         let rowBorder: UIColor
         let rowBackground: UIColor
         let rowText: UIColor
+        let codeInactiveBorder: UIColor
+        let codeActiveBorder: UIColor
     }
 
-    /// Light matches the owner colors. Dark inverts the button and the field so
-    /// `#111111` is not drawn on a dark page and typed text is not white on `#F2F3F5`.
-    /// Field fill, text, caret, placeholder, and error come from `tellomiLoginFieldColors`.
+    /// Upstream day/night tokens, with any pair that misses WCAG AA moved until it passes.
     static func palette(dark: Bool) -> Palette {
-        let field = tellomiLoginFieldColors(dark: dark)
-        if dark {
-            return Palette(
-                buttonBackground: UIColor.white,
-                buttonForeground: UIColor(rgb: 0x111111),
-                buttonDisabledBackground: UIColor(rgb: 0x3A3A3C),
-                buttonDisabledForeground: UIColor(rgb: 0x8E8E93),
-                link: UIColor.white,
-                error: UIColor(rgb: field.error),
-                accent: UIColor(rgb: field.caret),
-                checkbox: UIColor.white,
-                fieldFill: UIColor(rgb: field.fill),
-                fieldText: UIColor(rgb: field.text),
-                secondaryText: UIColor(rgb: 0x8E8E93),
-                placeholder: UIColor(rgb: field.placeholder),
-                rowBorder: UIColor(rgb: 0x3A3A3C),
-                rowBackground: UIColor(rgb: 0x1C1C1E),
-                rowText: UIColor.white
-            )
+        return self.palette(colors: tellomiLoginSurfaceColors(dark: dark))
+    }
+
+    /// The on-screen authorization theme. Custom accents follow `PresentationTheme`;
+    /// a token that would be invisible is lifted by the same pass as `palette(dark:)`.
+    static func palette(theme: PresentationTheme) -> Palette {
+        return self.palette(colors: tellomiLoginSurfaceColors(self.tokens(theme: theme)))
+    }
+
+    static func tokens(theme: PresentationTheme) -> TellomiLoginThemeTokens {
+        let page = theme.list.plainBackgroundColor.rgb
+        let stroke = theme.list.itemCheckColors.strokeColor
+        let strokeAmount = min(1.0, max(0.0, Double(stroke.alpha)))
+        let checkStroke = strokeAmount >= 0.99 ? stroke.rgb : tellomiMix(page, stroke.rgb, strokeAmount)
+        return TellomiLoginThemeTokens(
+            page: page,
+            fieldFill: theme.list.itemInputField.backgroundColor.rgb,
+            primaryText: theme.list.itemPrimaryTextColor.rgb,
+            accent: theme.list.itemAccentColor.rgb,
+            secondaryText: theme.list.itemSecondaryTextColor.rgb,
+            placeholder: theme.list.itemInputField.placeholderColor.rgb,
+            destructive: theme.list.itemDestructiveColor.rgb,
+            separator: theme.list.itemPlainSeparatorColor.rgb,
+            disabledText: theme.list.itemDisabledTextColor.rgb,
+            checkFill: theme.list.itemCheckColors.fillColor.rgb,
+            checkStroke: checkStroke,
+            checkTick: theme.list.itemCheckColors.foregroundColor.rgb,
+            buttonBackground: theme.intro.startButtonColor.rgb,
+            buttonForeground: 0xFFFFFF,
+            rowBackground: theme.overallDarkAppearance ? theme.list.itemBlocksBackgroundColor.rgb : page
+        )
+    }
+
+    private static func palette(colors: TellomiLoginSurfaceColors) -> Palette {
+        func ink(_ rgb: UInt32) -> UIColor {
+            return UIColor(rgb: rgb)
         }
         return Palette(
-            buttonBackground: self.buttonBackground,
-            buttonForeground: self.buttonForeground,
-            buttonDisabledBackground: self.buttonDisabledBackground,
-            buttonDisabledForeground: self.buttonDisabledForeground,
-            link: self.link,
-            error: UIColor(rgb: field.error),
-            accent: UIColor(rgb: field.caret),
-            checkbox: self.checkbox,
-            fieldFill: UIColor(rgb: field.fill),
-            fieldText: UIColor(rgb: field.text),
-            secondaryText: self.secondaryText,
-            placeholder: UIColor(rgb: field.placeholder),
-            rowBorder: self.rowBorder,
-            rowBackground: UIColor.white,
-            rowText: UIColor(rgb: 0x111111)
+            buttonBackground: ink(colors.buttonBackground),
+            buttonForeground: ink(colors.buttonForeground),
+            buttonDisabledBackground: ink(colors.buttonDisabledBackground),
+            buttonDisabledForeground: ink(colors.buttonDisabledForeground),
+            link: ink(colors.link),
+            error: ink(colors.error),
+            accent: ink(colors.caret),
+            checkbox: ink(colors.checkboxFill),
+            checkboxTick: ink(colors.checkboxTick),
+            checkboxStroke: ink(colors.checkboxStroke),
+            fieldFill: ink(colors.fieldFill),
+            fieldText: ink(colors.fieldText),
+            fieldBorder: ink(colors.fieldBorder),
+            secondaryText: ink(colors.secondaryText),
+            placeholder: ink(colors.placeholder),
+            rowBorder: ink(colors.rowBorder),
+            rowBackground: ink(colors.rowBackground),
+            rowText: ink(colors.rowText),
+            codeInactiveBorder: ink(colors.codeInactiveBorder),
+            codeActiveBorder: ink(colors.codeActiveBorder)
         )
     }
 
     static func buttonTheme(dark: Bool = false) -> SolidRoundedButtonTheme {
-        let palette = self.palette(dark: dark)
+        return self.buttonTheme(palette: self.palette(dark: dark))
+    }
+
+    static func buttonTheme(theme: PresentationTheme) -> SolidRoundedButtonTheme {
+        return self.buttonTheme(palette: self.palette(theme: theme))
+    }
+
+    private static func buttonTheme(palette: Palette) -> SolidRoundedButtonTheme {
         return SolidRoundedButtonTheme(
             backgroundColor: palette.buttonBackground,
             foregroundColor: palette.buttonForeground,
@@ -129,10 +150,34 @@ enum TellomiLoginChrome {
         )
     }
 
-    static func applyField(_ node: ASDisplayNode, dark: Bool = false) {
-        node.backgroundColor = self.palette(dark: dark).fieldFill
+    static func applyField(_ node: ASDisplayNode, dark: Bool = false, focused: Bool = false) {
+        self.applyField(node, palette: self.palette(dark: dark), focused: focused)
+    }
+
+    static func applyField(_ node: ASDisplayNode, theme: PresentationTheme, focused: Bool = false) {
+        self.applyField(node, palette: self.palette(theme: theme), focused: focused)
+    }
+
+    static func applyField(_ node: ASDisplayNode, palette: Palette, focused: Bool = false) {
+        node.backgroundColor = palette.fieldFill
         node.cornerRadius = self.fieldCornerRadius
         node.clipsToBounds = true
+        node.borderWidth = focused ? 2.0 : 1.0
+        node.borderColor = (focused ? palette.accent : palette.fieldBorder).cgColor
+    }
+
+    /// Digit boxes. Inactive, focused, and failed borders come from the same surface colors as the fields.
+    static func codeInputTheme(theme: PresentationTheme, succeed: UIColor) -> CodeInputView.Theme {
+        let palette = self.palette(theme: theme)
+        return CodeInputView.Theme(
+            inactiveBorder: palette.codeInactiveBorder.argb,
+            activeBorder: palette.codeActiveBorder.argb,
+            succeedBorder: succeed.argb,
+            failedBorder: palette.error.argb,
+            foreground: palette.fieldText.argb,
+            isDark: theme.overallDarkAppearance,
+            fill: palette.fieldFill.argb
+        )
     }
 }
 

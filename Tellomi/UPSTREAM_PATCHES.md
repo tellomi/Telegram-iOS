@@ -1095,3 +1095,19 @@ A failure or an empty completion closes the progress, stops a video export, and 
 | `.github/workflows/pr-tests.yml` | Host tests that the pull request declares, plus the tab-bar simulator test. |
 | `submodules/TelegramUI/Components/TabBarLayout/BUILD` | Simulator pin is iPhone 17 / iOS 27.0. |
 | `submodules/TellomiWallpapers/Tests/TellomiWallpapersTests.swift` | Compare names and colors separately. A tuple array does not satisfy `XCTAssertEqual` on Xcode 27.1. |
+
+## Login and sign-up contrast
+
+The login chrome had its own hex palette. On the default day theme that left the unchecked agreement ring at `#C7C7CC` on white (about 1.7:1), the placeholder at `#B0B0B6` on `#F2F3F5` (about 1.9:1), disabled button text at `#8E8E93` on `#E5E5E5` (about 2.6:1), the code-box border at `#E5E5E5` on the field fill, and 13pt secondary copy under 4.5:1. The default dark theme's placeholder `#4D4D4D` fails on a dark fill, and `itemInputField` `#0F0F0F` sits on black at about 1.1:1. Links used the same black or white as body text instead of the accent. The agreement sentence used the light secondary color in both appearances.
+
+Colors now start from the authorization theme (`intro.startButtonColor`, `list.itemAccentColor`, `itemInputField`, `itemCheckColors`, separators, destructive) and move only far enough to clear WCAG AA: 4.5:1 for text, 3:1 for strokes, the checkbox, and code-box borders. The day field fill stays `#F2F2F7`. A dark field that does not separate from the page is lightened until it does. The primary button stays the intro start color (black in day, white at night) with a label that clears 4.5:1, including the disabled pair. Focus draws a 2pt accent border on the rounded fields and the password underline. The agreement circle is 22pt inside the existing 44pt control, with a tick that clears the fill. Titles that the layout measures use an unlimited line count and the capped Dynamic Type font. Sign-in, sign-up, email, code, and password requests are unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiLoginFieldColors.swift` | Theme tokens, contrast floor, surface colors. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Palette and buttons read the theme. Field border and code-box theme. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginSurfaces.swift` | Checkbox, chevron, divider, and rows use that palette. |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Sentence colors follow the theme in both appearances. |
+| Authorization sequence phone, code, sign-up, password, recovery, email, splash, and reset nodes | Same palette, focus border, wrapping titles. |
+| `submodules/AuthorizationUI/Tests/TellomiLoginFieldColorsTests.swift` | AA pairs for both appearances, and the old pairs still fail. |
+| `.github/workflows/login-auth-ui.yml` | Pull-request host test and unsigned simulator compile. No TestFlight. |

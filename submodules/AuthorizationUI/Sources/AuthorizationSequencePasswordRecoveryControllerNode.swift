@@ -38,11 +38,13 @@ final class AuthorizationSequencePasswordRecoveryControllerNode: ASDisplayNode, 
         self.titleNode = ASTextNode()
         self.titleNode.isUserInteractionEnabled = false
         self.titleNode.displaysAsynchronously = false
-        self.titleNode.attributedText = NSAttributedString(string: strings.TwoStepAuth_RecoveryTitle, font: Font.light(30.0), textColor: self.theme.list.itemPrimaryTextColor)
+        self.titleNode.attributedText = NSAttributedString(string: strings.TwoStepAuth_RecoveryTitle, font: TellomiLoginChrome.scaledFont(size: 30.0, weight: .light), textColor: self.theme.list.itemPrimaryTextColor)
+        self.titleNode.maximumNumberOfLines = 0
         
         self.noticeNode = ASTextNode()
         self.noticeNode.isUserInteractionEnabled = false
         self.noticeNode.displaysAsynchronously = false
+        self.noticeNode.maximumNumberOfLines = 0
         self.noticeNode.attributedText = NSAttributedString(string: strings.TwoStepAuth_RecoveryCodeHelp, font: Font.regular(17.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.noticeNode.lineSpacing = 0.1
         
@@ -51,17 +53,17 @@ final class AuthorizationSequencePasswordRecoveryControllerNode: ASDisplayNode, 
         
         self.codeSeparatorNode = ASDisplayNode()
         self.codeSeparatorNode.isLayerBacked = true
-        self.codeSeparatorNode.backgroundColor = self.theme.list.itemPlainSeparatorColor
+        self.codeSeparatorNode.backgroundColor = TellomiLoginChrome.palette(theme: theme).fieldBorder
         
         self.codeField = TextFieldNode()
         self.codeField.textField.font = Font.regular(20.0)
-        self.codeField.textField.textColor = self.theme.list.itemPrimaryTextColor
+        self.codeField.textField.textColor = TellomiLoginChrome.palette(theme: theme).fieldText
         self.codeField.textField.textAlignment = .center
-        self.codeField.textField.attributedPlaceholder = NSAttributedString(string: self.strings.TwoStepAuth_RecoveryCode, font: Font.regular(20.0), textColor: self.theme.list.itemPlaceholderTextColor)
+        self.codeField.textField.attributedPlaceholder = NSAttributedString(string: self.strings.TwoStepAuth_RecoveryCode, font: Font.regular(20.0), textColor: TellomiLoginChrome.palette(theme: theme).placeholder)
         self.codeField.textField.returnKeyType = .done
         self.codeField.textField.keyboardAppearance = self.theme.rootController.keyboardColor.keyboardAppearance
         self.codeField.textField.disableAutomaticKeyboardHandling = [.forward, .backward]
-        self.codeField.textField.tintColor = self.theme.list.itemAccentColor
+        self.codeField.textField.tintColor = TellomiLoginChrome.palette(theme: theme).accent
         
         super.init()
         
@@ -83,7 +85,7 @@ final class AuthorizationSequencePasswordRecoveryControllerNode: ASDisplayNode, 
     }
     
     func updateData(emailPattern: String) {
-        self.noAccessNode.setAttributedTitle(NSAttributedString(string: self.strings.TwoStepAuth_RecoveryEmailUnavailable(emailPattern).string, font: Font.regular(16.0), textColor: self.theme.list.itemAccentColor, paragraphAlignment: .center), for: [])
+        self.noAccessNode.setAttributedTitle(NSAttributedString(string: self.strings.TwoStepAuth_RecoveryEmailUnavailable(emailPattern).string, font: Font.regular(16.0), textColor: TellomiLoginChrome.palette(theme: theme).link, paragraphAlignment: .center), for: [])
     }
     
     func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
