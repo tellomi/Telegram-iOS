@@ -448,31 +448,9 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             })
         }
         
-        let translationConfiguration = TranslationConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
-        var translateButtonAvailable = false
-        var chatTranslationAvailable = false
-        
-        switch translationConfiguration.manual {
-        case .enabled, .alternative:
-            translateButtonAvailable = true
-        case .system:
-            if #available(iOS 18.0, *) {
-                translateButtonAvailable = true
-            }
-        default:
-            break
-        }
-        
-        switch translationConfiguration.auto {
-        case .enabled:
-            chatTranslationAvailable = true
-        case .system:
-            if #available(iOS 18.0, *) {
-                chatTranslationAvailable = true
-            }
-        default:
-            break
-        }
+        let translationValue = context.currentAppConfiguration.with { $0.data?[TellomiFeatureGate.translateKey] }
+        let translateButtonAvailable = tellomiSelfHostedTranslationEnabled(explicitlyDisabled: tellomiTranslationDisabledValue(translationValue))
+        let chatTranslationAvailable = translateButtonAvailable
         
         let previousState = Atomic<LocalizationListState?>(value: nil)
         let previousEntriesHolder = Atomic<([LanguageListEntry], PresentationTheme, PresentationStrings)?>(value: nil)
@@ -485,13 +463,11 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             self.applyingCode.get(),
             revealedCode.get(),
             self.isEditing.get()
-        ).start(next: { [weak self] localizationListState, peer, sharedData, presentationData, applyingCode, revealedCode, isEditing in
+        ).start(next: { [weak self] localizationListState, _, sharedData, presentationData, applyingCode, revealedCode, isEditing in
             guard let strongSelf = self else {
                 return
             }
             
-            let isPremium = peer?.isPremium ?? false
-                        
             var entries: [LanguageListEntry] = []
             var activeLanguageCode: String?
             if let localizationSettings = sharedData.entries[SharedDataKeys.localizationSettings]?.get(LocalizationSettings.self) {
@@ -504,7 +480,7 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             var ignoredLanguages: [String] = []
             if let translationSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.translationSettings]?.get(TranslationSettings.self) {
                 showTranslate = translationSettings.showTranslate
-                translateChats = isPremium ? translationSettings.translateChats : false
+                translateChats = translationSettings.translateChats
                 if let languages = translationSettings.ignoredLanguages {
                     ignoredLanguages = languages
                 } else {
@@ -525,7 +501,7 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                     }
                 }
             } else {
-                translateChats = isPremium
+                translateChats = translateButtonAvailable
                 if let activeLanguage = activeLanguageCode, supportedTranslationLanguages.contains(activeLanguage) {
                     ignoredLanguages = [activeLanguage]
                 }
@@ -546,7 +522,7 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                         entries.append(.translate(text: presentationData.strings.Localization_ShowTranslate, value: showTranslate))
                     }
                     if chatTranslationAvailable {
-                        entries.append(.translateEntire(text: presentationData.strings.Localization_TranslateEntireChat, value: translateChats, locked: !isPremium))
+                        entries.append(.translateEntire(text: presentationData.strings.Localization_TranslateEntireChat, value: translateChats, locked: false))
                     }
                     
                     var value = ""
@@ -606,6 +582,16 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                 }
                 tellomiAppendBuiltinInterfaceLanguages(&entries, existingIds: &existingIds, activeLanguageCode: activeLanguageCode, applyingCode: applyingCode, revealedCode: revealedCode)
             } else {
+                if translateButtonAvailable || chatTranslationAvailable {
+                    entries.append(.translateTitle(text: presentationData.strings.Localization_TranslateMessages.uppercased()))
+                    if translateButtonAvailable {
+                        entries.append(.translate(text: presentationData.strings.Localization_ShowTranslate, value: showTranslate))
+                    }
+                    if chatTranslationAvailable {
+                        entries.append(.translateEntire(text: presentationData.strings.Localization_TranslateEntireChat, value: translateChats, locked: false))
+                    }
+                    entries.append(.doNotTranslate(text: presentationData.strings.Localization_DoNotTranslate, value: ""))
+                }
                 entries.append(.localizationTitle(text: presentationData.strings.Localization_InterfaceLanguage.uppercased(), section: LanguageListSection.official.rawValue))
                 tellomiAppendBuiltinInterfaceLanguages(&entries, existingIds: &existingIds, activeLanguageCode: activeLanguageCode, applyingCode: applyingCode, revealedCode: revealedCode)
             }

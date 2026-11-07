@@ -79,6 +79,17 @@ swift_test(
 )
 
 swift_test(
+    name = "TellomiNativeBatchTests",
+    srcs = [
+        "Sources/Tellomi/TellomiNativeBatch.swift",
+        "Tests/TellomiNativeBatchTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
+    ],
+)
+
+swift_test(
     name = "TellomiSignUpAvatarTests",
     srcs = [
         "Sources/Tellomi/TellomiSignUpAvatar.swift",
