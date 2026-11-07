@@ -312,7 +312,7 @@ final class ChatTranslationPanelNode: ASDisplayNode {
                         selectedLanguages.insert(language)
                     }
                 }
-                for code in supportedTranslationLanguages {
+                for code in supportedTranslationLanguages where tellomiTranslationTargetAccepted(code) {
                     if selectedLanguages.contains(code) {
                         topLanguages.append(code)
                     }
@@ -336,7 +336,7 @@ final class ChatTranslationPanelNode: ASDisplayNode {
                     }
                 }
                 
-                for code in supportedTranslationLanguages {
+                for code in supportedTranslationLanguages where tellomiTranslationTargetAccepted(code) {
                     if !addedLanguages.contains(code) {
                         let displayTitle = languageLocale.localizedString(forLanguageCode: code) ?? ""
                         let value = (code, displayTitle)
