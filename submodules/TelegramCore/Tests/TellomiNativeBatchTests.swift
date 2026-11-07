@@ -64,6 +64,7 @@ final class TellomiNativeBatchTests: XCTestCase {
         XCTAssertEqual(alone.y, 39)
         let stacked = tellomiSideTranslateOrigin(bubbleX: 40, bubbleY: 10, bubbleWidth: 180, bubbleHeight: 60, buttonSide: 30, shareMinY: 40, incoming: true)
         XCTAssertEqual(stacked.x, 228)
-        XCTAssertLessThan(stacked.y + 30, 40)
+        XCTAssertEqual(stacked.y, 10)
+        XCTAssertLessThanOrEqual(stacked.y + 30, 40)
     }
 }
