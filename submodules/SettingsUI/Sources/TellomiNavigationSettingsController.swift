@@ -12,11 +12,13 @@ private final class TellomiNavigationSettingsArguments {
     let toggleFeed: (Bool) -> Void
     let toggleCalls: (Bool) -> Void
     let toggleContacts: (Bool) -> Void
+    let toggleHideTitles: (Bool) -> Void
 
-    init(toggleFeed: @escaping (Bool) -> Void, toggleCalls: @escaping (Bool) -> Void, toggleContacts: @escaping (Bool) -> Void) {
+    init(toggleFeed: @escaping (Bool) -> Void, toggleCalls: @escaping (Bool) -> Void, toggleContacts: @escaping (Bool) -> Void, toggleHideTitles: @escaping (Bool) -> Void) {
         self.toggleFeed = toggleFeed
         self.toggleCalls = toggleCalls
         self.toggleContacts = toggleContacts
+        self.toggleHideTitles = toggleHideTitles
     }
 }
 
@@ -26,6 +28,7 @@ private enum TellomiNavigationSettingsEntry: ItemListNodeEntry {
     case calls(String, Bool)
     case contacts(String, Bool)
     case settings(String)
+    case hideTitles(String, Bool)
     case footer(String)
 
     var section: ItemListSectionId {
@@ -44,8 +47,10 @@ private enum TellomiNavigationSettingsEntry: ItemListNodeEntry {
             return 3
         case .settings:
             return 4
-        case .footer:
+        case .hideTitles:
             return 5
+        case .footer:
+            return 6
         }
     }
 
@@ -69,6 +74,10 @@ private enum TellomiNavigationSettingsEntry: ItemListNodeEntry {
             }
         case let .settings(text):
             if case let .settings(rhsText) = rhs, text == rhsText {
+                return true
+            }
+        case let .hideTitles(text, value):
+            if case let .hideTitles(rhsText, rhsValue) = rhs, text == rhsText, value == rhsValue {
                 return true
             }
         case let .footer(text):
@@ -104,6 +113,10 @@ private enum TellomiNavigationSettingsEntry: ItemListNodeEntry {
         case let .settings(title):
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: true, enableInteractiveChanges: false, enabled: false, sectionId: self.section, style: .blocks, updated: { _ in
             })
+        case let .hideTitles(title, value):
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { updated in
+                arguments.toggleHideTitles(updated)
+            })
         case let .footer(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         }
@@ -118,8 +131,16 @@ private func tellomiNavigationSettingsEntries(presentationData: PresentationData
         .calls(presentationData.strings.Calls_TabTitle, calls.showTab),
         .contacts(presentationData.strings.Contacts_Title, tabs.showContactsTab),
         .settings(presentationData.strings.Settings_Title),
+        .hideTitles(tellomiHideTabTitlesTitle(languageCode: presentationData.strings.primaryComponent.languageCode), tabs.hideTabTitles),
         .footer(copy.navigationFooter)
     ]
+}
+
+private func tellomiHideTabTitlesTitle(languageCode: String) -> String {
+    if languageCode.lowercased().hasPrefix("zh") {
+        return "隐藏底栏文字"
+    }
+    return "Hide Tab Labels"
 }
 
 public func tellomiNavigationSettingsController(context: AccountContext) -> ViewController {
@@ -134,6 +155,10 @@ public func tellomiNavigationSettingsController(context: AccountContext) -> View
     }, toggleContacts: { value in
         let _ = updateTellomiTabSettingsInteractively(accountManager: context.sharedContext.accountManager, { settings in
             return settings.withUpdatedShowContactsTab(value)
+        }).start()
+    }, toggleHideTitles: { value in
+        let _ = updateTellomiTabSettingsInteractively(accountManager: context.sharedContext.accountManager, { settings in
+            return settings.withUpdatedHideTabTitles(value)
         }).start()
     })
 

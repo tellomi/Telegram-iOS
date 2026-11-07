@@ -9,6 +9,7 @@ import SwiftSignalKit
 import TellomiFeedScreen
 import TelegramCore
 import TelegramUIPreferences
+import TabBarUI
 import UIKit
 
 private var tellomiFeedScreenKey: UInt8 = 0
@@ -76,6 +77,7 @@ func tellomiStartTabObservation(context: AccountContext, rootController: Telegra
             return
         }
         tellomiRememberTabVisibility(settings)
+        (rootController.rootTabController as? TabBarControllerImpl)?.tellomiHidesTabTitles = settings.hideTabTitles
         rootController.updateRootControllers(showCallsTab: showCallsTab(), showNewsTab: showNewsTab())
     })
     objc_setAssociatedObject(rootController, &tellomiTabObservationKey, TellomiTabObservationBox(disposable), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)

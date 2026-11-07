@@ -1,6 +1,6 @@
 # Full Bazel build of //Telegram:Telegram, including the share and notification
 # extensions. Same release_arm64 steps as TestFlight, without the upload.
-# It runs only for the tab-bar metrics pull request.
+# It runs only for the latest integration compile.
 
 name: App compile
 
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   app:
-    if: github.head_ref == 'cursor/tab-bar-metrics-a9df'
+    if: github.head_ref == 'cursor/integrate-latest-a9df'
     runs-on: xcode-27
     timeout-minutes: 360
     env:
