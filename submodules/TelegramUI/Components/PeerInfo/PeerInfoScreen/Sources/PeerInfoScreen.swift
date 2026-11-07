@@ -130,6 +130,10 @@ public enum PeerInfoAvatarEditingMode {
     case fallback
 }
 
+private final class TellomiShownMeTabAvatar {
+    var image: (UIImage, UIImage)?
+}
+
 enum PeerInfoBotCommand {
     case settings
     case help
@@ -6783,10 +6787,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
                     let size = CGSize(width: 31.0, height: 31.0)
                     let inset: CGFloat = 3.0
                     if let signal = peerAvatarImage(account: primary.0, peerReference: PeerReference(primary.1), authorOfMessage: nil, representation: primary.1.profileImageRepresentations.first, displayDimensions: size, inset: 3.0, emptyColor: nil, synchronousLoad: false) {
-                        final class ShownAvatar {
-                            var image: (UIImage, UIImage)?
-                        }
-                        let shown = ShownAvatar()
+                        let shown = TellomiShownMeTabAvatar()
                         return signal
                         |> map { imageVersions -> (UIImage, UIImage)? in
                             let incoming: (UIImage, UIImage)?
