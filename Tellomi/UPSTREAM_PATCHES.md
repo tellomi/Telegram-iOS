@@ -1095,3 +1095,21 @@ A failure or an empty completion closes the progress, stops a video export, and 
 | `.github/workflows/pr-tests.yml` | Host tests that the pull request declares, plus the tab-bar simulator test. |
 | `submodules/TelegramUI/Components/TabBarLayout/BUILD` | Simulator pin is iPhone 17 / iOS 27.0. |
 | `submodules/TellomiWallpapers/Tests/TellomiWallpapersTests.swift` | Compare names and colors separately. A tuple array does not satisfy `XCTAssertEqual` on Xcode 27.1. |
+
+## Secret view and a per-chat PIN
+
+The chat list long-press menu adds 秘密查看 and 设置密码. The default bar and the navigation switches are unchanged.
+
+Secret view opens that chat without `messages.readHistory`, `channels.readHistory`, `readMessageContents`, `readMentions`, or `readReactions`. It does not clear the unread count. It does not send typing, sticker, or recording activity. While it is open, that account's online presence stays off, including the foreground refresh. Leaving the chat ends the session and restores presence only for the primary account. A banner reads 秘密查看中. The unread badge is still there because the read index is not applied.
+
+The chat PIN is 4 to 8 digits. The stored value is a salted SHA-256 in the app data-protection keychain (`kSecUseDataProtectionKeychain`, service `app.tellomi.chat.chat-lock`), not the macOS login keychain and not the server. Face ID or Touch ID is optional and does not replace the PIN. A lock is per account and per chat. List rows, search rows that use the same preview, notification text, and the external share text become 已锁定. Opening asks for the PIN first. Forgetting the PIN does not unlock the chat and does not contact the server. If the existing app passcode is on, that passcode can authorize a new chat PIN. Otherwise the chat stays locked.
+
+| File | Change |
+| --- | --- |
+| `TellomiChatPrivacy.swift` | The reports a secret view blocks, the salted PIN, and the per-account lock directory. |
+| `TellomiChatLockKeychain.swift` | Data-protection keychain load, save, and remove. |
+| `TellomiChatLockPrompt.swift` | Set, change, remove, unlock, biometrics, and the forgot-password alert. |
+| `ChatContextMenus.swift` | The two long-press actions. |
+| `ChatController.swift`, `NavigateToChatController.swift`, `ChatHistoryListNode.swift` | Secret view stays unread and shows the banner. A locked chat asks for the PIN before it opens. |
+| `SharedWakeupManager.swift` | Online presence stays off during secret view. |
+| `ChatListItemStrings.swift`, `ShareController.swift`, `NotificationService.swift` | Hidden preview text. |
