@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
 
 swift_library(
     name = "ChatMessageInteractiveInstantVideoNode",
@@ -42,5 +42,17 @@ swift_library(
     ],
     visibility = [
         "//visibility:public",
+    ],
+)
+
+# Host test of the round-video transcript decision. It does not link the node.
+swift_test(
+    name = "RoundVideoTranscriptionDecisionTests",
+    srcs = [
+        "Sources/RoundVideoTranscriptionDecision.swift",
+        "Tests/RoundVideoTranscriptionDecisionTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
     ],
 )

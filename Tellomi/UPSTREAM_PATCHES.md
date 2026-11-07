@@ -1095,3 +1095,16 @@ A failure or an empty completion closes the progress, stops a video export, and 
 | `.github/workflows/pr-tests.yml` | Host tests that the pull request declares, plus the tab-bar simulator test. |
 | `submodules/TelegramUI/Components/TabBarLayout/BUILD` | Simulator pin is iPhone 17 / iOS 27.0. |
 | `submodules/TellomiWallpapers/Tests/TellomiWallpapersTests.swift` | Compare names and colors separately. A tuple array does not satisfy `XCTAssertEqual` on Xcode 27.1. |
+
+## Round video transcription
+
+Tapping transcribe on a round video used to treat any stored transcript, including an error or an empty result, as a reason to replace the circle with the file row. That path sets the video node's alpha to zero and `canAttachContent = true`, which stops the player from attaching. With no text to show, the circle stays a blank disc and the duration, mute, time, and button go with it. A later open of the chat repeats that layout.
+
+A non-empty transcript is now the only case that replaces the video. Failure, an empty result, a still-pending request, and cancel leave the circle and its controls in place. The request is not started again by itself. The expanded mask uses the larger of the bubble and the new content size, so the text is not clipped back to the circle.
+
+| File | Change |
+| --- | --- |
+| `RoundVideoTranscriptionDecision.swift` | When the circle stays and when it may be replaced. |
+| `ChatMessageInteractiveInstantVideoNode.swift` | Applies that decision. Cancel stops an in-progress request. A failure restores the video. |
+| `ChatMessageInstantVideoBubbleContentNode.swift` | Expands only when the decision replaces the video. The mask is not stuck on the old circle. |
+| `RoundVideoTranscriptionDecisionTests.swift` | Success, pending, failure, empty, cancel, and no automatic retry. |
