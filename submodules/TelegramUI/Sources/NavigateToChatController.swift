@@ -20,6 +20,7 @@ import SavedMessagesScreen
 import WallpaperGalleryScreen
 import ChatMessageNotificationItem
 import FaceScanScreen
+import TelegramUIPreferences
 
 public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParams) {
     if case let .peer(peer) = params.chatLocation {
@@ -77,6 +78,15 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
         if requiresAgeVerification, let parentController = params.navigationController.viewControllers.last as? ViewController {
             presentAgeVerification(context: params.context, parentController: parentController, completion: {
                 navigateToChatControllerImpl(params.withSkipAgeVerification(true))
+            })
+            return
+        }
+
+        if !params.tellomiChatUnlocked, case let .peer(peer) = params.chatLocation, TellomiChatLockDirectory.shared.isLocked(accountPeerId: params.context.account.peerId.toInt64(), chatPeerId: peer.id.toInt64()) {
+            let language = params.context.sharedContext.currentPresentationData.with { $0 }.strings.primaryComponent.languageCode
+            let host = params.navigationController.view.window?.rootViewController ?? params.navigationController
+            tellomiUnlockChatIfNeeded(context: params.context, host: host, peerId: peer.id, languageCode: language, proceed: {
+                navigateToChatControllerImpl(params.withTellomiChatUnlocked())
             })
             return
         }
@@ -145,7 +155,7 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
         
         var found = false
         var isFirst = true
-        if params.useExisting {
+        if params.useExisting && !params.tellomiSecretView {
             for controller in params.navigationController.viewControllers.reversed() {
                 guard let controller = controller as? ChatControllerImpl else {
                     isFirst = false
@@ -298,7 +308,7 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
                     }
                 }
             } else {
-                controller = ChatControllerImpl(context: params.context, chatLocation: params.chatLocation.asChatLocation, chatLocationContextHolder: params.chatLocationContextHolder, subject: params.subject, botStart: params.botStart, attachBotStart: params.attachBotStart, botAppStart: params.botAppStart, peekData: params.peekData, chatListFilter: params.chatListFilter, chatNavigationStack: params.chatNavigationStack, customChatNavigationStack: params.customChatNavigationStack, showsUnreadChatsBackBadge: params.showsUnreadChatsBackBadge, initialTextInputState: params.updateTextInputState)
+                controller = ChatControllerImpl(context: params.context, chatLocation: params.chatLocation.asChatLocation, chatLocationContextHolder: params.chatLocationContextHolder, subject: params.subject, botStart: params.botStart, attachBotStart: params.attachBotStart, botAppStart: params.botAppStart, peekData: params.peekData, chatListFilter: params.chatListFilter, chatNavigationStack: params.chatNavigationStack, customChatNavigationStack: params.customChatNavigationStack, showsUnreadChatsBackBadge: params.showsUnreadChatsBackBadge, initialTextInputState: params.updateTextInputState, params: params.tellomiSecretView ? ChatControllerParams(tellomiSecretView: true) : nil)
                 
                 if let botAppStart = params.botAppStart, case let .peer(peer) = params.chatLocation {
                     Queue.mainQueue().after(0.1) {

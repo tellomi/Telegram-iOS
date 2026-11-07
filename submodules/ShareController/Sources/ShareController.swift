@@ -1029,11 +1029,16 @@ public final class ShareController: ViewController {
                                 }
                             }
                             
+                            let shareText: String
                             if let restrictedText = restrictedText {
-                                collectableItems.append(CollectableExternalShareItem(url: url, text: restrictedText, author: authorPeerId, timestamp: message.timestamp, mediaReference: nil))
+                                shareText = restrictedText
+                            } else if TellomiChatLockDirectory.shared.isLocked(accountPeerId: accountPeerId.toInt64(), chatPeerId: message.id.peerId.toInt64()) {
+                                shareText = tellomiChatLockConcealedText(languageCode: strongSelf.presentationData.strings.primaryComponent.languageCode)
                             } else {
-                                collectableItems.append(CollectableExternalShareItem(url: url, text: message.text, author: authorPeerId, timestamp: message.timestamp, mediaReference: selectedMedia.flatMap({ AnyMediaReference.message(message: MessageReference(message), media: $0) })))
+                                shareText = message.text
                             }
+                            let shareMedia = (restrictedText != nil || shareText != message.text) ? nil : selectedMedia.flatMap({ AnyMediaReference.message(message: MessageReference(message), media: $0) })
+                            collectableItems.append(CollectableExternalShareItem(url: url, text: shareText, author: authorPeerId, timestamp: message.timestamp, mediaReference: shareMedia))
                         }
                     case .fromExternal:
                         break

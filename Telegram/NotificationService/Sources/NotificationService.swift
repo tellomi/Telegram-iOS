@@ -48,6 +48,8 @@ private func rootPathForBasePath(_ appGroupPath: String) -> String {
     return appGroupPath + "/telegram-data"
 }
 
+private var tellomiChatLockRootPath = ""
+
 private let deviceColorSpace: CGColorSpace = {
     if #available(iOSApplicationExtension 9.3, iOS 9.3, *) {
         if let colorSpace = CGColorSpace(name: CGColorSpace.displayP3) {
@@ -534,6 +536,8 @@ private struct NotificationContent: CustomStringConvertible {
     var senderImage: INImage?
     
     var isLockedMessage: String?
+    var tellomiAccountPeerId: Int64?
+    var tellomiChatPeerId: Int64?
     
     init(isLockedMessage: String?) {
         self.isLockedMessage = isLockedMessage
@@ -558,6 +562,8 @@ private struct NotificationContent: CustomStringConvertible {
     }
 
     mutating func addSenderInfo(mediaBox: MediaBox, accountPeerId: PeerId, peer: Peer, topicTitle: String?, contactIdentifier: String?, isStory: Bool) {
+        self.tellomiAccountPeerId = accountPeerId.toInt64()
+        self.tellomiChatPeerId = peer.id.toInt64()
         if #available(iOS 15.0, *) {
             let image = peerAvatar(mediaBox: mediaBox, accountPeerId: accountPeerId, peer: peer, isStory: isStory)
 
@@ -673,6 +679,9 @@ private struct NotificationContent: CustomStringConvertible {
         if !content.title.isEmpty || !content.subtitle.isEmpty || !content.body.isEmpty {
             if let isLockedMessage = self.isLockedMessage {
                 content.body = isLockedMessage
+            } else if let accountPeerId = self.tellomiAccountPeerId, let chatPeerId = self.tellomiChatPeerId, tellomiChatLockIndexHides(index: tellomiChatLockIndex(at: tellomiChatLockIndexPath(rootPath: tellomiChatLockRootPath)), accountPeerId: accountPeerId, chatPeerId: chatPeerId) {
+                content.body = "新消息"
+                content.subtitle = ""
             }
         }
         
@@ -797,6 +806,7 @@ private final class NotificationServiceHandler {
         }
 
         let rootPath = rootPathForBasePath(appGroupUrl.path)
+        tellomiChatLockRootPath = rootPath
 
         TempBox.initializeShared(basePath: rootPath, processType: "notification", launchSpecificId: Int64.random(in: Int64.min ... Int64.max))
 

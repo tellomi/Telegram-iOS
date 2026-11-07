@@ -2728,7 +2728,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
             guard let strongSelf = self else {
                 return
             }
-            if !canRead || holdsReadsForSender {
+            if !canRead || holdsReadsForSender || TellomiSecretViewSessions.shared.suppressesReports(accountPeerId: strongSelf.context.account.peerId.toInt64(), chatPeerId: messageIndex.id.peerId.toInt64()) {
                 return
             }
             

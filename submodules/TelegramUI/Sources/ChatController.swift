@@ -545,6 +545,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     let preloadAvatarDisposable = MetaDisposable()
     
     let peekData: ChatPeekTimeout?
+    let tellomiSecretView: Bool
+    private let tellomiSecretViewBanner = UILabel()
+    private var tellomiSecretViewRestoresPresence = false
     let peekTimerDisposable = MetaDisposable()
     
     let createVoiceChatDisposable = MetaDisposable()
@@ -693,6 +696,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         self.botAppStart = botAppStart
         self.mode = mode
         self.peekData = peekData
+        self.tellomiSecretView = params?.tellomiSecretView ?? false
         self.currentChatListFilter = chatListFilter
         self.chatNavigationStack = chatNavigationStack
         self.customChatNavigationStack = customChatNavigationStack
@@ -702,6 +706,13 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         self.forcedNavigationBarTheme = params?.forcedNavigationBarTheme
         self.forcedWallpaper = params?.forcedWallpaper
         self.hideTopPanels = params?.hideTopPanels ?? false
+        if params?.tellomiSecretView == true, let peerId = chatLocation.peerId {
+            TellomiSecretViewSessions.shared.begin(accountPeerId: context.account.peerId.toInt64(), chatPeerId: peerId.toInt64())
+            context.account.shouldKeepOnlinePresence.set(.single(false))
+            let _ = (context.sharedContext.activeAccountContexts |> take(1) |> deliverOnMainQueue).start(next: { [weak self] accounts in
+                self?.tellomiSecretViewRestoresPresence = accounts.primary?.account.id == context.account.id
+            })
+        }
 
         var useSharedAnimationPhase = false
         switch mode {
@@ -6675,7 +6686,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         if let activitySpace = activitySpace {
             self.inputActivityDisposable = (self.typingActivityPromise.get()
             |> deliverOnMainQueue).startStrict(next: { [weak self] value in
-                if let strongSelf = self, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
+                if let strongSelf = self, !strongSelf.tellomiSecretView, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
                     strongSelf.context.account.updateLocalInputActivity(peerId: activitySpace, activity: .typingText, isPresent: value)
                 }
             })
@@ -6689,7 +6700,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 }
             }
             |> deliverOnMainQueue).startStrict(next: { [weak self] value in
-                if let strongSelf = self, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
+                if let strongSelf = self, !strongSelf.tellomiSecretView, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
                     if value {
                         strongSelf.context.account.updateLocalInputActivity(peerId: activitySpace, activity: .typingText, isPresent: false)
                     }
@@ -6699,7 +6710,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             
             self.recordingActivityDisposable = (self.recordingActivityPromise.get()
             |> deliverOnMainQueue).startStrict(next: { [weak self] value in
-                if let strongSelf = self, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
+                if let strongSelf = self, !strongSelf.tellomiSecretView, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
                     strongSelf.acquiredRecordingActivityDisposable?.dispose()
                     switch value {
                         case .voice:
@@ -7012,8 +7023,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             context.sharedContext.applicationBindings.applicationInForeground,
             self.canReadHistory.get(),
             self.hasBrowserOrAppInFront.get()
-        ) |> map { inForeground, globallyEnabled, hasBrowserOrWebAppInFront in
-            return inForeground && globallyEnabled && !hasBrowserOrWebAppInFront
+        ) |> map { [weak self] inForeground, globallyEnabled, hasBrowserOrWebAppInFront in
+            return inForeground && globallyEnabled && !hasBrowserOrWebAppInFront && self?.tellomiSecretView != true
         } |> deliverOnMainQueue).startStrict(next: { [weak self] value in
             if let strongSelf = self, strongSelf.canReadHistoryValue != value {
                 strongSelf.canReadHistoryValue = value
@@ -7085,6 +7096,14 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     }
 
     deinit {
+        if self.tellomiSecretView, let peerId = self.chatLocation.peerId {
+            let accountPeerId = self.context.account.peerId.toInt64()
+            TellomiSecretViewSessions.shared.end(accountPeerId: accountPeerId, chatPeerId: peerId.toInt64())
+            if self.tellomiSecretViewRestoresPresence && !TellomiSecretViewSessions.shared.suppressesOnline(accountPeerId: accountPeerId) {
+                let foreground = UIApplication.shared.applicationState == .active
+                self.context.account.shouldKeepOnlinePresence.set(.single(foreground))
+            }
+        }
         let _ = ChatControllerCount.modify { value in
             return value - 1
         }
@@ -8459,6 +8478,20 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         self.suspendNavigationBarLayout = true
         super.containerLayoutUpdated(layout, transition: transition)
+        if self.tellomiSecretView {
+            if self.tellomiSecretViewBanner.superview == nil {
+                self.tellomiSecretViewBanner.backgroundColor = UIColor.black.withAlphaComponent(0.72)
+                self.tellomiSecretViewBanner.textColor = .white
+                self.tellomiSecretViewBanner.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+                self.tellomiSecretViewBanner.textAlignment = .center
+                self.view.addSubview(self.tellomiSecretViewBanner)
+            }
+            let language = self.presentationData.strings.primaryComponent.languageCode
+            self.tellomiSecretViewBanner.text = tellomiSecretViewBannerTitle(languageCode: language)
+            let top = self.navigationLayout(layout: layout).navigationFrame.maxY
+            self.tellomiSecretViewBanner.frame = CGRect(x: 0, y: top, width: layout.size.width, height: 28)
+            self.view.bringSubviewToFront(self.tellomiSecretViewBanner)
+        }
         
         if self.isPreviewingMode, case let .peer(peerId) = self.chatLocation, peerId.namespace == Namespaces.Peer.SecretChat {
             // A previewing controller is hosted by a ContextController, which never calls
