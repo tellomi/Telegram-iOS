@@ -25,6 +25,14 @@ final class PeerInfoNavigationButtonSetsTests: XCTestCase {
         XCTAssertEqual(self.sets({ $0.isSettings = true }).normal, PeerInfoNavigationButtonSet(left: [.qrCode], right: [.search, .edit]))
     }
 
+    func test_meTabProfileOpensSettingsAndKeepsTheProfileButtons() {
+        let tab = self.sets({ $0.isMyProfile = true; $0.tellomiTabRoot = true }).normal
+        XCTAssertEqual(tab.left, [.settings])
+        XCTAssertEqual(tab.right, [.postStory, .edit])
+        XCTAssertEqual(self.sets({ $0.isMyProfile = true }).normal.left, [])
+        XCTAssertEqual(self.sets({ $0.isSettings = true; $0.tellomiTabRoot = true }).normal.left, [.qrCode])
+    }
+
     func test_editing_hasNoPaneSet() {
         let sets = self.sets({ $0.isEditing = true; $0.isSettings = true; $0.paneKey = .media })
         XCTAssertEqual(sets.normal, PeerInfoNavigationButtonSet(left: [.cancel], right: [.done]))

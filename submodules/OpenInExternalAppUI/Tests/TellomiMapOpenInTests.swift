@@ -154,4 +154,25 @@ final class TellomiMapOpenInTests: XCTestCase {
         XCTAssertEqual(tellomiBaiduMapURLScheme, "baidumap")
         XCTAssertEqual(tellomiTencentMapURLScheme, "qqmap")
     }
+
+    func testIOS27QueryWindowKeepsTheInstalledMapSchemes() {
+        let shipped = [
+            "instagram", "comgooglemaps-x-callback", "foursquare", "here-location", "yandexmaps",
+            "yandexnavi", "yandextaxi", "yangoride", "comgooglemaps", "youtube",
+            "twitter", "vk", "waze", "googlechrome", "firefox",
+            "touch-http", "yandexbrowser-open-url", "iosamap", "baidumap", "qqmap",
+            "uber", "citymapper", "lyft", "opera-http", "firefox-focus",
+            "ddgQuickLink", "moovit", "alook", "dgis", "microsoft-edge-http",
+            "brave", "onionhttp", "ucbrowser", "dolphin", "instagram-stories",
+            "yangomaps", "vivaldi", "rizogo",
+        ]
+        XCTAssertEqual(tellomiInstalledMapSchemesHiddenFromCanOpenURL(shipped), [])
+        XCTAssertEqual(tellomiSchemesVisibleToCanOpenURL(shipped).count, 25)
+
+        let previous = shipped.filter { !["iosamap", "baidumap", "qqmap"].contains($0) } + ["vimeo", "vine", "coub", "iosamap", "baidumap", "qqmap"]
+        XCTAssertEqual(
+            tellomiInstalledMapSchemesHiddenFromCanOpenURL(previous),
+            ["iosamap", "baidumap", "qqmap"]
+        )
+    }
 }

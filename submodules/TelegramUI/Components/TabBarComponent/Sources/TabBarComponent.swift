@@ -714,7 +714,7 @@ public final class TabBarComponent: Component {
                 availableLength -= barHeight + 8.0
             }
 
-            let dynamicTitlePointSize = tabBarClampedTitlePointSize(dynamicPointSize: UIFontMetrics(forTextStyle: .caption2).scaledValue(for: tabBarTitleBasePointSize, compatibleWith: self.traitCollection))
+            let dynamicTitlePointSize = tabBarUpstreamTitlePointSize
             func measureUnboundWidths(titlePointSize: CGFloat) -> [CGFloat] {
                 var widths: [CGFloat] = []
                 for item in component.items {
@@ -1247,7 +1247,7 @@ private final class ItemComponent: Component {
                         environment: {},
                         containerSize: CGSize(width: 100.0, height: 100.0)
                     )
-                    let iconFrame = CGRect(origin: CGPoint(x: floor((availableSize.width - iconSize.width) * 0.5), y: iconY(regular: 3.0, height: iconSize.height)), size: iconSize)
+                    let iconFrame = tabBarUpstreamIconFrame(itemWidth: availableSize.width, imageSize: iconSize)
                     if let imageIconView = imageIcon.view {
                         if imageIconView.superview == nil {
                             if let badgeView = self.badge?.view {
@@ -1349,12 +1349,12 @@ private final class ItemComponent: Component {
             let titleSize = self.title.update(
                 transition: .immediate,
                 component: AnyComponent(MultilineTextComponent(
-                    text: .plain(NSAttributedString(string: title, font: Font.semibold(component.titlePointSize), textColor: (component.isSelected && component.tintSelectedItem) ? component.theme.rootController.tabBar.selectedTextColor : component.theme.rootController.tabBar.textColor))
+                    text: .plain(NSAttributedString(string: title, font: Font.medium(component.titlePointSize), textColor: (component.isSelected && component.tintSelectedItem) ? component.theme.rootController.tabBar.selectedTextColor : component.theme.rootController.tabBar.textColor))
                 )),
                 environment: {},
                 containerSize: CGSize(width: availableSize.width, height: 100.0)
             )
-            let titleFrame = tabBarTitleFrame(itemSize: availableSize, titleSize: titleSize)
+            let titleFrame = component.showsTitle ? tabBarUpstreamTitleFrame(itemWidth: availableSize.width, titleSize: titleSize) : tabBarTitleFrame(itemSize: availableSize, titleSize: titleSize)
             if let titleView = self.title.view {
                 if titleView.superview == nil {
                     self.contextContainerView.contentView.addSubview(titleView)
