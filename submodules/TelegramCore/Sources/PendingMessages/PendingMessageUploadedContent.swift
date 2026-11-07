@@ -3,6 +3,7 @@ import Postbox
 internal import TelegramApi
 import SwiftSignalKit
 import CryptoUtils
+import TellomiDiscover
 
 enum PendingMessageUploadedContent {
     case text(String)
@@ -173,21 +174,18 @@ func messageContentToUpload(accountPeerId: PeerId, network: Network, postbox: Po
         }
         |> castError(PendingMessageUploadError.self), .text)
     } else if let media = media.first as? TelegramMediaWebpage, case let .Loaded(content) = media.content {
-        return .signal(postbox.transaction { transaction -> PendingMessageUploadedContentResult in
-            var flags: Int32 = 0
-            flags |= 1 << 2
-            if let attribute = attributes.first(where: { $0 is WebpagePreviewMessageAttribute }) as? WebpagePreviewMessageAttribute {
-                if let forceLargeMedia = attribute.forceLargeMedia {
-                    if forceLargeMedia {
-                        flags |= 1 << 0
-                    } else {
-                        flags |= 1 << 1
-                    }
+        var flags: Int32 = 0
+        flags |= 1 << 2
+        if let attribute = attributes.first(where: { $0 is WebpagePreviewMessageAttribute }) as? WebpagePreviewMessageAttribute {
+            if let forceLargeMedia = attribute.forceLargeMedia {
+                if forceLargeMedia {
+                    flags |= 1 << 0
+                } else {
+                    flags |= 1 << 1
                 }
             }
-            return .content(PendingMessageUploadedContentAndReuploadInfo(content: .media(.inputMediaWebPage(.init(flags: flags, url: content.url)), text), reuploadInfo: nil, cacheReferenceKey: nil))
         }
-        |> castError(PendingMessageUploadError.self), .text)
+        return .signal(tellomiWebPageUpload(network: network, postbox: postbox, messageMediaPreuploadManager: messageMediaPreuploadManager, peerId: peerId, content: content, attributes: attributes, text: text, baseFlags: flags), .text)
     } else if let media = media.first, let mediaResult = mediaContentToUpload(accountPeerId: accountPeerId, network: network, postbox: postbox, auxiliaryMethods: auxiliaryMethods, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messageMediaPreuploadManager: messageMediaPreuploadManager, revalidationContext: revalidationContext, forceReupload: forceReupload, isGrouped: isGrouped, passFetchProgress: passFetchProgress, forceNoBigParts: forceNoBigParts, peerId: peerId, media: media, text: text, autoremoveMessageAttribute: autoremoveMessageAttribute, autoclearMessageAttribute: autoclearMessageAttribute, messageId: messageId, attributes: attributes, mediaReference: mediaReference, explicitPartialReference: explicitPartialReference) {
         return .signal(mediaResult, .media)
     } else if peerId.namespace != Namespaces.Peer.SecretChat,
@@ -515,7 +513,7 @@ func mediaContentToUpload(accountPeerId: PeerId, network: Network, postbox: Post
                 }
             }
         }
-        return .single(.content(PendingMessageUploadedContentAndReuploadInfo(content: .media(.inputMediaWebPage(.init(flags: flags, url: content.url)), text), reuploadInfo: nil, cacheReferenceKey: nil)))
+        return tellomiWebPageUpload(network: network, postbox: postbox, messageMediaPreuploadManager: messageMediaPreuploadManager, peerId: peerId, content: content, attributes: attributes, text: text, baseFlags: flags)
     } else {
         return nil
     }
@@ -1726,6 +1724,41 @@ private func uploadedMediaFileContent(network: Network, postbox: Postbox, auxili
                 }
                 return byteUpload
             }
+        }
+    }
+}
+
+private func tellomiInputPhoto(_ image: TelegramMediaImage) -> Api.InputPhoto? {
+    guard let reference = image.reference, case let .cloud(id, accessHash, fileReference) = reference else {
+        return nil
+    }
+    return .inputPhoto(.init(id: id, accessHash: accessHash, fileReference: Buffer(data: fileReference ?? Data())))
+}
+
+private func tellomiInputWebPage(flags: Int32, content: TelegramMediaWebpageLoadedContent, photo: Api.InputPhoto?) -> Api.InputMedia {
+    let client = content.type?.hasPrefix("telegram_") != true && tellomiChatLinkRoute(content.url) == .client
+    let fields = client ? tellomiChatLinkFields(title: content.title, text: content.text, siteName: content.websiteName, hasPhoto: photo != nil) : nil
+    var sendFlags = flags
+    if let fields {
+        sendFlags |= fields.flags
+    }
+    return .inputMediaWebPage(.init(flags: sendFlags, url: content.url, title: fields?.title, description: fields?.text, siteName: fields?.siteName, photo: photo))
+}
+
+private func tellomiWebPageUpload(network: Network, postbox: Postbox, messageMediaPreuploadManager: MessageMediaPreuploadManager, peerId: PeerId, content: TelegramMediaWebpageLoadedContent, attributes: [MessageAttribute], text: String, baseFlags: Int32) -> Signal<PendingMessageUploadedContentResult, PendingMessageUploadError> {
+    let _ = attributes
+    let client = content.type?.hasPrefix("telegram_") != true && tellomiChatLinkRoute(content.url) == .client
+    guard client, let image = content.image, tellomiInputPhoto(image) == nil else {
+        return .single(.content(PendingMessageUploadedContentAndReuploadInfo(content: .media(tellomiInputWebPage(flags: baseFlags, content: content, photo: content.image.flatMap(tellomiInputPhoto)), text), reuploadInfo: nil, cacheReferenceKey: nil)))
+    }
+    return uploadImageToCloud(network: network, postbox: postbox, messageMediaPreuploadManager: messageMediaPreuploadManager, peerId: peerId, image: image)
+    |> map { event -> PendingMessageUploadedContentResult in
+        switch event {
+        case let .progress(value):
+            return .progress(PendingMessageUploadedContentProgress(progress: value))
+        case let .done(media):
+            let photo = (media as? TelegramMediaImage).flatMap(tellomiInputPhoto)
+            return .content(PendingMessageUploadedContentAndReuploadInfo(content: .media(tellomiInputWebPage(flags: baseFlags, content: content, photo: photo), text), reuploadInfo: nil, cacheReferenceKey: nil))
         }
     }
 }
