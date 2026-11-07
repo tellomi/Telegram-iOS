@@ -1032,3 +1032,13 @@ A failure or an empty completion closes the progress, stops a video export, and 
 | `submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift` | `error` and `completed` close the progress and offer one user retry. |
 | `submodules/TelegramUI/Components/MediaEditorScreen/Tests/StickerUploadOutcomeTests.swift` | Those states. |
 | `submodules/TelegramUI/Components/MediaEditorScreen/BUILD` | Host test `StickerUploadOutcomeTests`. |
+
+## Pull request tests
+
+`.github/workflows/pr-tests.yml` runs on pull requests on the standard `xcode-27` runner. It does not run on a master push and does not upload. The tab-bar layout test asks for iPhone 17 on iOS 27.0, which that image has. iOS 26.5 is not installed there.
+
+| File | Change |
+| --- | --- |
+| `.github/workflows/pr-tests.yml` | Host tests that the pull request declares, plus the tab-bar simulator test. |
+| `submodules/TelegramUI/Components/TabBarLayout/BUILD` | Simulator pin is iPhone 17 / iOS 27.0. |
+| `submodules/TellomiWallpapers/Tests/TellomiWallpapersTests.swift` | Compare names and colors separately. A tuple array does not satisfy `XCTAssertEqual` on Xcode 27.1. |
