@@ -191,17 +191,14 @@ public func translateMessageIds(context: AccountContext, messageIds: [EngineMess
             }
         }
         
-        let translationConfiguration = TranslationConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
-        var enableLocalIfPossible = false
-        switch translationConfiguration.auto {
-        case .system:
-            if #available(iOS 18.0, *) {
-                enableLocalIfPossible = true
-            }
-        default:
+        let _ = TranslationConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
+        switch tellomiTranslationRoute(from: fromLang, to: toLang, enabled: true, healthy: true) {
+        case .server:
             break
+        case .refused, .unavailable:
+            return .complete()
         }
-        return context.engine.messages.translateMessages(messageIds: messageIdsToTranslate, fromLang: fromLang, toLang: toLang, enableLocalIfPossible: enableLocalIfPossible)
+        return context.engine.messages.translateMessages(messageIds: messageIdsToTranslate, fromLang: fromLang, toLang: "zh", enableLocalIfPossible: tellomiTranslationAllowsLocalEngine())
         |> `catch` { _ -> Signal<Never, NoError> in
             return .complete()
         }

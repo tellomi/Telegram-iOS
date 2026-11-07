@@ -360,6 +360,8 @@ public final class TabBarComponent: Component {
     public let axis: Axis
     /// Icons without labels, on either axis.
     public let isCompact: Bool
+    /// Hides the labels while keeping the icon layout.
+    public let hideTitles: Bool
     
     public init(
         theme: PresentationTheme,
@@ -371,7 +373,8 @@ public final class TabBarComponent: Component {
         selectedId: AnyHashable?,
         outerInsets: UIEdgeInsets,
         axis: Axis,
-        isCompact: Bool
+        isCompact: Bool,
+        hideTitles: Bool = false
     ) {
         self.theme = theme
         self.tintSelectedItem = tintSelectedItem
@@ -383,6 +386,7 @@ public final class TabBarComponent: Component {
         self.outerInsets = outerInsets
         self.axis = axis
         self.isCompact = isCompact
+        self.hideTitles = hideTitles
     }
     
     public static func ==(lhs: TabBarComponent, rhs: TabBarComponent) -> Bool {
@@ -414,6 +418,9 @@ public final class TabBarComponent: Component {
             return false
         }
         if lhs.isCompact != rhs.isCompact {
+            return false
+        }
+        if lhs.hideTitles != rhs.hideTitles {
             return false
         }
         return true
@@ -731,7 +738,7 @@ public final class TabBarComponent: Component {
                             item: item,
                             theme: component.theme,
                             isSearchActive: false,
-                            showsTitle: true,
+                            showsTitle: !component.hideTitles,
                             isSelected: false,
                             tintSelectedItem: true,
                             isUnconstrained: true,
@@ -798,7 +805,7 @@ public final class TabBarComponent: Component {
                         item: item,
                         theme: component.theme,
                         isSearchActive: search?.isActive == true,
-                        showsTitle: !component.isCompact,
+                        showsTitle: !component.isCompact && !component.hideTitles,
                         isSelected: false,
                         tintSelectedItem: component.tintSelectedItem,
                         isUnconstrained: false,
@@ -813,7 +820,7 @@ public final class TabBarComponent: Component {
                         item: item,
                         theme: component.theme,
                         isSearchActive: search?.isActive == true,
-                        showsTitle: !component.isCompact,
+                        showsTitle: !component.isCompact && !component.hideTitles,
                         isSelected: true,
                         tintSelectedItem: component.tintSelectedItem,
                         isUnconstrained: false,

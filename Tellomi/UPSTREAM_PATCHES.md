@@ -686,6 +686,23 @@ A builtin reaction was drawn at twice the 20×20 slot, and the layer was not cli
 | `WebpagePreview.swift` | External links skip `getWebPagePreview`. |
 | `PendingMessageUploadedContent.swift` | Sends the client fields and the uploaded photo. |
 
+## Native translation, dictation, and tab labels
+
+Translation stays on the native language screen: Show Translate, Translate Entire Chat, and Do Not Translate. The only pair is English to Chinese, through `messages.translateText` and `messages.translateRichMessage`. Apple Translation, the Google fallback, Bailian, and Telegram's hosted path are not called. A missing `tellomi_translate_enabled` leaves the feature on. `disabled` turns it off. An unhealthy dependency is `TellomiTranslationRoute.unavailable` and the prompt is 翻译服务暂不可用.
+
+Dictation text, when a transcript exists and the service is healthy, is inserted into the draft. It does not send a voice message. The voice-message button is unchanged. The draft transcription RPC is not in `swift_scheme.tl` yet; this client does not invent one.
+
+The navigation screen gains 隐藏底栏文字. It hides labels and keeps the icons, the default 发现 / 聊天 / 我 order, and the existing switches.
+
+`PHONE_NUMBER_FLOOD` is the daily cap of 10 codes. `FLOOD_WAIT` is a short resend wait and is not that cap.
+
+| File | Change |
+| --- | --- |
+| `TellomiNativeBatch.swift` | The translation pair, the flood split, and the draft dictation rule. |
+| `Translate.swift`, `ChatTranslation.swift` | Server-only English to Chinese. |
+| `LocalizationListControllerNode.swift` | The three native rows, without a Premium lock. |
+| `TellomiTabSettings.swift`, `TellomiNavigationSettingsController.swift`, `TabBarComponent.swift` | Hide tab labels. |
+
 ## DC addresses from help.getConfig (M7 / D-33)
 
 `Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
