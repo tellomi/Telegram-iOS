@@ -1019,3 +1019,16 @@ The email code field called `applyField` without the dark flag, so the fill stay
 | `submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift` | Privacy → login email does not start LoginChange for an email-only identity. |
 | `submodules/ChatListUI/Sources/ChatListController.swift` | Skips the setup screen from `getPassword` plus the local peer. Does not dismiss the suggestion. |
 | `submodules/AuthorizationUI/Tests/TellomiLoginFieldColorsTests.swift`, `submodules/TelegramUIPreferences/Tests/TellomiSettingsDecisionsTests.swift` | Contrast and the email-channel decision. |
+
+## Sticker upload failure
+
+Creating a sticker calls `MediaEditorScreen.uploadSticker`. The signal can fail (`UploadStickerError`, including a server 400 from `messages.uploadMedia` or `stickers.createStickerSet`) or complete without a success value. The subscription had no error callback, so the "Uploading…" progress stayed up. teamgram PR 230 describes that server failure. This change does not deploy the server and does not change the upload or create calls.
+
+A failure or an empty completion closes the progress, stops a video export, and shows the existing unknown-error text with Cancel and Retry. Retry starts one new upload when the user taps it. Cancel on the progress still closes that screen and drops the subscription. A failure after cancel does not show the alert and does not count as success. Nothing retries on its own.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/MediaEditorScreen/Sources/StickerUploadOutcome.swift` | Terminal states. Failure is not success and does not retry itself. |
+| `submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift` | `error` and `completed` close the progress and offer one user retry. |
+| `submodules/TelegramUI/Components/MediaEditorScreen/Tests/StickerUploadOutcomeTests.swift` | Those states. |
+| `submodules/TelegramUI/Components/MediaEditorScreen/BUILD` | Host test `StickerUploadOutcomeTests`. |
