@@ -24,7 +24,7 @@ private func roundCorners(diameter: CGFloat) -> UIImage {
 
 final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFieldDelegate {
     private var theme: PresentationTheme
-    private let strings: PresentationStrings
+    private var strings: PresentationStrings
     private let addPhoto: () -> Void
     
     private let titleNode: ASTextNode
@@ -423,6 +423,14 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         }
     }
     
+    func updateStrings(_ strings: PresentationStrings) {
+        self.strings = strings
+        self.tellomiAgreement.refreshLanguage(languageCode: tellomiInterfaceLanguageCode(strings))
+        if let (layout, navigationHeight) = self.layoutArguments {
+            self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: .immediate)
+        }
+    }
+
     func applyPresentationTheme(_ theme: PresentationTheme) {
         self.theme = theme
         let palette = TellomiLoginChrome.palette(theme: theme)

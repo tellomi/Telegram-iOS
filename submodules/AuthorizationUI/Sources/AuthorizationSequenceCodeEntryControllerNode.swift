@@ -1188,8 +1188,8 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         }
         let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let timeout = self.currentTimeoutTime ?? 0
-        let active = timeout <= 0
-        let label = active ? copy.resend : copy.resendCountdown(Int(timeout))
+        let active = !self.tellomiResendBlocked && timeout <= 0
+        let label = (active || self.tellomiResendBlocked) ? copy.resend : copy.resendCountdown(Int(timeout))
         let palette = TellomiLoginChrome.palette(theme: self.theme)
         let color = active ? palette.link : palette.secondaryText
         self.nextOptionTitleNode.attributedText = NSAttributedString(string: label, font: TellomiLoginChrome.scaledFont(size: 14.0), textColor: color, paragraphAlignment: .center)
@@ -1487,8 +1487,19 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.requestAnotherOption?()
     }
 
+    private var tellomiResendBlocked = false
+
     var tellomiResendIsActive: Bool {
-        return (self.currentTimeoutTime ?? 0) <= 0
+        return !self.tellomiResendBlocked && (self.currentTimeoutTime ?? 0) <= 0
+    }
+
+    func tellomiBlockFurtherResends() {
+        self.tellomiResendBlocked = true
+        self.countdownDisposable.set(nil)
+        self.currentTimeoutTime = nil
+        if let layoutArguments = self.layoutArguments {
+            self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
+        }
     }
 
     @objc private func missingCodePressed() {

@@ -569,6 +569,10 @@ func tellomiBundledChineseLoginCopy(_ strings: PresentationStrings) -> TellomiLo
 /// login screen showed the English sentence. When the chrome language is Chinese and the
 /// text is still that English sentence, use the bundled translation. A pack that is already
 /// Chinese is left as it is.
+func tellomiLoginCodeFloodText(_ strings: PresentationStrings) -> String {
+    return tellomiCodeFloodSentence(languageCode: tellomiInterfaceLanguageCode(strings))
+}
+
 func tellomiLocalizedServerAlert(_ text: String, strings: PresentationStrings) -> String {
     let script = tellomiLoginScript(languageCode: tellomiInterfaceLanguageCode(strings))
     guard script != .english else {
@@ -589,7 +593,7 @@ func tellomiLocalizedServerAlert(_ text: String, strings: PresentationStrings) -
             bind(live, hans, hant)
         }
     }
-    row(english.Login_CodeFloodError, strings.Login_CodeFloodError, "尝试次数过多，请稍后再试。", "嘗試次數過多，請稍後再試。")
+    row(english.Login_CodeFloodError, strings.Login_CodeFloodError, "今天的验证码发送次数已达上限（每天最多 10 条），请明天再试。", "今天的驗證碼發送次數已達上限（每天最多 10 條），請明天再試。")
     row(english.Login_InvalidPhoneError, strings.Login_InvalidPhoneError, "手机号码无效，请重试。", "手機號碼無效，請重試。")
     row(english.Login_PhoneFloodError, strings.Login_PhoneFloodError, "抱歉，你最近删除并重建账号的次数过多。请等待几天后再重新注册。", "抱歉，你最近刪除並重建帳號的次數過多。請等待幾天後再重新註冊。")
     row(english.Login_ErrorAppOutdated, strings.Login_ErrorAppOutdated, "请将 Tellomi 更新到最新版本后再登录。", "請將 Tellomi 更新到最新版本後再登入。")

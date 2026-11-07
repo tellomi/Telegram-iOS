@@ -146,24 +146,28 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             let checked = tellomiLanguageCodesMatch(info.languageCode, current)
             let code = info.languageCode
             rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
-                guard let self, !checked else {
+                guard let self, let plan = tellomiLanguageApplyPlan(selectedCode: code, currentCode: current) else {
                     return
                 }
-                guard let account = self.account else {
+                let code = plan.code
+                if let account = self.account {
+                    tellomiStartInterfaceLanguageDownload(account: account, accountManager: self.sharedContext.accountManager, languageCode: code, disposable: self.tellomiLanguageDownloadDisposable, applied: { [weak self] strings in
+                        guard let self else {
+                            return
+                        }
+                        self.presentationData = self.presentationData.withStrings(strings)
+                        if self.isNodeLoaded {
+                            self.controllerNode.updateStrings(strings)
+                        }
+                        self.refreshTellomiLanguage()
+                    })
+                } else {
                     tellomiRememberInterfaceLanguage(code)
-                    self.refreshTellomiLanguage()
-                    return
                 }
-                tellomiStartInterfaceLanguageDownload(account: account, accountManager: self.sharedContext.accountManager, languageCode: code, disposable: self.tellomiLanguageDownloadDisposable, applied: { [weak self] strings in
-                    guard let self else {
-                        return
-                    }
-                    self.presentationData = self.presentationData.withStrings(strings)
-                    if self.isNodeLoaded {
-                        self.controllerNode.updateStrings(strings)
-                    }
-                    self.refreshTellomiLanguage()
-                })
+                if self.isNodeLoaded {
+                    self.controllerNode.updateStrings(self.presentationData.strings)
+                }
+                self.refreshTellomiLanguage()
             }))
         }
         let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.presentationData.theme.overallDarkAppearance)
@@ -214,6 +218,11 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         if !self.controllerNode.popTellomiSurface() {
             self.back()
         }
+    }
+
+    private func presentTellomiUnsupportedCallingCode() {
+        let text = TellomiCallingCodePolicy.message(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
+        self.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
     }
 
     private func presentTellomiAgreementPrompt() {
@@ -320,6 +329,10 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
                 let controller = AuthorizationSequenceCountrySelectionController(strings: strongSelf.presentationData.strings, theme: strongSelf.presentationData.theme, glass: true, localization: AuthorizationCountryListLocalization(locale: tellomiCountryLocale(languageCode: languageCode), title: countryChrome.title, searchPlaceholder: countryChrome.search), focusSearchOnAppear: false)
                 controller.completeWithCountryCode = { code, name in
                     if let strongSelf = self, let currentData = strongSelf.currentData {
+                        guard TellomiCallingCodePolicy.allows(Int32(code)) else {
+                            strongSelf.presentTellomiUnsupportedCallingCode()
+                            return
+                        }
                         strongSelf.updateData(countryCode: Int32(code), countryName: name, number: currentData.2)
                         strongSelf.controllerNode.activateInput()
                     }
@@ -335,6 +348,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
         self.controllerNode.tellomiOpenUrl = { [weak self] url in
             self?.tellomiPresentLegalURL(url)
+        }
+        self.controllerNode.tellomiUnsupportedCallingCode = { [weak self] in
+            self?.presentTellomiUnsupportedCallingCode()
         }
         self.controllerNode.tellomiSurfaceChanged = { [weak self] in
             self?.updateNavigationItems()

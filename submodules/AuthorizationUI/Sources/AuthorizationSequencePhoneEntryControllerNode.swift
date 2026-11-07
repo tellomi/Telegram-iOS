@@ -66,6 +66,8 @@ private final class PhoneAndCountryNode: ASDisplayNode {
     private var tellomiCompact = false
     private var tellomiPlaceholder = ""
     private var tellomiFocusHooked = false
+    private var tellomiRestoringCallingCode = false
+    var tellomiUnsupportedCallingCode: (() -> Void)?
     
     init(strings: PresentationStrings, theme: PresentationTheme) {
         self.strings = strings
@@ -203,6 +205,13 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         
         self.phoneInputNode.countryCodeUpdated = { [weak self] code, name in
             if let strongSelf = self {
+                if strongSelf.tellomiCompact, !strongSelf.tellomiRestoringCallingCode, let numeric = Int32(code), !TellomiCallingCodePolicy.allows(numeric) {
+                    strongSelf.tellomiRestoringCallingCode = true
+                    strongSelf.phoneInputNode.number = "+86"
+                    strongSelf.tellomiRestoringCallingCode = false
+                    strongSelf.tellomiUnsupportedCallingCode?()
+                    return
+                }
                 if let name = name {
                     strongSelf.preferredCountryIdForCode[code] = name
                 }
@@ -692,6 +701,14 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private let agreementRow: TellomiAgreementRow?
     let tellomiAgreement = TellomiSignUpAgreement()
     var tellomiOpenUrl: ((String) -> Void)?
+    var tellomiUnsupportedCallingCode: (() -> Void)? {
+        get {
+            return self.phoneAndCountryNode.tellomiUnsupportedCallingCode
+        }
+        set {
+            self.phoneAndCountryNode.tellomiUnsupportedCallingCode = newValue
+        }
+    }
     var tellomiSurfaceChanged: (() -> Void)?
     private let proceedNode: SolidRoundedButtonNode
     private(set) var tellomiSurface: TellomiLoginSurface = .phoneCode

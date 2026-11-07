@@ -272,7 +272,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
             }
         }
         |> `catch` { error -> Signal<(SendCodeResult, UnauthorizedAccount), AuthorizationCodeRequestError> in
-            if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+            if error.errorDescription.hasPrefix("FLOOD_WAIT") || error.errorDescription == "PHONE_CODE_FLOOD" {
                 return .fail(.limitExceeded)
             } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
                 return .fail(.invalidPhoneNumber)
@@ -461,7 +461,7 @@ private func internalResendAuthorizationCode(accountManager: AccountManager<Tele
     
     return account.network.request(Api.functions.auth.resendCode(flags: flags, phoneNumber: number, phoneCodeHash: hash, reason: mappedReason), automaticFloodWait: false)
     |> mapError { error -> AuthorizationCodeRequestError in
-        if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+        if error.errorDescription.hasPrefix("FLOOD_WAIT") || error.errorDescription == "PHONE_CODE_FLOOD" {
             return .limitExceeded
         } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
             return .invalidPhoneNumber
@@ -592,7 +592,7 @@ public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccou
                     do {
                         return account.network.request(Api.functions.auth.resendCode(flags: 0, phoneNumber: number, phoneCodeHash: hash, reason: nil), automaticFloodWait: false)
                         |> mapError { error -> AuthorizationCodeRequestError in
-                            if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                            if error.errorDescription.hasPrefix("FLOOD_WAIT") || error.errorDescription == "PHONE_CODE_FLOOD" {
                                 return .limitExceeded
                             } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
                                 return .invalidPhoneNumber

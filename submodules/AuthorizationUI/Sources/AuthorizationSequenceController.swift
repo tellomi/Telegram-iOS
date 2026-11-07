@@ -253,7 +253,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 var actions: [TextAlertAction] = []
                                 switch error {
                                     case .limitExceeded:
-                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                        text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .invalidPhoneNumber where emailLogin:
                                         text = emailCopy.invalid
@@ -351,7 +351,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             let text: String
                             switch error {
                             case .limitExceeded:
-                                text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
                             case .generic, .invalidEmailAddress, .codeExpired, .invalidEmailToken, .invalidCode:
                                 text = strongSelf.presentationData.strings.Login_UnknownError
                             }
@@ -445,7 +445,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                              let text: String
                                              switch error {
                                              case .limitExceeded:
-                                                 text = self.presentationData.strings.Login_CodeFloodError
+                                                 text = tellomiLoginCodeFloodText(self.presentationData.strings)
                                              case .generic, .alreadyInProgress:
                                                  text = self.presentationData.strings.Login_UnknownError
                                              case .codeExpired:
@@ -491,7 +491,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         switch error {
                                             case .limitExceeded:
                                                 resetCode = true
-                                                text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                                text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
                                             case .invalidCode:
                                                 resetCode = true
                                                 text = strongSelf.presentationData.strings.Login_InvalidCodeError
@@ -606,7 +606,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         switch error {
                                             case .limitExceeded:
                                                 resetCode = true
-                                                text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                                text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
                                             case .invalidCode:
                                                 resetCode = true
                                                 text = strongSelf.presentationData.strings.Login_InvalidCodeError
@@ -701,6 +701,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     }
     
     private func tellomiResendLoginCode(controller: AuthorizationSequenceCodeEntryController?) {
+        guard controller?.tellomiResendIsActive != false else {
+            return
+        }
         controller?.inProgress = true
         self.actionDisposable.set((self.engine.auth.resendLoginCode(accountManager: self.sharedContext.accountManager, apiId: self.apiId, apiHash: self.apiHash, firebaseSecretStream: self.sharedContext.firebaseSecretStream, attempt: self.tellomiActiveLoginAttempt)
         |> deliverOnMainQueue).startStrict(next: { _ in
@@ -714,7 +717,8 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             let text: String
             switch error {
             case .limitExceeded:
-                text = self.presentationData.strings.Login_CodeFloodError
+                controller.tellomiBlockFurtherResends()
+                text = tellomiLoginCodeFloodText(self.presentationData.strings)
             case .invalidPhoneNumber:
                 text = self.presentationData.strings.Login_InvalidPhoneError
             case .phoneLimitExceeded:
@@ -840,7 +844,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     let text: String
                     switch error {
                         case .limitExceeded:
-                            text = strongSelf.presentationData.strings.Login_CodeFloodError
+                            text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
                         case .generic, .codeExpired:
                             text = strongSelf.presentationData.strings.Login_UnknownError
                         case .timeout:
@@ -908,7 +912,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         let text: String
                         switch error {
                             case .limitExceeded:
-                                text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
                             case .generic, .codeExpired:
                                 text = strongSelf.presentationData.strings.Login_UnknownError
                             case .invalidCode:
@@ -946,7 +950,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 let text: String
                                 switch error {
                                     case .limitExceeded:
-                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                        text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
                                     case .invalidCode:
                                         text = strongSelf.presentationData.strings.Login_InvalidCodeError
                                     case .generic:
@@ -1315,7 +1319,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         var actions = [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]
         switch error {
         case .limitExceeded:
-            text = self.presentationData.strings.Login_CodeFloodError
+            text = tellomiLoginCodeFloodText(self.presentationData.strings)
         case .codeExpired:
             text = self.presentationData.strings.Login_CodeExpiredError
         case .invalidFirstName:
@@ -1413,11 +1417,18 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         }
                         self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                     }
-                case let .phoneEntry(storedCountryCode, number):
-                    // An update keeps the previous unauthorized state. An empty number is still
-                    // the automatic default, so replace a stored +1 with China. A typed number
-                    // keeps the code it was entered with.
-                    let countryCode = number.isEmpty ? AuthorizationSequenceCountrySelectionController.defaultCountryCode() : storedCountryCode
+                case let .phoneEntry(storedCountryCode, storedNumber):
+                    // Only the calling-code whitelist is offered. A stored +1, or any other
+                    // code, opens as China with an empty number.
+                    let countryCode: Int32
+                    let number: String
+                    if storedNumber.isEmpty || !TellomiCallingCodePolicy.allows(storedCountryCode) {
+                        countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+                        number = TellomiCallingCodePolicy.allows(storedCountryCode) ? storedNumber : ""
+                    } else {
+                        countryCode = storedCountryCode
+                        number = storedNumber
+                    }
                     var controllers: [ViewController] = []
                     var previousSplashController: AuthorizationSequenceSplashController?
                     for c in self.viewControllers {

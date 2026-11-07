@@ -72,6 +72,7 @@ jobs:
           set -euo pipefail
           "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_loginui test \
             //submodules/AuthorizationUI:TellomiLoginFieldColorsTests \
+            //submodules/CountrySelectionUI:TellomiCallingCodePolicyTests \
             --test_output=errors --announce_rc
 
       - name: Palette sheets
