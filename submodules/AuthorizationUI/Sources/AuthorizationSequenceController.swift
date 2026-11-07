@@ -1641,6 +1641,8 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 controller.applyPresentationTheme(presentationData)
             } else if let controller = controller as? AuthorizationSequenceSplashController {
                 controller.applyPresentationTheme(presentationData.theme)
+            } else if let controller = controller as? AuthorizationSequenceSignUpController {
+                controller.applyPresentationTheme(presentationData)
             }
         }
     }

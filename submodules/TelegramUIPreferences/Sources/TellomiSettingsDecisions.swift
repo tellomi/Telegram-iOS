@@ -50,6 +50,136 @@ public func tellomiSettingsHomeLayout(includeNavigation: Bool) -> [(TellomiSetti
 
 /// D-39. Phone when there is one, otherwise the email, then `@username`.
 /// The owner's settings card shows the address in full.
+///
+/// `loginEmailPattern` is `account.getPassword.login_email_pattern`. On the pending
+/// teamgram change it is a mask of `users.email` for an email-only account, including
+/// when there is no cloud password. It is not a full address and it is not the
+/// recovery email (`recoveryEmailPattern`). A real phone number keeps the native
+/// login-email screen; the mask must not hide that row.
+public struct TellomiEmailChannels: Equatable {
+    public var phone: String?
+    public var cachedSignInAddress: String?
+    public var loginEmailPattern: String?
+    public var recoveryEmailPattern: String?
+
+    public init(phone: String?, cachedSignInAddress: String?, loginEmailPattern: String?, recoveryEmailPattern: String? = nil) {
+        self.phone = phone
+        self.cachedSignInAddress = cachedSignInAddress
+        self.loginEmailPattern = loginEmailPattern
+        self.recoveryEmailPattern = recoveryEmailPattern
+    }
+}
+
+public enum TellomiSettingsEmailAction: Equatable {
+    /// Email-only identity. Do not open an empty bind form and do not send `account.verifyEmail` for a new address.
+    /// `fullAddress` is nil when the server only sent a mask.
+    case showIdentity(display: String, fullAddress: String?)
+    /// A phone account. The native login-email screen stays available. `pattern` is a label, not a new identity.
+    case phoneAccountLoginEmail(pattern: String?)
+}
+
+public func tellomiLoginEmailPatternIsMask(_ pattern: String) -> Bool {
+    return pattern.trimmingCharacters(in: .whitespacesAndNewlines).contains("***")
+}
+
+private func tellomiSettingsMailbox(_ raw: String?) -> String? {
+    let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard value.count >= 3, value.count <= 254, !value.contains(where: { $0.isWhitespace }) else {
+        return nil
+    }
+    let parts = value.split(separator: "@", omittingEmptySubsequences: false)
+    guard parts.count == 2, !parts[0].isEmpty, parts[0].count <= 64 else {
+        return nil
+    }
+    let domain = parts[1]
+    guard domain.count >= 3, domain.contains("."), !domain.hasPrefix("."), !domain.hasSuffix("."), !domain.contains("..") else {
+        return nil
+    }
+    return value
+}
+
+/// `u***@tellomi.app` matches `User@Tellomi.app` and nothing else.
+public func tellomiEmailMatchesLoginPattern(fullAddress: String, pattern: String) -> Bool {
+    guard let full = tellomiSettingsMailbox(fullAddress)?.lowercased() else {
+        return false
+    }
+    let mask = pattern.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard let fullAt = full.lastIndex(of: "@"), let maskAt = mask.lastIndex(of: "@") else {
+        return false
+    }
+    let fullLocal = full[..<fullAt]
+    let fullDomain = full[full.index(after: fullAt)...]
+    let maskLocal = mask[..<maskAt]
+    let maskDomain = mask[mask.index(after: maskAt)...]
+    guard !fullLocal.isEmpty, fullDomain == maskDomain, !maskDomain.isEmpty else {
+        return false
+    }
+    if !tellomiLoginEmailPatternIsMask(mask) {
+        return tellomiSettingsMailbox(mask) != nil && full == mask
+    }
+    guard maskLocal.hasSuffix("***") else {
+        return false
+    }
+    let prefix = maskLocal.dropLast(3)
+    guard prefix.count == 1, let fullFirst = fullLocal.first, prefix.first == fullFirst else {
+        return false
+    }
+    return true
+}
+
+private func tellomiConfirmedFullAddress(_ full: String?, pattern: String?) -> String? {
+    guard let full else {
+        return nil
+    }
+    guard let pattern, !pattern.isEmpty else {
+        return full
+    }
+    return tellomiEmailMatchesLoginPattern(fullAddress: full, pattern: pattern) ? full : nil
+}
+
+public func tellomiSettingsEmailAction(_ channels: TellomiEmailChannels) -> TellomiSettingsEmailAction {
+    let _ = channels.recoveryEmailPattern
+    let phoneTrim = channels.phone?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let phoneEmail = tellomiSettingsMailbox(phoneTrim)
+    let realPhone = (!phoneTrim.isEmpty && phoneEmail == nil) ? phoneTrim : nil
+    let cache = tellomiSettingsMailbox(channels.cachedSignInAddress)
+    let pattern = channels.loginEmailPattern?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let patternValue = (pattern?.isEmpty == false) ? pattern : nil
+
+    if realPhone != nil {
+        return .phoneAccountLoginEmail(pattern: patternValue)
+    }
+
+    if let phoneEmail {
+        if let patternValue, !tellomiEmailMatchesLoginPattern(fullAddress: phoneEmail, pattern: patternValue) {
+            return .showIdentity(display: patternValue, fullAddress: tellomiLoginEmailPatternIsMask(patternValue) ? nil : tellomiSettingsMailbox(patternValue))
+        }
+        return .showIdentity(display: phoneEmail, fullAddress: phoneEmail)
+    }
+
+    if let patternValue {
+        if let confirmed = tellomiConfirmedFullAddress(cache, pattern: patternValue) {
+            return .showIdentity(display: confirmed, fullAddress: confirmed)
+        }
+        let full = tellomiLoginEmailPatternIsMask(patternValue) ? nil : tellomiSettingsMailbox(patternValue)
+        return .showIdentity(display: patternValue, fullAddress: full)
+    }
+
+    if let cache {
+        return .showIdentity(display: cache, fullAddress: cache)
+    }
+    return .phoneAccountLoginEmail(pattern: nil)
+}
+
+public func tellomiShouldPresentNativeLoginEmailSetup(_ channels: TellomiEmailChannels) -> Bool {
+    switch tellomiSettingsEmailAction(channels) {
+    case .showIdentity:
+        return false
+    case let .phoneAccountLoginEmail(pattern):
+        return pattern == nil
+    }
+}
+
 public func tellomiSettingsIdentityLine(formattedPhone: String?, email: String?, username: String?) -> String {
     var parts: [String] = []
     let phone = formattedPhone?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -188,6 +318,12 @@ public struct TellomiSettingsCopy: Equatable {
     public var about: String
     public var phone: String
     public var email: String
+    /// Phone account with no Tellomi sign-in address. Opens the native login-email screen.
+    public var bindEmail: String
+    /// Shown when the account already signs in with an email. Not a recovery-email change.
+    public var signInEmailTitle: String
+    public var signInEmailBody: String
+    public var signInEmailMaskBody: String
     public var username: String
     public var addAccount: String
     public var logout: String
@@ -242,6 +378,10 @@ public struct TellomiSettingsCopy: Equatable {
             about: text("Tellomi.Settings.About", "About Tellomi", "关于 Tellomi", "關於 Tellomi"),
             phone: text("Tellomi.Settings.Phone", "Phone", "手机号", "手機號碼"),
             email: text("Tellomi.Settings.Email", "Email", "邮箱", "電子郵件"),
+            bindEmail: text("Tellomi.Settings.BindEmail", "Link an email", "绑定邮箱", "綁定電子郵件"),
+            signInEmailTitle: text("Tellomi.Settings.SignInEmailTitle", "Sign-in email", "登录邮箱", "登入電子郵件"),
+            signInEmailBody: text("Tellomi.Settings.SignInEmailBody", "This address already signs in to this account. It is not the cloud-password recovery email, and this screen does not change the account or link another address.", "这是登录这个账号的邮箱，不是云密码的恢复邮箱。这里不会改账号，也不会再要求绑定一次。", "這是登入這個帳號的電子郵件，不是雲端密碼的救援信箱。這裡不會改帳號，也不會再要求綁定一次。"),
+            signInEmailMaskBody: text("Tellomi.Settings.SignInEmailMaskBody", "The server only sent a masked login address. It is not the full address and it is not the cloud-password recovery email. This screen does not change the account.", "服务器只返回了掩码。这不是完整地址，也不是云密码的恢复邮箱。这里不会改账号。", "伺服器只返回了遮罩。這不是完整地址，也不是雲端密碼的救援信箱。這裡不會改帳號。"),
             username: text("Tellomi.Settings.Username", "Username", "用户名", "使用者名稱"),
             addAccount: text("Tellomi.Settings.AddAccount", "Add Account", "添加账号", "新增帳號"),
             logout: text("Tellomi.Settings.Logout", "Log Out", "退出登录", "登出"),

@@ -25,7 +25,7 @@ final class AuthorizationSequenceSignUpController: ViewController {
     private let moreButtonNode: MoreButtonNode
     
     private let sharedContext: SharedAccountContext
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
     private let back: () -> Void
     
     var initialName: (String, String) = ("", "")
@@ -95,6 +95,18 @@ final class AuthorizationSequenceSignUpController: ViewController {
         fatalError("init(coder:) has not been implemented")
     }
     
+    func applyPresentationTheme(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        self.statusBar.statusBarStyle = presentationData.theme.intro.statusBarStyle.style
+        if self.isViewLoaded {
+            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        }
+        self.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), strings: NavigationBarStrings(presentationStrings: presentationData.strings)), transition: .immediate)
+        if self.isNodeLoaded {
+            self.controllerNode.applyPresentationTheme(presentationData.theme)
+        }
+    }
+
     @objc private func cancelPressed() {
         self.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: self.presentationData.strings.Login_CancelSignUpConfirmation, actions: [TextAlertAction(type: .genericAction, title: self.presentationData.strings.Login_CancelPhoneVerificationContinue, action: {
         }), TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Login_CancelPhoneVerificationStop, action: { [weak self] in
