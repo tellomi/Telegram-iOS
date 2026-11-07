@@ -4524,42 +4524,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         
                         let _ = ApplicationSpecificNotice.incrementTranslationSuggestion(accountManager: context.sharedContext.accountManager, timestamp: Int32(Date().timeIntervalSince1970)).startStandalone()
                         
-                        let translationConfiguration = TranslationConfiguration.with(appConfiguration: self.context.currentAppConfiguration.with { $0 })
-                        var useSystemTranslation = false
-                        switch translationConfiguration.manual {
-                        case .system:
-                            if #available(iOS 18.0, *) {
-                                useSystemTranslation = true
-                            }
-                        default:
-                            break
-                        }
-                        
-                        if useSystemTranslation {
-                            presentTranslateScreen(
-                                context: context,
-                                text: text.string,
-                                entities: entities ?? [],
-                                canCopy: canCopy,
-                                fromLanguage: language,
-                                ignoredLanguages: translationSettings.ignoredLanguages,
-                                translateChat: { [weak self] _, toLang in
-                                    self?.interfaceInteraction?.changeTranslationLanguage(toLang)
-                                    self?.interfaceInteraction?.toggleTranslation(.translated)
-                                },
-                                pushController: { [weak self] c in
-                                    self?.effectiveNavigationController?._keepModalDismissProgress = true
-                                    self?.push(c)
-                                },
-                                presentController: { [weak self] c in
-                                    self?.present(c, in: .window(.root))
-                                },
-                                display: { [weak self] c in
-                                    self?.push(c)
-                                }
-                            )
-                        } else {
-                            self.push(await TextProcessingScreen(
+                        self.push(await TextProcessingScreen(
                                 context: self.context,
                                 mode: .translate(fromLanguage: language, applyResult: nil),
                                 inputText: .plain(text: text.string, entities: entities ?? []),
@@ -4582,7 +4547,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                                     self.interfaceInteraction?.toggleTranslation(.translated)
                                 }
                             ))
-                        }
                     }
                 }
                 if let currentContextController = self.currentContextController {
@@ -10292,6 +10256,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             } else {
                 text = self.presentationData.strings.Conversation_HoldForAudioOnly
             }
+        } else if updatedMode == .dictation {
+            text = self.presentationData.strings.baseLanguageCode.lowercased().hasPrefix("zh") ? "按住听写，文字进入草稿" : "Hold to dictate into the draft"
         } else {
             if canSwitch {
                 text = self.presentationData.strings.Conversation_HoldForVideo

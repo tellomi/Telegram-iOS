@@ -676,9 +676,9 @@ A builtin reaction was drawn at twice the 20×20 slot, and the layer was not cli
 
 ## Native translation, dictation, and tab labels
 
-Translation stays on the native language screen: Show Translate, Translate Entire Chat, and Do Not Translate. The only pair is English to Chinese, through `messages.translateText` and `messages.translateRichMessage`. Apple Translation, the Google fallback, Bailian, and Telegram's hosted path are not called. A missing `tellomi_translate_enabled` leaves the feature on. `disabled` turns it off. An unhealthy dependency is `TellomiTranslationRoute.unavailable` and the prompt is 翻译服务暂不可用.
+Translation stays on the native language screen: Show Translate, Translate Entire Chat, and Do Not Translate. The only pair is English to Chinese. `messages.translateText`, `messages.translateRichMessage`, and `messages.composeMessageWithAI` with `translate_to_lang` call the self-hosted service only. Apple Translation, the Google fallback, Bailian, and Telegram's hosted path are not selected. `to_lang` must be `zh`, `zh-cn`, or `zh-hans`; anything else is `TO_LANG_INVALID` before the request. `TRANSLATE_REQ_FAILED` and a compose translation's `AICOMPOSE_TIMEOUT` show 翻译服务暂不可用. The client does not call `/health`. A missing `translations_manual_enabled` or `tellomi_translate_enabled` stays off. `translations_auto_enabled` must be `enabled` before a whole chat translates. Per-chat 不翻译 stays `messages.togglePeerTranslations`. Production `5354817` does not serve this yet, so a missing key leaves translation off.
 
-Dictation text, when a transcript exists and the service is healthy, is inserted into the draft. It does not send a voice message. The voice-message button is unchanged. The draft transcription RPC is not in `swift_scheme.tl` yet; this client does not invent one.
+Dictation is the third position of the existing mic switch (voice, video, dictation). Voice send in the voice position is unchanged. Releasing a dictation recording calls `messages.transcribeDraft#7e11da47` with the in-memory OGG, at most 8 MB, and inserts only the returned text into the draft. It does not call `messages.sendMessage`, `messages.sendMedia`, or `messages.transcribeAudio`, and it does not write the audio into the chat database or object storage. `pending` is ignored. `USER_ID_INVALID`, `MEDIA_EMPTY`, `AUDIO_TOO_LONG`, `TRANSCRIPTION_UNAVAILABLE`, and an unknown method show a prompt; `TRANSCRIPTION_FAILED` shows 听写失败. Production `5354817` does not have this method, so the prompt is 听写服务暂不可用 until the server that includes it is deployed. The next server deploy is also expected to include the round-video protocol fix `bad916ac`; this client does not require those fields while production is still `5354817`.
 
 The navigation screen gains 隐藏底栏文字. It hides labels and keeps the icons, the default 发现 / 聊天 / 我 order, and the existing switches.
 
@@ -686,9 +686,11 @@ The navigation screen gains 隐藏底栏文字. It hides labels and keeps the ic
 
 | File | Change |
 | --- | --- |
-| `TellomiNativeBatch.swift` | The translation pair, the flood split, and the draft dictation rule. |
-| `Translate.swift`, `ChatTranslation.swift` | Server-only English to Chinese. |
-| `LocalizationListControllerNode.swift` | The three native rows, without a Premium lock. |
+| `TellomiNativeBatch.swift` | Health-gated translation flags, the `zh` allow list, and the draft audio checks. |
+| `swift_scheme.tl`, `Transcription.swift` | `messages.transcribeDraft#7e11da47`. |
+| `Translate.swift`, `ChatTranslation.swift` | Server-only English to Chinese. No Apple or alternative path. |
+| `ChatControllerMediaRecording.swift` | Dictation inserts text and leaves voice send alone. |
+| `LocalizationListControllerNode.swift` | The three native rows stay, and a down service says 翻译服务暂不可用. |
 | `TellomiTabSettings.swift`, `TellomiNavigationSettingsController.swift`, `TabBarComponent.swift` | Hide tab labels. |
 
 ## DC addresses from help.getConfig (M7 / D-33)

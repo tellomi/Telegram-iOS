@@ -448,9 +448,8 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             })
         }
         
-        let translationValue = context.currentAppConfiguration.with { $0.data?[TellomiFeatureGate.translateKey] }
-        let translateButtonAvailable = tellomiSelfHostedTranslationEnabled(explicitlyDisabled: tellomiTranslationDisabledValue(translationValue))
-        let chatTranslationAvailable = translateButtonAvailable
+        let translateButtonAvailable = true
+        let chatTranslationAvailable = true
         
         let previousState = Atomic<LocalizationListState?>(value: nil)
         let previousEntriesHolder = Atomic<([LanguageListEntry], PresentationTheme, PresentationStrings)?>(value: nil)
@@ -512,6 +511,11 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                 }
             }
             
+            let appData = context.currentAppConfiguration.with { $0 }.data
+            let manualTranslationAvailable = tellomiManualTranslationAvailable(manual: appData?["translations_manual_enabled"] as? String, flag: appData?[TellomiFeatureGate.translateKey] as Any?)
+            let autoTranslationAvailable = tellomiAutoTranslationAvailable(auto: appData?["translations_auto_enabled"] as? String)
+            let translationServiceInfo = (!manualTranslationAvailable && !autoTranslationAvailable) ? tellomiTranslationUnavailableText(languageCode: presentationData.strings.baseLanguageCode) : nil
+
             if !localizationListState.availableOfficialLocalizations.isEmpty {
                 strongSelf.currentListState = localizationListState
                 
@@ -548,7 +552,9 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                         entries.append(.doNotTranslate(text: presentationData.strings.Localization_DoNotTranslate, value: value))
                     }
                     
-                    if showTranslate {
+                    if let translationServiceInfo {
+                        entries.append(.translateInfo(text: translationServiceInfo))
+                    } else if showTranslate {
                         entries.append(.translateInfo(text: ignoredLanguages.count > 1 ? presentationData.strings.Localization_DoNotTranslateManyInfo : presentationData.strings.Localization_DoNotTranslateInfo))
                     } else {
                         entries.append(.translateInfo(text: presentationData.strings.Localization_ShowTranslateInfoExtended))
@@ -591,6 +597,9 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                         entries.append(.translateEntire(text: presentationData.strings.Localization_TranslateEntireChat, value: translateChats, locked: false))
                     }
                     entries.append(.doNotTranslate(text: presentationData.strings.Localization_DoNotTranslate, value: ""))
+                    if let translationServiceInfo {
+                        entries.append(.translateInfo(text: translationServiceInfo))
+                    }
                 }
                 entries.append(.localizationTitle(text: presentationData.strings.Localization_InterfaceLanguage.uppercased(), section: LanguageListSection.official.rawValue))
                 tellomiAppendBuiltinInterfaceLanguages(&entries, existingIds: &existingIds, activeLanguageCode: activeLanguageCode, applyingCode: applyingCode, revealedCode: revealedCode)

@@ -426,7 +426,7 @@ public final class ChatTextInputMediaRecordingButton: TGModernConversationInputM
         let image: UIImage?
         let theme = self.hidesOnLock ? defaultDarkColorPresentationTheme : self.theme
         switch self.mode {
-            case .audio:
+            case .audio, .dictation:
                 self.icon = PresentationResourcesChat.chatInputPanelVoiceActiveButtonImage(theme)
                 image = PresentationResourcesChat.chatInputPanelVoiceButtonImage(theme)
             case .video:
@@ -446,7 +446,7 @@ public final class ChatTextInputMediaRecordingButton: TGModernConversationInputM
         
         let animationName: String
         switch self.mode {
-            case .audio:
+            case .audio, .dictation:
                 animationName = "anim_videoToMic"
             case .video:
                 animationName = "anim_micToVideo"

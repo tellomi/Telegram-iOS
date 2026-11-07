@@ -3020,6 +3020,8 @@ extension ChatControllerImpl {
                         case .audio:
                             mode = .video
                         case .video:
+                            mode = .dictation
+                        case .dictation:
                             mode = .audio
                     }
                     updatedMode = mode
@@ -4309,6 +4311,11 @@ extension ChatControllerImpl {
             guard let self, let peerId = self.chatLocation.peerId else {
                 return
             }
+            guard tellomiTranslationTargetAccepted(langCode) else {
+                let text = tellomiTranslationOnlyEnglishToChineseText(languageCode: self.presentationData.strings.baseLanguageCode)
+                self.present(textAlertController(context: self.context, updatedPresentationData: self.updatedPresentationData, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                return
+            }
             let langCode = normalizeTranslationLanguage(langCode)
             let _ = updateChatTranslationStateInteractively(engine: self.context.engine, peerId: peerId, threadId: self.chatLocation.threadId, { current in
                 return current?.withToLang(langCode).withIsEnabled(true)
@@ -4599,40 +4606,14 @@ extension ChatControllerImpl {
             let (_, language) = canTranslateText(context: context, text: text.string, showTranslate: true, ignoredLanguages: nil)
 
             let entities = generateChatInputTextEntities(text)
-
-            let translationConfiguration = TranslationConfiguration.with(appConfiguration: self.context.currentAppConfiguration.with { $0 })
-            var useSystemTranslation = false
-            switch translationConfiguration.manual {
-            case .system:
-                if #available(iOS 18.0, *) {
-                    useSystemTranslation = true
-                }
-            default:
-                break
+            let appData = self.context.currentAppConfiguration.with { $0 }.data
+            if !tellomiManualTranslationAvailable(manual: appData?["translations_manual_enabled"] as? String, flag: appData?[TellomiFeatureGate.translateKey] as Any?) {
+                let prompt = tellomiTranslationUnavailableText(languageCode: self.presentationData.strings.baseLanguageCode)
+                self.present(textAlertController(context: self.context, updatedPresentationData: self.updatedPresentationData, title: nil, text: prompt, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                return
             }
 
-            if useSystemTranslation {
-                presentTranslateScreen(
-                    context: self.context,
-                    text: text.string,
-                    entities: entities,
-                    canCopy: true,
-                    fromLanguage: language,
-                    replaceText: { text, entities in
-                        replace(chatInputStateStringWithAppliedEntities(text, entities: entities))
-                    },
-                    pushController: { [weak self] c in
-                        self?.push(c)
-                    },
-                    presentController: { [weak self] c in
-                        self?.present(c, in: .window(.root))
-                    },
-                    display: { [weak self] c in
-                        self?.push(c)
-                    }
-                )
-            } else {
-                Task { @MainActor [weak self] in
+            Task { @MainActor [weak self] in
                     guard let self else {
                         return
                     }
@@ -4652,7 +4633,6 @@ extension ChatControllerImpl {
                         copyResult: nil,
                         translateChat: nil
                     ))
-                }
             }
         }, sendEmoji: { [weak self] text, attribute, immediately in
             guard let self else {
