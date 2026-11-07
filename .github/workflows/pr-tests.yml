@@ -92,7 +92,7 @@ jobs:
             //submodules/ChatListUI:ChatListScrollAnchorTests
             //submodules/TellomiWallpapers:TellomiWallpapersTests
             //submodules/TelegramUIPreferences:TellomiTabNavigationDecisionsTests
-            //submodules/TellomiDiscover:TellomiDiscoverTests
+            //submodules/TellomiDiscover:TellomiChatLinkPreviewTests
             //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
           )
           ios=(
