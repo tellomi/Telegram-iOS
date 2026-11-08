@@ -29,68 +29,96 @@ def pages(client, path):
         path = next_link[len("https://api.appstoreconnect.apple.com"):]
 
 
+def describe_build(item):
+    attrs = item.get("attributes") or {}
+    return "build {} {} uploaded {} expired {}".format(
+        attrs.get("version") or "",
+        attrs.get("processingState") or "",
+        attrs.get("uploadedDate") or "",
+        attrs.get("expired"),
+    )
+
+
 def print_builds(client, app_id):
-    """Read build processing and existing beta groups. Do not invite testers."""
-    print("builds:")
-    query = urllib.parse.urlencode({
+    """Read build 73 and existing groups. Do not invite testers or upload."""
+    fields = "version,processingState,uploadedDate,expired"
+    exact = urllib.parse.urlencode({
         "filter[app]": app_id,
-        "limit": 20,
-        "sort": "-uploadedDate",
-        "fields[builds]": "version,processingState,uploadedDate,expired",
+        "filter[version]": "73",
+        "limit": 5,
+        "fields[builds]": fields,
     })
-    builds = list(pages(client, "/v1/builds?" + query))
-    if not builds:
-        print("  (none)")
-        return
-    wanted = None
-    for item in builds:
+    print("build 73 filter:")
+    matches = list(pages(client, "/v1/builds?" + exact))
+    if not matches:
+        print("  absent")
+    for item in matches:
+        print("  {}".format(describe_build(item)))
+
+    print("preRelease 14.0.4 builds:")
+    found_prerelease = False
+    for item in pages(client, "/v1/apps/{}/preReleaseVersions?limit=200".format(app_id)):
         attrs = item.get("attributes") or {}
-        version = str(attrs.get("version") or "")
-        state = attrs.get("processingState") or ""
-        uploaded = attrs.get("uploadedDate") or ""
-        expired = attrs.get("expired")
-        print("  build {} {} uploaded {} expired {}".format(version, state, uploaded, expired))
-        if version == "73" and wanted is None:
-            wanted = item
-    if wanted is None:
-        print("build 73: not in the newest 20 builds")
-        return
-    build_id = wanted["id"]
-    linked = []
-    group_fields = urllib.parse.urlencode({
+        if attrs.get("version") != "14.0.4" or attrs.get("platform") != "IOS":
+            continue
+        found_prerelease = True
+        for build in pages(client, "/v1/preReleaseVersions/{}/builds?{}".format(
+            item["id"],
+            urllib.parse.urlencode({"limit": 20, "fields[builds]": fields}),
+        )):
+            print("  {}".format(describe_build(build)))
+    if not found_prerelease:
+        print("  (no 14.0.4 IOS prerelease)")
+
+    group_query = urllib.parse.urlencode({
         "limit": 50,
         "fields[betaGroups]": "name,isInternalGroup,publicLinkEnabled",
     })
-    for item in pages(client, "/v1/builds/{}/betaGroups?{}".format(build_id, group_fields)):
+    print("betaGroups:")
+    groups = list(pages(client, "/v1/apps/{}/betaGroups?{}".format(app_id, group_query)))
+    if not groups:
+        print("  (none)")
+    for item in groups:
         attrs = item.get("attributes") or {}
-        linked.append(item["id"])
-        print("  build 73 group {} internal={} publicLink={}".format(
+        print("  {} internal={} publicLink={}".format(
             attrs.get("name") or "",
             attrs.get("isInternalGroup"),
             attrs.get("publicLinkEnabled"),
         ))
-        if not linked:
-            print("  build 73 groups: (none)")
-        state = (wanted.get("attributes") or {}).get("processingState") or ""
-        if state != "VALID":
-            print("build 73 not attached: processingState {}".format(state))
-            return
-        group_query = urllib.parse.urlencode({
-            "limit": 50,
-            "fields[betaGroups]": "name,isInternalGroup,publicLinkEnabled",
+
+    wanted = matches[0] if matches else None
+    if wanted is None:
+        print("build 73 not attached: no build record")
+        return
+    build_id = wanted["id"]
+    linked = []
+    print("build 73 groups:")
+    for item in pages(client, "/v1/builds/{}/betaGroups?{}".format(build_id, group_query)):
+        attrs = item.get("attributes") or {}
+        linked.append(item["id"])
+        print("  {} internal={} publicLink={}".format(
+            attrs.get("name") or "",
+            attrs.get("isInternalGroup"),
+            attrs.get("publicLinkEnabled"),
+        ))
+    if not linked:
+        print("  (none)")
+    state = (wanted.get("attributes") or {}).get("processingState") or ""
+    if state != "VALID":
+        print("build 73 not attached: processingState {}".format(state))
+        return
+    for item in groups:
+        attrs = item.get("attributes") or {}
+        if attrs.get("isInternalGroup") is not True or attrs.get("publicLinkEnabled"):
+            continue
+        group_id = item["id"]
+        if group_id in linked:
+            continue
+        # Existing internal group only. No tester create and no invitation endpoint.
+        client.request("POST", "/v1/betaGroups/{}/relationships/builds".format(group_id), {
+            "data": [{"type": "builds", "id": build_id}],
         })
-        for item in pages(client, "/v1/apps/{}/betaGroups?{}".format(app_id, group_query)):
-            attrs = item.get("attributes") or {}
-            if attrs.get("isInternalGroup") is not True or attrs.get("publicLinkEnabled"):
-                continue
-            group_id = item["id"]
-            if group_id in linked:
-                continue
-            # Existing internal group only. No tester create and no invitation endpoint.
-            client.request("POST", "/v1/betaGroups/{}/relationships/builds".format(group_id), {
-                "data": [{"type": "builds", "id": build_id}],
-            })
-            print("attached build 73 to internal group {}".format(attrs.get("name") or group_id))
+        print("attached build 73 to internal group {}".format(attrs.get("name") or group_id))
 
 
 def main():
