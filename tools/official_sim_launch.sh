@@ -3,12 +3,17 @@
 # Does not type a phone number, a code, or a message.
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/../.." && pwd)"
+root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+echo "launch cwd=$(pwd)"
 out="${root}/official-sim-launch"
 mkdir -p "$out"
 ipa="bazel-bin/Telegram/Telegram.ipa"
-test -f "$ipa"
+if [[ ! -f "$ipa" ]]; then
+  echo "missing $ipa" >&2
+  ls -la bazel-bin/Telegram 2>/dev/null || true
+  exit 1
+fi
 stage="$(mktemp -d)"
 unzip -q -o "$ipa" -d "$stage"
 app="$(echo "${stage}"/Payload/*.app)"
