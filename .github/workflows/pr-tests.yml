@@ -105,17 +105,35 @@ jobs:
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
             //submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode:PeerInfoPaneNodeTests
           )
+          # Run 42416611063 died on the first query:
+          # bcr.bazel.build/.../zlib/1.2.12/MODULE.bazel connect timed out.
+          # Retry only that registry failure. A missing target and a failed
+          # test stay failures. Three attempts, then the job fails.
+          bazel_retry() {
+            local attempt log
+            log="${RUNNER_TEMP}/bazel-attempt.log"
+            for attempt in 1 2 3; do
+              if "$@" 2>&1 | tee "${log}"; then
+                return 0
+              fi
+              if [[ "${attempt}" -lt 3 ]] && grep -E -q 'Connect timed out|Failed to fetch registry file|Error accessing registry' "${log}"; then
+                echo "transient Bazel registry failure on attempt ${attempt}; retrying"
+                sleep $((attempt * 20))
+                continue
+              fi
+              return 1
+            done
+            return 1
+          }
           present() {
             local label="$1"
-            local err="${RUNNER_TEMP}/query.err"
-            if "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests query "${label}" >"${RUNNER_TEMP}/query.out" 2>"${err}"; then
+            if bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests query "${label}"; then
               return 0
             fi
-            if grep -E -q 'no such target|no such package' "${err}"; then
+            if grep -E -q 'no such target|no such package' "${RUNNER_TEMP}/bazel-attempt.log"; then
               echo "skip ${label}"
               return 1
             fi
-            cat "${err}"
             exit 1
           }
           run_host=()
@@ -137,14 +155,14 @@ jobs:
           fail=0
           if (( ${#run_host[@]} > 0 )); then
             for label in "${run_host[@]}"; do
-              if ! "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc; then
+              if ! bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc; then
                 fail=1
               fi
             done
           fi
           if (( ${#run_ios[@]} > 0 )); then
             for label in "${run_ios[@]}"; do
-              if ! "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64; then
+              if ! bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64; then
                 fail=1
               fi
             done

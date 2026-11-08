@@ -1258,3 +1258,7 @@ The chat PIN is 4 to 8 digits. The stored value is a salted SHA-256 in the app d
 | `ChatController.swift`, `NavigateToChatController.swift`, `ChatHistoryListNode.swift` | Secret view stays unread and shows the banner. A locked chat asks for the PIN before it opens. |
 | `SharedWakeupManager.swift` | Online presence stays off during secret view. |
 | `ChatListItemStrings.swift`, `ShareController.swift`, `NotificationService.swift` | Hidden preview text. |
+
+## PR test registry retry
+
+`.github/workflows/pr-tests.yml` retries a Bazel invocation up to three times only when the log says the central registry fetch failed (`Connect timed out`, `Failed to fetch registry file`, or `Error accessing registry`). A missing test target and a failing test still fail the job. This is the failure from run 42416611063, which stopped before any test ran.
