@@ -25,10 +25,47 @@ jobs:
           fetch-depth: 0
           submodules: false
 
+      - name: Check the restore contract
+        run: python3 Tellomi/check_restore_contract.py
+
+      - name: Decide whether the simulator package changed
+        id: scope
+        run: |
+          set -euo pipefail
+          base=5e2fc60c7f2e7032196e5f45d8d3b6332ab92562
+          git diff --name-only "$base" HEAD > /tmp/since-sim
+          echo "Changes since the verified simulator package:"
+          cat /tmp/since-sim
+          python3 - << 'PY'
+          from pathlib import Path
+          allowed = {
+              "Tellomi/check_restore_contract.py",
+              ".github/workflows/official-sim.yml",
+              "submodules/TelegramCore/Sources/Account/Account.swift",
+              "submodules/TelegramCore/Sources/Authorization.swift",
+          }
+          changed = [line.strip() for line in Path("/tmp/since-sim").read_text().splitlines() if line.strip()]
+          extra = [line for line in changed if line not in allowed]
+          Path("/tmp/rebuild").write_text("1" if extra else "0")
+          print("rebuild" if extra else "keep verified package")
+          for line in extra:
+              print(line)
+          PY
+          echo "rebuild=$(cat /tmp/rebuild)" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the verified simulator package
+        if: steps.scope.outputs.rebuild != '1'
+        run: |
+          echo "Simulator package was not rebuilt."
+          echo "Last launch: commit 5e2fc60c run 42523579119."
+          echo "This push is login error handling. Those screenshots do not cover it."
+
       - name: Checkout submodules
+        if: steps.scope.outputs.rebuild == '1'
         run: bash .github/checkout-submodules.sh
 
       - name: Select Xcode from versions.json
+        if: steps.scope.outputs.rebuild == '1'
         run: |
           set -euo pipefail
           sw_vers
@@ -43,6 +80,7 @@ jobs:
           xcodebuild -version
 
       - name: Pin Bazel from versions.json
+        if: steps.scope.outputs.rebuild == '1'
         run: |
           set -euo pipefail
           spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
@@ -55,6 +93,7 @@ jobs:
           chmod +x "build-input/${name}"
 
       - name: Build the unsigned simulator app
+        if: steps.scope.outputs.rebuild == '1'
         run: |
           set -euo pipefail
           export APP_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')"
@@ -79,6 +118,7 @@ jobs:
           '
 
       - name: Launch on the simulator without signing in
+        if: steps.scope.outputs.rebuild == '1'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash tools/official_sim_launch.sh

@@ -155,6 +155,7 @@ public class UnauthorizedAccount {
                             isSupportUser = true
                         }
                         let state = AuthorizedAccountState(isTestingEnvironment: testingEnvironment, masterDatacenterId: masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
+                        storeAuthorizedUser(transaction: transaction, user: user)
                         initializedAppSettingsAfterLogin(transaction: transaction, appVersion: networkArguments.appVersion, syncContacts: syncContacts)
                         transaction.setState(state)
                         return accountManager.transaction { [weak self] transaction -> SendAuthorizationCodeResult in
@@ -946,6 +947,13 @@ func securePasswordKDF(password: String, derivation: TwoStepSecurePasswordDeriva
 }
 
 func verifyPassword(_ account: UnauthorizedAccount, password: String) -> Signal<Api.auth.Authorization, MTRpcError> {
+    return verifyPassword(account, password: password, allowSrpRefresh: true)
+}
+
+/// `allowSrpRefresh` retries once after `SRP_ID_INVALID`. `account.getPassword`'s
+/// `srp_id` is single-use; a stale one is not a wrong password. The same refresh
+/// is what Android does. It does not substitute for a missing `current_algo`.
+private func verifyPassword(_ account: UnauthorizedAccount, password: String, allowSrpRefresh: Bool) -> Signal<Api.auth.Authorization, MTRpcError> {
     return _internal_twoStepAuthData(account.network)
     |> mapToSignal { authData -> Signal<Api.auth.Authorization, MTRpcError> in
         guard let currentPasswordDerivation = authData.currentPasswordDerivation, let srpSessionData = authData.srpSessionData else {
@@ -956,6 +964,12 @@ func verifyPassword(_ account: UnauthorizedAccount, password: String) -> Signal<
         
         if let kdfResult = kdfResult {
             return account.network.request(Api.functions.auth.checkPassword(password: .inputCheckPasswordSRP(.init(srpId: kdfResult.id, A: Buffer(data: kdfResult.A), M1: Buffer(data: kdfResult.M1)))), automaticFloodWait: false)
+            |> `catch` { error -> Signal<Api.auth.Authorization, MTRpcError> in
+                if allowSrpRefresh && error.errorDescription == "SRP_ID_INVALID" {
+                    return verifyPassword(account, password: password, allowSrpRefresh: false)
+                }
+                return .fail(error)
+            }
         } else {
             return .fail(MTRpcError(errorCode: 400, errorDescription: "KDF_ERROR"))
         }
@@ -1834,7 +1848,11 @@ public func standaloneStateManager(
             Logger.shared.log("StandaloneStateManager", "Received postbox: valid")
             
             return accountManager.transaction { transaction -> (LocalizationSettings?, ProxySettings?, NetworkEngineInputs) in
-                return (nil, transaction.getSharedData(SharedDataKeys.proxySettings)?.get(ProxySettings.self), networkEngineInputs(transaction: transaction))
+                // The extension shares this account manager with the app. A nil pack
+                // made the connection send lang_code "en" and overwrite the account's
+                // language on the server. Read the language the app stored.
+                let localizationSettings = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self)
+                return (localizationSettings, transaction.getSharedData(SharedDataKeys.proxySettings)?.get(ProxySettings.self), networkEngineInputs(transaction: transaction))
             }
             |> mapToSignal { localizationSettings, proxySettings, networkEngine -> Signal<AccountStateManager?, NoError> in
                 Logger.shared.log("StandaloneStateManager", "Received settings")

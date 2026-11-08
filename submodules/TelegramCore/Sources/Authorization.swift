@@ -5,6 +5,16 @@ internal import TelegramApi
 import MtProtoKit
 
 
+/// The user from `auth.authorization` is the account peer. The first screen reads it
+/// immediately. A later difference is what normally fills the peer table, and this
+/// server does not push that update before the read. Phone sign-in crashed once the
+/// code was accepted when the row was missing.
+func storeAuthorizedUser(transaction: Transaction, user: TelegramUser) {
+    transaction.updatePeersInternal([user], update: { _, updated in
+        return updated
+    })
+}
+
 public enum AuthorizationCodeRequestError {
     case invalidPhoneNumber
     case limitExceeded
@@ -372,6 +382,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
                             }
 
                             let user = TelegramUser(user: apiUser)
+                            storeAuthorizedUser(transaction: transaction, user: user)
                             var isSupportUser = false
                             if let phone = user.phone, phone.hasPrefix("42"), phone.count <= 5 {
                                 isSupportUser = true
@@ -1096,6 +1107,7 @@ public func authorizeWithCode(accountManager: AccountManager<TelegramAccountMana
                                         }
 
                                         let user = TelegramUser(user: apiUser)
+                                        storeAuthorizedUser(transaction: transaction, user: user)
                                         var isSupportUser = false
                                         if let phone = user.phone, phone.hasPrefix("42") {
                                             isSupportUser = true
@@ -1166,10 +1178,8 @@ public func authorizeWithPassword(accountManager: AccountManager<TelegramAccount
                 }
 
                 let user = TelegramUser(user: apiUser)
+                storeAuthorizedUser(transaction: transaction, user: user)
                 let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
-                /*transaction.updatePeersInternal([user], update: { current, peer -> Peer? in
-                 return peer
-                 })*/
                 var isSupportUser = false
                 if let phone = user.phone, phone.hasPrefix("42") {
                     isSupportUser = true
@@ -1295,6 +1305,7 @@ public func authorizeWithPasskey(accountManager: AccountManager<TelegramAccountM
                     }
 
                     let user = TelegramUser(user: apiUser)
+                    storeAuthorizedUser(transaction: transaction, user: user)
                     var isSupportUser = false
                     if let phone = user.phone, phone.hasPrefix("42") {
                         isSupportUser = true
@@ -1362,6 +1373,7 @@ public func loginWithRecoveredAccountData(accountManager: AccountManager<Telegra
             }
 
             let user = TelegramUser(user: apiUser)
+            storeAuthorizedUser(transaction: transaction, user: user)
             var isSupportUser = false
             if let phone = user.phone, phone.hasPrefix("42") {
                 isSupportUser = true
@@ -1525,6 +1537,7 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                     }
                     let appliedState = account.postbox.transaction { transaction -> Void in
                         let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
+                        storeAuthorizedUser(transaction: transaction, user: user)
                         if let hole = account.postbox.seedConfiguration.initializeChatListWithHole.topLevel {
                             transaction.replaceChatListHole(groupId: .root, index: hole.index, hole: nil)
                         }
