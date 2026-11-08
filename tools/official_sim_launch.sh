@@ -29,6 +29,7 @@ build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
   echo "simulator_build=${build}"
   echo "note=unsigned simulator build, not an App Store upload"
   echo "head=$(git rev-parse HEAD)"
+  echo "candidate_sha=${CANDIDATE_SHA:-unset}"
 } | tee "${out}/identity.txt"
 test "$bundle" = "app.tellomi.chat"
 test "$name" = "Tellomi"
@@ -49,8 +50,10 @@ for runtime, devices in json.loads(raw).get("devices", {}).items():
             chosen.append((name, device["udid"]))
 if not chosen:
     sys.exit("no available iPhone simulator")
-chosen.sort()
-print(chosen[-1][0] + "\t" + chosen[-1][1])
+regular = [item for item in chosen if "Duo" not in item[0]]
+pool = regular or chosen
+pool.sort()
+print(pool[-1][0] + "\t" + pool[-1][1])
 PY
 )"
 device_name="${udid%%$'\t'*}"
@@ -63,13 +66,47 @@ xcrun simctl ui "$udid" appearance light
 xcrun simctl install "$udid" "$app"
 xcrun simctl launch "$udid" "$bundle"
 sleep 12
-xcrun simctl io "$udid" screenshot "${out}/portrait-light.png"
+display=""
+shot() {
+  local dest="$1"
+  local errfile="${out}/screenshot.err"
+  if [[ -n "$display" ]]; then
+    xcrun simctl io "$udid" screenshot --display="$display" "$dest"
+    return
+  fi
+  if xcrun simctl io "$udid" screenshot "$dest" 2>"$errfile"; then
+    return
+  fi
+  cat "$errfile"
+  display="$(python3 - "$errfile" << 'PY'
+import re, sys
+text = open(sys.argv[1], errors="replace").read()
+primary = ""
+any_id = ""
+for line in text.splitlines():
+    match = re.search(r"--display=(\d+)", line)
+    if not match:
+        continue
+    any_id = match.group(1)
+    if "(primary)" in line and "primary-" not in line:
+        primary = any_id
+print(primary or any_id)
+PY
+)"
+  if [[ -z "$display" ]]; then
+    echo "screenshot failed and no display id was offered" >&2
+    return 22
+  fi
+  echo "screenshot_display=${display}" | tee -a "${out}/identity.txt"
+  xcrun simctl io "$udid" screenshot --display="$display" "$dest"
+}
+shot "${out}/portrait-light.png"
 xcrun simctl ui "$udid" appearance dark
 sleep 2
-xcrun simctl io "$udid" screenshot "${out}/portrait-dark.png"
+shot "${out}/portrait-dark.png"
 if xcrun simctl ui "$udid" orientation landscapeLeft; then
   sleep 2
-  xcrun simctl io "$udid" screenshot "${out}/landscape-dark.png"
+  shot "${out}/landscape-dark.png"
   xcrun simctl ui "$udid" orientation portrait || true
 else
   echo "orientation command unavailable" | tee "${out}/rotation.txt"
@@ -78,7 +115,7 @@ xcrun simctl terminate "$udid" "$bundle" || true
 sleep 1
 xcrun simctl launch "$udid" "$bundle"
 sleep 8
-xcrun simctl io "$udid" screenshot "${out}/cold-start.png"
+shot "${out}/cold-start.png"
 echo "no phone number was entered" | tee -a "${out}/identity.txt"
 python3 - "$out" << 'PY'
 import sys

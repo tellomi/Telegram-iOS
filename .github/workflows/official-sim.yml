@@ -79,6 +79,8 @@ jobs:
           '
 
       - name: Launch on the simulator without signing in
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash tools/official_sim_launch.sh
 
       - name: Upload launch screenshots
