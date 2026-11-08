@@ -1,1 +1,42 @@
-exports_files(["versions.json"])
+exports_files([
+    "versions.json",
+    "Tellomi/version",
+])
+
+# Icons from the released 14.0.4 tree (Tellomi/Brand at d5c5d581, tree 3acc9d283b50445939a70bcf9688454f7afd016e).
+# Not a new drawing. rules_apple rejects an .appiconset next to an Icon Composer .icon.
+filegroup(
+    name = "TellomiAppIcon",
+    srcs = glob(["Tellomi/Brand/AppIcon.xcassets/**"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "TellomiLooseIpadHomeIcons",
+    srcs = [
+        "Tellomi/Brand/LooseIpadIcons/TellomiHomeIpad76@2x.png",
+        "Tellomi/Brand/LooseIpadIcons/TellomiHomeIpad83@2x.png",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+[
+    filegroup(
+        name = "TellomiAlternate_{}".format(name),
+        srcs = glob(["Tellomi/Brand/Alternates/{}.alticon/*.png".format(name)]),
+        visibility = ["//visibility:public"],
+    ) for name in [
+        "BlackIcon",
+        "BlackClassicIcon",
+        "BlackFilledIcon",
+        "BlueIcon",
+        "BlueClassicIcon",
+        "BlueFilledIcon",
+        "WhiteFilledIcon",
+        "New1",
+        "New2",
+        "Premium",
+        "PremiumBlack",
+        "PremiumTurbo",
+    ]
+]
