@@ -13,7 +13,7 @@ import urllib.parse
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from prepare_appstore_signing import Client, make_jwt, require_env  # noqa: E402
+from prepare_appstore_signing import ApiError, Client, make_jwt, require_env  # noqa: E402
 
 BUNDLE_ID = "app.tellomi.chat"
 
@@ -27,6 +27,119 @@ def pages(client, path):
         if not next_link.startswith("https://api.appstoreconnect.apple.com"):
             return
         path = next_link[len("https://api.appstoreconnect.apple.com"):]
+
+
+def describe_build(item):
+    attrs = item.get("attributes") or {}
+    return "build {} {} uploaded {} expired {}".format(
+        attrs.get("version") or "",
+        attrs.get("processingState") or "",
+        attrs.get("uploadedDate") or "",
+        attrs.get("expired"),
+    )
+
+
+def print_builds(client, app_id):
+    """Read build 73 and existing groups. Do not invite testers or upload."""
+    fields = "version,processingState,uploadedDate,expired"
+    exact = urllib.parse.urlencode({
+        "filter[app]": app_id,
+        "filter[version]": "73",
+        "limit": 5,
+        "fields[builds]": fields,
+    })
+    print("build 73 filter:")
+    matches = list(pages(client, "/v1/builds?" + exact))
+    if not matches:
+        print("  absent")
+    for item in matches:
+        print("  {}".format(describe_build(item)))
+
+    print("preRelease 14.0.4 builds:")
+    found_prerelease = False
+    for item in pages(client, "/v1/apps/{}/preReleaseVersions?limit=200".format(app_id)):
+        attrs = item.get("attributes") or {}
+        if attrs.get("version") != "14.0.4" or attrs.get("platform") != "IOS":
+            continue
+        found_prerelease = True
+        for build in pages(client, "/v1/preReleaseVersions/{}/builds?{}".format(
+            item["id"],
+            urllib.parse.urlencode({"limit": 20, "fields[builds]": fields}),
+        )):
+            print("  {}".format(describe_build(build)))
+    if not found_prerelease:
+        print("  (no 14.0.4 IOS prerelease)")
+
+    group_query = urllib.parse.urlencode({
+        "limit": 50,
+        "fields[betaGroups]": "name,isInternalGroup,publicLinkEnabled",
+    })
+    print("betaGroups:")
+    groups = list(pages(client, "/v1/apps/{}/betaGroups?{}".format(app_id, group_query)))
+    if not groups:
+        print("  (none)")
+    for item in groups:
+        attrs = item.get("attributes") or {}
+        print("  {} internal={} publicLink={}".format(
+            attrs.get("name") or "",
+            attrs.get("isInternalGroup"),
+            attrs.get("publicLinkEnabled"),
+        ))
+
+    wanted = matches[0] if matches else None
+    if wanted is None:
+        print("build 73 not attached: no build record")
+        return
+    build_id = wanted["id"]
+    state = (wanted.get("attributes") or {}).get("processingState") or ""
+    print("build 73 groups via build relationship:")
+    try:
+        linked_names = []
+        for item in pages(client, "/v1/builds/{}/betaGroups?{}".format(build_id, group_query)):
+            attrs = item.get("attributes") or {}
+            linked_names.append(attrs.get("name") or item["id"])
+        if linked_names:
+            print("  " + ", ".join(linked_names))
+        else:
+            print("  (none)")
+    except ApiError as error:
+        print("  unavailable: {}".format(error))
+    if state != "VALID":
+        print("build 73 not attached: processingState {}".format(state))
+        return
+    for item in groups:
+        attrs = item.get("attributes") or {}
+        name = attrs.get("name") or item["id"]
+        if attrs.get("isInternalGroup") is not True or attrs.get("publicLinkEnabled") is True:
+            print("skipped group {}: internal={} publicLink={}".format(
+                name, attrs.get("isInternalGroup"), attrs.get("publicLinkEnabled"),
+            ))
+            continue
+        group_id = item["id"]
+        present = False
+        try:
+            for build in pages(client, "/v1/betaGroups/{}/builds?{}".format(
+                group_id,
+                urllib.parse.urlencode({"limit": 50, "fields[builds]": fields}),
+            )):
+                if str((build.get("attributes") or {}).get("version") or "") == "73":
+                    present = True
+                    break
+        except ApiError as error:
+            print("group {} builds unreadable: {}".format(name, error))
+            continue
+        if present:
+            print("build 73 already in internal group {}".format(name))
+            continue
+        # Existing internal group only. No tester create and no invitation endpoint.
+        try:
+            client.request("POST", "/v1/betaGroups/{}/relationships/builds".format(group_id), {
+                "data": [{"type": "builds", "id": build_id}],
+            })
+        except ApiError as error:
+            print("attach build 73 to {} failed: {}".format(name, error))
+            continue
+        print("attached build 73 to internal group {}".format(name))
 
 
 def main():
@@ -74,6 +187,7 @@ def main():
             print("  {} {}".format(version, platform))
         if not pre:
             print("  (none)")
+        print_builds(client, app_id)
     finally:
         import shutil
         shutil.rmtree(work, ignore_errors=True)
