@@ -15,7 +15,18 @@ swift_library(
 )
 
 # Host tests. The feed screen's UIKit is not in this target.
-# `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/TellomiDiscover:TellomiDiscoverTests`
+# `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/TellomiDiscover:TellomiFeedChromeMotionTests`
+swift_test(
+    name = "TellomiFeedChromeMotionTests",
+    srcs = [
+        "Sources/TellomiFeedChromeMotion.swift",
+        "Tests/TellomiFeedChromeMotionTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
+    ],
+)
+
 swift_test(
     name = "TellomiDiscoverTests",
     srcs = glob([

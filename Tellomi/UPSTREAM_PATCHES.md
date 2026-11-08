@@ -1223,3 +1223,7 @@ The chat PIN is 4 to 8 digits. The stored value is a salted SHA-256 in the app d
 | `ChatController.swift`, `NavigateToChatController.swift`, `ChatHistoryListNode.swift` | Secret view stays unread and shows the banner. A locked chat asks for the PIN before it opens. |
 | `SharedWakeupManager.swift` | Online presence stays off during secret view. |
 | `ChatListItemStrings.swift`, `ShareController.swift`, `NotificationService.swift` | Hidden preview text. |
+
+## Discover compose button
+
+The Discover list keeps the existing `composePressed` publish path. A bottom-right control uses `Chat List/AddIcon` through `generateItemListPlusIcon`, on `list.itemAccentColor`, with the check-foreground glyph. It sits above `intrinsicInsets.bottom` and the keyboard `inputHeight`. Scrolling a non-empty list calls `TabBarController.updateIsTabBarHidden`; an empty list, the top of the list, a tab change, and returning to the page show the bar again. Reduce Motion uses an immediate transition. Tab-title hiding is unchanged.

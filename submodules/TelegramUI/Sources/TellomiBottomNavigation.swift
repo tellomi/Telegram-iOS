@@ -23,11 +23,20 @@ private final class TellomiTabObservationBox: NSObject {
 }
 
 func tellomiFeedScreen(root: TelegramRootController, context: AccountContext) -> TellomiFeedScreen {
+    let screen: TellomiFeedScreen
     if let existing = objc_getAssociatedObject(root, &tellomiFeedScreenKey) as? TellomiFeedScreen {
-        return existing
+        screen = existing
+    } else {
+        screen = TellomiFeedScreen(context: context)
+        objc_setAssociatedObject(root, &tellomiFeedScreenKey, screen, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
-    let screen = TellomiFeedScreen(context: context)
-    objc_setAssociatedObject(root, &tellomiFeedScreenKey, screen, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    screen.onRootNavigationVisible = { [weak root] visible, animated in
+        guard let tabs = root?.rootTabController as? TabBarController else {
+            return
+        }
+        let transition: ContainedViewLayoutTransition = animated ? .animated(duration: 0.25, curve: .easeInOut) : .immediate
+        tabs.updateIsTabBarHidden(!visible, transition: transition)
+    }
     return screen
 }
 
