@@ -613,7 +613,7 @@ public final class ShareController: ViewController {
         var messageCount: Int = 1
         if case let .messages(messages) = self.subject, let message = messages.first, let peer = message.peers[message.id.peerId] as? TelegramChannel, case .broadcast = peer.info {
             fromPublicChannel = true
-        } else if case let .url(link) = self.subject, link.contains("\(TellomiLinks.host)/nft/") {
+        } else if case let .url(link) = self.subject, link.contains("t.me/nft/") {
             fromPublicChannel = true
         }
         
@@ -1006,7 +1006,7 @@ public final class ShareController: ViewController {
                             }
                             if let chatPeer = message.peers[message.id.peerId] as? TelegramChannel {
                                 if message.id.namespace == Namespaces.Message.Cloud, let addressName = chatPeer.addressName, !addressName.isEmpty {
-                                    url = "https://\(TellomiLinks.host)/\(addressName)/\(message.id.id)"
+                                    url = "https://t.me/\(addressName)/\(message.id.id)"
                                     if messageUrl == nil {
                                         messageUrl = url
                                     }
@@ -1029,16 +1029,11 @@ public final class ShareController: ViewController {
                                 }
                             }
                             
-                            let shareText: String
                             if let restrictedText = restrictedText {
-                                shareText = restrictedText
-                            } else if TellomiChatLockDirectory.shared.isLocked(accountPeerId: accountPeerId.toInt64(), chatPeerId: message.id.peerId.toInt64()) {
-                                shareText = tellomiChatLockConcealedText(languageCode: strongSelf.presentationData.strings.primaryComponent.languageCode)
+                                collectableItems.append(CollectableExternalShareItem(url: url, text: restrictedText, author: authorPeerId, timestamp: message.timestamp, mediaReference: nil))
                             } else {
-                                shareText = message.text
+                                collectableItems.append(CollectableExternalShareItem(url: url, text: message.text, author: authorPeerId, timestamp: message.timestamp, mediaReference: selectedMedia.flatMap({ AnyMediaReference.message(message: MessageReference(message), media: $0) })))
                             }
-                            let shareMedia = (restrictedText != nil || shareText != message.text) ? nil : selectedMedia.flatMap({ AnyMediaReference.message(message: MessageReference(message), media: $0) })
-                            collectableItems.append(CollectableExternalShareItem(url: url, text: shareText, author: authorPeerId, timestamp: message.timestamp, mediaReference: shareMedia))
                         }
                     case .fromExternal:
                         break

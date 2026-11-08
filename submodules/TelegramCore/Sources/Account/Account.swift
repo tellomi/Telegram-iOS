@@ -155,7 +155,6 @@ public class UnauthorizedAccount {
                             isSupportUser = true
                         }
                         let state = AuthorizedAccountState(isTestingEnvironment: testingEnvironment, masterDatacenterId: masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
-                        tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                         initializedAppSettingsAfterLogin(transaction: transaction, appVersion: networkArguments.appVersion, syncContacts: syncContacts)
                         transaction.setState(state)
                         return accountManager.transaction { [weak self] transaction -> SendAuthorizationCodeResult in
@@ -393,9 +392,11 @@ public func accountWithId(accountManager: AccountManager<TelegramAccountManagerT
                             }
                         }
                         
-                        // Release used to open datacenter 2. Tellomi's server has the
-                        // id in Tellomi/tellomi-server.json (1 for a stock Teamgram docker).
-                        let initialDatacenterId = Int(TellomiDefaultDatacenterId())
+                        #if DEBUG
+                        let initialDatacenterId: Int = 1
+                        #else
+                        let initialDatacenterId: Int = 2
+                        #endif
                         
                         return initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: initialDatacenterId, keychain: keychain, basePath: path, testingEnvironment: beginWithTestingEnvironment, languageCode: localizationSettings?.primaryComponent.languageCode, proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
                         |> map { network -> AccountResult in
@@ -947,13 +948,6 @@ func securePasswordKDF(password: String, derivation: TwoStepSecurePasswordDeriva
 }
 
 func verifyPassword(_ account: UnauthorizedAccount, password: String) -> Signal<Api.auth.Authorization, MTRpcError> {
-    return verifyPassword(account, password: password, allowSrpRefresh: true)
-}
-
-/// `allowSrpRefresh` retries once after `SRP_ID_INVALID`. `account.getPassword`'s
-/// `srp_id` is single-use; a stale one is not a wrong password. The same refresh
-/// is what Android does. It does not substitute for a missing `current_algo`.
-private func verifyPassword(_ account: UnauthorizedAccount, password: String, allowSrpRefresh: Bool) -> Signal<Api.auth.Authorization, MTRpcError> {
     return _internal_twoStepAuthData(account.network)
     |> mapToSignal { authData -> Signal<Api.auth.Authorization, MTRpcError> in
         guard let currentPasswordDerivation = authData.currentPasswordDerivation, let srpSessionData = authData.srpSessionData else {
@@ -964,12 +958,6 @@ private func verifyPassword(_ account: UnauthorizedAccount, password: String, al
         
         if let kdfResult = kdfResult {
             return account.network.request(Api.functions.auth.checkPassword(password: .inputCheckPasswordSRP(.init(srpId: kdfResult.id, A: Buffer(data: kdfResult.A), M1: Buffer(data: kdfResult.M1)))), automaticFloodWait: false)
-            |> `catch` { error -> Signal<Api.auth.Authorization, MTRpcError> in
-                if allowSrpRefresh && error.errorDescription == "SRP_ID_INVALID" {
-                    return verifyPassword(account, password: password, allowSrpRefresh: false)
-                }
-                return .fail(error)
-            }
         } else {
             return .fail(MTRpcError(errorCode: 400, errorDescription: "KDF_ERROR"))
         }
@@ -1365,7 +1353,7 @@ public class Account {
         
         self.stateManager = AccountStateManager(accountPeerId: self.peerId, accountManager: accountManager, postbox: self.postbox, network: self.network, callSessionManager: self.callSessionManager, addIsContactUpdates: { [weak self] updates in
             self?.contactSyncManager?.addIsContactUpdates(updates)
-        }, shouldKeepOnlinePresence: self.shouldKeepOnlinePresence.get(), peerInputActivityManager: self.peerInputActivityManager, auxiliaryMethods: auxiliaryMethods)
+        }, shouldKeepOnlinePresence: self.shouldKeepOnlinePresence.get(), peerInputActivityManager: self.peerInputActivityManager, auxiliaryMethods: auxiliaryMethods, ignoresShortSentMessages: supplementary)
         
         self.viewTracker = AccountViewTracker(account: self)
         self.viewTracker.resetPeerHoleManagement = { [weak self] peerId in
@@ -1848,11 +1836,7 @@ public func standaloneStateManager(
             Logger.shared.log("StandaloneStateManager", "Received postbox: valid")
             
             return accountManager.transaction { transaction -> (LocalizationSettings?, ProxySettings?, NetworkEngineInputs) in
-                // The extension shares this account manager with the app. A nil pack
-                // made the connection send lang_code "en" and overwrite the account's
-                // language on the server. Read the language the app stored.
-                let localizationSettings = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self)
-                return (localizationSettings, transaction.getSharedData(SharedDataKeys.proxySettings)?.get(ProxySettings.self), networkEngineInputs(transaction: transaction))
+                return (nil, transaction.getSharedData(SharedDataKeys.proxySettings)?.get(ProxySettings.self), networkEngineInputs(transaction: transaction))
             }
             |> mapToSignal { localizationSettings, proxySettings, networkEngine -> Signal<AccountStateManager?, NoError> in
                 Logger.shared.log("StandaloneStateManager", "Received settings")
@@ -1944,7 +1928,8 @@ public func standaloneStateManager(
                                         },
                                         shouldKeepOnlinePresence: .single(false),
                                         peerInputActivityManager: nil,
-                                        auxiliaryMethods: auxiliaryMethods
+                                        auxiliaryMethods: auxiliaryMethods,
+                                        ignoresShortSentMessages: true
                                     )
                                 }
                             }

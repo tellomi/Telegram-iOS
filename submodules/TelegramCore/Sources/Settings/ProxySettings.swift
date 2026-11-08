@@ -1,5 +1,4 @@
 import Foundation
-import TellomiLinks
 import Postbox
 import SwiftSignalKit
 import MtProtoKit
@@ -118,10 +117,10 @@ public func parseWebProxySettingsLink(_ value: String) -> ProxyServerSettings? {
 
     let scheme = components.scheme?.lowercased()
     let isTelegramLink = scheme == "https"
-        && TellomiLinks.isPublicLinkHost(components.host)
+        && components.host?.lowercased() == "t.me"
         && components.path == "/webproxy"
         && (components.port == nil || components.port == Int(WebProxyConfiguration.port))
-    let isTelegramScheme = TellomiLinks.isDeepLinkScheme(scheme)
+    let isTelegramScheme = scheme == "tg"
         && components.host?.lowercased() == "webproxy"
         && (components.path.isEmpty || components.path == "/")
         && components.port == nil
@@ -142,7 +141,7 @@ public func webProxySettingsLink(_ settings: ProxyServerSettings) -> String? {
     }
     var components = URLComponents()
     components.scheme = "https"
-    components.host = TellomiLinks.host
+    components.host = "t.me"
     components.path = "/webproxy"
     components.percentEncodedQueryItems = [
         URLQueryItem(name: "server", value: webProxyPercentEncodedAddress(configuration.address)),

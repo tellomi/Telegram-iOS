@@ -13,7 +13,6 @@ import AppBundle
 import LocalizedPeerData
 import TooltipUI
 import TelegramNotices
-import TelegramUIPreferences
 
 private func galleryMediaForMedia(media: Media) -> Media? {
     if let media = media as? TelegramMediaImage {
@@ -550,9 +549,7 @@ public final class SecretMediaPreviewController: ViewController {
                     self?.didSetReady = true
                 }
                 self._ready.set(ready |> map { true })
-                if !TellomiSecretViewSessions.shared.suppressesReports(accountPeerId: self.context.account.peerId.toInt64(), chatPeerId: message.id.peerId.toInt64()) {
-                    self.markMessageAsConsumedDisposable.set(self.context.engine.messages.markMessageContentAsConsumedInteractively(messageId: message.id).start())
-                }
+                self.markMessageAsConsumedDisposable.set(self.context.engine.messages.markMessageContentAsConsumedInteractively(messageId: message.id).start())
             } else {
                 var beginTimeAndTimeout: (Double, Double, Bool)?
                 var videoDuration: Double?

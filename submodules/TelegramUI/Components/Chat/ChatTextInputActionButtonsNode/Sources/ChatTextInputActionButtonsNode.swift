@@ -594,9 +594,6 @@ public final class ChatTextInputActionButtonsNode: ASDisplayNode, ChatSendMessag
                 case .video:
                     self.accessibilityLabel = self.strings.VoiceOver_Chat_RecordModeVideoMessage
                     self.accessibilityHint = self.strings.VoiceOver_Chat_RecordModeVideoMessageInfo
-                case .dictation:
-                    self.accessibilityLabel = self.strings.baseLanguageCode.lowercased().hasPrefix("zh") ? "听写" : "Dictation"
-                    self.accessibilityHint = self.strings.baseLanguageCode.lowercased().hasPrefix("zh") ? "按住后把文字写入草稿" : "Hold to type the recording into the draft"
             }
         } else {
             self.accessibilityLabel = self.strings.MediaPicker_Send

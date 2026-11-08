@@ -17,15 +17,12 @@ import RemoteBuild
 import TartBuild
 import GenerateProfiles
 import PostboxImportCheck
-import IconSizeCheck
-import ChatListSwipeCheck
 
 
 class ResolvedCodesigningData:
-    def __init__(self, aps_environment, use_xcode_managed_codesigning, communication_notifications):
+    def __init__(self, aps_environment, use_xcode_managed_codesigning):
         self.aps_environment = aps_environment
         self.use_xcode_managed_codesigning = use_xcode_managed_codesigning
-        self.communication_notifications = communication_notifications
 
 
 class BazelCommandLine:
@@ -452,8 +449,7 @@ def resolve_codesigning(arguments, base_path, build_configuration, provisioning_
 
     return ResolvedCodesigningData(
         aps_environment=profile_source.resolve_aps_environment(),
-        use_xcode_managed_codesigning=profile_source.use_xcode_managed_codesigning(),
-        communication_notifications=profile_source.resolve_communication_notifications()
+        use_xcode_managed_codesigning=profile_source.use_xcode_managed_codesigning()
     )
 
 
@@ -484,35 +480,12 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
         provisioning_profiles_path=provisioning_path,
         additional_codesigning_output_path=additional_codesigning_output_path
     )
-    # Unsigned builds ad-hoc sign and do not embed a profile, so the
-    # communication-notifications entitlement can be present. A signed build
-    # may request it only when the profile grants it.
-    if getattr(arguments, 'disableProvisioningProfiles', False):
-        communication_notifications = True
-    else:
-        communication_notifications = codesigning_data.communication_notifications is True
     if codesigning_data.aps_environment is None:
-        # build-system/fake-codesigning is the upstream Telegram team
-        # (C67CF9S4VU / ph.telegra.Telegraph). A fork whose configuration
-        # names a different team and bundle finds no main profile, so the
-        # aps-environment lookup returns None. An unsigned build
-        # (--disableProvisioningProfiles) does not embed those profiles;
-        # rules_apple ad-hoc signs instead. Leave the entitlement empty,
-        # which is also what Xcode-managed codesigning stores.
-        if getattr(arguments, 'disableProvisioningProfiles', False):
-            print('Provisioning profiles are disabled; continuing without an aps-environment entitlement.')
-            codesigning_data.aps_environment = ''
-        else:
-            print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
-            sys.exit(1)
-
-    if build_configuration.bundle_id == 'app.tellomi.chat' and not communication_notifications:
-        print('Communication notifications entitlement omitted: the provisioning profile has no com.apple.developer.usernotifications.communication key. Lock-screen notifications keep the app icon until that capability is enabled on the App ID and the profile is regenerated.')
-    elif build_configuration.bundle_id == 'app.tellomi.chat':
-        print('Communication notifications entitlement included.')
+        print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
+        sys.exit(1)
 
     if bazel_command_line is not None:
-        build_configuration.write_to_variables_file(bazel_path=bazel_command_line.bazel, use_xcode_managed_codesigning=codesigning_data.use_xcode_managed_codesigning, aps_environment=codesigning_data.aps_environment, path=configuration_repository_path + '/variables.bzl', communication_notifications=communication_notifications)
+        build_configuration.write_to_variables_file(bazel_path=bazel_command_line.bazel, use_xcode_managed_codesigning=codesigning_data.use_xcode_managed_codesigning, aps_environment=codesigning_data.aps_environment, path=configuration_repository_path + '/variables.bzl')
 
     provisioning_profile_files = []
     for file_name in os.listdir(provisioning_path):
@@ -634,10 +607,6 @@ def resolve_watch_provisioning_profile(arguments, base_path):
 def build(bazel, arguments):
     if PostboxImportCheck.run(os.getcwd()) != 0:
         sys.exit(1)
-    if IconSizeCheck.run(os.getcwd()) != 0:
-        sys.exit(1)
-    if ChatListSwipeCheck.run(os.getcwd()) != 0:
-        sys.exit(1)
 
     bazel_command_line = BazelCommandLine(
         bazel=bazel,
@@ -662,8 +631,6 @@ def build(bazel, arguments):
     )
 
     bazel_command_line.set_configuration(arguments.configuration)
-    if getattr(arguments, 'disableProvisioningProfiles', False):
-        bazel_command_line.set_disable_provisioning_profiles()
     if arguments.embedWatchApp:
         if arguments.configuration in ('debug_arm64', 'release_arm64'):
             if arguments.watchApiId is None or arguments.watchApiHash is None:
@@ -724,10 +691,6 @@ def build(bazel, arguments):
 
 def test(bazel, arguments):
     if PostboxImportCheck.run(os.getcwd()) != 0:
-        sys.exit(1)
-    if IconSizeCheck.run(os.getcwd()) != 0:
-        sys.exit(1)
-    if ChatListSwipeCheck.run(os.getcwd()) != 0:
         sys.exit(1)
 
     bazel_command_line = BazelCommandLine(
@@ -1072,17 +1035,6 @@ if __name__ == '__main__':
         ],
         required=True,
         help='Build configuration'
-    )
-    buildParser.add_argument(
-        '--disableProvisioningProfiles',
-        action='store_true',
-        default=False,
-        help='''
-            Do not embed provisioning profiles. A simulator build then
-            ad-hoc signs and does not need a certificate. A device build
-            still fails in rules_apple analysis: "Building for device, but
-            no provisioning_profile attribute was set."
-            '''
     )
     buildParser.add_argument(
         '--enableParallelSwiftmoduleGeneration',

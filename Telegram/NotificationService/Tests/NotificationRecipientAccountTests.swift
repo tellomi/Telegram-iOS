@@ -171,20 +171,4 @@ final class NotificationRecipientAccountTests: XCTestCase {
         XCTAssertEqual(names.title, "Releases (Dev Forum) → peter")
         XCTAssertEqual(names.displayedSenderName, "Releases (Dev Forum) → peter")
     }
-
-    func testAPrivateChatDoesNotNameTheRecipientAccount() {
-        let user = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(1))
-        let secret = PeerId(namespace: Namespaces.Peer.SecretChat, id: PeerId.Id._internalFromInt64Value(2))
-
-        XCTAssertNil(notificationRecipientAccountNameForTitle(peerId: user, recipientAccountName: "peter"))
-        XCTAssertNil(notificationRecipientAccountNameForTitle(peerId: secret, recipientAccountName: "peter"))
-    }
-
-    func testAGroupKeepsTheRecipientAccount() {
-        let group = PeerId(namespace: Namespaces.Peer.CloudGroup, id: PeerId.Id._internalFromInt64Value(1))
-        let channel = PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id._internalFromInt64Value(2))
-
-        XCTAssertEqual(notificationRecipientAccountNameForTitle(peerId: group, recipientAccountName: "peter"), "peter")
-        XCTAssertEqual(notificationRecipientAccountNameForTitle(peerId: channel, recipientAccountName: "peter"), "peter")
-    }
 }

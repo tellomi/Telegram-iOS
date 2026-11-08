@@ -146,7 +146,6 @@ final class AuthorizedApplicationContext {
     let isReady = Promise<Bool>()
     
     private var presentationDataDisposable: Disposable?
-    private var tellomiLanguageDisposable: Disposable?
     private var displayAlertsDisposable: Disposable?
     private var removeNotificationsDisposable: Disposable?
     
@@ -261,8 +260,7 @@ final class AuthorizedApplicationContext {
             |> map { $0 && $1 }
             |> filter { $0 }
             |> take(1)
-            // A chat list that never reports ready used to keep the window on the code screen.
-            self.isReady.set(combinedReady |> timeout(2.0, queue: .mainQueue(), alternate: .single(true)))
+            self.isReady.set(combinedReady)
         } else {
             self.isReady.set(.single(true))
         }
@@ -836,22 +834,7 @@ final class AuthorizedApplicationContext {
             self.showNewsTab = value
             self.rootController.updateRootControllers(showCallsTab: self.showCallsTab, showNewsTab: value)
         })
-
-        tellomiStartTabObservation(context: self.context, rootController: self.rootController, showCallsTab: { [weak self] in
-            return self?.showCallsTab ?? false
-        }, showNewsTab: { [weak self] in
-            return self?.showNewsTab ?? false
-        })
         
-        if let code = tellomiLangPackCodePendingApplication(currentLanguageCode: presentationData.strings.primaryComponent.languageCode) {
-            self.tellomiLanguageDisposable = context.engine.localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: code).start(error: { _ in
-            }, completed: {
-                Queue.mainQueue().async {
-                    tellomiMarkSystemLangPackApplied()
-                }
-            })
-        }
-
         self.rootController.setForceInCallStatusBar((self.context.sharedContext as! SharedAccountContextImpl).currentCallStatusBarNode)
         if let groupCallController = self.context.sharedContext.currentGroupCallController as? VoiceChatController {
             if let overlayController = groupCallController.currentOverlayController {
@@ -863,7 +846,6 @@ final class AuthorizedApplicationContext {
     
     deinit {
         self.context.account.postbox.clearCaches()
-        tellomiStopTabObservation(rootController: self.rootController)
         self.showNewsTabDisposable?.dispose()
         self.context.account.shouldKeepOnlinePresence.set(.single(false))
         self.context.account.shouldBeServiceTaskMaster.set(.single(.never))
@@ -876,7 +858,6 @@ final class AuthorizedApplicationContext {
         self.displayAlertsDisposable?.dispose()
         self.removeNotificationsDisposable?.dispose()
         self.presentationDataDisposable?.dispose()
-        self.tellomiLanguageDisposable?.dispose()
         self.enablePostboxTransactionsDiposable?.dispose()
         self.termsOfServiceProceedToBotDisposable.dispose()
         self.watchNavigateToMessageDisposable.dispose()

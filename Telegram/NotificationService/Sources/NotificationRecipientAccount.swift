@@ -21,16 +21,6 @@ func notificationsNameRecipientAccount(records: [AccountRecord<TelegramAccountMa
 /// The name a notification uses for the account it was delivered to, as the extension named it
 /// before its 2021 rewrite dropped the feature (`StoredAccountInfo.peerName`): the username
 /// without "@", else the account's name.
-/// Private chats and secret chats match official Telegram: the title is the other
-/// person, not "name → this account". Groups and channels still name the account
-/// when more than one is signed in.
-func notificationRecipientAccountNameForTitle(peerId: EnginePeer.Id, recipientAccountName: String?) -> String? {
-    if peerId.isGroupOrChannel {
-        return recipientAccountName
-    }
-    return nil
-}
-
 func notificationRecipientAccountName(accountPeer: EnginePeer?) -> String? {
     guard let accountPeer else {
         return nil

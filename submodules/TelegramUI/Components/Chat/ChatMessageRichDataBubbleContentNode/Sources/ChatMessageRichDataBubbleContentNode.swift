@@ -356,8 +356,7 @@ public class ChatMessageRichDataBubbleContentNode: ChatMessageBubbleContentNode 
             canDisplayTranslation = false
         }
 
-        let sideTranslation = item.controllerInteraction.translatedMessageIds.contains(item.message.id)
-        if canDisplayTranslation, let translateToLanguage = item.associatedData.translateToLanguage ?? (sideTranslation ? "zh" : nil) {
+        if canDisplayTranslation, let translateToLanguage = item.associatedData.translateToLanguage {
             if let translation = item.message.attributes.first(where: { ($0 as? TranslationMessageAttribute)?.toLang == translateToLanguage }) as? TranslationMessageAttribute, let instantPage = translation.instantPage {
                 return ResolvedRichDataContent(
                     instantPage: instantPage,

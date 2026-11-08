@@ -46,13 +46,6 @@ public protocol TabBarContainedController {
 
 open class TabBarControllerImpl: ViewController, TabBarController {
     private var validLayout: ContainerViewLayout?
-    public var tellomiHidesTabTitles: Bool = false {
-        didSet {
-            if oldValue != self.tellomiHidesTabTitles {
-                self.updateLayout()
-            }
-        }
-    }
     
     private var tabBarControllerNode: TabBarControllerNode {
         get {
@@ -385,7 +378,6 @@ open class TabBarControllerImpl: ViewController, TabBarController {
         super.containerLayoutUpdated(layout, transition: transition)
         
         self.validLayout = layout
-        self.tabBarControllerNode.tellomiHidesTabTitles = self.tellomiHidesTabTitles
         
         let bottomInset = self.tabBarControllerNode.containerLayoutUpdated(layout, toolbar: self.currentController?.toolbar, transition: transition)
         

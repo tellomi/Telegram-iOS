@@ -32,12 +32,11 @@ swift_library(
 )
 
 # The runner MUST pin a real device/OS: the default runner picks an invalid
-# device and the test process exits 15. The standard xcode-27 image has
-# iPhone 17 on iOS 27.0, not 26.5.
+# device and the test process exits 15.
 ios_test_runner(
     name = "TabBarLayoutTestRunner",
     device_type = "iPhone 17",
-    os_version = "27.0",
+    os_version = "26.5",
 )
 
 ios_unit_test(

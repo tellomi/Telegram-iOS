@@ -12,10 +12,6 @@ private enum ApplicationSpecificPreferencesKeyValues: Int32 {
     case walletState = 23
     case qrStudioLook = 24
     case qrStudioPeerLook = 25
-    /// Tellomi Discover recommendation switch. 100 stays clear of upstream's next id.
-    case tellomiRecommendationSettings = 100
-    /// Discover activity pushes. Same account-preference namespace as the recommendation switch.
-    case tellomiDiscoverNotificationSettings = 101
 }
 
 public struct ApplicationSpecificPreferencesKeys {
@@ -27,8 +23,6 @@ public struct ApplicationSpecificPreferencesKeys {
     public static let ageVerificationState: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.ageVerificationState.rawValue)
     public static let walletState: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.walletState.rawValue)
     public static let qrStudioLook: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.qrStudioLook.rawValue)
-    public static let tellomiRecommendationSettings: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.tellomiRecommendationSettings.rawValue)
-    public static let tellomiDiscoverNotificationSettings: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificPreferencesKeyValues.tellomiDiscoverNotificationSettings.rawValue)
     
     public static func qrStudioPeerLook(peerId: EnginePeer.Id) -> EngineDataBuffer {
         let key = EngineDataBuffer(length: 4 + 8)
@@ -69,8 +63,6 @@ private enum ApplicationSpecificSharedDataKeyValues: Int32 {
     case mediaDisplaySettings = 20
     case updateSettings = 21
     case chatSettings = 22
-    /// Tellomi tab visibility. 100 stays clear of upstream's next id (22).
-    case tellomiTabSettings = 100
 }
 
 public struct ApplicationSpecificSharedDataKeys {
@@ -97,7 +89,6 @@ public struct ApplicationSpecificSharedDataKeys {
     public static let mediaDisplaySettings: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificSharedDataKeyValues.mediaDisplaySettings.rawValue)
     public static let updateSettings: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificSharedDataKeyValues.updateSettings.rawValue)
     public static let chatSettings: EngineDataBuffer = applicationSpecificPreferencesKey(ApplicationSpecificSharedDataKeyValues.chatSettings.rawValue)
-    public static let tellomiTabSettings: EngineDataBuffer = applicationSpecificSharedDataKey(ApplicationSpecificSharedDataKeyValues.tellomiTabSettings.rawValue)
 }
 
 private enum ApplicationSpecificItemCacheCollectionIdValues: Int8 {

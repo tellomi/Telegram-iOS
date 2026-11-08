@@ -229,9 +229,6 @@ final class NavigationBarContentView: UIView {
             if let accessibilityLabel = button.overflow?.title {
                 buttonComponentView.accessibilityLabel = accessibilityLabel
             }
-            if let accessibilityIdentifier = button.accessibilityIdentifier {
-                buttonComponentView.accessibilityIdentifier = accessibilityIdentifier
-            }
             buttonTransition.setFrame(view: buttonComponentView, frame: frame(buttonSize))
             if animateButtonIn {
                 alphaTransition.animateBlur(layer: buttonComponentView.layer, fromRadius: 10.0, toRadius: 0.0)

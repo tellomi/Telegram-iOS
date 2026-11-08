@@ -469,7 +469,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     }
     var stickerSettings: ChatInterfaceStickerSettings
     var stickerSettingsDisposable: Disposable?
-    var tellomiTranslationSettingsDisposable: Disposable?
     
     var applicationInForegroundDisposable: Disposable?
     var applicationInFocusDisposable: Disposable?
@@ -546,9 +545,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     let preloadAvatarDisposable = MetaDisposable()
     
     let peekData: ChatPeekTimeout?
-    let tellomiSecretView: Bool
-    private let tellomiSecretViewBanner = UILabel()
-    private var tellomiSecretViewRestoresPresence = false
     let peekTimerDisposable = MetaDisposable()
     
     let createVoiceChatDisposable = MetaDisposable()
@@ -697,7 +693,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         self.botAppStart = botAppStart
         self.mode = mode
         self.peekData = peekData
-        self.tellomiSecretView = params?.tellomiSecretView ?? false
         self.currentChatListFilter = chatListFilter
         self.chatNavigationStack = chatNavigationStack
         self.customChatNavigationStack = customChatNavigationStack
@@ -707,10 +702,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         self.forcedNavigationBarTheme = params?.forcedNavigationBarTheme
         self.forcedWallpaper = params?.forcedWallpaper
         self.hideTopPanels = params?.hideTopPanels ?? false
-        if params?.tellomiSecretView == true, let peerId = chatLocation.peerId {
-            TellomiSecretViewSessions.shared.begin(accountPeerId: context.account.peerId.toInt64(), chatPeerId: peerId.toInt64())
-            context.account.shouldKeepOnlinePresence.set(.single(false))
-        }
 
         var useSharedAnimationPhase = false
         switch mode {
@@ -767,12 +758,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         self.moreBarButton.isUserInteractionEnabled = true
         
         super.init(context: context, navigationBarPresentationData: navigationBarPresentationData)
-
-        if self.tellomiSecretView {
-            let _ = (context.sharedContext.activeAccountContexts |> take(1) |> deliverOnMainQueue).start(next: { [weak self] accounts in
-                self?.tellomiSecretViewRestoresPresence = accounts.primary?.account.id == context.account.id
-            })
-        }
         
         self._hasGlassStyle = true
         
@@ -2939,9 +2924,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                                     
                                     if let balance, funds.amount.amount > balance {
                                         let needed = funds.amount.amount - balance
-                                        guard TellomiFeatureGate.with(appConfiguration: strongSelf.context.currentAppConfiguration.with { $0 }).fragmentEnabled else {
-                                            return
-                                        }
                                         var fragmentUrl = "https://fragment.com/ads/topup"
                                         if let data = strongSelf.context.currentAppConfiguration.with({ $0 }).data, let value = data["ton_topup_url"] as? String {
                                             fragmentUrl = value
@@ -3131,7 +3113,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                                                 openBot()
                                             }, showMore: nil, openTerms: { [weak self] in
                                                 if let self, let navigationController = self.effectiveNavigationController {
-                                                    context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(presentationData.strings.WebApp_LaunchTermsConfirmation_URL, fallback: "tos/mini-apps"), forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
+                                                    context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: presentationData.strings.WebApp_LaunchTermsConfirmation_URL, forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})
                                                 }
                                             })
                                             strongSelf.present(controller, in: .window(.root))
@@ -4525,7 +4507,42 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         
                         let _ = ApplicationSpecificNotice.incrementTranslationSuggestion(accountManager: context.sharedContext.accountManager, timestamp: Int32(Date().timeIntervalSince1970)).startStandalone()
                         
-                        self.push(await TextProcessingScreen(
+                        let translationConfiguration = TranslationConfiguration.with(appConfiguration: self.context.currentAppConfiguration.with { $0 })
+                        var useSystemTranslation = false
+                        switch translationConfiguration.manual {
+                        case .system:
+                            if #available(iOS 18.0, *) {
+                                useSystemTranslation = true
+                            }
+                        default:
+                            break
+                        }
+                        
+                        if useSystemTranslation {
+                            presentTranslateScreen(
+                                context: context,
+                                text: text.string,
+                                entities: entities ?? [],
+                                canCopy: canCopy,
+                                fromLanguage: language,
+                                ignoredLanguages: translationSettings.ignoredLanguages,
+                                translateChat: { [weak self] _, toLang in
+                                    self?.interfaceInteraction?.changeTranslationLanguage(toLang)
+                                    self?.interfaceInteraction?.toggleTranslation(.translated)
+                                },
+                                pushController: { [weak self] c in
+                                    self?.effectiveNavigationController?._keepModalDismissProgress = true
+                                    self?.push(c)
+                                },
+                                presentController: { [weak self] c in
+                                    self?.present(c, in: .window(.root))
+                                },
+                                display: { [weak self] c in
+                                    self?.push(c)
+                                }
+                            )
+                        } else {
+                            self.push(await TextProcessingScreen(
                                 context: self.context,
                                 mode: .translate(fromLanguage: language, applyResult: nil),
                                 inputText: .plain(text: text.string, entities: entities ?? []),
@@ -4548,6 +4565,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                                     self.interfaceInteraction?.toggleTranslation(.translated)
                                 }
                             ))
+                        }
                     }
                 }
                 if let currentContextController = self.currentContextController {
@@ -5548,7 +5566,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             guard let self else {
                 return
             }
-            self.openUrl("https://\(TellomiLinks.host)/nft/\(slug)", concealed: false)
+            self.openUrl("https://t.me/nft/\(slug)", concealed: false)
         }, openMessageFeeException: { [weak self] in
             guard let self, let peer = self.presentationInterfaceState.renderedPeer?.peer.flatMap(EnginePeer.init) else {
                 return
@@ -6654,7 +6672,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         if let activitySpace = activitySpace {
             self.inputActivityDisposable = (self.typingActivityPromise.get()
             |> deliverOnMainQueue).startStrict(next: { [weak self] value in
-                if let strongSelf = self, !strongSelf.tellomiSecretView, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
+                if let strongSelf = self, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
                     strongSelf.context.account.updateLocalInputActivity(peerId: activitySpace, activity: .typingText, isPresent: value)
                 }
             })
@@ -6668,7 +6686,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 }
             }
             |> deliverOnMainQueue).startStrict(next: { [weak self] value in
-                if let strongSelf = self, !strongSelf.tellomiSecretView, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
+                if let strongSelf = self, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
                     if value {
                         strongSelf.context.account.updateLocalInputActivity(peerId: activitySpace, activity: .typingText, isPresent: false)
                     }
@@ -6678,7 +6696,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             
             self.recordingActivityDisposable = (self.recordingActivityPromise.get()
             |> deliverOnMainQueue).startStrict(next: { [weak self] value in
-                if let strongSelf = self, !strongSelf.tellomiSecretView, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
+                if let strongSelf = self, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil && strongSelf.presentationInterfaceState.subject != .scheduledMessages && strongSelf.presentationInterfaceState.currentSendAsPeerId == nil {
                     strongSelf.acquiredRecordingActivityDisposable?.dispose()
                     switch value {
                         case .voice:
@@ -6928,28 +6946,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             }
         })
         
-        self.tellomiTranslationSettingsDisposable = (context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.translationSettings])
-        |> deliverOnMainQueue).startStrict(next: { [weak self] sharedData in
-            guard let self else {
-                return
-            }
-            let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.translationSettings]?.get(TranslationSettings.self) ?? TranslationSettings.defaultSettings
-            let appData = self.context.currentAppConfiguration.with { $0 }.data
-            let manual = tellomiManualTranslationAvailable(manual: appData?["translations_manual_enabled"] as? String, flag: appData?[TellomiFeatureGate.translateKey] as Any?)
-            let enabled = settings.showTranslate && manual
-            guard self.controllerInteraction?.tellomiShowsSideTranslate != enabled else {
-                return
-            }
-            self.controllerInteraction?.tellomiShowsSideTranslate = enabled
-            if self.isNodeLoaded {
-                self.chatDisplayNode.historyNode.forEachItemNode { node in
-                    if let itemNode = node as? ChatMessageBubbleItemNode, let messageId = itemNode.item?.message.id {
-                        let _ = self.controllerInteraction?.requestMessageUpdate(messageId, false, nil)
-                    }
-                }
-            }
-        })
-
         self.stickerSettingsDisposable = combineLatest(queue: Queue.mainQueue(),
             context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.stickerSettings]),
             self.disableStickerAnimationsPromise.get(),
@@ -7013,8 +7009,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             context.sharedContext.applicationBindings.applicationInForeground,
             self.canReadHistory.get(),
             self.hasBrowserOrAppInFront.get()
-        ) |> map { [weak self] inForeground, globallyEnabled, hasBrowserOrWebAppInFront in
-            return inForeground && globallyEnabled && !hasBrowserOrWebAppInFront && self?.tellomiSecretView != true
+        ) |> map { inForeground, globallyEnabled, hasBrowserOrWebAppInFront in
+            return inForeground && globallyEnabled && !hasBrowserOrWebAppInFront
         } |> deliverOnMainQueue).startStrict(next: { [weak self] value in
             if let strongSelf = self, strongSelf.canReadHistoryValue != value {
                 strongSelf.canReadHistoryValue = value
@@ -7086,14 +7082,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     }
 
     deinit {
-        if self.tellomiSecretView, let peerId = self.chatLocation.peerId {
-            let accountPeerId = self.context.account.peerId.toInt64()
-            TellomiSecretViewSessions.shared.end(accountPeerId: accountPeerId, chatPeerId: peerId.toInt64())
-            if self.tellomiSecretViewRestoresPresence && !TellomiSecretViewSessions.shared.suppressesOnline(accountPeerId: accountPeerId) {
-                let foreground = UIApplication.shared.applicationState == .active
-                self.context.account.shouldKeepOnlinePresence.set(.single(foreground))
-            }
-        }
         let _ = ChatControllerCount.modify { value in
             return value - 1
         }
@@ -7177,7 +7165,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         self.choosingStickerActivityDisposable?.dispose()
         self.automaticMediaDownloadSettingsDisposable?.dispose()
         self.stickerSettingsDisposable?.dispose()
-        self.tellomiTranslationSettingsDisposable?.dispose()
         self.searchQuerySuggestionState?.1.dispose()
         self.recorderDataDisposable.dispose()
         self.displaySendWhenOnlineTipDisposable.dispose()
@@ -8469,20 +8456,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         self.suspendNavigationBarLayout = true
         super.containerLayoutUpdated(layout, transition: transition)
-        if self.tellomiSecretView {
-            if self.tellomiSecretViewBanner.superview == nil {
-                self.tellomiSecretViewBanner.backgroundColor = UIColor.black.withAlphaComponent(0.72)
-                self.tellomiSecretViewBanner.textColor = .white
-                self.tellomiSecretViewBanner.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
-                self.tellomiSecretViewBanner.textAlignment = .center
-                self.view.addSubview(self.tellomiSecretViewBanner)
-            }
-            let language = self.presentationData.strings.primaryComponent.languageCode
-            self.tellomiSecretViewBanner.text = tellomiSecretViewBannerTitle(languageCode: language)
-            let top = self.navigationLayout(layout: layout).navigationFrame.maxY
-            self.tellomiSecretViewBanner.frame = CGRect(x: 0, y: top, width: layout.size.width, height: 28)
-            self.view.bringSubviewToFront(self.tellomiSecretViewBanner)
-        }
         
         if self.isPreviewingMode, case let .peer(peerId) = self.chatLocation, peerId.namespace == Namespaces.Peer.SecretChat {
             // A previewing controller is hosted by a ContextController, which never calls
@@ -10280,8 +10253,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             } else {
                 text = self.presentationData.strings.Conversation_HoldForAudioOnly
             }
-        } else if updatedMode == .dictation {
-            text = self.presentationData.strings.baseLanguageCode.lowercased().hasPrefix("zh") ? "按住听写，文字进入草稿" : "Hold to dictate into the draft"
         } else {
             if canSwitch {
                 text = self.presentationData.strings.Conversation_HoldForVideo

@@ -1,170 +1,44 @@
-# Simulator package of the iOS app. Signing, the IPA, and the GitHub Release
-# run only for a workflow_dispatch with package_release. A push to master
-# does not package or publish. A push that only changes .github does not
-# start this workflow at all: paths-ignore skips it when every changed file
-# is under .github, which is how a .github-only merge stays off this job.
-# Unsigned FeedScreen compile verification is the Proof compile workflow.
-#
-# Runner: xcode-27 (GitHub-hosted, macOS 27, arm64). macos-13 was removed in
-# December 2025, so this job queued forever and never received a machine.
-# versions.json requires Xcode 27.1. That toolchain is not installed on
-# macos-15 or macos-latest (macos-26 ships Xcode 26.x only). The xcode-27
-# image installs Xcode 27.1 at /Applications/Xcode_27.1.app and selects it
-# as the default; this workflow still selects that bundle explicitly.
-# Bazel is the 9.2.0 darwin-arm64 binary pinned by hash in versions.json,
-# the same file Make.py downloads into build-input/.
-#
-# The unsigned job is release_sim_arm64 with --disableProvisioningProfiles.
-# rules_apple refuses a device build that has no provisioning profile
-# ("Building for device, but no provisioning_profile attribute was set",
-# run 41370385064). Simulator builds ad-hoc sign and do not read
-# build-system/fake-codesigning. Those profiles expire 2026-10-30 and
-# TelegramMessenger/Telegram-iOS master still has the same git blobs.
-#
-# No pull_request job. The only supported app compile is the full Bazel
-# Telegram/Telegram target; Make.py has no smaller one. TestFlight's device
-# release on this image took 32–84 minutes on 2026-11-01 before upload.
-# A pull_request compile would hold a free macOS runner for about an hour
-# on every source change and contend with those releases. Public
-# repositories are not billed for standard macOS minutes; the limit is
-# duration and runner contention, not the free-minute quota.
-
 name: CI
 
 on:
   push:
     branches: [ master ]
-    paths-ignore:
-      - '.github/**'
 
   workflow_dispatch:
-    inputs:
-      package_release:
-        description: 'Sign, package the simulator IPA, and publish the GitHub Release. Ordinary pushes do not.'
-        type: boolean
-        required: false
-        default: false
-      runner:
-        description: 'runs-on as JSON. Empty uses vars.IOS_CI_RUNNER, else "xcode-27". Self-hosted Mac Studio: ["self-hosted","macOS","tellomi-mac"]'
-        required: false
-        default: ''
-      allow_xcode_mismatch:
-        description: 'Allow a different Xcode 27.x than versions.json (passes --overrideXcodeVersion). Needed on tellomi-mac-studio (Xcode 27.2).'
-        type: boolean
-        required: false
-        default: false
-
-permissions:
-  contents: write
 
 jobs:
   build:
-    # Packaging is the explicit release batch. A master push matches this
-    # workflow only when it changes something outside .github, and even then
-    # this job does not run, so it does not sign, copy an IPA, or publish.
-    if: github.event_name == 'workflow_dispatch' && inputs.package_release
-    # Default stays xcode-27. Override per dispatch (inputs.runner) or with
-    # the repository variable IOS_CI_RUNNER
-    # (JSON, e.g. ["self-hosted","macOS","tellomi-mac"]).
-    runs-on: ${{ fromJSON(github.event.inputs.runner || vars.IOS_CI_RUNNER || '"xcode-27"') }}
-    env:
-      ALLOW_XCODE_MISMATCH: ${{ github.event.inputs.allow_xcode_mismatch || vars.IOS_CI_ALLOW_XCODE_MISMATCH || 'false' }}
-    timeout-minutes: 360
+    runs-on: macos-13
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v2
         with:
-          # Full history: the build number is git rev-list --count plus the
-          # offset in build_number_offset. Submodules are fetched by the next
-          # step at the recorded commits. actions/checkout's recursive
-          # submodule update clones relative URLs (tgcalls, rlottie) that this
-          # org does not have, and with a shallow fetch it also ignores the pin.
-          fetch-depth: 0
-          submodules: false
+          submodules: 'recursive'
+          fetch-depth: '0'
 
-      - name: Checkout submodules
-        run: bash .github/checkout-submodules.sh
-
-      - name: Select Xcode from versions.json
+      - name: Set active Xcode path
         run: |
-          set -euo pipefail
-          sw_vers
-          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
-          CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
-          if [ ! -d "$CANDIDATE" ]; then
-            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
-            ls -1 /Applications | grep -E '^Xcode' || true
-            if [ "$ALLOW_XCODE_MISMATCH" != "true" ]; then
-              exit 1
-            fi
-            CANDIDATE="/Applications/Xcode.app"
-            if [ ! -d "$CANDIDATE" ]; then
-              exit 1
-            fi
-          fi
-          PLIST_VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "${CANDIDATE}/Contents/Info.plist")"
-          echo "CFBundleShortVersionString=${PLIST_VERSION}"
-          if [ "$PLIST_VERSION" != "$XCODE_VERSION" ]; then
-            if [ "$ALLOW_XCODE_MISMATCH" = "true" ] && [ "${PLIST_VERSION%%.*}" = "${XCODE_VERSION%%.*}" ]; then
-              echo "::warning::Building with Xcode ${PLIST_VERSION}; versions.json requires ${XCODE_VERSION} (allow_xcode_mismatch)."
-              echo "MAKE_XCODE_FLAGS=--overrideXcodeVersion" >> "$GITHUB_ENV"
-            else
-              echo "Selected Xcode reports ${PLIST_VERSION}, versions.json requires ${XCODE_VERSION}."
-              exit 1
-            fi
-          fi
-          # DEVELOPER_DIR selects Xcode without sudo (self-hosted runners may
-          # not have passwordless sudo); xcode-select -p and xcrun honour it.
-          echo "DEVELOPER_DIR=${CANDIDATE}/Contents/Developer" >> "$GITHUB_ENV"
-          export DEVELOPER_DIR="${CANDIDATE}/Contents/Developer"
-          xcode-select -p
-          xcodebuild -version
-          echo "BAZEL_CACHE_DIR=${HOME}/telegram-bazel-cache" >> "$GITHUB_ENV"
+          XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
+          sudo xcode-select -s /Applications/Xcode_$XCODE_VERSION.app/Contents/Developer
 
-      - name: Pin Bazel from versions.json
+      - name: Create canonical source directory
         run: |
-          set -euo pipefail
-          spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
-          version="${spec%%:*}"
-          sha="${spec##*:}"
-          name="bazel-${version}-darwin-arm64"
-          url="https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
-          mkdir -p build-input
-          curl -fL --retry 3 --output "build-input/${name}" "$url"
-          echo "${sha}  build-input/${name}" | shasum -a 256 -c -
-          chmod +x "build-input/${name}"
-          reported="$("build-input/${name}" --version)"
-          echo "${reported}"
-          got="${reported#bazel }"
-          if [ "$got" != "$version" ]; then
-            echo "Bazel reports ${got}, versions.json requires ${version}."
-            exit 1
-          fi
-
-      - name: Restore Bazel cache
-        if: runner.environment == 'github-hosted'
-        uses: actions/cache/restore@v4
-        with:
-          path: /Users/runner/telegram-bazel-cache
-          key: tellomi-bazel-none
-          restore-keys: |
-            tellomi-bazel-
+          set -x
+          sudo mkdir -p /Users/Shared
+          cp -R $GITHUB_WORKSPACE /Users/Shared/
+          mv /Users/Shared/$(basename $GITHUB_WORKSPACE) /Users/Shared/telegram-ios
 
       - name: Build the App
         run: |
-          set -euo pipefail
           set -x
 
-          # Build in the workspace. TestFlight already completes a release
-          # build here on xcode-27. Copying the tree to /Users/Shared does
-          # not fit: the image disk is 14 GB and the Bazel output needs the
-          # rest. The workspace path is stable across GitHub-hosted runs
-          # (/Users/runner/work/Telegram-iOS/Telegram-iOS), which is what the
-          # old copy was for.
-          SOURCE_DIR="$GITHUB_WORKSPACE"
+          # source code paths are included in the final binary, so we need to make them stable across builds
+          SOURCE_DIR=/Users/Shared/telegram-ios
+
+          # use canonical bazel root
           BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
 
-          cd "$SOURCE_DIR"
+          cd $SOURCE_DIR
 
           BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
 
@@ -175,143 +49,61 @@ jobs:
           echo "BUILD_NUMBER=$(echo $BUILD_NUMBER)" >> $GITHUB_ENV
           echo "APP_VERSION=$(echo $APP_VERSION)" >> $GITHUB_ENV
 
-          # Do not import build-system/fake-codesigning. Its profiles expired
-          # on 2026-10-30, they are the upstream Telegram bundle, and a
-          # device build cannot drop the profile (rules_apple fails
-          # analysis). release_sim_arm64 plus --disableProvisioningProfiles
-          # ad-hoc signs and never opens that certificate.
-          # --xcodeManagedCodesigning satisfies Make.py's required
-          # codesigning selector without reading a profile directory.
+          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
-            --cacheDir "$BAZEL_CACHE_DIR" \
-            ${MAKE_XCODE_FLAGS:-} \
             build \
             --configurationPath="build-system/appstore-configuration.json" \
-            --xcodeManagedCodesigning \
-            --disableProvisioningProfiles \
-            --configuration=release_sim_arm64 \
+            --codesigningInformationPath=build-system/fake-codesigning \
+            --configuration=release_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
-          # Bazel prints the product as bazel-bin/Telegram/Telegram.ipa.
-          # bazel-bin and the ipa are symlinks. The real file lives under
-          # bazel-out/ios_sim_arm64-<mode>-ios-sim_arm64-min15.0-ST-*/,
-          # not applebin_ios-ios_arm* (that glob matches nothing now).
+          # collect ipa
           OUTPUT_PATH="build/artifacts"
           rm -rf "$OUTPUT_PATH"
           mkdir -p "$OUTPUT_PATH"
-          ipa_link="bazel-bin/Telegram/Telegram.ipa"
-          if [ ! -e "$ipa_link" ]; then
-            echo "No IPA at ${ipa_link}"
-            exit 1
-          fi
-          ipa="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$ipa_link")"
-          echo "Collecting IPA from ${ipa_link} -> ${ipa}"
-          cp -L "$ipa" "$OUTPUT_PATH/Telegram.ipa"
-          test -s "$OUTPUT_PATH/Telegram.ipa"
+          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
+            cp "$f" $OUTPUT_PATH/
+          done
 
-          shopt -s nullglob
-          ipa_dir="$(dirname "$ipa")"
-          dsyms=("$ipa_dir"/*.dSYM)
-          if [ ${#dsyms[@]} -gt 0 ]; then
-            mkdir -p build/DSYMs
-            for f in "${dsyms[@]}"; do
-              cp -R "$f" build/DSYMs/
-            done
-            zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
-          fi
+          # collect dsym
+          mkdir -p build/DSYMs
+          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/*.dSYM; do
+            cp -R "$f" build/DSYMs/
+          done
+          zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
 
-      # Proof runs are not published. Print the iPad icon plist and the loose
-      # PNGs from the IPA so the App Store icon check can be read from the log.
-      - name: Inspect iPad icons and Siri vocabulary
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          set -euo pipefail
-          python3 - << 'PY'
-          import plistlib
-          import struct
-          import zipfile
-
-          archive = zipfile.ZipFile("build/artifacts/Telegram.ipa")
-          names = archive.namelist()
-          infos = [
-              name for name in names
-              if name.endswith(".app/Info.plist")
-              and "PlugIns/" not in name
-              and "Frameworks/" not in name
-              and "/Watch/" not in name
-          ]
-          print("app Info.plist:", infos)
-          raw = archive.read(infos[0])
-          plist = plistlib.loads(raw)
-          ipad = plist["CFBundleIcons~ipad"]
-          primary = ipad["CFBundlePrimaryIcon"]
-          print("primary CFBundleIconFiles:", primary.get("CFBundleIconFiles"))
-          print("primary CFBundleIconName:", primary.get("CFBundleIconName"))
-          for icon_id, entry in sorted(ipad.get("CFBundleAlternateIcons", {}).items()):
-              print("alternate", icon_id, entry.get("CFBundleIconFiles"))
-          prefix = infos[0].rsplit("/", 1)[0] + "/"
-
-          def png_size(data):
-              return struct.unpack(">II", data[16:24])
-
-          print("loose iPad-sized PNGs:")
-          for name in sorted(names):
-              if not name.startswith(prefix) or not name.endswith(".png"):
-                  continue
-              if name.count("/") != prefix.count("/"):
-                  continue
-              width, height = png_size(archive.read(name))
-              if (width, height) in ((152, 152), (167, 167)):
-                  print(f"  {width}x{height} {name}")
-          vocabs = sorted(name for name in names if name.endswith("AppIntentVocabulary.plist"))
-          print("AppIntentVocabulary:", vocabs)
-          for language in ("zh-Hans", "zh-Hant"):
-              matches = [name for name in vocabs if f"/{language}.lproj/" in name]
-              if len(matches) != 1:
-                  raise SystemExit(f"missing {language} vocabulary: {matches}")
-              phrases = plistlib.loads(archive.read(matches[0]))["IntentPhrases"]
-              print(language, [item["IntentName"] for item in phrases])
-          PY
-
-      # actions/create-release@v1 and actions/upload-release-asset@v1 run on
-      # Node 12, which current GitHub images reject. gh is on the image.
-      # Only the explicit package batch on master publishes. A push, and a
-      # dispatch that leaves package_release off, do not reach this step.
-      # The integration token sometimes cannot create releases (HTTP 403).
-      # That must not fail the compile. Any other error still fails the job.
-      - name: Publish GitHub Release
-        if: github.event_name == 'workflow_dispatch' && inputs.package_release && github.ref == 'refs/heads/master'
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          cd "${GITHUB_WORKSPACE}/build/artifacts"
-          assets=("Telegram.ipa#Telegram.ipa")
-          if [ -f Telegram.DSYMs.zip ]; then
-            assets+=("Telegram.DSYMs.zip#Telegram.DSYMs.zip")
-          fi
-          set +e
-          notes=$(gh release create "build-${BUILD_NUMBER}" \
-            --title "Telegram ${APP_VERSION} (${BUILD_NUMBER})" \
-            --notes "An unsigned simulator build of Telegram for iOS ${APP_VERSION} (${BUILD_NUMBER}). Ad-hoc signed, no provisioning profile." \
-            --target "${GITHUB_SHA}" \
-            "${assets[@]}" 2>&1)
-          status=$?
-          set -e
-          printf '%s\n' "$notes"
-          if [ "$status" -ne 0 ]; then
-            if printf '%s\n' "$notes" | grep -q "403"; then
-              echo "GitHub Release was not created: the integration token cannot create releases. The unsigned build itself succeeded."
-              exit 0
-            fi
-            exit "$status"
-          fi
-
-      - name: Save Bazel cache
-        if: always() && runner.environment == 'github-hosted'
-        continue-on-error: true
-        uses: actions/cache/save@v4
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          path: /Users/runner/telegram-bazel-cache
-          key: tellomi-bazel-${{ github.run_id }}-${{ github.run_attempt }}
+          tag_name: build-${{ env.BUILD_NUMBER }}
+          release_name: Telegram ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
+          body: |
+            An unsigned build of Telegram for iOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
+          draft: false
+          prerelease: false
+
+      - name: Upload Release IPA
+        id: upload-release-ipa 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa
+          asset_name: Telegram.ipa
+          asset_content_type: application/zip
+
+      - name: Upload Release DSYM
+        id: upload-release-dsym 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.DSYMs.zip
+          asset_name: Telegram.DSYMs.zip
+          asset_content_type: application/zip

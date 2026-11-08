@@ -54,32 +54,15 @@ load(
     "telegram_bazel_path",
     "telegram_use_xcode_managed_codesigning",
     "telegram_bundle_id",
-    "telegram_app_name",
-    "telegram_app_specific_url_scheme",
     "telegram_aps_environment",
-    "telegram_communication_notifications",
     "telegram_team_id",
     "telegram_enable_icloud",
     "telegram_enable_siri",
-    "telegram_suffix_share",
-    "telegram_suffix_notification_content",
-    "telegram_suffix_notification_service",
-    "telegram_suffix_siri_intents",
-    "telegram_suffix_widget",
-    "telegram_suffix_broadcast_upload",
 )
 
 load("@build_bazel_rules_apple//apple:resources.bzl",
     "swift_intent_library",
 )
-
-# Suffix strings are Tellomi/extension-suffixes.json, written into variables.bzl.
-extension_bundle_id_share = telegram_bundle_id + telegram_suffix_share
-extension_bundle_id_notification_content = telegram_bundle_id + telegram_suffix_notification_content
-extension_bundle_id_notification_service = telegram_bundle_id + telegram_suffix_notification_service
-extension_bundle_id_siri_intents = telegram_bundle_id + telegram_suffix_siri_intents
-extension_bundle_id_widget = telegram_bundle_id + telegram_suffix_widget
-extension_bundle_id_broadcast_upload = telegram_bundle_id + telegram_suffix_broadcast_upload
 
 config_setting(
     name = "debug",
@@ -292,9 +275,6 @@ filegroup(
     name = "AppStringResources",
     srcs = [
         "Telegram-iOS/en.lproj/Localizable.strings",
-        # APNs loc-key fallback. These are real files, not the empty stubs above.
-        "Telegram-iOS/zh-Hans.lproj/Localizable.strings",
-        "Telegram-iOS/zh-Hant.lproj/Localizable.strings",
     ] + [
         "{}.lproj/Localizable.strings".format(language) for language in empty_languages
     ],
@@ -361,12 +341,25 @@ alternate_icon_folders = [
     "PremiumTurbo",
 ]
 
-# Primary and alternate icons are Tellomi/Brand. The upstream PNG folders stay
-# in the tree so an upstream icon update does not have to be merged by hand.
-# alticonstool copies every PNG basename into both CFBundleIcons and
-# CFBundleIcons~ipad, so each alternate needs its own 76pt @2x (152) and
-# 83.5pt @2x (167) file. Premium and WhiteFilled did not inherit those from
-# upstream; they are rendered from the same Tellomi slot artwork.
+composer_icon_folders = ["Telegram"]
+
+[
+    filegroup(
+        name = "{}".format(name),
+        srcs = glob([
+            "Telegram-iOS/{}.alticon/*.png".format(name),
+        ]),
+    ) for name in alternate_icon_folders
+]
+
+[
+    filegroup(
+        name = "{}_icon".format(name),
+        srcs = glob([
+            "Telegram-iOS/{}.icon/**/*".format(name),
+        ]),
+    ) for name in composer_icon_folders
+]
 
 filegroup(
     name = "LaunchScreen",
@@ -438,7 +431,6 @@ plist_fragment(
             <key>CFBundleURLSchemes</key>
             <array>
                 <string>telegram</string>
-                <string>{telegram_app_specific_url_scheme}</string>
             </array>
         </dict>
         <dict>
@@ -457,7 +449,6 @@ plist_fragment(
     </array>
     """.format(
         telegram_bundle_id = telegram_bundle_id,
-        telegram_app_specific_url_scheme = telegram_app_specific_url_scheme,
     )
 )
 
@@ -535,13 +526,14 @@ icloud_fragment = "" if not telegram_enable_icloud else """
     telegram_icloud_environment="Production" if telegram_aps_environment == "production" else "Development"
 )
 
-# Host must match TellomiLinks.host (tell.cc). webcredentials stays because the
-# previous entitlement used it for t.me; it now names Tellomi's host only.
-associated_domains_fragment = """
+associated_domains_fragment = "" if telegram_bundle_id not in official_bundle_ids else """
 <key>com.apple.developer.associated-domains</key>
 <array>
-    <string>applinks:tell.cc</string>
-    <string>webcredentials:tell.cc</string>
+    <string>applinks:telegram.me</string>
+    <string>applinks:t.me</string>
+    <string>applinks:*.t.me</string>
+    <string>webcredentials:t.me</string>
+    <string>webcredentials:telegram.org</string>
 </array>
 """
 
@@ -571,13 +563,7 @@ official_communication_notifications_fragment = """
 <key>com.apple.developer.usernotifications.communication</key>
 <true/>
 """
-# This entitlement is what makes iOS draw the sender avatar on the lock screen
-# and in Notification Center (the notification service's INSendMessageIntent).
-# It is a normal Communication Notifications capability, not a Telegram-only
-# grant. Tellomi signs it when the provisioning profile contains it, and on
-# unsigned simulator builds. A profile that predates the capability omits it
-# so codesign still succeeds. CarPlay and unrestricted VoIP stay official-only.
-communication_notifications_fragment = official_communication_notifications_fragment if (telegram_bundle_id in official_bundle_ids or telegram_communication_notifications) else ""
+communication_notifications_fragment = official_communication_notifications_fragment if telegram_bundle_id in official_bundle_ids else ""
 
 official_notification_filtering_fragment = """
 <key>com.apple.developer.usernotifications.filtering</key>
@@ -620,10 +606,10 @@ plist_fragment(
 
 genrule(
     name = "VersionInfoPlist",
-    srcs = ["//:Tellomi/version"],
+    srcs = ["//:versions.json"],
     outs = ["VersionInfoPlist.plist"],
     cmd = """
-        version=$$(tr -d '[:space:]' < $(location //:Tellomi/version))
+        version=$$(python3 -c "import json; print(json.load(open('$(location //:versions.json)'))['app'])")
         cat > $@ <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -655,10 +641,8 @@ plist_fragment(
     template =
     """
     <key>CFBundleDisplayName</key>
-    <string>{telegram_app_name}</string>
-    """.format(
-        telegram_app_name = telegram_app_name,
-    )
+    <string>Telegram</string>
+    """
 )
 
 plist_fragment(
@@ -965,11 +949,6 @@ sh_binary(
     srcs = [":GenerateAddAlternateIcons"],
 )
 
-sh_binary(
-    name = "EnsureIpadHomeIcons",
-    srcs = ["ensure_ipad_home_icons.sh"],
-)
-
 plist_fragment(
     name = "TelegramUIInfoPlist",
     extension = "plist",
@@ -1059,9 +1038,9 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{extension_bundle_id_share}</string>
+    <string>{telegram_bundle_id}.Share</string>
     <key>CFBundleName</key>
-    <string>{telegram_app_name}</string>
+    <string>Telegram</string>
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>NSExtension</key>
@@ -1097,8 +1076,7 @@ plist_fragment(
         <string>ShareRootController</string>
     </dict>
     """.format(
-        extension_bundle_id_share = extension_bundle_id_share,
-        telegram_app_name = telegram_app_name,
+        telegram_bundle_id = telegram_bundle_id,
     )
 )
 
@@ -1119,7 +1097,7 @@ swift_library(
 )
 
 plist_fragment(
-    name = "ExtensionAppGroupEntitlements",
+    name = "ShareExtensionEntitlements",
     extension = "entitlements",
     template = """
 <key>com.apple.security.application-groups</key>
@@ -1131,8 +1109,10 @@ plist_fragment(
 
 ios_extension(
     name = "ShareExtension",
-    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = extension_bundle_id_share,
+    entitlements = ":ShareExtensionEntitlements.entitlements",
+    bundle_id = "{telegram_bundle_id}.Share".format(
+        telegram_bundle_id = telegram_bundle_id,
+    ),
     families = [
         "iphone",
         "ipad",
@@ -1163,9 +1143,9 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{extension_bundle_id_notification_content}</string>
+    <string>{telegram_bundle_id}.NotificationContent</string>
     <key>CFBundleName</key>
-    <string>{telegram_app_name}</string>
+    <string>Telegram</string>
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>NSExtension</key>
@@ -1186,8 +1166,7 @@ plist_fragment(
         <string>NotificationViewController</string>
     </dict>
     """.format(
-        extension_bundle_id_notification_content = extension_bundle_id_notification_content,
-        telegram_app_name = telegram_app_name,
+        telegram_bundle_id = telegram_bundle_id,
     )
 )
 
@@ -1238,8 +1217,9 @@ swift_library(
 
 ios_extension(
     name = "NotificationContentExtension",
-    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = extension_bundle_id_notification_content,
+    bundle_id = "{telegram_bundle_id}.NotificationContent".format(
+        telegram_bundle_id = telegram_bundle_id,
+    ),
     families = [
         "iphone",
         "ipad",
@@ -1271,9 +1251,9 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{extension_bundle_id_widget}</string>
+    <string>{telegram_bundle_id}.Widget</string>
     <key>CFBundleName</key>
-    <string>{telegram_app_name}</string>
+    <string>Telegram</string>
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>NSExtension</key>
@@ -1286,8 +1266,7 @@ plist_fragment(
         <string>arm64</string>
     </array>
     """.format(
-        extension_bundle_id_widget = extension_bundle_id_widget,
-        telegram_app_name = telegram_app_name,
+        telegram_bundle_id = telegram_bundle_id,
     )
 )
 
@@ -1343,8 +1322,9 @@ genrule(
 
 ios_extension(
     name = "WidgetExtension",
-    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = extension_bundle_id_widget,
+    bundle_id = "{telegram_bundle_id}.Widget".format(
+        telegram_bundle_id = telegram_bundle_id,
+    ),
     families = [
         "iphone",
         "ipad",
@@ -1388,9 +1368,9 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{extension_bundle_id_siri_intents}</string>
+    <string>{telegram_bundle_id}.SiriIntents</string>
     <key>CFBundleName</key>
-    <string>{telegram_app_name}</string>
+    <string>Telegram</string>
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>NSExtension</key>
@@ -1418,8 +1398,7 @@ plist_fragment(
         <string>IntentHandler</string>
     </dict>
     """.format(
-        extension_bundle_id_siri_intents = extension_bundle_id_siri_intents,
-        telegram_app_name = telegram_app_name,
+        telegram_bundle_id = telegram_bundle_id,
     )
 )
 
@@ -1516,8 +1495,9 @@ ios_unit_test(
 
 ios_extension(
     name = "IntentsExtension",
-    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = extension_bundle_id_siri_intents,
+    bundle_id = "{telegram_bundle_id}.SiriIntents".format(
+        telegram_bundle_id = telegram_bundle_id,
+    ),
     families = [
         "iphone",
         "ipad",
@@ -1551,9 +1531,9 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{extension_bundle_id_broadcast_upload}</string>
+    <string>{telegram_bundle_id}.BroadcastUpload</string>
     <key>CFBundleName</key>
-    <string>{telegram_app_name}</string>
+    <string>Telegram</string>
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>NSExtension</key>
@@ -1566,8 +1546,7 @@ plist_fragment(
         <string>RPBroadcastProcessModeSampleBuffer</string>
     </dict>
     """.format(
-        extension_bundle_id_broadcast_upload = extension_bundle_id_broadcast_upload,
-        telegram_app_name = telegram_app_name,
+        telegram_bundle_id = telegram_bundle_id,
     )
 )
 
@@ -1611,8 +1590,9 @@ swift_library(
 
 ios_extension(
     name = "BroadcastUploadExtension",
-    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = extension_bundle_id_broadcast_upload,
+    bundle_id = "{telegram_bundle_id}.BroadcastUpload".format(
+        telegram_bundle_id = telegram_bundle_id,
+    ),
     families = [
         "iphone",
         "ipad",
@@ -1645,9 +1625,9 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleIdentifier</key>
-    <string>{extension_bundle_id_notification_service}</string>
+    <string>{telegram_bundle_id}.NotificationService</string>
     <key>CFBundleName</key>
-    <string>{telegram_app_name}</string>
+    <string>Telegram</string>
     <key>CFBundlePackageType</key>
     <string>XPC!</string>
     <key>NSExtension</key>
@@ -1665,15 +1645,15 @@ plist_fragment(
         </dict>
     </dict>
     """.format(
-        extension_bundle_id_notification_service = extension_bundle_id_notification_service,
-        telegram_app_name = telegram_app_name,
+        telegram_bundle_id = telegram_bundle_id
     )
 )
 
 ios_extension(
     name = "NotificationServiceExtension" + notificationServiceExtensionVersion,
-    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
-    bundle_id = extension_bundle_id_notification_service,
+    bundle_id = "{telegram_bundle_id}.NotificationService".format(
+        telegram_bundle_id = telegram_bundle_id,
+    ),
     families = [
         "iphone",
         "ipad",
@@ -1716,11 +1696,11 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>{telegram_app_name}</string>
+    <string>Telegram</string>
     <key>CFBundleIdentifier</key>
     <string>{telegram_bundle_id}</string>
     <key>CFBundleName</key>
-    <string>{telegram_app_name}</string>
+    <string>Telegram</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
@@ -1746,9 +1726,9 @@ plist_fragment(
         <string>firefox</string>
         <string>touch-http</string>
         <string>yandexbrowser-open-url</string>
-        <string>iosamap</string>
-        <string>baidumap</string>
-        <string>qqmap</string>
+        <string>vimeo</string>
+        <string>vine</string>
+        <string>coub</string>
         <string>uber</string>
         <string>citymapper</string>
         <string>lyft</string>
@@ -1776,33 +1756,36 @@ plist_fragment(
         <true/>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>需要相机权限，以便拍照、录像和进行视频通话。</string>
+    <string>We need this so that you can take and share photos and videos.</string>
     <key>NSContactsUsageDescription</key>
-    <string>当你与朋友联系时，{telegram_app_name} 会把通讯录同步到加密的云端，以便在你的设备上找到他们。</string>
+    <string>Telegram stores your contacts heavily encrypted in the cloud to let you connect with your friends across all your devices.</string>
     <key>NSFaceIDUsageDescription</key>
-    <string>你可以使用面容 ID 解锁应用。</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>当你分享位置、发送实时位置，或查看附近的人时，{telegram_app_name} 需要使用你的位置。开启实时位置后，应用在后台也会继续使用位置信息。</string>
+    <string>You can use Face ID to unlock the app.</string>
     <key>NSLocationAlwaysUsageDescription</key>
-    <string>当你在聊天中与朋友分享实时位置时，{telegram_app_name} 需要在后台使用位置，以便在分享期间持续更新。从 Apple Watch 发送位置也需要这项权限。</string>
+    <string>When you send your location to your friends, Telegram needs access to show them a map. You also need this to send locations from an Apple Watch.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>当你向朋友发送位置时，{telegram_app_name} 需要使用你的位置来显示地图。</string>
+    <string>When you send your location to your friends, Telegram needs access to show them a map.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>需要麦克风权限，以便录制并分享语音消息和有声视频。</string>
+    <string>We need this so that you can record and share voice messages and videos with sound.</string>
     <key>NSMotionUsageDescription</key>
-    <string>当你向朋友发送位置时，{telegram_app_name} 需要使用你的位置来显示地图。</string>
+    <string>When you send your location to your friends, Telegram needs access to show them a map.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
-    <string>需要权限，以便把照片和视频保存到相册。</string>
+    <string>We need this so that you can share photos and videos from your photo library.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>需要照片权限，以便从相册分享照片和视频，并保存你拍摄的内容。</string>
+    <string>We need this so that you can share photos and videos from your photo library.</string>
     <key>NSSiriUsageDescription</key>
-    <string>你可以使用 Siri 发送消息。</string>
+    <string>You can use Siri to send messages.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>需要语音识别权限，以便在你要求时把语音消息转成文字。</string>
+    <string>We need this to transcribe audio messages on your request.</string>
     <key>NSUserActivityTypes</key>
     <array>
         <string>INSendMessageIntent</string>
         <string>RemindAboutChatIntent</string>
+    </array>
+    <key>UIAppFonts</key>
+    <array>
+        <string>AremacFS-Regular.otf</string>
+        <string>AremacFS-Semibold.otf</string>
     </array>
     <key>UIApplicationSceneManifest</key>
     <dict>
@@ -1870,7 +1853,7 @@ plist_fragment(
                 <string>public.data</string>
             </array>
             <key>UTTypeDescription</key>
-            <string>{telegram_app_name} iOS Color Theme File</string>
+            <string>Telegram iOS Color Theme File</string>
             <key>UTTypeIconFiles</key>
             <array>
                 <string>BlueIcon@3x.png</string>
@@ -1892,7 +1875,6 @@ plist_fragment(
     <true/>
     """.format(
         telegram_bundle_id = telegram_bundle_id,
-        telegram_app_name = telegram_app_name,
     )
 )
 
@@ -1940,18 +1922,12 @@ ios_application(
         ":RequiredDeviceCapabilitiesPlist",
         ":UrlTypesInfoPlist",
     ],
-    app_icons = ["//:TellomiAppIcon"],
+    app_icons = [ ":{}_icon".format(name) for name in composer_icon_folders ],
     alternate_icons = [
-        "//:TellomiAlternate_{}".format(name) for name in alternate_icon_folders
+        ":{}".format(name) for name in alternate_icon_folders
     ],
-    # Actool compiles the primary icon into Assets.car. ITMS-90892 still wants
-    # the 152 and 167 PNGs as loose files referenced by CFBundleIcons~ipad.
-    # The processor appends those names after the plist merge, which cannot
-    # itself repeat the CFBundleIcons~ipad key actool already wrote.
-    ipa_post_processor = ":EnsureIpadHomeIcons",
     resources = [
         ":LaunchScreen",
-        "//:TellomiLooseIpadHomeIcons",
         #":DefaultAppIcon",
     ],
     frameworks = [

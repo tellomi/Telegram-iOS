@@ -594,7 +594,6 @@ class TabBarNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 node.contextTextImageNode.image = contextTextImage
                 node.contextImageNode.image = contextImage
                 node.contentWidth = max(contentWidth, imageContentWidth)
-                let becameSelected = !node.isSelected
                 node.isSelected = true
                 
                 if !self.reduceMotion && item.item.ringSelection {
@@ -604,8 +603,6 @@ class TabBarNode: ASDisplayNode, ASGestureRecognizerDelegate {
                             node?.imageNode.layer.removeAllAnimations()
                         })
                     })
-                } else if !self.reduceMotion && becameSelected && item.item.animationName == nil {
-                    node.imageNode.layer.animateScale(from: 0.86, to: 1.0, duration: 0.18, removeOnCompletion: true)
                 }
             } else {
                 let (textImage, contentWidth) = tabBarItemImage(item.item.image, title: item.item.title ?? "", backgroundColor: .clear, tintColor: self.theme.rootController.tabBar.textColor, horizontal: self.horizontal, imageMode: false, centered: self.centered)

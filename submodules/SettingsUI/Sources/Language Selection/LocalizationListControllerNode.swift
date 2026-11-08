@@ -16,7 +16,6 @@ import UndoUI
 import TelegramUIPreferences
 import TranslateUI
 import PremiumUI
-import AuthorizationUI
 
 private enum LanguageListSection: ItemListSectionId {
     case translate
@@ -314,18 +313,6 @@ private final class LocalizationListSearchContainerNode: SearchDisplayController
     }
 }
 
-private func tellomiAppendBuiltinInterfaceLanguages(_ entries: inout [LanguageListEntry], existingIds: inout Set<String>, activeLanguageCode: String?, applyingCode: String?, revealedCode: String?) {
-    let known = Set(existingIds.map { $0.lowercased() })
-    for info in tellomiBuiltinInterfaceLanguages() {
-        if known.contains(info.languageCode.lowercased()) || existingIds.contains(info.languageCode) {
-            continue
-        }
-        existingIds.insert(info.languageCode)
-        let code = info.languageCode.lowercased()
-        entries.append(.localization(index: entries.count, info: info, type: .official, selected: code == activeLanguageCode?.lowercased(), activity: code == applyingCode?.lowercased(), revealed: code == revealedCode?.lowercased(), editing: false))
-    }
-}
-
 private struct LanguageListNodeTransition {
     let deletions: [ListViewDeleteItem]
     let insertions: [ListViewInsertItem]
@@ -448,8 +435,31 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             })
         }
         
-        let translateButtonAvailable = true
-        let chatTranslationAvailable = true
+        let translationConfiguration = TranslationConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
+        var translateButtonAvailable = false
+        var chatTranslationAvailable = false
+        
+        switch translationConfiguration.manual {
+        case .enabled, .alternative:
+            translateButtonAvailable = true
+        case .system:
+            if #available(iOS 18.0, *) {
+                translateButtonAvailable = true
+            }
+        default:
+            break
+        }
+        
+        switch translationConfiguration.auto {
+        case .enabled:
+            chatTranslationAvailable = true
+        case .system:
+            if #available(iOS 18.0, *) {
+                chatTranslationAvailable = true
+            }
+        default:
+            break
+        }
         
         let previousState = Atomic<LocalizationListState?>(value: nil)
         let previousEntriesHolder = Atomic<([LanguageListEntry], PresentationTheme, PresentationStrings)?>(value: nil)
@@ -462,11 +472,13 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             self.applyingCode.get(),
             revealedCode.get(),
             self.isEditing.get()
-        ).start(next: { [weak self] localizationListState, _, sharedData, presentationData, applyingCode, revealedCode, isEditing in
+        ).start(next: { [weak self] localizationListState, peer, sharedData, presentationData, applyingCode, revealedCode, isEditing in
             guard let strongSelf = self else {
                 return
             }
             
+            let isPremium = peer?.isPremium ?? false
+                        
             var entries: [LanguageListEntry] = []
             var activeLanguageCode: String?
             if let localizationSettings = sharedData.entries[SharedDataKeys.localizationSettings]?.get(LocalizationSettings.self) {
@@ -479,7 +491,7 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             var ignoredLanguages: [String] = []
             if let translationSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.translationSettings]?.get(TranslationSettings.self) {
                 showTranslate = translationSettings.showTranslate
-                translateChats = translationSettings.translateChats
+                translateChats = isPremium ? translationSettings.translateChats : false
                 if let languages = translationSettings.ignoredLanguages {
                     ignoredLanguages = languages
                 } else {
@@ -500,7 +512,7 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                     }
                 }
             } else {
-                translateChats = translateButtonAvailable
+                translateChats = isPremium
                 if let activeLanguage = activeLanguageCode, supportedTranslationLanguages.contains(activeLanguage) {
                     ignoredLanguages = [activeLanguage]
                 }
@@ -511,11 +523,6 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                 }
             }
             
-            let appData = context.currentAppConfiguration.with { $0 }.data
-            let manualTranslationAvailable = tellomiManualTranslationAvailable(manual: appData?["translations_manual_enabled"] as? String, flag: appData?[TellomiFeatureGate.translateKey] as Any?)
-            let autoTranslationAvailable = tellomiAutoTranslationAvailable(auto: appData?["translations_auto_enabled"] as? String)
-            let translationServiceInfo = (!manualTranslationAvailable && !autoTranslationAvailable) ? tellomiTranslationUnavailableText(languageCode: presentationData.strings.baseLanguageCode) : nil
-
             if !localizationListState.availableOfficialLocalizations.isEmpty {
                 strongSelf.currentListState = localizationListState
                 
@@ -526,7 +533,7 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                         entries.append(.translate(text: presentationData.strings.Localization_ShowTranslate, value: showTranslate))
                     }
                     if chatTranslationAvailable {
-                        entries.append(.translateEntire(text: presentationData.strings.Localization_TranslateEntireChat, value: translateChats, locked: false))
+                        entries.append(.translateEntire(text: presentationData.strings.Localization_TranslateEntireChat, value: translateChats, locked: !isPremium))
                     }
                     
                     var value = ""
@@ -552,9 +559,7 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                         entries.append(.doNotTranslate(text: presentationData.strings.Localization_DoNotTranslate, value: value))
                     }
                     
-                    if let translationServiceInfo {
-                        entries.append(.translateInfo(text: translationServiceInfo))
-                    } else if showTranslate {
+                    if showTranslate {
                         entries.append(.translateInfo(text: ignoredLanguages.count > 1 ? presentationData.strings.Localization_DoNotTranslateManyInfo : presentationData.strings.Localization_DoNotTranslateInfo))
                     } else {
                         entries.append(.translateInfo(text: presentationData.strings.Localization_ShowTranslateInfoExtended))
@@ -586,23 +591,10 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
                     existingIds.insert(info.languageCode)
                     entries.append(.localization(index: entries.count, info: info, type: .official, selected: info.languageCode == activeLanguageCode, activity: applyingCode == info.languageCode, revealed: revealedCode == info.languageCode, editing: false))
                 }
-                tellomiAppendBuiltinInterfaceLanguages(&entries, existingIds: &existingIds, activeLanguageCode: activeLanguageCode, applyingCode: applyingCode, revealedCode: revealedCode)
             } else {
-                if translateButtonAvailable || chatTranslationAvailable {
-                    entries.append(.translateTitle(text: presentationData.strings.Localization_TranslateMessages.uppercased()))
-                    if translateButtonAvailable {
-                        entries.append(.translate(text: presentationData.strings.Localization_ShowTranslate, value: showTranslate))
-                    }
-                    if chatTranslationAvailable {
-                        entries.append(.translateEntire(text: presentationData.strings.Localization_TranslateEntireChat, value: translateChats, locked: false))
-                    }
-                    entries.append(.doNotTranslate(text: presentationData.strings.Localization_DoNotTranslate, value: ""))
-                    if let translationServiceInfo {
-                        entries.append(.translateInfo(text: translationServiceInfo))
-                    }
+                for _ in 0 ..< 15 {
+                    entries.append(.localization(index: entries.count, info: nil, type: .official, selected: false, activity: false, revealed: false, editing: false))
                 }
-                entries.append(.localizationTitle(text: presentationData.strings.Localization_InterfaceLanguage.uppercased(), section: LanguageListSection.official.rawValue))
-                tellomiAppendBuiltinInterfaceLanguages(&entries, existingIds: &existingIds, activeLanguageCode: activeLanguageCode, applyingCode: applyingCode, revealedCode: revealedCode)
             }
             
             let previousState = previousState.swap(localizationListState)
@@ -776,7 +768,6 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             strongSelf.applyingCode.set(.single(info.languageCode))
             strongSelf.applyDisposable.set((strongSelf.context.engine.localization.downloadAndApplyLocalization(accountManager: strongSelf.context.sharedContext.accountManager, languageCode: info.languageCode)
                 |> deliverOnMainQueue).start(completed: { [weak self] in
-                    tellomiRememberInterfaceLanguage(info.languageCode)
                     self?.applyingCode.set(.single(nil))
                 
                     self?.context.engine.messages.refreshAttachMenuBots()
@@ -803,7 +794,7 @@ final class LocalizationListControllerNode: ViewControllerTracingNode {
             guard let strongSelf = self else {
                 return
             }
-            let shareController = strongSelf.context.sharedContext.makeShareScreen(context: strongSelf.context, params: ShareControllerParams(subject: .url("https://\(TellomiLinks.host)/setlanguage/\(info.languageCode)"), actionCompleted: { [weak self] in
+            let shareController = strongSelf.context.sharedContext.makeShareScreen(context: strongSelf.context, params: ShareControllerParams(subject: .url("https://t.me/setlanguage/\(info.languageCode)"), actionCompleted: { [weak self] in
                 if let strongSelf = self {
                     let presentationData = strongSelf.context.sharedContext.currentPresentationData.with { $0 }
                     strongSelf.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), nil)

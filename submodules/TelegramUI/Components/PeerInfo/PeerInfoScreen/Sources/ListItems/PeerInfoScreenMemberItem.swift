@@ -8,7 +8,6 @@ import SwiftSignalKit
 import AccountContext
 import TelegramCore
 import ItemListUI
-import PhoneNumberFormat
 
 enum PeerInfoScreenMemberItemAction {
     case open
@@ -201,12 +200,7 @@ private final class PeerInfoScreenMemberItemNode: PeerInfoScreenItemNode {
         var synchronousLoads = false
         if case .account = item.member {
             itemHeight = .generic
-            if case let .user(user) = item.member.peer, let label = tellomiAccountSwitcherLabel(phone: user.phone, peerId: user.id) {
-                let shown = label.contains("@") ? label : formatPhoneNumber(label)
-                itemText = .text(shown, .secondary)
-            } else {
-                itemText = .none
-            }
+            itemText = .none
             synchronousLoads = true
         } else {
             itemHeight = .peerList

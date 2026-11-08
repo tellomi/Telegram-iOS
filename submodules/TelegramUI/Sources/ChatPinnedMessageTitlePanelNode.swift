@@ -1026,7 +1026,7 @@ final class ChatPinnedMessageTitlePanelNode: ChatTitleAccessoryPanelNode {
                         return
                     case let .url(url):
                         var isConcealed = true
-                        if TellomiLinks.hasDeepLinkPrefix(url) {
+                        if url.hasPrefix("tg://") {
                             isConcealed = false
                         }
                         controllerInteraction.openUrl(ChatControllerInteraction.OpenUrl(url: url, concealed: isConcealed, progress: Promise()))
@@ -1124,7 +1124,7 @@ final class ChatPinnedMessageTitlePanelNode: ChatTitleAccessoryPanelNode {
             for media in message.media {
                 if let webpage = media as? TelegramMediaWebpage, case let .Loaded(content) = webpage.content, content.type == "telegram_call" {
                     var isConcealed = true
-                    if TellomiLinks.hasDeepLinkPrefix(content.url) {
+                    if content.url.hasPrefix("tg://") {
                         isConcealed = false
                     }
                     let progressPromise = Promise<Bool>()

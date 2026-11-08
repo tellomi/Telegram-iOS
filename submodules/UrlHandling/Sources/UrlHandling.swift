@@ -9,13 +9,20 @@ import TelegramNotices
 import AccountContext
 import WalletContext
 
-private let baseTelegramMePaths = TellomiLinks.linkHosts
-private let telegramWebShortLinkHosts = TellomiLinks.shortLinkHosts
+private let baseTelegramMePaths = [
+    "telegram.me",
+    "t.me", "telegram.dog"
+]
+private let telegramWebShortLinkHosts = [
+    "a.t.me", 
+    "k.t.me",
+    "z.t.me"
+]
 private let baseTelegraPhPaths = [
     "telegra.ph/",
     "te.legra.ph/",
     "graph.org/",
-    "\(TellomiLinks.host)/iv?",
+    "t.me/iv?",
     "telegram.org/blog/",
     "telegram.org/tour/"
 ]
@@ -275,7 +282,7 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, context: Accou
                             }
                         }
                         if let _ = url {
-                            return .internalInstantView(url: "https://\(TellomiLinks.host)/\(query)")
+                            return .internalInstantView(url: "https://t.me/\(query)")
                         }
                     } else if peerName == "contact" {
                         var code: String?
@@ -337,7 +344,7 @@ public func parseInternalUrl(sharedContext: SharedAccountContext, context: Accou
                             }
                         }
                         if let _ = token {
-                            return .oauth(url: "https://\(TellomiLinks.host)/\(query)")
+                            return .oauth(url: "https://t.me/\(query)")
                         }
                     } else {
                         if let value = queryItems.first(where: { $0.name == "free" })?.value, !value.isEmpty {
@@ -863,7 +870,7 @@ private enum ResolveInternalUrlResult {
 //
 // A link whose target message *is* the topic's root message (`messageId.id == threadId`) addresses
 // the topic itself, not a message within it — that is the canonical topic link, e.g.
-// `tell.cc/<name>/<threadId>` or `tell.cc/c/<channelId>/<threadId>`. Resolving it to a specific message
+// `t.me/<name>/<threadId>` or `t.me/c/<channelId>/<threadId>`. Resolving it to a specific message
 // would pin the history anchor to the topic's very first message, so the topic would always open at
 // its oldest message instead of at the unread position. Returning `.replyThread` leaves the anchor
 // unset, which lets it fall back to `maxReadIncomingMessageId`.
@@ -907,7 +914,7 @@ private func resolveInternalUrl(context: AccountContext, url: ParsedInternalUrl)
         case let .premiumOffer(reference):
             return .single(.result(.premiumOffer(reference: reference)))
         case let .sendGrams(queryItems):
-            var walletUrl = URLComponents(string: "https://\(TellomiLinks.host)/sendgrams")!
+            var walletUrl = URLComponents(string: "https://t.me/sendgrams")!
             walletUrl.queryItems = queryItems
             walletUrl.percentEncodedQuery = walletUrl.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
             if let value = walletUrl.string, WalletContext.isTonConnectUrl(value) {
@@ -1542,7 +1549,7 @@ public func parseProxyUrl(sharedContext: SharedAccountContext, url: String) -> (
             }
         }
     }
-    if let parsedUrl = URL(string: url), TellomiLinks.isDeepLinkScheme(parsedUrl.scheme), let host = parsedUrl.host, let query = parsedUrl.query {
+    if let parsedUrl = URL(string: url), parsedUrl.scheme == "tg", let host = parsedUrl.host, let query = parsedUrl.query {
         if let internalUrl = parseInternalUrl(sharedContext: sharedContext, context: nil, query: host + "?" + query), case let .proxy(host, port, username, password, secret) = internalUrl {
             return (host, port, username, password, secret)
         }
@@ -1563,7 +1570,7 @@ public func parseStickerPackUrl(sharedContext: SharedAccountContext, url: String
             }
         }
     }
-    if let parsedUrl = URL(string: url), TellomiLinks.isDeepLinkScheme(parsedUrl.scheme), let host = parsedUrl.host, let query = parsedUrl.query {
+    if let parsedUrl = URL(string: url), parsedUrl.scheme == "tg", let host = parsedUrl.host, let query = parsedUrl.query {
         if let internalUrl = parseInternalUrl(sharedContext: sharedContext, context: nil, query: host + "?" + query), case let .stickerPack(name, _) = internalUrl {
             return name
         }
@@ -1584,7 +1591,7 @@ public func parseWallpaperUrl(sharedContext: SharedAccountContext, url: String) 
             }
         }
     }
-    if let parsedUrl = URL(string: url), TellomiLinks.isDeepLinkScheme(parsedUrl.scheme), let host = parsedUrl.host, let query = parsedUrl.query {
+    if let parsedUrl = URL(string: url), parsedUrl.scheme == "tg", let host = parsedUrl.host, let query = parsedUrl.query {
         if let internalUrl = parseInternalUrl(sharedContext: sharedContext, context: nil, query: host + "?" + query), case let .wallpaper(wallpaper) = internalUrl {
             return wallpaper
         }
@@ -1605,7 +1612,7 @@ public func parseAdUrl(sharedContext: SharedAccountContext, context: AccountCont
             }
         }
     }
-    if let parsedUrl = URL(string: url), TellomiLinks.isDeepLinkScheme(parsedUrl.scheme), let host = parsedUrl.host, let query = parsedUrl.query {
+    if let parsedUrl = URL(string: url), parsedUrl.scheme == "tg", let host = parsedUrl.host, let query = parsedUrl.query {
         if let internalUrl = parseInternalUrl(sharedContext: sharedContext, context: context, query: host + "?" + query), case .peer = internalUrl {
             return internalUrl
         }
@@ -1679,14 +1686,6 @@ public func resolveUrlImpl(context: AccountContext, peerId: EnginePeer.Id?, url:
                         url = "http://\(url)"
                     }
                 }
-            }
-
-            // D-57. A chat tap parses `tell.cc/m#<id>` as the username `m` before
-            // the external opener can reopen Discover. Hand that address out as
-            // an external URL so `tellomiHandleFeedPostLink` runs. Checked before
-            // autologin, which would otherwise rewrite the fragment.
-            if tellomiFeedPostLinkEscapesPeerResolution(url, navigationEnabled: tellomiBottomNavigationEnabled(appConfiguration: appConfiguration)) {
-                return .single(.result(.externalUrl(url)))
             }
             
             if let urlValue = URL(string: url), let host = urlValue.host?.lowercased() {

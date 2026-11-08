@@ -652,8 +652,6 @@ public final class NavigateToChatControllerParams {
     /// Whether the chat's back button shows the unread chats Back returns to. Off for a chat opened from
     /// News, whose Back returns to the feed.
     public let showsUnreadChatsBackBadge: Bool
-    public let tellomiSecretView: Bool
-    public let tellomiChatUnlocked: Bool
 
     public init(
         navigationController: NavigationController,
@@ -689,9 +687,7 @@ public final class NavigateToChatControllerParams {
         forceOpenChat: Bool = false,
         customChatNavigationStack: [EnginePeer.Id]? = nil,
         skipAgeVerification: Bool = false,
-        showsUnreadChatsBackBadge: Bool = true,
-        tellomiSecretView: Bool = false,
-        tellomiChatUnlocked: Bool = false
+        showsUnreadChatsBackBadge: Bool = true
     ) {
         self.navigationController = navigationController
         self.chatController = chatController
@@ -727,8 +723,6 @@ public final class NavigateToChatControllerParams {
         self.customChatNavigationStack = customChatNavigationStack
         self.skipAgeVerification = skipAgeVerification
         self.showsUnreadChatsBackBadge = showsUnreadChatsBackBadge
-        self.tellomiSecretView = tellomiSecretView
-        self.tellomiChatUnlocked = tellomiChatUnlocked
     }
     
     public func withSkipAgeVerification(_ skipAgeVerification: Bool) -> NavigateToChatControllerParams {
@@ -766,50 +760,7 @@ public final class NavigateToChatControllerParams {
             forceOpenChat: self.forceOpenChat,
             customChatNavigationStack: self.customChatNavigationStack,
             skipAgeVerification: skipAgeVerification,
-            showsUnreadChatsBackBadge: self.showsUnreadChatsBackBadge,
-            tellomiSecretView: self.tellomiSecretView,
-            tellomiChatUnlocked: self.tellomiChatUnlocked
-        )
-    }
-
-    public func withTellomiChatUnlocked() -> NavigateToChatControllerParams {
-        return NavigateToChatControllerParams(
-            navigationController: self.navigationController,
-            chatController: self.chatController,
-            context: self.context,
-            chatLocation: self.chatLocation,
-            chatLocationContextHolder: self.chatLocationContextHolder,
-            subject: self.subject,
-            botStart: self.botStart,
-            attachBotStart: self.attachBotStart,
-            botAppStart: self.botAppStart,
-            updateTextInputState: self.updateTextInputState,
-            activateInput: self.activateInput,
-            keepStack: self.keepStack,
-            useExisting: self.useExisting,
-            useBackAnimation: self.useBackAnimation,
-            purposefulAction: self.purposefulAction,
-            scrollToEndIfExists: self.scrollToEndIfExists,
-            activateMessageSearch: self.activateMessageSearch,
-            peekData: self.peekData,
-            reportReason: self.reportReason,
-            animated: self.animated,
-            forceAnimatedScroll: self.forceAnimatedScroll,
-            options: self.options,
-            parentGroupId: self.parentGroupId,
-            chatListFilter: self.chatListFilter,
-            chatNavigationStack: self.chatNavigationStack,
-            changeColors: self.changeColors,
-            setupController: self.setupController,
-            pushController: self.pushController,
-            completion: self.completion,
-            chatListCompletion: self.chatListCompletion,
-            forceOpenChat: self.forceOpenChat,
-            customChatNavigationStack: self.customChatNavigationStack,
-            skipAgeVerification: self.skipAgeVerification,
-            showsUnreadChatsBackBadge: self.showsUnreadChatsBackBadge,
-            tellomiSecretView: self.tellomiSecretView,
-            tellomiChatUnlocked: true
+            showsUnreadChatsBackBadge: self.showsUnreadChatsBackBadge
         )
     }
 }
@@ -1212,20 +1163,17 @@ public struct ChatControllerParams {
     public let forcedNavigationBarTheme: PresentationTheme?
     public let forcedWallpaper: TelegramWallpaper?
     public let hideTopPanels: Bool
-    public let tellomiSecretView: Bool
     
     public init(
         forcedTheme: PresentationTheme? = nil,
         forcedNavigationBarTheme: PresentationTheme? = nil,
         forcedWallpaper: TelegramWallpaper? = nil,
-        hideTopPanels: Bool = false,
-        tellomiSecretView: Bool = false
+        hideTopPanels: Bool = false
     ) {
         self.forcedTheme = forcedTheme
         self.forcedNavigationBarTheme = forcedNavigationBarTheme
         self.forcedWallpaper = forcedWallpaper
         self.hideTopPanels = hideTopPanels
-        self.tellomiSecretView = tellomiSecretView
     }
 }
 
@@ -1767,6 +1715,7 @@ public protocol SharedAccountContext: AnyObject {
         initialUsername: String?,
         initialTitle: String?,
         openAutomatically: Bool,
+        viaDeeplink: Bool,
         completion: @escaping (EnginePeer.Id?) -> Void
     ) async -> ViewController?
     func makeEmojiStatusSelectionController(context: AccountContext, mode: EmojiStatusSelectionControllerMode, sourceView: UIView, emojiContent: Signal<AnyObject, NoError>, currentSelection: Int64?, color: UIColor?, destinationItemView: @escaping () -> UIView?) -> ViewController

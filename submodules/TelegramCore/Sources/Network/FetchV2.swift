@@ -943,7 +943,6 @@ private final class FetchImpl {
                         fileReference = info.reference.apiFileReference
                     }
                     if let inputLocation = cloudResource.apiInputLocation(fileReference: fileReference) {
-                        tellomiFileHashNoteLocation(resourceKey: self.resource.id.stringRepresentation, location: inputLocation)
                         let queue = self.queue
                         filePartRequest = self.network.multiplexedRequestManager.request(
                             to: .main(sourceDatacenterId),
@@ -1046,7 +1045,6 @@ private final class FetchImpl {
                             )
                         }
                     case let .cdnRedirect(cdnData):
-                        tellomiFileHashNoteTransport(resourceKey: self.resource.id.stringRepresentation, cdn: true)
                         self.cdnReuploadCounts.removeAll()
                         self.cdnReuploadGenerations.removeAll()
                         let cdnState = FetchImpl.FetchingState(
@@ -1285,7 +1283,6 @@ private final class FetchImpl {
         }
         
         private func fallBackToMaster(sourceDatacenterId: Int, reason: String, allowRedirect: Bool = false) {
-            tellomiFileHashNoteTransport(resourceKey: self.resource.id.stringRepresentation, cdn: false)
             Logger.shared.log("FetchV2", "\(self.loggingIdentifier): CDN unusable (\(reason)), downloading from datacenter \(sourceDatacenterId)")
             self.cdnDisabled = !allowRedirect
             let masterState = FetchingState(

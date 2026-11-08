@@ -451,7 +451,6 @@ public final class DeviceAccess {
                         })
                     }
                 case let .location(locationSubject):
-                    locationManager?.requestPreciseLocationIfReduced()
                     let status = sharedLocationAuthorizationManager.authorizationStatus
                     let hasPreciseLocation: Bool
                     if #available(iOS 14.0, *) {

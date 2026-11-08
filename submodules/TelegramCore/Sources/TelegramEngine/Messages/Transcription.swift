@@ -15,29 +15,6 @@ private enum InternalAudioTranscriptionResult {
     case limitExceeded(Int32)
 }
 
-func _internal_transcribeDraft(network: Network, audio: Data, fileExtension: String) -> Signal<String, TellomiDraftTranscriptionError> {
-    switch tellomiDraftAudioDecision(byteCount: audio.count, fileExtension: fileExtension) {
-    case .empty:
-        return .fail(.empty)
-    case .tooLong:
-        return .fail(.tooLong)
-    case .unsupported:
-        return .fail(.failed)
-    case .accepted:
-        break
-    }
-    return network.request(Api.functions.messages.transcribeDraft(audio: Buffer(data: audio)))
-    |> mapError { error -> TellomiDraftTranscriptionError in
-        return tellomiDraftTranscriptionError(error.errorDescription)
-    }
-    |> map { result -> String in
-        switch result {
-        case let .transcribedAudio(transcribedAudioData):
-            return transcribedAudioData.text
-        }
-    }
-}
-
 func _internal_transcribeAudio(postbox: Postbox, network: Network, messageId: MessageId) -> Signal<EngineAudioTranscriptionResult, NoError> {
     return postbox.transaction { transaction -> Api.InputPeer? in
         return transaction.getPeer(messageId.peerId).flatMap(apiInputPeer)

@@ -1,5 +1,4 @@
 import Foundation
-import NaturalLanguage
 import LottieSettings
 import UIKit
 import AsyncDisplayKit
@@ -39,26 +38,6 @@ import ChatHistoryEntry
 import ChatMessageTextBubbleContentNode
 import ChatMessageRichDataBubbleContentNode
 import ChatMessageItemCommon
-
-private func tellomiDominantLanguage(_ text: String) -> String? {
-    let sample = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !sample.isEmpty else {
-        return nil
-    }
-    let recognizer = NLLanguageRecognizer()
-    recognizer.processString(String(sample.prefix(64)))
-    return recognizer.dominantLanguage?.rawValue
-}
-
-private func tellomiNeedsSideTranslate(item: ChatMessageItem, incoming: Bool) -> Bool {
-    let showing = item.controllerInteraction.translatedMessageIds.contains(item.message.id)
-    switch tellomiSideTranslateButton(isIncoming: incoming, isSecret: item.message.id.peerId.namespace == Namespaces.Peer.SecretChat, isSelecting: item.controllerInteraction.selectionState != nil, showTranslate: item.controllerInteraction.tellomiShowsSideTranslate, manualAvailable: item.controllerInteraction.tellomiShowsSideTranslate, detectedLanguage: showing ? nil : tellomiDominantLanguage(item.message.text), isShowingThisMessage: showing, wholeChatTranslation: item.associatedData.translateToLanguage != nil) {
-    case .hidden:
-        return false
-    case .translate, .restore:
-        return true
-    }
-}
 import ChatMessageReplyInfoNode
 import ChatMessageCallBubbleContentNode
 import ChatMessageInteractiveFileNode
@@ -790,7 +769,6 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
     
     private var summarizeButtonNode: ChatMessageShareButton?
     private var shareButtonNode: ChatMessageShareButton?
-    private var sideTranslateButtonNode: ChatMessageSideTranslateButton?
     
     private let messageAccessibilityArea: AccessibilityAreaNode
 
@@ -1339,10 +1317,6 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 }
                 
                 if let shareButtonNode = strongSelf.shareButtonNode, shareButtonNode.frame.contains(point) {
-                    return .fail
-                }
-
-                if let sideTranslateButtonNode = strongSelf.sideTranslateButtonNode, sideTranslateButtonNode.frame.contains(point) {
                     return .fail
                 }
                 
@@ -2035,9 +2009,6 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         if isEphemeralMessage {
             needsShareButton = false
         }
-        if needsSummarizeButton, !TellomiFeatureGate.with(appConfiguration: item.context.currentAppConfiguration.with { $0 }).aiSummaryEnabled {
-            needsSummarizeButton = false
-        }
         
         /*if isInlinePage {
             needsShareButton = false
@@ -2052,18 +2023,17 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             allowFullWidth = true
         }
 
-        let reservesSideButton = ((needsShareButton || tellomiNeedsSideTranslate(item: item, incoming: incoming)) && !isSidePanelOpen)
         var tmpWidth: CGFloat
         if allowFullWidth {
             tmpWidth = baseWidth
-            if reservesSideButton || isAd {
+            if (needsShareButton && !isSidePanelOpen) || isAd {
                 tmpWidth -= 45.0
             } else {
                 tmpWidth -= 3.0
             }
         } else {
             tmpWidth = layoutConstants.bubble.maximumWidthFill.widthFor(baseWidth)
-            if (reservesSideButton || isAd) && tmpWidth + 32.0 > baseWidth {
+            if ((needsShareButton && !isSidePanelOpen) || isAd) && tmpWidth + 32.0 > baseWidth {
                 tmpWidth = baseWidth - 32.0
             }
         }
@@ -2076,7 +2046,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         tmpWidth -= deliveryFailedInset
 
         var maximumContentWidth = floor(tmpWidth - layoutConstants.bubble.edgeInset * 3.0 - layoutConstants.bubble.contentInsets.left - layoutConstants.bubble.contentInsets.right - avatarInset)
-        if reservesSideButton {
+        if (needsShareButton && !isSidePanelOpen) {
             maximumContentWidth -= 10.0
         }
         
@@ -4051,7 +4021,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         }
         strongSelf.backgroundNode.setType(type: backgroundType, highlighted: false, graphics: graphics, maskMode: strongSelf.backgroundMaskMode, hasWallpaper: hasWallpaper, transition: legacyTransition, backgroundNode: presentationContext.backgroundNode)
         strongSelf.backgroundWallpaperNode.setType(type: backgroundType, theme: item.presentationData.theme, essentialGraphics: graphics, maskMode: strongSelf.backgroundMaskMode, backgroundNode: presentationContext.backgroundNode)
-        strongSelf.shadowNode.setType(type: backgroundType, hasWallpaper: tellomiDrawsBubbleShadow(hasWallpaper: hasWallpaper), graphics: graphics)
+        strongSelf.shadowNode.setType(type: backgroundType, hasWallpaper: hasWallpaper, graphics: graphics)
         
         strongSelf.backgroundType = backgroundType
         
@@ -5762,7 +5732,6 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         // Outside both branches on purpose: the animated one only touches the background when the
         // frame CHANGED, and a tear can move while the bubble does not.
         strongSelf.updateBackgroundTear(unsupportedZones, backgroundFrame: backgroundFrame, animation: animation)
-        strongSelf.layoutSideTranslateButton(item: item, incoming: incoming, backgroundFrame: backgroundFrame, animation: animation, hidden: isCurrentlyPlayingMedia || isSidePanelOpen)
 
         let previousContextContentFrame = strongSelf.mainContextSourceNode.contentRect
         strongSelf.mainContextSourceNode.contentRect = backgroundFrame.offsetBy(dx: incomingOffset, dy: 0.0)
@@ -6728,10 +6697,6 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         
         if let shareButtonNode = self.shareButtonNode, shareButtonNode.frame.contains(point) {
             return shareButtonNode.view.hitTest(self.view.convert(point, to: shareButtonNode.view), with: event)
-        }
-
-        if let sideTranslateButtonNode = self.sideTranslateButtonNode, sideTranslateButtonNode.frame.contains(point) {
-            return sideTranslateButtonNode.view.hitTest(self.view.convert(point, to: sideTranslateButtonNode.view), with: event)
         }
         
         if let selectionNode = self.selectionNode {
@@ -7814,79 +7779,6 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         self.updateVisibility(isScroll: false)
     }
     
-    private func layoutSideTranslateButton(item: ChatMessageItem, incoming: Bool, backgroundFrame: CGRect, animation: ListViewItemUpdateAnimation, hidden: Bool) {
-        let showing = item.controllerInteraction.translatedMessageIds.contains(item.message.id)
-        let decision = tellomiSideTranslateButton(
-            isIncoming: incoming,
-            isSecret: item.message.id.peerId.namespace == Namespaces.Peer.SecretChat,
-            isSelecting: item.controllerInteraction.selectionState != nil,
-            showTranslate: item.controllerInteraction.tellomiShowsSideTranslate,
-            manualAvailable: item.controllerInteraction.tellomiShowsSideTranslate,
-            detectedLanguage: showing ? nil : tellomiDominantLanguage(item.message.text),
-            isShowingThisMessage: showing,
-            wholeChatTranslation: item.associatedData.translateToLanguage != nil
-        )
-        guard decision != .hidden else {
-            self.sideTranslateButtonNode?.removeFromSupernode()
-            self.sideTranslateButtonNode = nil
-            return
-        }
-        let button: ChatMessageSideTranslateButton
-        if let current = self.sideTranslateButtonNode {
-            button = current
-        } else {
-            button = ChatMessageSideTranslateButton()
-            self.sideTranslateButtonNode = button
-            self.insertSubnode(button, belowSubnode: self.messageAccessibilityArea)
-            button.pressed = { [weak self] in
-                self?.toggleSideTranslation()
-            }
-        }
-        let icon = generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Translate"), color: item.presentationData.theme.theme.chat.message.incoming.primaryTextColor)
-        let buttonSize = button.update(icon: icon)
-        let origin = tellomiSideTranslateOrigin(bubbleX: Double(backgroundFrame.minX), bubbleY: Double(backgroundFrame.minY), bubbleWidth: Double(backgroundFrame.width), bubbleHeight: Double(backgroundFrame.height), buttonSide: Double(buttonSize.width), shareMinY: self.shareButtonNode.map { Double($0.frame.minY) }, incoming: incoming)
-        let frame = CGRect(origin: CGPoint(x: origin.x, y: origin.y), size: buttonSize)
-        animation.animator.updatePosition(layer: button.layer, position: frame.center, completion: nil)
-        animation.animator.updateBounds(layer: button.layer, bounds: CGRect(origin: CGPoint(), size: frame.size), completion: nil)
-        animation.animator.updateAlpha(layer: button.layer, alpha: hidden ? 0.0 : 1.0, completion: nil)
-        button.isUserInteractionEnabled = !hidden
-        button.accessibilityLabel = decision == .restore ? "还原" : item.presentationData.strings.Conversation_ContextMenuTranslate
-    }
-
-    private func toggleSideTranslation() {
-        guard let item = self.item else {
-            return
-        }
-        if item.controllerInteraction.translatedMessageIds.contains(item.message.id) {
-            item.controllerInteraction.translatedMessageIds.remove(item.message.id)
-            let _ = item.controllerInteraction.requestMessageUpdate(item.message.id, false, nil)
-            return
-        }
-        item.controllerInteraction.translatedMessageIds.insert(item.message.id)
-        let _ = item.controllerInteraction.requestMessageUpdate(item.message.id, false, nil)
-        var alreadyTranslated = false
-        for attribute in item.message.attributes {
-            if let attribute = attribute as? TranslationMessageAttribute, attribute.toLang == "zh", !attribute.text.isEmpty || attribute.instantPage != nil {
-                alreadyTranslated = true
-                break
-            }
-        }
-        if alreadyTranslated {
-            return
-        }
-        let _ = (item.context.engine.messages.translateMessages(messageIds: [item.message.id], fromLang: "en", toLang: "zh", enableLocalIfPossible: false)
-        |> deliverOnMainQueue).start(error: { [weak self] _ in
-            guard let self, let item = self.item else {
-                return
-            }
-            item.controllerInteraction.translatedMessageIds.remove(item.message.id)
-            let _ = item.controllerInteraction.requestMessageUpdate(item.message.id, false, nil)
-            item.controllerInteraction.displayUndo(.info(title: nil, text: tellomiTranslationUnavailableText(languageCode: item.presentationData.strings.baseLanguageCode), timeout: nil, customUndoText: nil))
-        }, completed: {
-            let _ = item.controllerInteraction.requestMessageUpdate(item.message.id, false, nil)
-        })
-    }
-
     private func toggleSummarization() {
         guard let item = self.item else {
             return

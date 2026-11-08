@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
 
 load(
     "@build_configuration//:variables.bzl",
@@ -11,12 +11,7 @@ filegroup(
     srcs = glob([
         "Sounds/**/*",
         "Resources/**/*",
-    ], exclude = [
-        "Sounds/**/.*",
-        "Resources/**/.*",
-        # Apple's SF Camera (filename reversed). Not licensed for redistribution.
-        "Resources/Fonts/AremacFS-*.otf",
-    ]),
+    ], exclude = ["Sounds/**/.*", "Resources/**/.*"]),
     visibility = ["//visibility:public"],
 )
 
@@ -58,20 +53,6 @@ available_appcenter_targets = [
 ]
 
 appcenter_targets = available_appcenter_targets if telegram_bundle_id in internal_bundle_ids else []
-
-# Host test. The decision file imports nothing. Run with
-# `swift test` is not this target; on a Mac:
-# `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/TelegramUI:ChatHistoryEmptyLoadingDecisionTests`
-swift_test(
-    name = "ChatHistoryEmptyLoadingDecisionTests",
-    srcs = [
-        "Sources/ChatHistoryEmptyLoadingDecision.swift",
-        "Tests/ChatHistoryEmptyLoadingDecisionTests.swift",
-    ],
-    copts = [
-        "-warnings-as-errors",
-    ],
-)
 
 swift_library(
     name = "TelegramUI",
@@ -352,7 +333,6 @@ swift_library(
         "//submodules/TelegramUI/Components/CoreList:CoreList",
         "//submodules/TelegramUI/Components/CoreListComponentHost",
         "//submodules/TelegramUI/Components/News/NewsScreen",
-        "//submodules/TelegramUI/Components/Tellomi/FeedScreen",
         "//submodules/TelegramUI/Components/News/NewsFeedSupport",
         "//submodules/TelegramUI/Components/Stories/StoryContainerScreen",
         "//submodules/TelegramUI/Components/CameraScreen",

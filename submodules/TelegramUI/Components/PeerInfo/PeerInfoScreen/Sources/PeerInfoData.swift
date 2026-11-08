@@ -1595,7 +1595,7 @@ func peerInfoScreenData(
                 var availablePanes = availablePanes
                 if isMyProfile {
                     availablePanes?.insert(.stories, at: 0)
-                    if TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).giftsEnabled, availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData {
+                    if availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData {
                         if let starGiftsCount = cachedData.starGiftsCount, starGiftsCount > 0 {
                             availablePanes?.insert(.gifts, at: 1)
                         }
@@ -1608,7 +1608,7 @@ func peerInfoScreenData(
                         availablePanes?.insert(.stories, at: 0)
                     }
                     
-                    if TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).giftsEnabled, availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData, peerView.peerId != context.account.peerId {
+                    if availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData, peerView.peerId != context.account.peerId {
                         if let starGiftsCount = cachedData.starGiftsCount, starGiftsCount > 0 {
                             availablePanes?.insert(.gifts, at: hasStories ? 1 : 0)
                         }
@@ -1948,7 +1948,7 @@ func peerInfoScreenData(
                         }
                     }
                     
-                    if TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).giftsEnabled, availablePanes != nil, let cachedData = peerView.cachedData as? CachedChannelData {
+                    if availablePanes != nil, let cachedData = peerView.cachedData as? CachedChannelData {
                         if (cachedData.starGiftsCount ?? 0) > 0 || (profileGiftsState.count ?? 0) > 0 || forceHasGifts {
                             availablePanes?.insert(.gifts, at: hasStories ? 1 : 0)
                         }

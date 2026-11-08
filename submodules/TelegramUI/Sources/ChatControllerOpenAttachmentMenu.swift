@@ -390,7 +390,7 @@ extension ChatControllerImpl {
             let premiumGiftOptions: [CachedPremiumGiftOption]
             
             var showPremiumGift = false
-            if !premiumConfiguration.isPremiumDisabled && TellomiFeatureGate.with(appConfiguration: self.context.currentAppConfiguration.with { $0 }).giftsEnabled && self.presentationInterfaceState.disallowedGifts != TelegramDisallowedGifts.All {
+            if !premiumConfiguration.isPremiumDisabled && self.presentationInterfaceState.disallowedGifts != TelegramDisallowedGifts.All {
                 if self.presentationInterfaceState.alwaysShowGiftButton {
                     showPremiumGift = true
                 } else if self.presentationInterfaceState.hasBirthdayToday {

@@ -8,31 +8,11 @@ import MtProtoKit
 public enum AuthorizationCodeRequestError {
     case invalidPhoneNumber
     case limitExceeded
-    /// `420 FLOOD_WAIT_X`. A short resend pause, not the daily code cap.
-    case floodWait(Int32)
     case generic(info: (Int, String)?)
-    /// `400 PHONE_NUMBER_FLOOD`. On this server that is the 11th code of the day.
     case phoneLimitExceeded
     case phoneBanned
     case timeout
     case appOutdated
-}
-
-func tellomiFloodWaitSeconds(_ description: String) -> Int32 {
-    let prefix = "FLOOD_WAIT_"
-    if description.hasPrefix(prefix), let seconds = Int32(description.dropFirst(prefix.count)), seconds > 0 {
-        return seconds
-    }
-    return 60
-}
-
-/// The user from `auth.authorization` is the account peer. The first screen reads it
-/// immediately. Leaving it out of the peer table crashed phone sign-in once the code
-/// was accepted: email sign-up reached a name screen first and the peer arrived later.
-func tellomiStoreAuthorizedUser(transaction: Transaction, user: TelegramUser) {
-    transaction.updatePeersInternal([user], update: { _, updated in
-        return updated
-    })
 }
 
 func switchToAuthorizedAccount(transaction: AccountManagerModifier<TelegramAccountManagerTypes>, account: UnauthorizedAccount, isSupportUser: Bool) {
@@ -161,42 +141,7 @@ func sendFirebaseAuthorizationCode(network: Network, phoneNumber: String, apiId:
     }
 }
 
-/// One `auth.sendCode` / `auth.resendCode` attempt. A later attempt, or Back, advances `token`
-/// so a response that is already in flight cannot write its phone number and `phone_code_hash`.
-public struct TellomiLoginAttempt {
-    public let token: Atomic<Int>
-    public let id: Int
-
-    public init(token: Atomic<Int>, id: Int) {
-        self.token = token
-        self.id = id
-    }
-
-    public func isCurrent() -> Bool {
-        return self.token.with { $0 == self.id }
-    }
-}
-
-/// Writes the unauthorized state only while `attempt` is still the one the user is on.
-/// The check and the write share the attempt lock, so Back cannot land between them.
-private func tellomiCommitUnauthorizedContents(transaction: Transaction, account: UnauthorizedAccount, attempt: TellomiLoginAttempt?, contents: UnauthorizedAccountStateContents) {
-    let write = {
-        transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: contents))
-    }
-    guard let attempt else {
-        write()
-        return
-    }
-    let _ = attempt.token.with { value -> Bool in
-        guard value == attempt.id else {
-            return false
-        }
-        write()
-        return true
-    }
-}
-
-public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, phoneNumber: String, apiId: Int32, apiHash: String, pushNotificationConfiguration: AuthorizationCodePushNotificationConfiguration?, firebaseSecretStream: Signal<[String: String], NoError>, syncContacts: Bool, disableAuthTokens: Bool = false, attempt: TellomiLoginAttempt? = nil, forcedPasswordSetupNotice: @escaping (Int32) -> (NoticeEntryKey, CodableEntry)?) -> Signal<SendAuthorizationCodeResult, AuthorizationCodeRequestError> {
+public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, phoneNumber: String, apiId: Int32, apiHash: String, pushNotificationConfiguration: AuthorizationCodePushNotificationConfiguration?, firebaseSecretStream: Signal<[String: String], NoError>, syncContacts: Bool, disableAuthTokens: Bool = false, forcedPasswordSetupNotice: @escaping (Int32) -> (NoticeEntryKey, CodableEntry)?) -> Signal<SendAuthorizationCodeResult, AuthorizationCodeRequestError> {
     var cloudValue: [Data] = []
     if let list = NSUbiquitousKeyValueStore.default.object(forKey: "T_SLTokens") as? [String] {
         cloudValue = list.compactMap { string -> Data? in
@@ -284,7 +229,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
         }
         |> `catch` { error -> Signal<(SendCodeResult, UnauthorizedAccount), AuthorizationCodeRequestError> in
             if error.errorDescription.hasPrefix("FLOOD_WAIT") {
-                return .fail(.floodWait(tellomiFloodWaitSeconds(error.errorDescription)))
+                return .fail(.limitExceeded)
             } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
                 return .fail(.invalidPhoneNumber)
             } else if error.errorDescription == "PHONE_NUMBER_FLOOD" {
@@ -320,7 +265,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
             return account.postbox.transaction { transaction -> Signal<SendAuthorizationCodeResult, AuthorizationCodeRequestError> in
                 switch result {
                 case let .password(hint):
-                    tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .passwordEntry(hint: hint ?? "", number: nil, code: nil, suggestReset: false, syncContacts: syncContacts))
+                    transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .passwordEntry(hint: hint ?? "", number: nil, code: nil, suggestReset: false, syncContacts: syncContacts)))
                     return .single(.sentCode(account))
                 case let .sentCode(sentCode):
                     switch sentCode {
@@ -353,7 +298,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
                             |> castError(AuthorizationCodeRequestError.self)
                             |> mapToSignal { firebaseSecret -> Signal<SendAuthorizationCodeResult, AuthorizationCodeRequestError> in
                                 guard let firebaseSecret = firebaseSecret else {
-                                    return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: phoneNumber, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebasePushTimeout, attempt: attempt)
+                                    return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: phoneNumber, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebasePushTimeout)
                                 }
                                 
                                 return sendFirebaseAuthorizationCode(network: account.network, phoneNumber: phoneNumber, apiId: apiId, apiHash: apiHash, phoneCodeHash: phoneCodeHash, timeout: codeTimeout, firebaseSecret: firebaseSecret)
@@ -384,13 +329,13 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
                                                     }
                                                 }
                                             }
-                                            tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .confirmationCodeEntry(number: phoneNumber, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false))
+                                            transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .confirmationCodeEntry(number: phoneNumber, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false)))
                                             
                                             return .sentCode(account)
                                         }
                                         |> castError(AuthorizationCodeRequestError.self)
                                     } else {
-                                        return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: phoneNumber, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebaseSendCodeError, attempt: attempt)
+                                        return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: phoneNumber, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebaseSendCodeError)
                                     }
                                 }
                             }
@@ -414,7 +359,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
                                 }
                             }
                         }
-                        tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .confirmationCodeEntry(number: phoneNumber, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false))
+                        transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .confirmationCodeEntry(number: phoneNumber, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false)))
                     case .sentCodePaymentRequired:
                         return .never()
                     case let .sentCodeSuccess(sentCodeSuccessData):
@@ -432,7 +377,6 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
                                 isSupportUser = true
                             }
                             let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
-                            tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                             initializedAppSettingsAfterLogin(transaction: transaction, appVersion: account.networkArguments.appVersion, syncContacts: syncContacts)
                             transaction.setState(state)
                             if let otherwiseReloginDays = otherwiseReloginDays, let value = forcedPasswordSetupNotice(otherwiseReloginDays) {
@@ -462,7 +406,7 @@ enum ResendAuthorizationCodeReason: String {
     case firebaseSendCodeError = "FIREBASE_SEND_CODE_ERROR"
 }
 
-private func internalResendAuthorizationCode(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, number: String, apiId: Int32, apiHash: String, hash: String, syncContacts: Bool, firebaseSecretStream: Signal<[String: String], NoError>, reason: ResendAuthorizationCodeReason?, attempt: TellomiLoginAttempt? = nil) -> Signal<SendAuthorizationCodeResult, AuthorizationCodeRequestError> {
+private func internalResendAuthorizationCode(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, number: String, apiId: Int32, apiHash: String, hash: String, syncContacts: Bool, firebaseSecretStream: Signal<[String: String], NoError>, reason: ResendAuthorizationCodeReason?) -> Signal<SendAuthorizationCodeResult, AuthorizationCodeRequestError> {
     var flags: Int32 = 0
     var mappedReason: String?
     if let reason {
@@ -473,7 +417,7 @@ private func internalResendAuthorizationCode(accountManager: AccountManager<Tele
     return account.network.request(Api.functions.auth.resendCode(flags: flags, phoneNumber: number, phoneCodeHash: hash, reason: mappedReason), automaticFloodWait: false)
     |> mapError { error -> AuthorizationCodeRequestError in
         if error.errorDescription.hasPrefix("FLOOD_WAIT") {
-            return .floodWait(tellomiFloodWaitSeconds(error.errorDescription))
+            return .limitExceeded
         } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
             return .invalidPhoneNumber
         } else if error.errorDescription == "PHONE_NUMBER_FLOOD" {
@@ -518,7 +462,7 @@ private func internalResendAuthorizationCode(accountManager: AccountManager<Tele
                     |> castError(AuthorizationCodeRequestError.self)
                     |> mapToSignal { firebaseSecret -> Signal<SendAuthorizationCodeResult, AuthorizationCodeRequestError> in
                         guard let firebaseSecret = firebaseSecret else {
-                            return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: number, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebasePushTimeout, attempt: attempt)
+                            return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: number, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebasePushTimeout)
                         }
                         
                         return sendFirebaseAuthorizationCode(network: account.network, phoneNumber: number, apiId: apiId, apiHash: apiHash, phoneCodeHash: phoneCodeHash, timeout: codeTimeout, firebaseSecret: firebaseSecret)
@@ -549,13 +493,13 @@ private func internalResendAuthorizationCode(accountManager: AccountManager<Tele
                                             }
                                         }
                                     }
-                                    tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .confirmationCodeEntry(number: number, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false))
+                                    transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .confirmationCodeEntry(number: number, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false)))
                                     
                                     return .sentCode(account)
                                 }
                                 |> castError(AuthorizationCodeRequestError.self)
                             } else {
-                                return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: number, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebaseSendCodeError, attempt: attempt)
+                                return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: number, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebaseSendCodeError)
                             }
                         }
                     }
@@ -579,12 +523,12 @@ private func internalResendAuthorizationCode(accountManager: AccountManager<Tele
                         }
                     }
                 }
-                tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .confirmationCodeEntry(number: number, type: SentAuthorizationCodeType(apiType: type), hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false))
+                transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .confirmationCodeEntry(number: number, type: SentAuthorizationCodeType(apiType: type), hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false)))
                 
                 return .single(.sentCode(account))
             case let .sentCodePaymentRequired(sentCodePaymentRequiredData):
                 let (storeProduct, codeHash, supportEmailAddress, supportEmailSubject, premiumDays) = (sentCodePaymentRequiredData.storeProduct, sentCodePaymentRequiredData.phoneCodeHash, sentCodePaymentRequiredData.supportEmailAddress, sentCodePaymentRequiredData.supportEmailSubject, sentCodePaymentRequiredData.premiumDays)
-                tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .payment(number: number, codeHash: codeHash, storeProduct: storeProduct, premiumDays: premiumDays, supportEmailAddress: supportEmailAddress, supportEmailSubject: supportEmailSubject, syncContacts: syncContacts))
+                transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .payment(number: number, codeHash: codeHash, storeProduct: storeProduct, premiumDays: premiumDays, supportEmailAddress: supportEmailAddress, supportEmailSubject: supportEmailSubject, syncContacts: syncContacts)))
                 return .single(.sentCode(account))
             case .sentCodeSuccess:
                 return .single(.loggedIn)
@@ -595,16 +539,16 @@ private func internalResendAuthorizationCode(accountManager: AccountManager<Tele
     }
 }
 
-public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, apiId: Int32, apiHash: String, firebaseSecretStream: Signal<[String: String], NoError>, attempt: TellomiLoginAttempt? = nil) -> Signal<Void, AuthorizationCodeRequestError> {
+public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, apiId: Int32, apiHash: String, firebaseSecretStream: Signal<[String: String], NoError>) -> Signal<Void, AuthorizationCodeRequestError> {
     return account.postbox.transaction { transaction -> Signal<Void, AuthorizationCodeRequestError> in
         if let state = transaction.getState() as? UnauthorizedAccountState {
             switch state.contents {
-                case let .confirmationCodeEntry(number, type, hash, _, _, syncContacts, previousCodeEntryValue, _):
-                    do {
+                case let .confirmationCodeEntry(number, type, hash, _, nextType, syncContacts, previousCodeEntryValue, _):
+                    if nextType != nil {
                         return account.network.request(Api.functions.auth.resendCode(flags: 0, phoneNumber: number, phoneCodeHash: hash, reason: nil), automaticFloodWait: false)
                         |> mapError { error -> AuthorizationCodeRequestError in
                             if error.errorDescription.hasPrefix("FLOOD_WAIT") {
-                                return .floodWait(tellomiFloodWaitSeconds(error.errorDescription))
+                                return .limitExceeded
                             } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
                                 return .invalidPhoneNumber
                             } else if error.errorDescription == "PHONE_NUMBER_FLOOD" {
@@ -666,7 +610,7 @@ public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccou
                                         |> castError(AuthorizationCodeRequestError.self)
                                         |> mapToSignal { firebaseSecret -> Signal<SendAuthorizationCodeResult, AuthorizationCodeRequestError> in
                                             guard let firebaseSecret = firebaseSecret else {
-                                                return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: number, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebasePushTimeout, attempt: attempt)
+                                                return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: number, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebasePushTimeout)
                                             }
                                             
                                             return sendFirebaseAuthorizationCode(network: account.network, phoneNumber: number, apiId: apiId, apiHash: apiHash, phoneCodeHash: phoneCodeHash, timeout: codeTimeout, firebaseSecret: firebaseSecret)
@@ -679,23 +623,23 @@ public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccou
                                             |> mapToSignal { success -> Signal<SendAuthorizationCodeResult, AuthorizationCodeRequestError> in
                                                 if success {
                                                     return account.postbox.transaction { transaction -> SendAuthorizationCodeResult in
-                                                        tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .confirmationCodeEntry(number: number, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false))
+                                                        transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .confirmationCodeEntry(number: number, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false)))
                                                         
                                                         return .sentCode(account)
                                                     }
                                                     |> castError(AuthorizationCodeRequestError.self)
                                                 } else {
-                                                    return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: number, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebaseSendCodeError, attempt: attempt)
+                                                    return internalResendAuthorizationCode(accountManager: accountManager, account: account, number: number, apiId: apiId, apiHash: apiHash, hash: phoneCodeHash, syncContacts: syncContacts, firebaseSecretStream: firebaseSecretStream, reason: .firebaseSendCodeError)
                                                 }
                                             }
                                         }
                                         |> map { _ -> Void in return Void() }
                                     }
                                     
-                                    tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .confirmationCodeEntry(number: number, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false))
+                                    transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .confirmationCodeEntry(number: number, type: parsedType, hash: phoneCodeHash, timeout: codeTimeout, nextType: parsedNextType, syncContacts: syncContacts, previousCodeEntry: previousCodeEntry, usePrevious: false)))
                                 case let .sentCodePaymentRequired(sentCodePaymentRequiredData):
                                     let (storeProduct, codeHash, supportEmailAddress, supportEmailSubject, premiumDays) = (sentCodePaymentRequiredData.storeProduct, sentCodePaymentRequiredData.phoneCodeHash, sentCodePaymentRequiredData.supportEmailAddress, sentCodePaymentRequiredData.supportEmailSubject, sentCodePaymentRequiredData.premiumDays)
-                                    tellomiCommitUnauthorizedContents(transaction: transaction, account: account, attempt: attempt, contents: .payment(number: number, codeHash: codeHash, storeProduct: storeProduct, premiumDays: premiumDays, supportEmailAddress: supportEmailAddress, supportEmailSubject: supportEmailSubject, syncContacts: syncContacts))
+                                    transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .payment(number: number, codeHash: codeHash, storeProduct: storeProduct, premiumDays: premiumDays, supportEmailAddress: supportEmailAddress, supportEmailSubject: supportEmailSubject, syncContacts: syncContacts)))
                                 case .sentCodeSuccess:
                                     break
                                 }
@@ -704,6 +648,8 @@ public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccou
                             |> mapError { _ -> AuthorizationCodeRequestError in }
                             |> switchToLatest
                         }
+                    } else {
+                        return .fail(.generic(info: nil))
                     }
                 default:
                     return .complete()
@@ -1150,15 +1096,11 @@ public func authorizeWithCode(accountManager: AccountManager<TelegramAccountMana
                                         }
 
                                         let user = TelegramUser(user: apiUser)
-                                        if tellomiIsLoginEmail(number) {
-                                            tellomiRememberLoginEmail(peerId: user.id, login: number)
-                                        }
                                         var isSupportUser = false
                                         if let phone = user.phone, phone.hasPrefix("42") {
                                             isSupportUser = true
                                         }
                                         let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
-                                        tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                                         initializedAppSettingsAfterLogin(transaction: transaction, appVersion: account.networkArguments.appVersion, syncContacts: syncContacts)
                                         transaction.setState(state)
                                         if let otherwiseReloginDays = otherwiseReloginDays, let value = forcedPasswordSetupNotice(otherwiseReloginDays) {
@@ -1225,7 +1167,6 @@ public func authorizeWithPassword(accountManager: AccountManager<TelegramAccount
 
                 let user = TelegramUser(user: apiUser)
                 let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
-                tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                 /*transaction.updatePeersInternal([user], update: { current, peer -> Peer? in
                  return peer
                  })*/
@@ -1359,7 +1300,6 @@ public func authorizeWithPasskey(accountManager: AccountManager<TelegramAccountM
                         isSupportUser = true
                     }
                     let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
-                    tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                     initializedAppSettingsAfterLogin(transaction: transaction, appVersion: account.networkArguments.appVersion, syncContacts: syncContacts)
                     transaction.setState(state)
                     if let otherwiseReloginDays = otherwiseReloginDays, let value = forcedPasswordSetupNotice(otherwiseReloginDays) {
@@ -1427,7 +1367,6 @@ public func loginWithRecoveredAccountData(accountManager: AccountManager<Telegra
                 isSupportUser = true
             }
             let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
-            tellomiStoreAuthorizedUser(transaction: transaction, user: user)
 
             initializedAppSettingsAfterLogin(transaction: transaction, appVersion: account.networkArguments.appVersion, syncContacts: syncContacts)
             transaction.setState(state)
@@ -1548,8 +1487,6 @@ public enum SignUpError {
     case codeExpired
     case invalidFirstName
     case invalidLastName
-    /// The account was created. The profile photo was not. `description` is the RPC error text.
-    case avatarUploadFailed(code: Int32, description: String)
 }
 
 public func signUpWithName(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, firstName: String, lastName: String, avatarData: Data?, avatarVideo: Signal<UploadedPeerPhotoData?, NoError>?, videoStartTimestamp: Double?, disableJoinNotifications: Bool = false, forcedPasswordSetupNotice: @escaping (Int32) -> (NoticeEntryKey, CodableEntry)?) -> Signal<Void, SignUpError> {
@@ -1582,16 +1519,12 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                     }
 
                     let user = TelegramUser(user: apiUser)
-                    if tellomiIsLoginEmail(number) {
-                        tellomiRememberLoginEmail(peerId: user.id, login: number)
-                    }
                     var isSupportUser = false
                     if let phone = user.phone, phone.hasPrefix("42") {
                         isSupportUser = true
                     }
                     let appliedState = account.postbox.transaction { transaction -> Void in
                         let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
-                        tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                         if let hole = account.postbox.seedConfiguration.initializeChatListWithHole.topLevel {
                             transaction.replaceChatListHole(groupId: .root, index: hole.index, hole: nil)
                         }
@@ -1608,23 +1541,27 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                     }
                     |> castError(SignUpError.self)
                     
-                    let activated = appliedState
-                    |> then(switchedAccounts)
-                    if avatarData == nil && avatarVideo == nil {
-                        return activated
-                    }
-                    return tellomiSignUpAvatarUpload(postbox: account.postbox, network: account.network, accountPeerId: user.id, peer: .single(user), avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp)
-                    |> castError(SignUpError.self)
-                    |> mapToSignal { step -> Signal<Void, SignUpError> in
-                        switch tellomiSignUpAvatarDecision(step) {
-                        case .wait:
-                            return Signal<Void, SignUpError>.never()
-                        case .createAccount:
-                            return activated
-                        case let .createAccountAndShowError(failure):
-                            return activated
-                            |> then(Signal<Void, SignUpError>.fail(.avatarUploadFailed(code: failure.code, description: failure.description)))
-                        }
+                    if let avatarData = avatarData {
+                        let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
+                        account.postbox.mediaBox.storeResourceData(resource.id, data: avatarData)
+                        
+                        return _internal_updatePeerPhotoInternal(postbox: account.postbox, network: account.network, stateManager: nil, accountPeerId: user.id, peer: .single(user), photo: _internal_uploadedPeerPhoto(postbox: account.postbox, network: account.network, resource: resource), video: avatarVideo, videoStartTimestamp: videoStartTimestamp, mapResourceToAvatarSizes: { _, _ in .single([:]) })
+                            |> `catch` { _ -> Signal<UpdatePeerPhotoStatus, SignUpError> in
+                                return .complete()
+                            }
+                            |> mapToSignal { result -> Signal<Void, SignUpError> in
+                                switch result {
+                                case .complete:
+                                    return .complete()
+                                case .progress:
+                                    return .never()
+                                }
+                            }
+                            |> then(appliedState)
+                            |> then(switchedAccounts)
+                    } else {
+                        return appliedState
+                        |> then(switchedAccounts)
                     }
                 case .authorizationSignUpRequired:
                     return .fail(.generic)
@@ -1632,64 +1569,6 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
             }
         } else {
             return .fail(.generic)
-        }
-    }
-    |> mapError { _ -> SignUpError in
-    }
-    |> switchToLatest
-}
-
-private func tellomiSignUpAvatarUpload(postbox: Postbox, network: Network, accountPeerId: PeerId, peer: Signal<Peer, NoError>, avatarData: Data?, avatarVideo: Signal<UploadedPeerPhotoData?, NoError>?, videoStartTimestamp: Double?) -> Signal<TellomiSignUpAvatarStep, NoError> {
-    let photo: Signal<UploadedPeerPhotoData, NoError>?
-    if let avatarData {
-        let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
-        postbox.mediaBox.storeResourceData(resource.id, data: avatarData)
-        photo = _internal_uploadedPeerPhoto(postbox: postbox, network: network, resource: resource)
-    } else {
-        photo = nil
-    }
-    return _internal_updatePeerPhotoInternal(postbox: postbox, network: network, stateManager: nil, accountPeerId: accountPeerId, peer: peer, photo: photo, video: avatarVideo, videoStartTimestamp: videoStartTimestamp, mapResourceToAvatarSizes: { _, _ in .single([:]) })
-    |> map { status -> TellomiSignUpAvatarStep in
-        switch status {
-        case .progress:
-            return .working
-        case .complete:
-            return .uploaded
-        }
-    }
-    |> `catch` { error -> Signal<TellomiSignUpAvatarStep, NoError> in
-        let failure: TellomiSignUpAvatarFailure
-        if case let .server(code, description) = error {
-            failure = TellomiSignUpAvatarFailure(code: code, description: description)
-        } else {
-            failure = TellomiSignUpAvatarFailure(code: 500, description: "")
-        }
-        return .single(.failed(failure))
-    }
-}
-
-/// Uploads the sign-up photo again. Does not call `auth.signUp` and does not change the session.
-public func tellomiRetrySignUpAvatar(account: UnauthorizedAccount, avatarData: Data?, avatarVideo: Signal<UploadedPeerPhotoData?, NoError>?, videoStartTimestamp: Double?) -> Signal<Void, SignUpError> {
-    return account.postbox.transaction { transaction -> Signal<Void, SignUpError> in
-        guard let state = transaction.getState() as? AuthorizedAccountState else {
-            return .fail(.generic)
-        }
-        let peerId = state.peerId
-        return account.postbox.loadedPeerWithId(peerId)
-        |> castError(SignUpError.self)
-        |> mapToSignal { peer -> Signal<Void, SignUpError> in
-            return tellomiSignUpAvatarUpload(postbox: account.postbox, network: account.network, accountPeerId: peerId, peer: .single(peer), avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp)
-            |> castError(SignUpError.self)
-            |> mapToSignal { step -> Signal<Void, SignUpError> in
-                switch tellomiSignUpAvatarDecision(step) {
-                case .wait:
-                    return Signal<Void, SignUpError>.never()
-                case .createAccount:
-                    return Signal<Void, SignUpError>.complete()
-                case let .createAccountAndShowError(failure):
-                    return Signal<Void, SignUpError>.fail(.avatarUploadFailed(code: failure.code, description: failure.description))
-                }
-            }
         }
     }
     |> mapError { _ -> SignUpError in

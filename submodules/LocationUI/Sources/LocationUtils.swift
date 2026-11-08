@@ -7,8 +7,8 @@ import MapKit
 import AccountContext
 
 extension TelegramMediaMap {
-    convenience init(coordinate: CLLocationCoordinate2D, liveBroadcastingTimeout: Int32? = nil, proximityNotificationRadius: Int32? = nil, accuracyRadius: Double? = nil) {
-        self.init(latitude: coordinate.latitude, longitude: coordinate.longitude, heading: nil, accuracyRadius: accuracyRadius, venue: nil, liveBroadcastingTimeout: liveBroadcastingTimeout, liveProximityNotificationRadius: proximityNotificationRadius)
+    convenience init(coordinate: CLLocationCoordinate2D, liveBroadcastingTimeout: Int32? = nil, proximityNotificationRadius: Int32? = nil) {
+        self.init(latitude: coordinate.latitude, longitude: coordinate.longitude, heading: nil, accuracyRadius: nil, venue: nil, liveBroadcastingTimeout: liveBroadcastingTimeout, liveProximityNotificationRadius: proximityNotificationRadius)
     }
     
     var coordinate: CLLocationCoordinate2D {
@@ -64,41 +64,24 @@ public func nearbyVenues(context: AccountContext, story: Bool = false, latitude:
             return .single(result)
         }
         |> mapToSignal { peer -> Signal<ChatContextResultCollection?, NoError> in
-            let botResults: Signal<ChatContextResultCollection?, NoError>
-            if let peer {
-                botResults = context.engine.messages.requestChatContextResults(botId: peer.id, peerId: context.account.peerId, query: query ?? "", location: .single((latitude, longitude)), offset: "")
-                |> map { results -> ChatContextResultCollection? in
-                    return results?.results
-                }
-                |> `catch` { _ -> Signal<ChatContextResultCollection?, NoError> in
-                    return .single(nil)
-                }
-            } else {
-                botResults = .single(nil)
+            guard let peer = peer else {
+                return .single(nil)
             }
-            // The inline venue bot (foursquare) wins when it returns venues. Tellomi has no
-            // such bot: resolve fails or the result list is empty, and MapKit fills the same
-            // venue rows.
-            return botResults
-            |> mapToSignal { collection -> Signal<ChatContextResultCollection?, NoError> in
-                if let collection, contextResultHasVenues(collection) {
-                    return .single(collection)
-                }
-                let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
-                let languageCode = localeIdentifierLanguageCode(baseLanguageCode: strings.baseLanguageCode, primaryLanguageCode: strings.primaryComponent.languageCode)
-                return appleMapVenueResults(peerId: context.account.peerId, latitude: latitude, longitude: longitude, query: query, languageCode: languageCode)
+            return context.engine.messages.requestChatContextResults(botId: peer.id, peerId: context.account.peerId, query: query ?? "", location: .single((latitude, longitude)), offset: "")
+            |> map { results -> ChatContextResultCollection? in
+                return results?.results
+            }
+            |> `catch` { error -> Signal<ChatContextResultCollection?, NoError> in
+                return .single(nil)
             }
         }
-    }
-}
-
-private func contextResultHasVenues(_ collection: ChatContextResultCollection) -> Bool {
-    for result in collection.results {
-        if case let .mapLocation(media, _) = result.message, media.venue != nil {
-            return true
+        |> map { contextResult -> ChatContextResultCollection? in
+            guard let contextResult else {
+                return nil
+            }
+            return contextResult
         }
     }
-    return false
 }
 
 func stringForEstimatedDuration(strings: PresentationStrings, time: Double, format: (String) -> String) -> String? {
