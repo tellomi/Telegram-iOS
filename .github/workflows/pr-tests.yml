@@ -35,7 +35,9 @@ jobs:
         run: bash .github/checkout-submodules.sh
 
       - name: Registry retry script tests
-        run: bash .github/bazel_registry_retry_test.sh
+        run: |
+          bash .github/bazel_registry_retry_test.sh
+          bash .github/download_retry_test.sh
 
       - name: Record this runner
         run: |
@@ -68,7 +70,7 @@ jobs:
           want="${spec##*:}"
           name="bazel-${version}-darwin-arm64"
           dest="${RUNNER_TEMP}/${name}"
-          curl -fsSL -o "${dest}" "https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
+          bash .github/fetch_pinned.sh "https://github.com/bazelbuild/bazel/releases/download/${version}/${name}" "${dest}" "${want}"
           got="$(shasum -a 256 "${dest}" | awk '{print $1}')"
           [[ "${got}" == "${want}" ]]
           chmod +x "${dest}"

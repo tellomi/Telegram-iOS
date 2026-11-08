@@ -52,7 +52,7 @@ jobs:
           want="${spec##*:}"
           name="bazel-${version}-darwin-arm64"
           dest="${RUNNER_TEMP}/${name}"
-          curl -fsSL -o "${dest}" "https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
+          bash .github/fetch_pinned.sh "https://github.com/bazelbuild/bazel/releases/download/${version}/${name}" "${dest}" "${want}"
           got="$(shasum -a 256 "${dest}" | awk '{print $1}')"
           [[ "${got}" == "${want}" ]]
           chmod +x "${dest}"
@@ -71,7 +71,8 @@ jobs:
       - name: Authorization contrast tests
         run: |
           set -euo pipefail
-          "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_loginui test \
+          bash .github/retry_external_fetch.sh -- \
+            "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_loginui test \
             //submodules/AuthorizationUI:TellomiLoginFieldColorsTests \
             //submodules/CountrySelectionUI:TellomiCallingCodePolicyTests \
             --test_output=errors --announce_rc
@@ -132,8 +133,7 @@ jobs:
           name="bazel-${version}-darwin-arm64"
           url="https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
           mkdir -p build-input
-          curl -fL --retry 3 --output "build-input/${name}" "$url"
-          echo "${sha}  build-input/${name}" | shasum -a 256 -c -
+          bash .github/fetch_pinned.sh "$url" "build-input/${name}" "${sha}"
           chmod +x "build-input/${name}"
 
       - name: Build the unsigned simulator app
@@ -143,7 +143,8 @@ jobs:
           export APP_VERSION=$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')
           export COMMIT_COUNT=$(git rev-list --count HEAD)
           export BUILD_NUMBER="$((COMMIT_COUNT + BUILD_NUMBER_OFFSET))"
-          python3 -u build-system/Make/Make.py \
+          bash .github/retry_external_fetch.sh -- \
+            python3 -u build-system/Make/Make.py \
             --bazelUserRoot="/private/var/tmp/_bazel_loginui_app" \
             --cacheDir "$BAZEL_CACHE_DIR" \
             build \

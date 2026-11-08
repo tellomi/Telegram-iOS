@@ -81,7 +81,8 @@ jobs:
       - name: Build release IPA
         run: |
           set -euo pipefail
-          python3 -u build-system/Make/Make.py \
+          bash .github/retry_external_fetch.sh -- \
+            python3 -u build-system/Make/Make.py \
             --overrideXcodeVersion \
             --cacheDir /Users/runner/telegram-bazel-cache \
             build \
