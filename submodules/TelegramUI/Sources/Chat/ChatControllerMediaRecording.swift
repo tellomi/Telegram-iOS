@@ -246,6 +246,23 @@ extension ChatControllerImpl {
         }
     }
     
+    func tellomiInsertDictationDraft(_ text: String) {
+        let current = self.presentationInterfaceState.interfaceState.effectiveInputState.inputText
+        let updated = NSMutableAttributedString(attributedString: current)
+        if updated.length > 0 {
+            updated.append(NSAttributedString(string: " "))
+        }
+        updated.append(NSAttributedString(string: text))
+        self.updateChatPresentationInterfaceState(animated: true, interactive: true, {
+            $0.updatedInterfaceState { $0.withUpdatedEffectiveInputState(ChatTextInputState(inputText: updated)) }
+        })
+    }
+
+    func tellomiPresentDraftTranscription(_ error: TellomiDraftTranscriptionError) {
+        let prompt = tellomiDraftTranscriptionPrompt(error, languageCode: self.presentationData.strings.baseLanguageCode)
+        self.present(textAlertController(context: self.context, updatedPresentationData: self.updatedPresentationData, title: nil, text: prompt, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+    }
+
     func dismissMediaRecorder(_ action: ChatFinishMediaRecordingAction) {
         var updatedAction = action
         var isScheduledMessages = false
@@ -253,8 +270,13 @@ extension ChatControllerImpl {
             isScheduledMessages = true
         }
         
-        if let _ = self.presentationInterfaceState.slowmodeState, !isScheduledMessages {
-            updatedAction = .preview
+        if self.presentationInterfaceState.slowmodeState != nil && !isScheduledMessages {
+            switch action {
+            case .dictate:
+                break
+            default:
+                updatedAction = .preview
+            }
         }
         
         var sendImmediately = false
@@ -400,6 +422,56 @@ extension ChatControllerImpl {
                             strongSelf.recorderDataDisposable.set(nil)
                         }
                     }
+                }))
+            case .dictate:
+                self.chatDisplayNode.updateRecordedMediaDeleted(true)
+                self.recorderDataDisposable.set((audioRecorderValue.takenRecordedData()
+                |> deliverOnMainQueue).startStrict(next: { [weak self] data in
+                    guard let strongSelf = self else {
+                        return
+                    }
+                    strongSelf.audioRecorder.set(.single(nil))
+                    strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, {
+                        $0.updatedInputTextPanelState { panelState in
+                            return panelState.withUpdatedMediaRecordingState(nil)
+                        }
+                    })
+                    guard let data, data.duration >= 0.5 else {
+                        strongSelf.tellomiPresentDraftTranscription(.empty)
+                        strongSelf.recorderDataDisposable.set(nil)
+                        return
+                    }
+                    let audio = data.compressedData
+                    switch tellomiDraftAudioDecision(byteCount: audio.count, fileExtension: "ogg") {
+                    case .accepted:
+                        break
+                    case .empty:
+                        strongSelf.tellomiPresentDraftTranscription(.empty)
+                        strongSelf.recorderDataDisposable.set(nil)
+                        return
+                    case .tooLong:
+                        strongSelf.tellomiPresentDraftTranscription(.tooLong)
+                        strongSelf.recorderDataDisposable.set(nil)
+                        return
+                    case .unsupported:
+                        strongSelf.tellomiPresentDraftTranscription(.failed)
+                        strongSelf.recorderDataDisposable.set(nil)
+                        return
+                    }
+                    strongSelf.recorderDataDisposable.set((strongSelf.context.engine.messages.transcribeDraft(audio: audio, fileExtension: "ogg")
+                    |> deliverOnMainQueue).startStrict(next: { [weak strongSelf] text in
+                        guard let strongSelf else {
+                            return
+                        }
+                        switch tellomiDictationOutcome(transcript: text, healthy: true) {
+                        case let .insertDraft(draft):
+                            strongSelf.tellomiInsertDictationDraft(draft)
+                        case .unavailable:
+                            strongSelf.tellomiPresentDraftTranscription(.unavailable)
+                        }
+                    }, error: { [weak strongSelf] error in
+                        strongSelf?.tellomiPresentDraftTranscription(error)
+                    }))
                 }))
             }
         } else if let videoRecorderValue = self.videoRecorderValue {

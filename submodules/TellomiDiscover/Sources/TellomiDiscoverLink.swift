@@ -210,6 +210,14 @@ public enum TellomiDiscoverLink {
         return Preview(url: pageUrl, title: self.clip(title, self.titleLimit), description: self.clip(description, self.descriptionLimit), image: image)
     }
 
+    /// `og:site_name`, clipped to 64 characters. Discover posts do not send this.
+    public static func openGraphSiteName(_ html: String?) -> String? {
+        guard let html else {
+            return nil
+        }
+        return self.meta(html, "og:site_name", 64)
+    }
+
     /// One stored object, the shape `POST /v1/feed/posts` sends. `site_name` is ignored.
     public static func parseStored(url: String?, title: String?, description: String?, image: String?) -> Preview? {
         guard let url = self.httpUrl(url), self.fetchable(url) else {

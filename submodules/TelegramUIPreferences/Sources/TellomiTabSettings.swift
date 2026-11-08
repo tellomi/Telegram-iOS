@@ -8,14 +8,16 @@ import TelegramCore
 public struct TellomiTabSettings: Equatable, Codable {
     public var showFeedTab: Bool
     public var showContactsTab: Bool
+    public var hideTabTitles: Bool
 
     public static var defaultSettings: TellomiTabSettings {
-        return TellomiTabSettings(showFeedTab: true, showContactsTab: false)
+        return TellomiTabSettings(showFeedTab: true, showContactsTab: false, hideTabTitles: false)
     }
 
-    public init(showFeedTab: Bool, showContactsTab: Bool) {
+    public init(showFeedTab: Bool, showContactsTab: Bool, hideTabTitles: Bool = false) {
         self.showFeedTab = showFeedTab
         self.showContactsTab = showContactsTab
+        self.hideTabTitles = hideTabTitles
     }
 
     public init(from decoder: Decoder) throws {
@@ -30,20 +32,30 @@ public struct TellomiTabSettings: Equatable, Codable {
         } else {
             self.showContactsTab = false
         }
+        if let value = try container.decodeIfPresent(Int32.self, forKey: "hideTabTitles") {
+            self.hideTabTitles = value != 0
+        } else {
+            self.hideTabTitles = false
+        }
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: StringCodingKey.self)
         try container.encode((self.showFeedTab ? 1 : 0) as Int32, forKey: "showFeedTab")
         try container.encode((self.showContactsTab ? 1 : 0) as Int32, forKey: "showContactsTab")
+        try container.encode((self.hideTabTitles ? 1 : 0) as Int32, forKey: "hideTabTitles")
     }
 
     public func withUpdatedShowFeedTab(_ showFeedTab: Bool) -> TellomiTabSettings {
-        return TellomiTabSettings(showFeedTab: showFeedTab, showContactsTab: self.showContactsTab)
+        return TellomiTabSettings(showFeedTab: showFeedTab, showContactsTab: self.showContactsTab, hideTabTitles: self.hideTabTitles)
     }
 
     public func withUpdatedShowContactsTab(_ showContactsTab: Bool) -> TellomiTabSettings {
-        return TellomiTabSettings(showFeedTab: self.showFeedTab, showContactsTab: showContactsTab)
+        return TellomiTabSettings(showFeedTab: self.showFeedTab, showContactsTab: showContactsTab, hideTabTitles: self.hideTabTitles)
+    }
+
+    public func withUpdatedHideTabTitles(_ hideTabTitles: Bool) -> TellomiTabSettings {
+        return TellomiTabSettings(showFeedTab: self.showFeedTab, showContactsTab: self.showContactsTab, hideTabTitles: hideTabTitles)
     }
 }
 

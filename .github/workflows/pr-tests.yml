@@ -34,6 +34,11 @@ jobs:
       - name: Checkout submodules
         run: bash .github/checkout-submodules.sh
 
+      - name: Registry retry script tests
+        run: |
+          bash .github/bazel_registry_retry_test.sh
+          bash .github/download_retry_test.sh
+
       - name: Record this runner
         run: |
           set -euo pipefail
@@ -65,7 +70,7 @@ jobs:
           want="${spec##*:}"
           name="bazel-${version}-darwin-arm64"
           dest="${RUNNER_TEMP}/${name}"
-          curl -fsSL -o "${dest}" "https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
+          bash .github/fetch_pinned.sh "https://github.com/bazelbuild/bazel/releases/download/${version}/${name}" "${dest}" "${want}"
           got="$(shasum -a 256 "${dest}" | awk '{print $1}')"
           [[ "${got}" == "${want}" ]]
           chmod +x "${dest}"
@@ -95,26 +100,38 @@ jobs:
             //submodules/TelegramUI/Components/Chat/ChatMessageInteractiveInstantVideoNode:RoundVideoTranscriptionDecisionTests
             //submodules/TelegramUIPreferences:TellomiChatPrivacyTests
             //submodules/Components/ReactionButtonListComponent:ReactionIconMetricsTests
+            //submodules/TellomiDiscover:TellomiChatLinkPreviewTests
             //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
             //submodules/TelegramCore:EphemeralMediaLifecycleTests
+            //submodules/TelegramCore:TellomiNativeBatchTests
             //submodules/OpenInExternalAppUI:TellomiMapOpenInTests
+            //submodules/TellomiDiscover:TellomiFeedChromeMotionTests
           )
           ios=(
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
             //submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode:PeerInfoPaneNodeTests
           )
+          # Run 42416611063 died before any test: the Bazel registry fetch timed out.
+          # .github/bazel_registry_retry.sh retries only that pure fetch failure
+          # and returns the command's own status for every other failure.
+          export BAZEL_RETRY_LOG="${RUNNER_TEMP}/bazel-attempt.log"
+          retry_script="${GITHUB_WORKSPACE}/.github/bazel_registry_retry.sh"
+          bazel_retry() {
+            bash "$retry_script" run -- "$@"
+          }
           present() {
-            local label="$1"
-            local err="${RUNNER_TEMP}/query.err"
-            if "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests query "${label}" >"${RUNNER_TEMP}/query.out" 2>"${err}"; then
+            local label="$1" status=0 disposition
+            status=0
+            bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests query "${label}" || status=$?
+            if [[ "$status" -eq 0 ]]; then
               return 0
             fi
-            if grep -E -q 'no such target|no such package' "${err}"; then
+            disposition="$(bash "$retry_script" classify "$BAZEL_RETRY_LOG")"
+            if [[ "$disposition" == "skip" ]]; then
               echo "skip ${label}"
               return 1
             fi
-            cat "${err}"
-            exit 1
+            exit "$status"
           }
           run_host=()
           for label in "${host[@]}"; do
@@ -135,17 +152,21 @@ jobs:
           fail=0
           if (( ${#run_host[@]} > 0 )); then
             for label in "${run_host[@]}"; do
-              if ! "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc; then
-                fail=1
+              status=0
+              bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc || status=$?
+              if [[ "$status" -ne 0 ]]; then
+                fail="$status"
               fi
             done
           fi
           if (( ${#run_ios[@]} > 0 )); then
             for label in "${run_ios[@]}"; do
-              if ! "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64; then
-                fail=1
+              status=0
+              bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64 || status=$?
+              if [[ "$status" -ne 0 ]]; then
+                fail="$status"
               fi
             done
           fi
           test ! -f bazel-bin/Telegram/Telegram.ipa
-          exit "${fail}"
+          exit "$fail"

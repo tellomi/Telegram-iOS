@@ -674,6 +674,41 @@ A builtin reaction was drawn at twice the 20×20 slot, and the layer was not cli
 | `ReactionIconMetrics.swift` | Slot, scale, and clip for each reaction kind. |
 | `ReactionButtonListComponent.swift` | The icon layer uses that frame. |
 
+## Chat link cards
+
+`tell.cc`, `t.me`, `telegram.me`, and `telegram.dog` still go through `messages.getWebPagePreview`. The server builds the sticker, channel, user, and message cards. Other http(s) links are read on the phone with the Discover Open Graph fetch: 8 seconds, 512 KiB, and no private, loopback, or link-local address. The image is uploaded with `messages.uploadMedia`, then `inputMediaWebPage` flags 3–6 carry the title, description, site name, and photo. A field larger than 16 KiB is omitted. Stored lengths are 128, 400, and 64. `author` equal to `unverified` is not kept, so the bubble does not draw it. The card is still `article` or `photo`.
+
+| File | Change |
+| --- | --- |
+| `swift_scheme.tl` | `inputMediaWebPage` flags 3–6. |
+| `TellomiChatLinkPreview.swift` | Internal versus client route, limits, and the hidden author. |
+| `TellomiDiscoverLinkFetch.swift` | The phone's GET, shared with Discover. |
+| `TellomiDiscoverLinkClient.swift` | The in-memory card cache marks a hit as newest. |
+| `WebpagePreview.swift` | External links skip `getWebPagePreview`. |
+| `PendingMessageUploadedContent.swift` | Sends the client fields and the uploaded photo. |
+
+## Native translation, dictation, and tab labels
+
+Translation stays on the native language screen: Show Translate, Translate Entire Chat, and Do Not Translate. The only pair is English to Chinese. `messages.translateText`, `messages.translateRichMessage`, and `messages.composeMessageWithAI` with `translate_to_lang` call the self-hosted service only. Apple Translation, the Google fallback, Bailian, and Telegram's hosted path are not selected. `to_lang` must be `zh`, `zh-cn`, or `zh-hans`; anything else is `TO_LANG_INVALID` before the request. `TRANSLATE_REQ_FAILED` and a compose translation's `AICOMPOSE_TIMEOUT` show 翻译服务暂不可用. The client does not call `/health`. A missing `translations_manual_enabled` or `tellomi_translate_enabled` stays off. `translations_auto_enabled` must be `enabled` before a whole chat translates. Per-chat 不翻译 stays `messages.togglePeerTranslations`. Production `5354817` does not serve this yet, so a missing key leaves translation off.
+
+Dictation is the third position of the existing mic switch (voice, video, dictation). Voice send in the voice position is unchanged. Releasing a dictation recording calls `messages.transcribeDraft#7e11da47` with the in-memory OGG, at most 8 MB, and inserts only the returned text into the draft. It does not call `messages.sendMessage`, `messages.sendMedia`, or `messages.transcribeAudio`, and it does not write the audio into the chat database or object storage. `pending` is ignored. `USER_ID_INVALID`, `MEDIA_EMPTY`, `AUDIO_TOO_LONG`, `TRANSCRIPTION_UNAVAILABLE`, and an unknown method show a prompt; `TRANSCRIPTION_FAILED` shows 听写失败. Production `5354817` does not have this method, so the prompt is 听写服务暂不可用 until the server that includes it is deployed. The next server deploy is also expected to include the round-video protocol fix `bad916ac`; this client does not require those fields while production is still `5354817`.
+
+An incoming English message can show a translate button in the gap to the right of the bubble, the same gap the share button already uses. It follows Show Translate and the self-hosted manual switch. It hides during selection and while whole-chat translation is already on. Tapping it uses the same translate calls and shows Chinese in place; tapping again restores the original. The long-press Translate action stays.
+
+The navigation screen gains 隐藏底栏文字. It hides labels and keeps the icons, the default 发现 / 聊天 / 我 order, and the existing switches.
+
+`PHONE_NUMBER_FLOOD` is the daily cap of 10 codes. `FLOOD_WAIT` is a short resend wait and is not that cap.
+
+| File | Change |
+| --- | --- |
+| `TellomiNativeBatch.swift` | Health-gated translation flags, the `zh` allow list, and the draft audio checks. |
+| `swift_scheme.tl`, `Transcription.swift` | `messages.transcribeDraft#7e11da47`. |
+| `Translate.swift`, `ChatTranslation.swift` | Server-only English to Chinese. No Apple or alternative path. |
+| `ChatControllerMediaRecording.swift` | Dictation inserts text and leaves voice send alone. |
+| `LocalizationListControllerNode.swift` | The three native rows stay, and a down service says 翻译服务暂不可用. |
+| `ChatMessageBubbleItemNode.swift` | Side translate button, outside the bubble's text measure. |
+| `TellomiTabSettings.swift`, `TellomiNavigationSettingsController.swift`, `TabBarComponent.swift` | Hide tab labels. |
+
 ## DC addresses from help.getConfig (M7 / D-33)
 
 `Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
@@ -1223,3 +1258,13 @@ The chat PIN is 4 to 8 digits. The stored value is a salted SHA-256 in the app d
 | `ChatController.swift`, `NavigateToChatController.swift`, `ChatHistoryListNode.swift` | Secret view stays unread and shows the banner. A locked chat asks for the PIN before it opens. |
 | `SharedWakeupManager.swift` | Online presence stays off during secret view. |
 | `ChatListItemStrings.swift`, `ShareController.swift`, `NotificationService.swift` | Hidden preview text. |
+
+## PR test registry retry
+
+`.github/bazel_registry_retry.sh` is the only retry decision. It reruns a Bazel command up to three times only when the log is a pure central-registry fetch failure: one `ERROR` for `Error computing the main repository mapping` / `Error accessing registry` / `Failed to fetch registry file`, plus a transport timeout. A test assertion (`FAILED`, `XCTAssert`, Swift `error: -[`), a missing target or package, any other `ERROR`, or a bare timeout is not retried. The command's own exit status is what the job exits with. `.github/bazel_registry_retry_test.sh` drives that script with fixture logs and a stub command, including a later success that must not erase an earlier assertion or missing-target failure. `.github/workflows/pr-tests.yml` calls the script. This is the failure from run 42416611063, which stopped before any test ran.
+
+`.github/fetch_pinned.sh` downloads the pinned Bazel binary from the same GitHub release URL and checks the sha256 in `versions.json`. HTTP 502/503/504 and transport timeouts are retried; 401/403 and a checksum mismatch are not. `.github/retry_external_fetch.sh` re-runs a Bazel or Make.py invocation only when the failure is an external archive timeout or HTTP 502/503/504. Bazel 9.2.0 retries those status codes while connecting (`HttpConnector`) and does not retry a read timeout after the connection is open (`HttpDownloader.transferTo`). A compiler error, test assertion, checksum mismatch, HTTP 401/403, or missing target is not retried. `.github/download_retry_test.sh` drives both. `prepare_appstore_signing.py` GETs the existing App Store app record and does not POST a create when that GET finds it. A refused CREATE is not tried again.
+
+## Discover compose button
+
+The Discover list keeps the existing `composePressed` publish path. A bottom-right control uses `Chat List/AddIcon` through `generateItemListPlusIcon`, on `list.itemAccentColor`, with the check-foreground glyph. It sits above `intrinsicInsets.bottom` and the keyboard `inputHeight`. Scrolling a non-empty list calls `TabBarController.updateIsTabBarHidden`; an empty list, the top of the list, a tab change, and returning to the page show the bar again. Reduce Motion uses an immediate transition. Tab-title hiding is unchanged.

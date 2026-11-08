@@ -469,6 +469,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     }
     var stickerSettings: ChatInterfaceStickerSettings
     var stickerSettingsDisposable: Disposable?
+    var tellomiTranslationSettingsDisposable: Disposable?
     
     var applicationInForegroundDisposable: Disposable?
     var applicationInFocusDisposable: Disposable?
@@ -4524,42 +4525,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         
                         let _ = ApplicationSpecificNotice.incrementTranslationSuggestion(accountManager: context.sharedContext.accountManager, timestamp: Int32(Date().timeIntervalSince1970)).startStandalone()
                         
-                        let translationConfiguration = TranslationConfiguration.with(appConfiguration: self.context.currentAppConfiguration.with { $0 })
-                        var useSystemTranslation = false
-                        switch translationConfiguration.manual {
-                        case .system:
-                            if #available(iOS 18.0, *) {
-                                useSystemTranslation = true
-                            }
-                        default:
-                            break
-                        }
-                        
-                        if useSystemTranslation {
-                            presentTranslateScreen(
-                                context: context,
-                                text: text.string,
-                                entities: entities ?? [],
-                                canCopy: canCopy,
-                                fromLanguage: language,
-                                ignoredLanguages: translationSettings.ignoredLanguages,
-                                translateChat: { [weak self] _, toLang in
-                                    self?.interfaceInteraction?.changeTranslationLanguage(toLang)
-                                    self?.interfaceInteraction?.toggleTranslation(.translated)
-                                },
-                                pushController: { [weak self] c in
-                                    self?.effectiveNavigationController?._keepModalDismissProgress = true
-                                    self?.push(c)
-                                },
-                                presentController: { [weak self] c in
-                                    self?.present(c, in: .window(.root))
-                                },
-                                display: { [weak self] c in
-                                    self?.push(c)
-                                }
-                            )
-                        } else {
-                            self.push(await TextProcessingScreen(
+                        self.push(await TextProcessingScreen(
                                 context: self.context,
                                 mode: .translate(fromLanguage: language, applyResult: nil),
                                 inputText: .plain(text: text.string, entities: entities ?? []),
@@ -4582,7 +4548,6 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                                     self.interfaceInteraction?.toggleTranslation(.translated)
                                 }
                             ))
-                        }
                     }
                 }
                 if let currentContextController = self.currentContextController {
@@ -6963,6 +6928,28 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             }
         })
         
+        self.tellomiTranslationSettingsDisposable = (context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.translationSettings])
+        |> deliverOnMainQueue).startStrict(next: { [weak self] sharedData in
+            guard let self else {
+                return
+            }
+            let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.translationSettings]?.get(TranslationSettings.self) ?? TranslationSettings.defaultSettings
+            let appData = self.context.currentAppConfiguration.with { $0 }.data
+            let manual = tellomiManualTranslationAvailable(manual: appData?["translations_manual_enabled"] as? String, flag: appData?[TellomiFeatureGate.translateKey] as Any?)
+            let enabled = settings.showTranslate && manual
+            guard self.controllerInteraction?.tellomiShowsSideTranslate != enabled else {
+                return
+            }
+            self.controllerInteraction?.tellomiShowsSideTranslate = enabled
+            if self.isNodeLoaded {
+                self.chatDisplayNode.historyNode.forEachItemNode { node in
+                    if let itemNode = node as? ChatMessageBubbleItemNode, let messageId = itemNode.item?.message.id {
+                        let _ = self.controllerInteraction?.requestMessageUpdate(messageId, false, nil)
+                    }
+                }
+            }
+        })
+
         self.stickerSettingsDisposable = combineLatest(queue: Queue.mainQueue(),
             context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.stickerSettings]),
             self.disableStickerAnimationsPromise.get(),
@@ -7190,6 +7177,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         self.choosingStickerActivityDisposable?.dispose()
         self.automaticMediaDownloadSettingsDisposable?.dispose()
         self.stickerSettingsDisposable?.dispose()
+        self.tellomiTranslationSettingsDisposable?.dispose()
         self.searchQuerySuggestionState?.1.dispose()
         self.recorderDataDisposable.dispose()
         self.displaySendWhenOnlineTipDisposable.dispose()
@@ -10292,6 +10280,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             } else {
                 text = self.presentationData.strings.Conversation_HoldForAudioOnly
             }
+        } else if updatedMode == .dictation {
+            text = self.presentationData.strings.baseLanguageCode.lowercased().hasPrefix("zh") ? "按住听写，文字进入草稿" : "Hold to dictate into the draft"
         } else {
             if canSwitch {
                 text = self.presentationData.strings.Conversation_HoldForVideo

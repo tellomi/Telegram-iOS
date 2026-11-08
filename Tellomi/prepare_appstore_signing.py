@@ -683,10 +683,36 @@ def next_build_number(client, bundle_id, floor):
     return number
 
 
-def ensure_app_record(client, bundle_resource_id, name):
+def find_app_id(client, bundle_id):
+    query = urllib.parse.urlencode({"filter[bundleId]": bundle_id, "limit": 1})
+    payload = client.request("GET", "/v1/apps?" + query)
+    apps = payload.get("data") or []
+    if not apps:
+        return None
+    return apps[0].get("id")
+
+
+def app_record_plan(found_before, create_status=None, found_after=False):
+    """Decide the App Store app record without retrying a refused CREATE.
+
+    GET is enough when the bundle already has a record. CREATE is one POST.
+    HTTP 403 is not tried again; the record is used only if GET can see it.
+    """
+    if found_before:
+        return "use"
+    if create_status is None:
+        return "create_once"
+    if create_status == 409 or (create_status == 403 and found_after):
+        return "use"
+    return "fail"
+
+
+def ensure_app_record(client, bundle_id, bundle_resource_id, name):
     # Creating the app record is what makes the first TestFlight upload have a destination.
-    # A 409 means the name or sku is taken, or the app already exists; the upload still
-    # works when the bundle id is already registered.
+    # The API key used here may GET and UPDATE an existing app but not CREATE one.
+    if find_app_id(client, bundle_id):
+        print("App Store Connect app record already exists")
+        return
     try:
         client.request("POST", "/v1/apps", {
             "data": {
@@ -703,10 +729,14 @@ def ensure_app_record(client, bundle_resource_id, name):
         })
         print("created App Store Connect app record")
     except ApiError as error:
-        if error.status == 409:
+        found_after = False
+        if error.status in (403, 409):
+            found_after = find_app_id(client, bundle_id) is not None
+        if app_record_plan(False, error.status, found_after) == "use":
             print("App Store Connect app record already exists")
             return
         print("could not create the App Store Connect app record: {}".format(error), file=sys.stderr)
+        raise
 
 
 def prepare(args):
@@ -786,7 +816,7 @@ def prepare(args):
                     )
         team_id = team_id_from_profile(main_profile)
         write_configuration(args.configuration, pathlib.Path(args.configuration_out), team_id)
-        ensure_app_record(client, ids[bundle_id], app_name)
+        ensure_app_record(client, bundle_id, ids[bundle_id], app_name)
         number = next_build_number(client, bundle_id, args.build_number_floor)
         pathlib.Path(args.build_number_out).write_text(str(number) + "\n", encoding="utf-8")
     finally:

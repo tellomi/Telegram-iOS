@@ -26,7 +26,7 @@ func pollCloudMediaToInputMedia(_ media: Media) -> Api.InputMedia? {
         }
     } else if let webpage = media as? TelegramMediaWebpage, let url = webpage.content.url {
         let flags: Int32 = 1 << 2
-        return .inputMediaWebPage(.init(flags: flags, url: url))
+        return .inputMediaWebPage(.init(flags: flags, url: url, title: nil, description: nil, siteName: nil, photo: nil))
     }
     return nil
 }
