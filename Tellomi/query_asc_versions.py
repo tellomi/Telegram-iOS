@@ -13,7 +13,7 @@ import urllib.parse
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from prepare_appstore_signing import Client, make_jwt, require_env  # noqa: E402
+from prepare_appstore_signing import ApiError, Client, make_jwt, require_env  # noqa: E402
 
 BUNDLE_ID = "app.tellomi.chat"
 
@@ -91,34 +91,55 @@ def print_builds(client, app_id):
         print("build 73 not attached: no build record")
         return
     build_id = wanted["id"]
-    linked = []
-    print("build 73 groups:")
-    for item in pages(client, "/v1/builds/{}/betaGroups?{}".format(build_id, group_query)):
-        attrs = item.get("attributes") or {}
-        linked.append(item["id"])
-        print("  {} internal={} publicLink={}".format(
-            attrs.get("name") or "",
-            attrs.get("isInternalGroup"),
-            attrs.get("publicLinkEnabled"),
-        ))
-    if not linked:
-        print("  (none)")
     state = (wanted.get("attributes") or {}).get("processingState") or ""
+    print("build 73 groups via build relationship:")
+    try:
+        linked_names = []
+        for item in pages(client, "/v1/builds/{}/betaGroups?{}".format(build_id, group_query)):
+            attrs = item.get("attributes") or {}
+            linked_names.append(attrs.get("name") or item["id"])
+        if linked_names:
+            print("  " + ", ".join(linked_names))
+        else:
+            print("  (none)")
+    except ApiError as error:
+        print("  unavailable: {}".format(error))
     if state != "VALID":
         print("build 73 not attached: processingState {}".format(state))
         return
     for item in groups:
         attrs = item.get("attributes") or {}
-        if attrs.get("isInternalGroup") is not True or attrs.get("publicLinkEnabled"):
+        name = attrs.get("name") or item["id"]
+        if attrs.get("isInternalGroup") is not True or attrs.get("publicLinkEnabled") is True:
+            print("skipped group {}: internal={} publicLink={}".format(
+                name, attrs.get("isInternalGroup"), attrs.get("publicLinkEnabled"),
+            ))
             continue
         group_id = item["id"]
-        if group_id in linked:
+        present = False
+        try:
+            for build in pages(client, "/v1/betaGroups/{}/builds?{}".format(
+                group_id,
+                urllib.parse.urlencode({"limit": 50, "fields[builds]": fields}),
+            )):
+                if str((build.get("attributes") or {}).get("version") or "") == "73":
+                    present = True
+                    break
+        except ApiError as error:
+            print("group {} builds unreadable: {}".format(name, error))
+            continue
+        if present:
+            print("build 73 already in internal group {}".format(name))
             continue
         # Existing internal group only. No tester create and no invitation endpoint.
-        client.request("POST", "/v1/betaGroups/{}/relationships/builds".format(group_id), {
-            "data": [{"type": "builds", "id": build_id}],
-        })
-        print("attached build 73 to internal group {}".format(attrs.get("name") or group_id))
+        try:
+            client.request("POST", "/v1/betaGroups/{}/relationships/builds".format(group_id), {
+                "data": [{"type": "builds", "id": build_id}],
+            })
+        except ApiError as error:
+            print("attach build 73 to {} failed: {}".format(name, error))
+            continue
+        print("attached build 73 to internal group {}".format(name))
 
 
 def main():
