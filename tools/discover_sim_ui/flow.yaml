@@ -1,0 +1,84 @@
+appId: app.tellomi.chat
+---
+# Login uses Telegram's test country 999 and the server's 99966XYYYY range.
+# The code is the datacenter digit five times. No SMS and no email are sent.
+# Element ids are the ones already on the login and Discover screens.
+- runFlow: launch.yaml
+- runFlow: login.yaml
+- tapOn:
+    text: "发现|Discover"
+- extendedWaitUntil:
+    visible: "发现|Discover|还没有内容|还没有帖子|Nothing here yet|No posts yet|发布|Post"
+    timeout: 60000
+- takeScreenshot: discover-opened
+- runFlow:
+    when:
+      visible:
+        id: "tellomi.discover.composeButton"
+    commands:
+      - takeScreenshot: discover-compose
+- runFlow:
+    when:
+      notVisible:
+        id: "tellomi.discover.composeButton"
+    commands:
+      - takeScreenshot: discover-compose-absent
+- runFlow:
+    when:
+      visible: "还没有帖子|No posts yet|还没有内容|Nothing here yet"
+    commands:
+      - swipe:
+          direction: UP
+          duration: 600
+      - swipe:
+          direction: UP
+          duration: 600
+      - takeScreenshot: empty-after-scroll-down
+      - assertVisible: "聊天|Chats"
+      - swipe:
+          direction: DOWN
+          duration: 600
+      - takeScreenshot: empty-after-scroll-up
+- runFlow:
+    when:
+      notVisible: "还没有帖子|No posts yet|还没有内容|Nothing here yet"
+    commands:
+      - swipe:
+          direction: UP
+          duration: 700
+      - swipe:
+          direction: UP
+          duration: 700
+      - takeScreenshot: posts-after-scroll-down
+      - swipe:
+          direction: DOWN
+          duration: 700
+      - swipe:
+          direction: DOWN
+          duration: 700
+      - takeScreenshot: posts-after-scroll-up
+- tapOn:
+    text: "聊天|Chats"
+- takeScreenshot: chats
+- tapOn:
+    text: "发现|Discover"
+- takeScreenshot: discover-after-chat
+- tapOn:
+    text: "同城|Nearby"
+    optional: true
+- takeScreenshot: nearby
+- tapOn:
+    id: "tellomi.discover.city.cn:chengdu"
+    optional: true
+- takeScreenshot: city-chengdu
+- tapOn:
+    id: "tellomi.discover.changeCity"
+    optional: true
+- tapOn:
+    id: "tellomi.discover.city.cn:beijing"
+    optional: true
+- takeScreenshot: city-changed
+- tapOn:
+    text: "发现|Discover"
+    optional: true
+- takeScreenshot: discover-after-city

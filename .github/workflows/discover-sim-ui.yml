@@ -1,0 +1,97 @@
+# Simulator screenshots of Discover after a 99966 test-number login.
+# Runs only for the candidate branch. Does not sign, upload, or move release/ios.
+# The build recipe is the Login auth UI simulator compile.
+
+name: Discover sim UI
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - .github/workflows/discover-sim-ui.yml
+      - tools/discover_sim_ui/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discover-sim-ui-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ui:
+    if: github.head_ref == 'cursor/discover-sim-ui-458c'
+    runs-on: xcode-27
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
+
+      - name: Select Xcode from versions.json
+        run: |
+          set -euo pipefail
+          sw_vers
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [ ! -d "$CANDIDATE" ]; then
+            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
+            ls -1 /Applications | grep -E '^Xcode' || true
+            exit 1
+          fi
+          PLIST_VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "${CANDIDATE}/Contents/Info.plist")"
+          if [ "$PLIST_VERSION" != "$XCODE_VERSION" ]; then
+            echo "Selected Xcode reports ${PLIST_VERSION}, versions.json requires ${XCODE_VERSION}."
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=${CANDIDATE}/Contents/Developer" >> "$GITHUB_ENV"
+          export DEVELOPER_DIR="${CANDIDATE}/Contents/Developer"
+          xcodebuild -version
+          echo "BAZEL_CACHE_DIR=${HOME}/telegram-bazel-cache" >> "$GITHUB_ENV"
+
+      - name: Pin Bazel from versions.json
+        run: |
+          set -euo pipefail
+          spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
+          version="${spec%%:*}"
+          sha="${spec##*:}"
+          name="bazel-${version}-darwin-arm64"
+          url="https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
+          mkdir -p build-input
+          bash .github/fetch_pinned.sh "$url" "build-input/${name}" "${sha}"
+          chmod +x "build-input/${name}"
+
+      - name: Build the unsigned simulator app
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
+          export APP_VERSION=$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')
+          export COMMIT_COUNT=$(git rev-list --count HEAD)
+          export BUILD_NUMBER="$((COMMIT_COUNT + BUILD_NUMBER_OFFSET))"
+          echo "simulator BUILD_NUMBER=${BUILD_NUMBER} (not TestFlight 73)"
+          bash .github/retry_external_fetch.sh -- \
+            python3 -u build-system/Make/Make.py \
+            --bazelUserRoot="/private/var/tmp/_bazel_loginui_app" \
+            --cacheDir "$BAZEL_CACHE_DIR" \
+            build \
+            --configurationPath="build-system/appstore-configuration.json" \
+            --xcodeManagedCodesigning \
+            --disableProvisioningProfiles \
+            --configuration=release_sim_arm64 \
+            --buildNumber="$BUILD_NUMBER"
+          test -e bazel-bin/Telegram/Telegram.ipa
+
+      - name: Log in with a test number and screenshot Discover
+        run: bash tools/discover_sim_ui/run.sh
+
+      - name: Upload Discover screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discover-sim-ui
+          path: discover-sim-ui
+          if-no-files-found: ignore

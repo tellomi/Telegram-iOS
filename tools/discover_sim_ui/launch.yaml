@@ -1,0 +1,12 @@
+appId: app.tellomi.chat
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    text: "Continue in English"
+    optional: true
+- tapOn:
+    text: "Not now|以后再说|稍后|Skip|跳过|Don't Allow|不允许|Later|Cancel|取消"
+    optional: true
+    repeat: 3
+    delay: 400
