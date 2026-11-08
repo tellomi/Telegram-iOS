@@ -34,6 +34,9 @@ jobs:
       - name: Checkout submodules
         run: bash .github/checkout-submodules.sh
 
+      - name: Registry retry script tests
+        run: bash .github/bazel_registry_retry_test.sh
+
       - name: Record this runner
         run: |
           set -euo pipefail
@@ -105,36 +108,27 @@ jobs:
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
             //submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode:PeerInfoPaneNodeTests
           )
-          # Run 42416611063 died on the first query:
-          # bcr.bazel.build/.../zlib/1.2.12/MODULE.bazel connect timed out.
-          # Retry only that registry failure. A missing target and a failed
-          # test stay failures. Three attempts, then the job fails.
+          # Run 42416611063 died before any test: the Bazel registry fetch timed out.
+          # .github/bazel_registry_retry.sh retries only that pure fetch failure
+          # and returns the command's own status for every other failure.
+          export BAZEL_RETRY_LOG="${RUNNER_TEMP}/bazel-attempt.log"
+          retry_script="${GITHUB_WORKSPACE}/.github/bazel_registry_retry.sh"
           bazel_retry() {
-            local attempt log
-            log="${RUNNER_TEMP}/bazel-attempt.log"
-            for attempt in 1 2 3; do
-              if "$@" 2>&1 | tee "${log}"; then
-                return 0
-              fi
-              if [[ "${attempt}" -lt 3 ]] && grep -E -q 'Connect timed out|Failed to fetch registry file|Error accessing registry' "${log}"; then
-                echo "transient Bazel registry failure on attempt ${attempt}; retrying"
-                sleep $((attempt * 20))
-                continue
-              fi
-              return 1
-            done
-            return 1
+            bash "$retry_script" run -- "$@"
           }
           present() {
-            local label="$1"
-            if bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests query "${label}"; then
+            local label="$1" status=0 disposition
+            status=0
+            bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests query "${label}" || status=$?
+            if [[ "$status" -eq 0 ]]; then
               return 0
             fi
-            if grep -E -q 'no such target|no such package' "${RUNNER_TEMP}/bazel-attempt.log"; then
+            disposition="$(bash "$retry_script" classify "$BAZEL_RETRY_LOG")"
+            if [[ "$disposition" == "skip" ]]; then
               echo "skip ${label}"
               return 1
             fi
-            exit 1
+            exit "$status"
           }
           run_host=()
           for label in "${host[@]}"; do
@@ -155,17 +149,21 @@ jobs:
           fail=0
           if (( ${#run_host[@]} > 0 )); then
             for label in "${run_host[@]}"; do
-              if ! bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc; then
-                fail=1
+              status=0
+              bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc || status=$?
+              if [[ "$status" -ne 0 ]]; then
+                fail="$status"
               fi
             done
           fi
           if (( ${#run_ios[@]} > 0 )); then
             for label in "${run_ios[@]}"; do
-              if ! bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64; then
-                fail=1
+              status=0
+              bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64 || status=$?
+              if [[ "$status" -ne 0 ]]; then
+                fail="$status"
               fi
             done
           fi
           test ! -f bazel-bin/Telegram/Telegram.ipa
-          exit "${fail}"
+          exit "$fail"
