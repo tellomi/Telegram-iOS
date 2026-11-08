@@ -1,6 +1,7 @@
-# Simulator screenshots of Discover after a 99966 test-number login.
-# Runs only for the candidate branch. Does not sign, upload, or move release/ios.
-# The build recipe is the Login auth UI simulator compile.
+# Simulator screenshots of Discover after login to a loopback teamgram
+# stack started on this runner. Does not sign, upload, or move release/ios.
+# The iOS build recipe is the Login auth UI simulator compile.
+# The committed seed stays api.tellomi.cn. The job rewrites only its workspace.
 
 name: Discover sim UI
 
@@ -28,16 +29,6 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-
-      - name: Refuse an unproven remote login
-        run: |
-          set -euo pipefail
-          echo "blocked: this checkout would dial the compiled seed api.tellomi.cn:10443"
-          echo "local TestPhones do not prove that host is an isolated test service"
-          echo "no phone, code, post, or notification is sent"
-          mkdir -p discover-sim-ui
-          printf '%s\n' "blocked before login" "head=$(git rev-parse HEAD)" > discover-sim-ui/blocker.txt
-          exit 1
 
       - name: Checkout submodules
         run: bash .github/checkout-submodules.sh
@@ -75,6 +66,12 @@ jobs:
           bash .github/fetch_pinned.sh "$url" "build-input/${name}" "${sha}"
           chmod +x "build-input/${name}"
 
+      - name: Start the loopback TestPhones stack
+        run: bash tools/discover_sim_ui/local_stack.sh
+
+      - name: Point this workspace seed at loopback
+        run: python3 tools/discover_sim_ui/point_local_seed.py
+
       - name: Build the unsigned simulator app
         run: |
           set -euo pipefail
@@ -95,15 +92,25 @@ jobs:
             --buildNumber="$BUILD_NUMBER"
           test -e bazel-bin/Telegram/Telegram.ipa
 
-      - name: Refuse an unproven remote login
+      - name: Log in on loopback and screenshot Discover
+        run: bash tools/discover_sim_ui/run.sh
+
+      - name: Stop the loopback stack
+        if: always()
         run: |
           set -euo pipefail
-          echo "blocked: this checkout would dial the compiled seed api.tellomi.cn:10443"
-          echo "local TestPhones do not prove that host is an isolated test service"
-          echo "no phone, code, post, or notification is sent"
-          mkdir -p discover-sim-ui
-          printf '%s\n' "blocked before login" "head=$(git rev-parse HEAD)" > discover-sim-ui/blocker.txt
-          exit 1
+          pin="e2868f536cad6633931b210c8e88aa42ebe5f66c"
+          dest="${RUNNER_TEMP}/teamgram-server-${pin}"
+          if [[ -d "$dest" ]] && docker info >/dev/null 2>&1; then
+            (
+              cd "$dest"
+              docker compose \
+                -f docker-compose-env.yaml \
+                -f docker-compose.yaml \
+                -f e2e/docker-compose.ci.yaml \
+                down
+            )
+          fi
 
       - name: Upload Discover screenshots
         if: always()

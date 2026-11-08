@@ -19,10 +19,19 @@ mkdir -p "$artifact_dir"
     ':(exclude)tools/discover_sim_ui'
 } | tee "${artifact_dir}/identity.txt"
 
-if ! git diff --quiet -- Tellomi/tellomi-server.json submodules/MtProtoKit/Sources/TellomiServerConfigJSON.h; then
-  echo "server seed files differ from the commit; refusing to run" >&2
-  exit 2
-fi
+git show HEAD:Tellomi/tellomi-server.json > "${artifact_dir}/committed-seed.json"
+python3 - "${artifact_dir}/committed-seed.json" <<'PY'
+import json, pathlib, sys
+committed = json.loads(pathlib.Path(sys.argv[1]).read_text())
+for name in ("production", "testing"):
+    if committed["seeds"][name]["1"] != ["api.tellomi.cn"]:
+        sys.exit("committed seed changed; refusing to launch")
+working = json.loads(pathlib.Path("Tellomi/tellomi-server.json").read_text())
+for name in ("production", "testing"):
+    if working["seeds"][name]["1"] != ["127.0.0.1"]:
+        sys.exit("working seed is not loopback; refusing to launch")
+print("committed seed remains api.tellomi.cn; this build's working seed is 127.0.0.1")
+PY
 
 ipa="bazel-bin/Telegram/Telegram.ipa"
 test -f "$ipa"
@@ -40,11 +49,19 @@ build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "${app}/Info.plist"
 } | tee "${artifact_dir}/bundle.txt"
 test "$bundle" = "app.tellomi.chat"
 
-python3 - <<'PY'
-import sys
-print("refusing remote seed: api.tellomi.cn is not an isolated TestPhones service in this run", file=sys.stderr)
-sys.exit(3)
+remote_seed=$'[\n        "api.tellomi.cn"\n      ]'
+executable="${app}/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${app}/Info.plist")"
+python3 - "$executable" "$remote_seed" <<'PY'
+import pathlib, sys
+blob = pathlib.Path(sys.argv[1]).read_bytes()
+remote = sys.argv[2].encode()
+if remote in blob:
+    sys.exit("simulator binary still contains the api.tellomi.cn seed array")
+if blob.count(b'"127.0.0.1"') < 3:
+    sys.exit("simulator binary does not contain the loopback seeds")
+print("simulator binary seed array is loopback")
 PY
+printf '%s\n' "seed=127.0.0.1" "binary=$(basename "$executable")" | tee -a "${artifact_dir}/identity.txt"
 
 phone="${DISCOVER_TEST_PHONE:-}"
 if [[ -z "$phone" ]]; then
