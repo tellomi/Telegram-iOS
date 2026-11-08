@@ -304,11 +304,11 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         let bottom = max(cursor, size.height - bottomInset)
         self.table.frame = CGRect(x: 0, y: cursor, width: size.width, height: max(0, bottom - cursor))
         let clearance: CGFloat = self.composeButton.isHidden ? 0.0 : 72.0
-        if self.table.contentInset.bottom != clearance {
+        var indicatorInsets = self.table.verticalScrollIndicatorInsets
+        if self.table.contentInset.bottom != clearance || indicatorInsets.bottom != clearance {
             self.table.contentInset.bottom = clearance
-            var indicator = self.table.scrollIndicatorInsets
-            indicator.bottom = clearance
-            self.table.scrollIndicatorInsets = indicator
+            indicatorInsets.bottom = clearance
+            self.table.verticalScrollIndicatorInsets = indicatorInsets
         }
         let buttonFrame = tellomiDiscoverComposeButtonFrame(containerWidth: size.width, containerHeight: size.height, bottomInset: bottomInset, keyboardOverlap: self.keyboardOverlap)
         self.composeButton.frame = buttonFrame
