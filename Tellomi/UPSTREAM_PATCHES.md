@@ -1262,3 +1262,7 @@ The chat PIN is 4 to 8 digits. The stored value is a salted SHA-256 in the app d
 ## PR test registry retry
 
 `.github/bazel_registry_retry.sh` is the only retry decision. It reruns a Bazel command up to three times only when the log is a pure central-registry fetch failure: one `ERROR` for `Error computing the main repository mapping` / `Error accessing registry` / `Failed to fetch registry file`, plus a transport timeout. A test assertion (`FAILED`, `XCTAssert`, Swift `error: -[`), a missing target or package, any other `ERROR`, or a bare timeout is not retried. The command's own exit status is what the job exits with. `.github/bazel_registry_retry_test.sh` drives that script with fixture logs and a stub command, including a later success that must not erase an earlier assertion or missing-target failure. `.github/workflows/pr-tests.yml` calls the script. This is the failure from run 42416611063, which stopped before any test ran.
+
+## Discover compose button
+
+The Discover list keeps the existing `composePressed` publish path. A bottom-right control uses `Chat List/AddIcon` through `generateItemListPlusIcon`, on `list.itemAccentColor`, with the check-foreground glyph. It sits above `intrinsicInsets.bottom` and the keyboard `inputHeight`. Scrolling a non-empty list calls `TabBarController.updateIsTabBarHidden`; an empty list, the top of the list, a tab change, and returning to the page show the bar again. Reduce Motion uses an immediate transition. Tab-title hiding is unchanged.

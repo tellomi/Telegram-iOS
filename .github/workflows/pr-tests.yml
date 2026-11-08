@@ -103,6 +103,7 @@ jobs:
             //submodules/TelegramCore:EphemeralMediaLifecycleTests
             //submodules/TelegramCore:TellomiNativeBatchTests
             //submodules/OpenInExternalAppUI:TellomiMapOpenInTests
+            //submodules/TellomiDiscover:TellomiFeedChromeMotionTests
           )
           ios=(
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
