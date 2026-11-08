@@ -41,15 +41,9 @@ build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "${app}/Info.plist"
 test "$bundle" = "app.tellomi.chat"
 
 python3 - <<'PY'
-import os, socket, sys
-host = "api.tellomi.cn"
-port = 10443
-try:
-    with socket.create_connection((host, port), 8):
-        print(f"seed {host}:{port} reachable")
-except OSError as error:
-    print(f"seed {host}:{port} unreachable: {error}", file=sys.stderr)
-    sys.exit(3)
+import sys
+print("refusing remote seed: api.tellomi.cn is not an isolated TestPhones service in this run", file=sys.stderr)
+sys.exit(3)
 PY
 
 phone="${DISCOVER_TEST_PHONE:-}"
