@@ -26,6 +26,7 @@ struct TellomiFeedNodeModel {
     var cityAction: String? = nil
     var clearCityTitle: String? = nil
     var legacyTitleTappable: Bool = false
+    var showsCompose: Bool = false
 }
 
 final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate {
@@ -40,6 +41,8 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
     var onChangeCity: (() -> Void)?
     var onClearCity: (() -> Void)?
     var onLegacyTitle: (() -> Void)?
+    var onCompose: (() -> Void)?
+    var onNavigationScroll: ((TellomiFeedNavigationChange) -> Void)?
 
     private let titleNode = ImmediateTextNode()
     private let textNode = ImmediateTextNode()
@@ -56,7 +59,12 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
     private let cityActionButton = UIButton(type: .system)
     private let clearCityButton = UIButton(type: .system)
     private let spinner = UIActivityIndicatorView(style: .medium)
+    private let composeButton = UIButton(type: .custom)
     private let sizingCell = TellomiDiscoverPostCell(style: .default, reuseIdentifier: nil)
+    private var navigationScroll = TellomiFeedNavigationScrollState.resting
+    private var lastOffsetY: CGFloat?
+    private var keyboardOverlap: CGFloat = 0
+    private var applyingFrames = false
     private var model = TellomiFeedNodeModel(mode: .legacy, tabTitles: [], selectedTab: 0, posts: [], loading: false, failure: nil, legacyTitle: "", legacyBody: "", copy: .resolve(languageCode: "en"))
     private var presentationData: PresentationData?
     private var layout: (size: CGSize, topInset: CGFloat, bottomInset: CGFloat)?
@@ -117,6 +125,12 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         self.view.addSubview(self.cityActionButton)
         self.view.addSubview(self.clearCityButton)
         self.view.addSubview(self.spinner)
+        self.composeButton.accessibilityIdentifier = "tellomi.discover.composeButton"
+        self.composeButton.accessibilityTraits = .button
+        self.composeButton.layer.cornerRadius = 28.0
+        self.composeButton.clipsToBounds = true
+        self.composeButton.addTarget(self, action: #selector(self.composeButtonPressed), for: .touchUpInside)
+        self.view.addSubview(self.composeButton)
         self.titleNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.legacyTitlePressed)))
         self.titleNode.isUserInteractionEnabled = false
         self.textNode.isUserInteractionEnabled = false
@@ -129,8 +143,9 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         self.apply()
     }
 
-    func updateLayout(size: CGSize, topInset: CGFloat, bottomInset: CGFloat, transition: ContainedViewLayoutTransition) {
+    func updateLayout(size: CGSize, topInset: CGFloat, bottomInset: CGFloat, keyboardOverlap: CGFloat = 0, transition: ContainedViewLayoutTransition) {
         let _ = transition
+        self.keyboardOverlap = keyboardOverlap
         self.layout = (size, topInset, bottomInset)
         self.applyFrames()
     }
@@ -209,7 +224,22 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
             self.spinner.stopAnimating()
             self.refresh.endRefreshing()
         }
+        let showsCompose = self.model.showsCompose
+        self.composeButton.isHidden = !showsCompose
+        self.composeButton.accessibilityElementsHidden = !showsCompose
+        self.composeButton.accessibilityLabel = copy.compose
+        self.composeButton.backgroundColor = presentationData.theme.list.itemAccentColor
+        self.composeButton.setImage(generateItemListPlusIcon(presentationData.theme.list.itemCheckColors.foregroundColor), for: .normal)
+        if self.model.mode != .feed || self.model.posts.isEmpty {
+            let wasHidden = !self.navigationScroll.visible
+            self.navigationScroll = .resting
+            self.lastOffsetY = nil
+            if wasHidden {
+                self.onNavigationScroll?(.shown)
+            }
+        }
         if self.isNodeLoaded {
+            self.lastOffsetY = nil
             self.table.reloadData()
         }
         self.applyFrames()
@@ -218,6 +248,10 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
     private func applyFrames() {
         guard let layout = self.layout else {
             return
+        }
+        self.applyingFrames = true
+        defer {
+            self.applyingFrames = false
         }
         let size = layout.size
         let topInset = layout.topInset
@@ -269,6 +303,16 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         }
         let bottom = max(cursor, size.height - bottomInset)
         self.table.frame = CGRect(x: 0, y: cursor, width: size.width, height: max(0, bottom - cursor))
+        let clearance: CGFloat = self.composeButton.isHidden ? 0.0 : 72.0
+        var indicatorInsets = self.table.verticalScrollIndicatorInsets
+        if self.table.contentInset.bottom != clearance || indicatorInsets.bottom != clearance {
+            self.table.contentInset.bottom = clearance
+            indicatorInsets.bottom = clearance
+            self.table.verticalScrollIndicatorInsets = indicatorInsets
+        }
+        let buttonFrame = tellomiDiscoverComposeButtonFrame(containerWidth: size.width, containerHeight: size.height, bottomInset: bottomInset, keyboardOverlap: self.keyboardOverlap)
+        self.composeButton.frame = buttonFrame
+        self.composeButton.layer.cornerRadius = buttonFrame.width / 2.0
         self.spinner.center = CGPoint(x: size.width / 2.0, y: cursor + 28.0)
         let showLegacy = self.model.mode == .legacy || (self.model.mode == .feed && self.model.posts.isEmpty && !self.model.loading)
         if showLegacy {
@@ -284,6 +328,32 @@ final class TellomiFeedScreenNode: ASDisplayNode, UITableViewDataSource, UITable
         self.view.bringSubviewToFront(self.locationButton)
         self.view.bringSubviewToFront(self.clearCityButton)
         self.view.bringSubviewToFront(self.spinner)
+        self.view.bringSubviewToFront(self.composeButton)
+    }
+
+    func resetNavigationScroll() {
+        self.navigationScroll = .resting
+        self.lastOffsetY = self.table.contentOffset.y
+    }
+
+    @objc private func composeButtonPressed() {
+        self.onCompose?()
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if self.applyingFrames {
+            self.lastOffsetY = scrollView.contentOffset.y
+            return
+        }
+        let offset = scrollView.contentOffset.y
+        let delta = self.lastOffsetY.map { offset - $0 } ?? 0
+        self.lastOffsetY = offset
+        let hasPosts = self.model.mode == .feed && !self.model.posts.isEmpty
+        let stepped = TellomiFeedNavigationScroll.step(state: self.navigationScroll, offsetY: offset, delta: delta, hasPosts: hasPosts)
+        self.navigationScroll = stepped.state
+        if stepped.change != .unchanged {
+            self.onNavigationScroll?(stepped.change)
+        }
     }
 
     @objc private func tabChanged() {

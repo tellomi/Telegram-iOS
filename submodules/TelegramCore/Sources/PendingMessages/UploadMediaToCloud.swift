@@ -55,7 +55,7 @@ func uploadMediaToCloud(
     return .fail(.generic)
 }
 
-private func uploadImageToCloud(
+func uploadImageToCloud(
     network: Network,
     postbox: Postbox,
     messageMediaPreuploadManager: MessageMediaPreuploadManager,

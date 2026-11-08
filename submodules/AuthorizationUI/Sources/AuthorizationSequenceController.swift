@@ -267,8 +267,11 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             }
                                             strongSelf.sharedContext.applicationBindings.openUrl(TellomiLoginChrome.helpURL)
                                         }))
+                                    case .floodWait(let seconds):
+                                        text = tellomiLoginResendWaitText(strongSelf.presentationData.strings, seconds: seconds)
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .phoneLimitExceeded:
-                                        text = strongSelf.presentationData.strings.Login_PhoneFloodError
+                                        text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .appOutdated:
                                         text = strongSelf.presentationData.strings.Login_ErrorAppOutdated
@@ -701,6 +704,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     }
     
     private func tellomiResendLoginCode(controller: AuthorizationSequenceCodeEntryController?) {
+        guard controller?.tellomiResendIsActive != false else {
+            return
+        }
         controller?.inProgress = true
         self.actionDisposable.set((self.engine.auth.resendLoginCode(accountManager: self.sharedContext.accountManager, apiId: self.apiId, apiHash: self.apiHash, firebaseSecretStream: self.sharedContext.firebaseSecretStream, attempt: self.tellomiActiveLoginAttempt)
         |> deliverOnMainQueue).startStrict(next: { _ in
@@ -715,10 +721,14 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             switch error {
             case .limitExceeded:
                 text = self.presentationData.strings.Login_CodeFloodError
+            case .floodWait(let seconds):
+                controller.tellomiPauseResend(seconds: seconds)
+                text = tellomiLoginResendWaitText(self.presentationData.strings, seconds: seconds)
             case .invalidPhoneNumber:
                 text = self.presentationData.strings.Login_InvalidPhoneError
             case .phoneLimitExceeded:
-                text = self.presentationData.strings.Login_PhoneFloodError
+                controller.tellomiBlockFurtherResends()
+                text = tellomiLoginCodeFloodText(self.presentationData.strings)
             case .appOutdated:
                 text = self.presentationData.strings.Login_ErrorAppOutdated
                 let updateUrl = self.presentationData.strings.InviteText_URL
@@ -1413,11 +1423,18 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         }
                         self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                     }
-                case let .phoneEntry(storedCountryCode, number):
-                    // An update keeps the previous unauthorized state. An empty number is still
-                    // the automatic default, so replace a stored +1 with China. A typed number
-                    // keeps the code it was entered with.
-                    let countryCode = number.isEmpty ? AuthorizationSequenceCountrySelectionController.defaultCountryCode() : storedCountryCode
+                case let .phoneEntry(storedCountryCode, storedNumber):
+                    // Only the calling-code whitelist is offered. A stored +1, or any other
+                    // code, opens as China with an empty number.
+                    let countryCode: Int32
+                    let number: String
+                    if storedNumber.isEmpty || !TellomiCallingCodePolicy.allows(storedCountryCode) {
+                        countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+                        number = TellomiCallingCodePolicy.allows(storedCountryCode) ? storedNumber : ""
+                    } else {
+                        countryCode = storedCountryCode
+                        number = storedNumber
+                    }
                     var controllers: [ViewController] = []
                     var previousSplashController: AuthorizationSequenceSplashController?
                     for c in self.viewControllers {

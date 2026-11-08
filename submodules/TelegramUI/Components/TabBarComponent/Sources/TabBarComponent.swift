@@ -360,6 +360,8 @@ public final class TabBarComponent: Component {
     public let axis: Axis
     /// Icons without labels, on either axis.
     public let isCompact: Bool
+    /// Hides the labels while keeping the icon layout.
+    public let hideTitles: Bool
     
     public init(
         theme: PresentationTheme,
@@ -371,7 +373,8 @@ public final class TabBarComponent: Component {
         selectedId: AnyHashable?,
         outerInsets: UIEdgeInsets,
         axis: Axis,
-        isCompact: Bool
+        isCompact: Bool,
+        hideTitles: Bool = false
     ) {
         self.theme = theme
         self.tintSelectedItem = tintSelectedItem
@@ -383,6 +386,7 @@ public final class TabBarComponent: Component {
         self.outerInsets = outerInsets
         self.axis = axis
         self.isCompact = isCompact
+        self.hideTitles = hideTitles
     }
     
     public static func ==(lhs: TabBarComponent, rhs: TabBarComponent) -> Bool {
@@ -414,6 +418,9 @@ public final class TabBarComponent: Component {
             return false
         }
         if lhs.isCompact != rhs.isCompact {
+            return false
+        }
+        if lhs.hideTitles != rhs.hideTitles {
             return false
         }
         return true
@@ -714,7 +721,7 @@ public final class TabBarComponent: Component {
                 availableLength -= barHeight + 8.0
             }
 
-            let dynamicTitlePointSize = tabBarClampedTitlePointSize(dynamicPointSize: UIFontMetrics(forTextStyle: .caption2).scaledValue(for: tabBarTitleBasePointSize, compatibleWith: self.traitCollection))
+            let dynamicTitlePointSize = tabBarUpstreamTitlePointSize
             func measureUnboundWidths(titlePointSize: CGFloat) -> [CGFloat] {
                 var widths: [CGFloat] = []
                 for item in component.items {
@@ -731,7 +738,7 @@ public final class TabBarComponent: Component {
                             item: item,
                             theme: component.theme,
                             isSearchActive: false,
-                            showsTitle: true,
+                            showsTitle: !component.hideTitles,
                             isSelected: false,
                             tintSelectedItem: true,
                             isUnconstrained: true,
@@ -798,7 +805,7 @@ public final class TabBarComponent: Component {
                         item: item,
                         theme: component.theme,
                         isSearchActive: search?.isActive == true,
-                        showsTitle: !component.isCompact,
+                        showsTitle: !component.isCompact && !component.hideTitles,
                         isSelected: false,
                         tintSelectedItem: component.tintSelectedItem,
                         isUnconstrained: false,
@@ -813,7 +820,7 @@ public final class TabBarComponent: Component {
                         item: item,
                         theme: component.theme,
                         isSearchActive: search?.isActive == true,
-                        showsTitle: !component.isCompact,
+                        showsTitle: !component.isCompact && !component.hideTitles,
                         isSelected: true,
                         tintSelectedItem: component.tintSelectedItem,
                         isUnconstrained: false,
@@ -1247,7 +1254,7 @@ private final class ItemComponent: Component {
                         environment: {},
                         containerSize: CGSize(width: 100.0, height: 100.0)
                     )
-                    let iconFrame = CGRect(origin: CGPoint(x: floor((availableSize.width - iconSize.width) * 0.5), y: iconY(regular: 3.0, height: iconSize.height)), size: iconSize)
+                    let iconFrame = tabBarUpstreamIconFrame(itemWidth: availableSize.width, imageSize: iconSize)
                     if let imageIconView = imageIcon.view {
                         if imageIconView.superview == nil {
                             if let badgeView = self.badge?.view {
@@ -1349,12 +1356,12 @@ private final class ItemComponent: Component {
             let titleSize = self.title.update(
                 transition: .immediate,
                 component: AnyComponent(MultilineTextComponent(
-                    text: .plain(NSAttributedString(string: title, font: Font.semibold(component.titlePointSize), textColor: (component.isSelected && component.tintSelectedItem) ? component.theme.rootController.tabBar.selectedTextColor : component.theme.rootController.tabBar.textColor))
+                    text: .plain(NSAttributedString(string: title, font: Font.medium(component.titlePointSize), textColor: (component.isSelected && component.tintSelectedItem) ? component.theme.rootController.tabBar.selectedTextColor : component.theme.rootController.tabBar.textColor))
                 )),
                 environment: {},
                 containerSize: CGSize(width: availableSize.width, height: 100.0)
             )
-            let titleFrame = tabBarTitleFrame(itemSize: availableSize, titleSize: titleSize)
+            let titleFrame = component.showsTitle ? tabBarUpstreamTitleFrame(itemWidth: availableSize.width, titleSize: titleSize) : tabBarTitleFrame(itemSize: availableSize, titleSize: titleSize)
             if let titleView = self.title.view {
                 if titleView.superview == nil {
                     self.contextContainerView.contentView.addSubview(titleView)

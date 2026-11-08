@@ -24,7 +24,7 @@ private func roundCorners(diameter: CGFloat) -> UIImage {
 
 final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFieldDelegate {
     private var theme: PresentationTheme
-    private let strings: PresentationStrings
+    private var strings: PresentationStrings
     private let addPhoto: () -> Void
     
     private let titleNode: ASTextNode
@@ -119,8 +119,9 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.termsNode.textAlignment = .center
         self.termsNode.maximumNumberOfLines = 0
         self.termsNode.displaysAsynchronously = false
-        let body = MarkdownAttributeSet(font: Font.regular(13.0), textColor: theme.list.itemSecondaryTextColor)
-        let link = MarkdownAttributeSet(font: Font.regular(13.0), textColor: theme.list.itemAccentColor, additionalAttributes: [TelegramTextAttributes.URL: ""])
+        let signupPalette = TellomiLoginChrome.palette(theme: theme)
+        let body = MarkdownAttributeSet(font: Font.regular(13.0), textColor: signupPalette.secondaryText)
+        let link = MarkdownAttributeSet(font: Font.regular(13.0), textColor: signupPalette.link, additionalAttributes: [TelegramTextAttributes.URL: ""])
         self.termsNode.attributedText = parseMarkdownIntoAttributedString(strings.Login_TermsOfServiceLabel.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "]", with: "]()"), attributes: MarkdownAttributes(body: body, bold: body, link: link, linkAttribute: { _ in nil }), textAlignment: .center)
         self.agreementRow = TellomiAgreementRow(textNode: self.termsNode)
         
@@ -134,7 +135,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         self.firstNameField = TextFieldNode()
         self.firstNameField.textField.font = Font.regular(20.0)
-        self.firstNameField.textField.textColor = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).fieldText
+        self.firstNameField.textField.textColor = TellomiLoginChrome.palette(theme: self.theme).fieldText
         self.firstNameField.textField.textAlignment = .natural
         self.firstNameField.textField.returnKeyType = .next
         self.firstNameField.textField.attributedPlaceholder = NSAttributedString(string: self.strings.UserInfo_FirstNamePlaceholder, font: self.firstNameField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
@@ -144,12 +145,12 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             self.firstNameField.textField.textContentType = .givenName
         }
         self.firstNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.firstNameField.textField.tintColor = TellomiLoginChrome.palette(dark: theme.overallDarkAppearance).accent
+        self.firstNameField.textField.tintColor = TellomiLoginChrome.palette(theme: theme).accent
         self.firstNameField.textField.accessibilityIdentifier = "Auth.SetName.FirstNameField"
 
         self.lastNameField = TextFieldNode()
         self.lastNameField.textField.font = Font.regular(20.0)
-        self.lastNameField.textField.textColor = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).fieldText
+        self.lastNameField.textField.textColor = TellomiLoginChrome.palette(theme: self.theme).fieldText
         self.lastNameField.textField.textAlignment = .natural
         self.lastNameField.textField.returnKeyType = .done
         self.lastNameField.textField.attributedPlaceholder = NSAttributedString(string: strings.UserInfo_LastNamePlaceholder, font: self.lastNameField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
@@ -159,7 +160,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             self.lastNameField.textField.textContentType = .familyName
         }
         self.lastNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.lastNameField.textField.tintColor = TellomiLoginChrome.palette(dark: theme.overallDarkAppearance).accent
+        self.lastNameField.textField.tintColor = TellomiLoginChrome.palette(theme: theme).accent
         self.lastNameField.textField.accessibilityIdentifier = "Auth.SetName.LastNameField"
 
         self.currentPhotoNode = ASImageNode()
@@ -168,13 +169,14 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.currentPhotoNode.displayWithoutProcessing = true
         
         self.addPhotoButton = HighlightableButtonNode()
-        self.addPhotoButton.setImage(generateTintedImage(image: UIImage(bundleImageName: "Avatar/EditAvatarIconLarge"), color: self.theme.list.itemAccentColor), for: .normal)
-        self.addPhotoButton.setBackgroundImage(generateFilledCircleImage(diameter: 110.0, color: self.theme.list.itemAccentColor.withAlphaComponent(0.1), strokeColor: nil, strokeWidth: nil, backgroundColor: nil), for: .normal)
+        let avatarInk = TellomiLoginChrome.palette(theme: theme).link
+        self.addPhotoButton.setImage(generateTintedImage(image: UIImage(bundleImageName: "Avatar/EditAvatarIconLarge"), color: avatarInk), for: .normal)
+        self.addPhotoButton.setBackgroundImage(generateFilledCircleImage(diameter: 110.0, color: avatarInk.withAlphaComponent(0.15), strokeColor: avatarInk.withAlphaComponent(0.45), strokeWidth: 1.0, backgroundColor: nil), for: .normal)
                 
         self.addPhotoButton.addSubnode(self.currentPhotoNode)
         self.addPhotoButton.allowsGroupOpacity = true
         
-        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings)).continueAction, theme: TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance), glass: false, height: 50.0, cornerRadius: 25.0)
+        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings)).continueAction, theme: TellomiLoginChrome.buttonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 25.0)
         self.proceedNode.progressType = .embedded
         self.proceedNode.accessibilityIdentifier = "Auth.SetName.ContinueButton"
         
@@ -189,8 +191,8 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.firstNameField.textField.delegate = self
         self.lastNameField.textField.delegate = self
         
-        TellomiLoginChrome.applyField(self.tellomiFirstBackground, dark: theme.overallDarkAppearance)
-        TellomiLoginChrome.applyField(self.tellomiLastBackground, dark: theme.overallDarkAppearance)
+        TellomiLoginChrome.applyField(self.tellomiFirstBackground, theme: theme)
+        TellomiLoginChrome.applyField(self.tellomiLastBackground, theme: theme)
         self.firstSeparatorNode.isHidden = true
         self.lastSeparatorNode.isHidden = true
 
@@ -209,7 +211,8 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         self.addPhotoButton.addTarget(self, action: #selector(self.addPhotoPressed), forControlEvents: .touchUpInside)
         
-        self.termsNode.linkHighlightColor = self.theme.list.itemAccentColor.withAlphaComponent(0.2)
+        self.termsNode.linkHighlightColor = signupPalette.link.withAlphaComponent(0.2)
+        self.agreementRow.apply(theme: theme)
         self.termsNode.highlightAttributeAction = { attributes in
             if let _ = attributes[NSAttributedString.Key(rawValue: TelegramTextAttributes.URL)] {
                 return NSAttributedString.Key(rawValue: TelegramTextAttributes.URL)
@@ -248,7 +251,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     
     func updateData(firstName: String, lastName: String, hasTermsOfService: Bool) {
         self.agreementRow.isHidden = false // Tellomi: the agreement checkbox is always shown.
-        let ink = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).fieldText
+        let ink = TellomiLoginChrome.palette(theme: self.theme).fieldText
         self.firstNameField.textField.textColor = ink
         self.lastNameField.textField.textColor = ink
         self.firstNameField.textField.attributedText = NSAttributedString(string: firstName, font: Font.regular(20.0), textColor: ink)
@@ -378,6 +381,22 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         }
     }
     
+    func textFieldDidBeginEditing(_ textField: UITextField) {
+        self.tellomiSetNameFocus(textField, focused: true)
+    }
+
+    func textFieldDidEndEditing(_ textField: UITextField) {
+        self.tellomiSetNameFocus(textField, focused: false)
+    }
+
+    private func tellomiSetNameFocus(_ textField: UITextField, focused: Bool) {
+        if textField === self.firstNameField.textField {
+            TellomiLoginChrome.applyField(self.tellomiFirstBackground, theme: self.theme, focused: focused)
+        } else if textField === self.lastNameField.textField {
+            TellomiLoginChrome.applyField(self.tellomiLastBackground, theme: self.theme, focused: focused)
+        }
+    }
+
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         if textField === self.firstNameField.textField && !self.tellomiNicknameOnly {
             self.lastNameField.textField.becomeFirstResponder()
@@ -392,7 +411,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         let copy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
         let bundled = tellomiBundledChineseLoginCopy(self.strings)
         let placeholder = self.tellomiNicknameOnly ? copy.nicknamePlaceholder : (bundled?.firstNamePlaceholder ?? self.strings.UserInfo_FirstNamePlaceholder)
-        let hint = TellomiLoginChrome.palette(dark: self.theme.overallDarkAppearance).placeholder
+        let hint = TellomiLoginChrome.palette(theme: self.theme).placeholder
         self.firstNameField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: self.firstNameField.textField.font, textColor: hint)
         if !self.tellomiNicknameOnly {
             let lastPlaceholder = bundled?.lastNamePlaceholder ?? self.strings.UserInfo_LastNamePlaceholder
@@ -404,24 +423,36 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         }
     }
     
+    func updateStrings(_ strings: PresentationStrings) {
+        self.strings = strings
+        self.tellomiAgreement.refreshLanguage(languageCode: tellomiInterfaceLanguageCode(strings))
+        if let (layout, navigationHeight) = self.layoutArguments {
+            self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: .immediate)
+        }
+    }
+
     func applyPresentationTheme(_ theme: PresentationTheme) {
         self.theme = theme
-        let palette = TellomiLoginChrome.palette(dark: theme.overallDarkAppearance)
+        let palette = TellomiLoginChrome.palette(theme: theme)
         self.backgroundColor = theme.list.plainBackgroundColor
-        TellomiLoginChrome.applyField(self.tellomiFirstBackground, dark: theme.overallDarkAppearance)
-        TellomiLoginChrome.applyField(self.tellomiLastBackground, dark: theme.overallDarkAppearance)
+        TellomiLoginChrome.applyField(self.tellomiFirstBackground, theme: theme)
+        TellomiLoginChrome.applyField(self.tellomiLastBackground, theme: theme)
         self.firstNameField.textField.textColor = palette.fieldText
         self.lastNameField.textField.textColor = palette.fieldText
         self.firstNameField.textField.tintColor = palette.accent
         self.lastNameField.textField.tintColor = palette.accent
         self.firstNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
         self.lastNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(dark: theme.overallDarkAppearance))
+        self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(theme: theme))
+        self.addPhotoButton.setImage(generateTintedImage(image: UIImage(bundleImageName: "Avatar/EditAvatarIconLarge"), color: palette.link), for: .normal)
+        self.addPhotoButton.setBackgroundImage(generateFilledCircleImage(diameter: 110.0, color: palette.link.withAlphaComponent(0.15), strokeColor: palette.link.withAlphaComponent(0.45), strokeWidth: 1.0, backgroundColor: nil), for: .normal)
         let first = self.firstNameField.textField.text ?? ""
         let last = self.lastNameField.textField.text ?? ""
         self.firstNameField.textField.attributedText = NSAttributedString(string: first, font: Font.regular(20.0), textColor: palette.fieldText)
         self.lastNameField.textField.attributedText = NSAttributedString(string: last, font: Font.regular(20.0), textColor: palette.fieldText)
         self.applyTellomiNicknameChrome()
+        self.agreementRow.apply(theme: theme)
+        self.termsNode.linkHighlightColor = palette.link.withAlphaComponent(0.2)
         if let (layout, navigationHeight) = self.layoutArguments {
             self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: .immediate)
         }

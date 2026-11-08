@@ -48,11 +48,13 @@ final class AuthorizationSequenceAwaitingAccountResetControllerNode: ASDisplayNo
         self.titleNode = ASTextNode()
         self.titleNode.isUserInteractionEnabled = false
         self.titleNode.displaysAsynchronously = false
-        self.titleNode.attributedText = NSAttributedString(string: strings.Login_ResetAccountProtected_Title, font: Font.light(30.0), textColor: self.theme.list.itemPrimaryTextColor)
+        self.titleNode.maximumNumberOfLines = 0
+        self.titleNode.attributedText = NSAttributedString(string: strings.Login_ResetAccountProtected_Title, font: TellomiLoginChrome.scaledFont(size: 30.0, weight: .light), textColor: self.theme.list.itemPrimaryTextColor)
         
         self.noticeNode = ASTextNode()
         self.noticeNode.isUserInteractionEnabled = false
         self.noticeNode.displaysAsynchronously = false
+        self.noticeNode.maximumNumberOfLines = 0
         
         self.timerTitleNode = ASTextNode()
         self.timerTitleNode.isUserInteractionEnabled = false
@@ -64,8 +66,9 @@ final class AuthorizationSequenceAwaitingAccountResetControllerNode: ASDisplayNo
         self.timerValueNode.displaysAsynchronously = false
         
         self.resetNode = HighlightableButtonNode()
-        self.resetNode.setAttributedTitle(NSAttributedString(string: strings.Login_ResetAccountProtected_Reset, font: Font.regular(21.0), textColor: self.theme.list.itemAccentColor), for: [])
-        self.resetNode.setAttributedTitle(NSAttributedString(string: strings.Login_ResetAccountProtected_Reset, font: Font.regular(21.0), textColor: self.theme.list.itemPlaceholderTextColor), for: [.disabled])
+        let palette = TellomiLoginChrome.palette(theme: theme)
+        self.resetNode.setAttributedTitle(NSAttributedString(string: strings.Login_ResetAccountProtected_Reset, font: Font.regular(21.0), textColor: palette.link), for: [])
+        self.resetNode.setAttributedTitle(NSAttributedString(string: strings.Login_ResetAccountProtected_Reset, font: Font.regular(21.0), textColor: palette.secondaryText), for: [.disabled])
         self.resetNode.displaysAsynchronously = false
         self.resetNode.isEnabled = false
         

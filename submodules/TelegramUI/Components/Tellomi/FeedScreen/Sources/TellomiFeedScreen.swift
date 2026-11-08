@@ -15,6 +15,8 @@ import UIKitRuntimeUtils
 /// Discover tab. The live feed stays off until `tellomi_discover_feed_enabled` is true.
 /// Logged-out sessions keep the empty state and do not ask for a credential.
 public final class TellomiFeedScreen: ViewController {
+    public var onRootNavigationVisible: ((Bool, Bool) -> Void)?
+    private var rootNavigationVisible = true
     private let context: AccountContext
     private var presentationData: PresentationData
     private var appConfiguration: AppConfiguration
@@ -192,6 +194,7 @@ public final class TellomiFeedScreen: ViewController {
     }
 
     public func openPost(id: String) {
+        self.restoreRootNavigation()
         if self.pendingPostId != id {
             self.postPresentAttempts = 0
             self.postPresentRetryQueued = false
@@ -241,6 +244,19 @@ public final class TellomiFeedScreen: ViewController {
             self.loadFeed(reset: true)
             self.sync(reload: false)
         }
+        node.onCompose = { [weak self] in
+            self?.composePressed()
+        }
+        node.onNavigationScroll = { [weak self] change in
+            switch change {
+            case .unchanged:
+                break
+            case .shown:
+                self?.publishRootNavigation(visible: true)
+            case .hidden:
+                self?.publishRootNavigation(visible: false)
+            }
+        }
         self.displayNode = node
         self.displayNodeDidLoad()
         self.sync(reload: true)
@@ -250,7 +266,12 @@ public final class TellomiFeedScreen: ViewController {
         super.containerLayoutUpdated(layout, transition: transition)
         self.appliedLayout = layout
         let navigationHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
-        self.feedNode.updateLayout(size: layout.size, topInset: navigationHeight, bottomInset: layout.intrinsicInsets.bottom, transition: transition)
+        self.feedNode.updateLayout(size: layout.size, topInset: navigationHeight, bottomInset: layout.intrinsicInsets.bottom, keyboardOverlap: layout.inputHeight ?? 0, transition: transition)
+    }
+
+    override public func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        self.restoreRootNavigation()
     }
 
     override public func tabBarItemContextAction(sourceView: ContextExtractedContentContainingView, gesture: ContextGesture) {
@@ -387,7 +408,8 @@ public final class TellomiFeedScreen: ViewController {
                 cityLine: showCityLine ? tellomiDiscoverComposeCityLine(self.cityCode, languageCode: languageCode, pack: pack) : nil,
                 cityAction: showCityLine ? (publishCity == nil ? copy.cityPrompt : copy.changeCity) : nil,
                 clearCityTitle: mode == .city && publishCity != nil ? copy.composeCityNone : nil,
-                legacyTitleTappable: mode == .feed && self.kind == .nearby && self.nearbyUnavailable && !self.loading
+                legacyTitleTappable: mode == .feed && self.kind == .nearby && self.nearbyUnavailable && !self.loading,
+                showsCompose: tellomiDiscoverComposeButtonVisible(showsCompose: chrome.showsCompose, engineVisible: self.engineVisible != false)
             ))
             if let layout = self.appliedLayout {
                 let navigationHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
@@ -415,6 +437,7 @@ public final class TellomiFeedScreen: ViewController {
         guard self.tabs.indices.contains(index) else {
             return
         }
+        self.restoreRootNavigation()
         let kind = self.tabs[index]
         self.pickingCity = false
         guard kind != self.kind else {
@@ -680,6 +703,22 @@ public final class TellomiFeedScreen: ViewController {
 
     @objc private func composePressed() {
         self.presentCompose(quoteOf: nil, quotePreview: "")
+    }
+
+    private func restoreRootNavigation() {
+        if self.isNodeLoaded {
+            self.feedNode.resetNavigationScroll()
+        }
+        self.publishRootNavigation(visible: true)
+    }
+
+    private func publishRootNavigation(visible: Bool) {
+        guard visible != self.rootNavigationVisible else {
+            return
+        }
+        self.rootNavigationVisible = visible
+        let animated = tellomiFeedNavigationTransitionAnimated(reduceMotion: UIAccessibility.isReduceMotionEnabled)
+        self.onRootNavigationVisible?(visible, animated)
     }
 
     private func presentCompose(quoteOf: String?, quotePreview: String) {

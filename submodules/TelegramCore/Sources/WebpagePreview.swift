@@ -4,6 +4,7 @@ import SwiftSignalKit
 internal import TelegramApi
 import MtProtoKit
 import LinkPresentation
+import TellomiDiscover
 #if os(iOS)
 import UIKit
 #endif
@@ -151,6 +152,14 @@ public func webpagePreviewWithProgress(account: Account, urls: [String], webpage
                 }
             }
             
+            let routes = urls.map(tellomiChatLinkRoute)
+            if !routes.contains(.server), let sourceUrl = urls.first(where: { tellomiChatLinkRoute($0) == .client }) {
+                return tellomiLocalWebpagePreview(account: account, sourceUrl: sourceUrl)
+            }
+            if !urls.isEmpty && !routes.contains(.server) {
+                return .single(.result(nil))
+            }
+
             return account.network.requestWithAdditionalInfo(Api.functions.messages.getWebPagePreview(flags: 0, message: urls.joined(separator: " "), entities: nil), info: .progress)
             |> `catch` { _ -> Signal<NetworkRequestResult<Api.messages.WebPagePreview>, NoError> in
                 return .single(.result(.webPagePreview(.init(media: .messageMediaEmpty, chats: [], users: []))))
@@ -301,5 +310,73 @@ public func updatedRemoteWebpage(postbox: Postbox, network: Network, accountPeer
         }
     } else {
         return .single(nil)
+    }
+}
+
+private func tellomiLocalWebpagePreview(account: Account, sourceUrl: String) -> Signal<WebpagePreviewWithProgressResult, NoError> {
+    return Signal { subscriber in
+        subscriber.putNext(.progress(0.0))
+        DispatchQueue.global(qos: .utility).async {
+            guard let page = TellomiDiscoverLinkFetch.loadPage(sourceUrl) else {
+                subscriber.putNext(.result(nil))
+                subscriber.putCompletion()
+                return
+            }
+            let fields = tellomiChatLinkFields(title: page.preview.title, text: page.preview.description, siteName: TellomiDiscoverLink.openGraphSiteName(page.html), hasPhoto: false)
+            var image: TelegramMediaImage?
+            if let imageURL = page.preview.image, TellomiDiscoverLink.fetchable(imageURL), let data = TellomiDiscoverLinkFetch.loadData(imageURL), let parsed = UIImage(data: data), parsed.size.width > 0.0, parsed.size.height > 0.0 {
+                let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
+                account.postbox.mediaBox.storeResourceData(resource.id, data: data)
+                image = TelegramMediaImage(
+                    imageId: MediaId(namespace: Namespaces.Media.LocalImage, id: Int64.random(in: Int64.min ... Int64.max)),
+                    representations: [
+                        TelegramMediaImageRepresentation(
+                            dimensions: PixelDimensions(width: Int32(parsed.size.width), height: Int32(parsed.size.height)),
+                            resource: resource,
+                            progressiveSizes: [],
+                            immediateThumbnailData: nil,
+                            hasVideo: false,
+                            isPersonal: false
+                        )
+                    ],
+                    immediateThumbnailData: nil,
+                    reference: nil,
+                    partialReference: nil,
+                    flags: []
+                )
+            }
+            if fields.title == nil && fields.text == nil && fields.siteName == nil && image == nil {
+                subscriber.putNext(.result(nil))
+                subscriber.putCompletion()
+                return
+            }
+            let webpage = TelegramMediaWebpage(
+                webpageId: MediaId(namespace: Namespaces.Media.LocalWebpage, id: Int64.random(in: Int64.min ... Int64.max)),
+                content: .Loaded(TelegramMediaWebpageLoadedContent(
+                    url: page.url,
+                    displayUrl: page.url,
+                    hash: 0,
+                    type: image == nil ? "article" : "photo",
+                    websiteName: fields.siteName,
+                    title: fields.title,
+                    text: fields.text,
+                    embedUrl: nil,
+                    embedType: nil,
+                    embedSize: nil,
+                    duration: nil,
+                    author: nil,
+                    isMediaLargeByDefault: image != nil,
+                    imageIsVideoCover: false,
+                    image: image,
+                    file: nil,
+                    story: nil,
+                    attributes: [],
+                    instantPage: nil
+                ))
+            )
+            subscriber.putNext(.result(WebpagePreviewResult.Result(webpage: webpage, sourceUrl: sourceUrl)))
+            subscriber.putCompletion()
+        }
+        return EmptyDisposable
     }
 }

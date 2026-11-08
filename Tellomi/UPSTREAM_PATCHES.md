@@ -646,6 +646,69 @@ Labels share one font. Dynamic Type scales that font from 10pt caption2, capped 
 | `submodules/TelegramUI/Components/TabBarLayout/Tests/TabBarItemsLayoutTests.swift` | Narrow 320pt bar stays equal. Scale and baseline. |
 | `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Applies that font, and exposes one accessibility element per tab. |
 
+The glass bar was drawing each icon at its bitmap size and the title in semibold up to 13pt at the bottom of the 56pt item. Upstream `TabBarNode` draws the 30pt Contacts/Chats/Settings PDFs at the top of a 45pt block that starts 3pt down, with a medium 10pt title under the icon. Icons larger than 30pt, including Discover, are fitted into that 30pt box. The title is medium 10pt on that same block. Tab order and the navigation switches are unchanged.
+
+The Me tab photo was requested only when another account was signed in (`activeAccountsAndPeers` leaves the primary out of the other-account list). One account kept the settings glyph. A download that had not finished yet also replaced a photo that was already drawn. The photo is now requested whenever the account peer exists, and a missing frame keeps the last photo. The file is the same profile photo the profile screen downloads. No server change is required.
+
+| File | Change |
+| --- | --- |
+| `TabBarItemsLayout.swift` | Upstream icon box, origin, and title position. |
+| `TabBarComponent.swift` | Uses that box and medium 10pt. |
+| `PeerInfoScreen.swift` | Me tab photo does not wait for a second account, and a miss keeps the last photo. |
+
+The Me tab opens the existing My Profile screen (`isMyProfile`), the same one Settings → 资料 pushes. It is not a new page. The header, phone, username, birthday, bio, and stories pane are that screen's. While it is the tab root it has no back button, and its navigation bar has the settings gear, which pushes the existing settings screen. The settings screen, its 资料 row, the navigation switches, long-press account switching, and `ios_killswitch_disable_tellomi_tabs` stay. The kill switch still builds the settings screen as the last tab. The Me tab icon is the signed-in account photo whenever that peer record exists; another account is not required. A frame that has not downloaded yet keeps the photo already drawn.
+
+| File | Change |
+| --- | --- |
+| `TellomiTabNavigationDecisions.swift` | The product bar's last tab is My Profile. The avatar does not wait for a second account. |
+| `TelegramRootController.swift` | Creates that profile as the tab, or Settings when the kill switch is on. |
+| `PeerInfoNavigationButtons.swift` | The tab-root profile's bar adds Settings. A profile opened from Settings does not. |
+| `PeerInfoScreen.swift` | The button pushes the existing settings screen. The tab label stays 我. |
+
+## Reaction pills
+
+A builtin reaction was drawn at twice the 20×20 slot, and the layer was not clipped. Telegram's own reaction files are padded, so that 2× layer still looks about 20pt. These files are full-bleed, so the glyph filled 40pt, left the 30pt pill, and left the bubble. The reactor avatar beside it is the existing 24pt view and is unchanged. The list, the count, and the pill height stay. Builtin icons are now the slot size and clipped. Custom emoji stays 1.25× and clipped. Stars stays 1.25×. The server does not need `imageSize` or a custom-emoji attribute for the frame.
+
+| File | Change |
+| --- | --- |
+| `ReactionIconMetrics.swift` | Slot, scale, and clip for each reaction kind. |
+| `ReactionButtonListComponent.swift` | The icon layer uses that frame. |
+
+## Chat link cards
+
+`tell.cc`, `t.me`, `telegram.me`, and `telegram.dog` still go through `messages.getWebPagePreview`. The server builds the sticker, channel, user, and message cards. Other http(s) links are read on the phone with the Discover Open Graph fetch: 8 seconds, 512 KiB, and no private, loopback, or link-local address. The image is uploaded with `messages.uploadMedia`, then `inputMediaWebPage` flags 3–6 carry the title, description, site name, and photo. A field larger than 16 KiB is omitted. Stored lengths are 128, 400, and 64. `author` equal to `unverified` is not kept, so the bubble does not draw it. The card is still `article` or `photo`.
+
+| File | Change |
+| --- | --- |
+| `swift_scheme.tl` | `inputMediaWebPage` flags 3–6. |
+| `TellomiChatLinkPreview.swift` | Internal versus client route, limits, and the hidden author. |
+| `TellomiDiscoverLinkFetch.swift` | The phone's GET, shared with Discover. |
+| `TellomiDiscoverLinkClient.swift` | The in-memory card cache marks a hit as newest. |
+| `WebpagePreview.swift` | External links skip `getWebPagePreview`. |
+| `PendingMessageUploadedContent.swift` | Sends the client fields and the uploaded photo. |
+
+## Native translation, dictation, and tab labels
+
+Translation stays on the native language screen: Show Translate, Translate Entire Chat, and Do Not Translate. The only pair is English to Chinese. `messages.translateText`, `messages.translateRichMessage`, and `messages.composeMessageWithAI` with `translate_to_lang` call the self-hosted service only. Apple Translation, the Google fallback, Bailian, and Telegram's hosted path are not selected. `to_lang` must be `zh`, `zh-cn`, or `zh-hans`; anything else is `TO_LANG_INVALID` before the request. `TRANSLATE_REQ_FAILED` and a compose translation's `AICOMPOSE_TIMEOUT` show 翻译服务暂不可用. The client does not call `/health`. A missing `translations_manual_enabled` or `tellomi_translate_enabled` stays off. `translations_auto_enabled` must be `enabled` before a whole chat translates. Per-chat 不翻译 stays `messages.togglePeerTranslations`. Production `5354817` does not serve this yet, so a missing key leaves translation off.
+
+Dictation is the third position of the existing mic switch (voice, video, dictation). Voice send in the voice position is unchanged. Releasing a dictation recording calls `messages.transcribeDraft#7e11da47` with the in-memory OGG, at most 8 MB, and inserts only the returned text into the draft. It does not call `messages.sendMessage`, `messages.sendMedia`, or `messages.transcribeAudio`, and it does not write the audio into the chat database or object storage. `pending` is ignored. `USER_ID_INVALID`, `MEDIA_EMPTY`, `AUDIO_TOO_LONG`, `TRANSCRIPTION_UNAVAILABLE`, and an unknown method show a prompt; `TRANSCRIPTION_FAILED` shows 听写失败. Production `5354817` does not have this method, so the prompt is 听写服务暂不可用 until the server that includes it is deployed. The next server deploy is also expected to include the round-video protocol fix `bad916ac`; this client does not require those fields while production is still `5354817`.
+
+An incoming English message can show a translate button in the gap to the right of the bubble, the same gap the share button already uses. It follows Show Translate and the self-hosted manual switch. It hides during selection and while whole-chat translation is already on. Tapping it uses the same translate calls and shows Chinese in place; tapping again restores the original. The long-press Translate action stays.
+
+The navigation screen gains 隐藏底栏文字. It hides labels and keeps the icons, the default 发现 / 聊天 / 我 order, and the existing switches.
+
+`PHONE_NUMBER_FLOOD` is the daily cap of 10 codes. `FLOOD_WAIT` is a short resend wait and is not that cap.
+
+| File | Change |
+| --- | --- |
+| `TellomiNativeBatch.swift` | Health-gated translation flags, the `zh` allow list, and the draft audio checks. |
+| `swift_scheme.tl`, `Transcription.swift` | `messages.transcribeDraft#7e11da47`. |
+| `Translate.swift`, `ChatTranslation.swift` | Server-only English to Chinese. No Apple or alternative path. |
+| `ChatControllerMediaRecording.swift` | Dictation inserts text and leaves voice send alone. |
+| `LocalizationListControllerNode.swift` | The three native rows stay, and a down service says 翻译服务暂不可用. |
+| `ChatMessageBubbleItemNode.swift` | Side translate button, outside the bubble's text measure. |
+| `TellomiTabSettings.swift`, `TellomiNavigationSettingsController.swift`, `TabBarComponent.swift` | Hide tab labels. |
+
 ## DC addresses from help.getConfig (M7 / D-33)
 
 `Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
@@ -1095,3 +1158,113 @@ A failure or an empty completion closes the progress, stops a video export, and 
 | `.github/workflows/pr-tests.yml` | Host tests that the pull request declares, plus the tab-bar simulator test. |
 | `submodules/TelegramUI/Components/TabBarLayout/BUILD` | Simulator pin is iPhone 17 / iOS 27.0. |
 | `submodules/TellomiWallpapers/Tests/TellomiWallpapersTests.swift` | Compare names and colors separately. A tuple array does not satisfy `XCTAssertEqual` on Xcode 27.1. |
+
+## Login and sign-up contrast
+
+The login chrome had its own hex palette. On the default day theme that left the unchecked agreement ring at `#C7C7CC` on white (about 1.7:1), the placeholder at `#B0B0B6` on `#F2F3F5` (about 1.9:1), disabled button text at `#8E8E93` on `#E5E5E5` (about 2.6:1), the code-box border at `#E5E5E5` on the field fill, and 13pt secondary copy under 4.5:1. The default dark theme's placeholder `#4D4D4D` fails on a dark fill, and `itemInputField` `#0F0F0F` sits on black at about 1.1:1. Links used the same black or white as body text instead of the accent. The agreement sentence used the light secondary color in both appearances.
+
+Colors now start from the authorization theme (`intro.startButtonColor`, `list.itemAccentColor`, `itemInputField`, `itemCheckColors`, separators, destructive) and move only far enough to clear WCAG AA: 4.5:1 for text, 3:1 for strokes, the checkbox, and code-box borders. The day field fill stays `#F2F2F7`. A dark field that does not separate from the page is lightened until it does. The primary button stays the intro start color (black in day, white at night) with a label that clears 4.5:1, including the disabled pair. Focus draws a 2pt accent border on the rounded fields and the password underline. The agreement circle is 22pt inside the existing 44pt control, with a tick that clears the fill. Titles that the layout measures use an unlimited line count and the capped Dynamic Type font. Sign-in, sign-up, email, code, and password requests are unchanged.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiLoginFieldColors.swift` | Theme tokens, contrast floor, surface colors. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginChrome.swift` | Palette and buttons read the theme. Field border and code-box theme. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginSurfaces.swift` | Checkbox, chevron, divider, and rows use that palette. |
+| `submodules/AuthorizationUI/Sources/TellomiSignUpAgreement.swift` | Sentence colors follow the theme in both appearances. |
+| Authorization sequence phone, code, sign-up, password, recovery, email, splash, and reset nodes | Same palette, focus border, wrapping titles. |
+| `submodules/AuthorizationUI/Tests/TellomiLoginFieldColorsTests.swift` | AA pairs for both appearances, and the old pairs still fail. |
+| `.github/workflows/login-auth-ui.yml` | Pull-request host test and unsigned simulator compile. No TestFlight. |
+
+## Login language, calling codes, and the daily code limit
+
+The globe opened the language card, then waited for `langpack.getLanguage` before rewriting the page, and the download had no error handler. The login sentences for 简体 / 繁體 / English are already in the app, so the choice is stored and the current screen lays out before the request. The login connection is known to answer `langpack.getLanguages`, `getLangPack`, `getStrings`, and `getDifference`. The download's first call is the separate method `langpack.getLanguage` (`0x6a596502`). If that one fails, the client still requests `getLangPack` for the chosen code (base `en`). A failed download no longer leaves the welcome button dimmed.
+
+The country list and a pasted number accept `TellomiCallingCodePolicy.allowedCallingCodes`, which is `{86}`. Assign that set to add codes later. Any other calling code is put back to +86 and the screen says only mainland China is available. The full country table stays loaded so a pasted `+66…` is still recognized as foreign.
+
+On server 235 the 11th code of the day is `400 PHONE_NUMBER_FLOOD`. A resend inside 60 seconds is `420 FLOOD_WAIT_X`. `PHONE_NUMBER_FLOOD` shows the daily cap (10) and leaves resend off. `FLOOD_WAIT_X` shows the wait in seconds and pauses resend only for that long. It does not say the day is used up, and it does not keep the button off.
+
+| File | Change |
+| --- | --- |
+| `TellomiLoginLocale.swift`, phone, code, and sign-up controllers | Remember the language and redraw, then download. |
+| `Localizations.swift` | `getLanguage` failure still downloads `getLangPack`. |
+| `TellomiLoginDecisions.swift` | Switch plan, daily cap versus `FLOOD_WAIT`, paste decision, phone titles. |
+| `AuthorizationSequenceSplashController.swift` | A failed pack download still opens the phone screen. |
+| `TellomiCallingCodePolicy.swift`, country list, phone entry | Whitelist, picker filter, paste notice. |
+| `Authorization.swift` | `FLOOD_WAIT_X` is `floodWait(seconds)`. `PHONE_NUMBER_FLOOD` stays the day cap. |
+| `AuthorizationSequenceController.swift`, code entry node | Different alerts. Resend pauses, then turns back on. |
+
+## Round video transcription
+
+Tapping transcribe on a round video used to treat any stored transcript, including an error or an empty result, as a reason to replace the circle with the file row. That path sets the video node's alpha to zero and `canAttachContent = true`, which stops the player from attaching. With no text to show, the circle stays a blank disc and the duration, mute, time, and button go with it. A later open of the chat repeats that layout.
+
+A non-empty transcript is now the only case that replaces the video. Failure, an empty result, a still-pending request, and cancel leave the circle and its controls in place. The request is not started again by itself. The expanded mask uses the larger of the bubble and the new content size, so the text is not clipped back to the circle.
+
+| File | Change |
+| --- | --- |
+| `RoundVideoTranscriptionDecision.swift` | When the circle stays and when it may be replaced. |
+| `ChatMessageInteractiveInstantVideoNode.swift` | Applies that decision. Cancel stops an in-progress request. A failure restores the video. |
+| `ChatMessageInstantVideoBubbleContentNode.swift` | Expands only when the decision replaces the video. The mask is not stuck on the old circle. |
+| `RoundVideoTranscriptionDecisionTests.swift` | Success, pending, failure, empty, cancel, and no automatic retry. |
+
+## View-once, media timers, and conversation TTL
+
+The iOS client already separates these timers. This records what each one does to the message, the cache, and `readMessageContents`. No production database or file is touched. The tests use only the values below.
+
+A cloud view-once photo, video, voice, or round video is an `AutoclearTimeoutMessageAttribute` whose timeout is `0x7fffffff`. A cloud self-destruct photo or video is the same attribute with a timeout of at most 60 seconds. Voice and round video use that view-once value too; playback start and the secret-media gallery call the same consume function. The conversation TTL is an `AutoremoveTimeoutMessageAttribute` and is not secret media once it is longer than 60 seconds. A secret chat stores both its media timer and its conversation timer as `AutoremoveTimeoutMessageAttribute`. Compose and peer info still call `createSecretChat`.
+
+Opening an incoming view-once or media-timer message starts the countdown and queues `messages.readMessageContents` (a channel uses `channels.readMessageContents`). It does not replace the media and does not delete the cache. The sender's copy is ignored because the message is not incoming. A secret chat queues `readMessagesContent` on the secret-chat operation log instead of the cloud RPC. An incoming cloud conversation TTL already begins at the message date.
+
+When the local timer fires, a cloud view-once or media timer keeps the message and stores `TelegramMediaExpiredContent`. The video, its thumbnail, and a voice track stay in `mediaBox`. A cloud conversation TTL deletes the message row and also leaves the cache. A secret chat deletes the row and force-removes those resource ids. None of the three calls `readMessageContents` or marks the file id invalid. A later holder of the old id can still read the cache or ask the server. That is a different step from the placeholder.
+
+A failed cloud `readMessageContents` is swallowed and the operation log entry is then removed, so that report is not retried. The local placeholder does not wait for the RPC. Another device applies the remote consume by inserting the placeholder for view-once, without deleting the cache.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/Tellomi/EphemeralMediaLifecycle.swift` | The five kinds and the four effects: placeholder, row removal, cache removal, server report. |
+| `submodules/TelegramCore/Tests/EphemeralMediaLifecycleTests.swift` | Synthetic cases for sender, recipient, expiry, a failed report, and a stale resource id. |
+| `submodules/TelegramCore/BUILD` | Host test `EphemeralMediaLifecycleTests`. |
+
+## Open in 高德, 百度, and 腾讯
+
+The Open In sheet already lists 高德, 百度, and 腾讯 when `canOpenURL` says they are installed, then Google Maps under the same check, with Apple Maps always first. TestFlight 14.0.4 build 71 contains that code (`118e9b2560` is an ancestor of `eb90bf0e2d`). A pin, a venue, and a live location all use `OpenInItem.location`. Directions and the share action use the same list. The watch app still opens Apple Maps only.
+
+`canOpenURL` was still false for the three Chinese apps. This binary is linked with the iOS 27 SDK, and that SDK only answers `canOpenURL` for the first 25 `LSApplicationQueriesSchemes` entries. `TelegramInfoPlist` had 41 entries. `comgooglemaps-x-callback` was second, so Google Maps showed. `iosamap`, `baidumap`, and `qqmap` were 39–41, so an installed 高德, 百度, or 腾讯 stayed hidden. The sheet was Apple Maps plus Google Maps.
+
+Those three schemes now replace `vimeo`, `vine`, and `coub` inside the first 25. Nothing in this repo calls `canOpenURL` for those three. The Chinese schemes are no longer repeated at the end. `Info.plist` and `InfoBazel.plist` use the same placement. The Bazel app links `TelegramInfoPlist`.
+
+Coordinates are unchanged. Telegram stores WGS-84. 高德 is `iosamap://` with `dev=1`. 百度 is `baidumap://` with `coord_type=wgs84`. 腾讯 `qqmap://` is converted to GCJ-02 here. Apple Maps receives the stored WGS-84 point.
+
+| File | Change |
+| --- | --- |
+| `Telegram/BUILD` | `iosamap`, `baidumap`, `qqmap` sit inside the first 25 query schemes. |
+| `Telegram/Telegram-iOS/Info.plist`, `InfoBazel.plist` | The same placement. |
+| `TellomiMapOpenIn.swift` | The 25-scheme window. |
+| `TellomiMapOpenInTests.swift` | The shipped order shows the four map schemes. The previous order hides the three Chinese ones. |
+
+## Secret view and a per-chat PIN
+
+The chat list long-press menu adds 秘密查看 and 设置密码. The default bar and the navigation switches are unchanged.
+
+Secret view opens that chat without `messages.readHistory`, `channels.readHistory`, `readMessageContents`, `readMentions`, or `readReactions`. It does not clear the unread count. It does not send typing, sticker, or recording activity. While it is open, that account's online presence stays off, including the foreground refresh. Leaving the chat ends the session and restores presence only for the primary account. A banner reads 秘密查看中. The unread badge is still there because the read index is not applied.
+
+The chat PIN is 4 to 8 digits. The stored value is a salted SHA-256 in the app data-protection keychain (`kSecUseDataProtectionKeychain`, service `app.tellomi.chat.chat-lock`), not the macOS login keychain and not the server. Face ID or Touch ID is optional and does not replace the PIN. A lock is per account and per chat. List rows, search rows that use the same preview, notification text, and the external share text become 已锁定. Opening asks for the PIN first. Forgetting the PIN does not unlock the chat and does not contact the server. If the existing app passcode is on, that passcode can authorize a new chat PIN. Otherwise the chat stays locked.
+
+| File | Change |
+| --- | --- |
+| `TellomiChatPrivacy.swift` | The reports a secret view blocks, the salted PIN, and the per-account lock directory. |
+| `TellomiChatLockKeychain.swift` | Data-protection keychain load, save, and remove. |
+| `TellomiChatLockPrompt.swift` | Set, change, remove, unlock, biometrics, and the forgot-password alert. |
+| `ChatContextMenus.swift` | The two long-press actions. |
+| `ChatController.swift`, `NavigateToChatController.swift`, `ChatHistoryListNode.swift` | Secret view stays unread and shows the banner. A locked chat asks for the PIN before it opens. |
+| `SharedWakeupManager.swift` | Online presence stays off during secret view. |
+| `ChatListItemStrings.swift`, `ShareController.swift`, `NotificationService.swift` | Hidden preview text. |
+
+## PR test registry retry
+
+`.github/bazel_registry_retry.sh` is the only retry decision. It reruns a Bazel command up to three times only when the log is a pure central-registry fetch failure: one `ERROR` for `Error computing the main repository mapping` / `Error accessing registry` / `Failed to fetch registry file`, plus a transport timeout. A test assertion (`FAILED`, `XCTAssert`, Swift `error: -[`), a missing target or package, any other `ERROR`, or a bare timeout is not retried. The command's own exit status is what the job exits with. `.github/bazel_registry_retry_test.sh` drives that script with fixture logs and a stub command, including a later success that must not erase an earlier assertion or missing-target failure. `.github/workflows/pr-tests.yml` calls the script. This is the failure from run 42416611063, which stopped before any test ran.
+
+`.github/fetch_pinned.sh` downloads the pinned Bazel binary from the same GitHub release URL and checks the sha256 in `versions.json`. HTTP 502/503/504 and transport timeouts are retried; 401/403 and a checksum mismatch are not. `.github/retry_external_fetch.sh` re-runs a Bazel or Make.py invocation only when the failure is an external archive timeout or HTTP 502/503/504. Bazel 9.2.0 retries those status codes while connecting (`HttpConnector`) and does not retry a read timeout after the connection is open (`HttpDownloader.transferTo`). A compiler error, test assertion, checksum mismatch, HTTP 401/403, or missing target is not retried. `.github/download_retry_test.sh` drives both. `prepare_appstore_signing.py` GETs the existing App Store app record and does not POST a create when that GET finds it. A refused CREATE is not tried again.
+
+## Discover compose button
+
+The Discover list keeps the existing `composePressed` publish path. A bottom-right control uses `Chat List/AddIcon` through `generateItemListPlusIcon`, on `list.itemAccentColor`, with the check-foreground glyph. It sits above `intrinsicInsets.bottom` and the keyboard `inputHeight`. Scrolling a non-empty list calls `TabBarController.updateIsTabBarHidden`; an empty list, the top of the list, a tab change, and returning to the page show the bar again. Reduce Motion uses an immediate transition. Tab-title hiding is unchanged.
