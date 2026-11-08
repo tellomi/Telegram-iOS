@@ -47,6 +47,26 @@ final class TabBarItemsLayoutTests: XCTestCase {
         XCTAssertEqual(tabBarUpstreamTitlePointSize, 10.0)
     }
 
+    func test_hiddenTitlesCenterTheSameIconAndIgnoreTheLabelWidth() {
+        let item = CGSize(width: 104.0, height: 56.0)
+        let image = CGSize(width: 30.0, height: 30.0)
+        let titled = tabBarIconFrame(itemSize: item, imageSize: image, showsTitle: true)
+        let hidden = tabBarIconFrame(itemSize: item, imageSize: image, showsTitle: false)
+        XCTAssertEqual(titled, tabBarUpstreamIconFrame(itemWidth: item.width, imageSize: image))
+        XCTAssertEqual(hidden.size, titled.size)
+        XCTAssertEqual(hidden.midX, titled.midX)
+        XCTAssertEqual(hidden.midY, item.height / 2.0)
+        XCTAssertEqual(tabBarBadgeOffsetY(iconFrame: titled, showsTitle: true), 0.0)
+        XCTAssertEqual(tabBarBadgeOffsetY(iconFrame: hidden, showsTitle: false), hidden.minY - titled.minY)
+        XCTAssertEqual(tabBarUnconstrainedItemWidth(titleWidth: 12.0, showsTitle: true), 32.0)
+        XCTAssertEqual(tabBarUnconstrainedItemWidth(titleWidth: 48.0, showsTitle: false), tabBarItemLength)
+        let phone = tabBarItemsLayout(axis: .horizontal, isCompact: false, unboundItemWidths: [tabBarItemLength, tabBarItemLength, tabBarItemLength], availableLength: 320.0)
+        XCTAssertEqual(phone.itemFrames.map(\.width), [104.0, 104.0, 104.0])
+        let lens = tabBarLensSelectionFrame(axis: .horizontal, barSize: phone.size, selectedItemFrame: phone.itemFrames[2], drag: nil)
+        XCTAssertEqual(lens.height, phone.size.height)
+        XCTAssertEqual(lens.width, phone.itemFrames[2].width + tabBarInnerInset * 2.0)
+    }
+
     func test_titleFramesShareABaselineAndSelectionIsATrait() {
         let item = CGSize(width: 104.0, height: 56.0)
         let discover = tabBarTitleFrame(itemSize: item, titleSize: CGSize(width: 36.0, height: 12.0))

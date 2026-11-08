@@ -1254,7 +1254,8 @@ private final class ItemComponent: Component {
                         environment: {},
                         containerSize: CGSize(width: 100.0, height: 100.0)
                     )
-                    let iconFrame = tabBarUpstreamIconFrame(itemWidth: availableSize.width, imageSize: iconSize)
+                    let iconFrame = tabBarIconFrame(itemSize: availableSize, imageSize: iconSize, showsTitle: component.showsTitle)
+                    badgeOffsetY = tabBarBadgeOffsetY(iconFrame: iconFrame, showsTitle: component.showsTitle)
                     if let imageIconView = imageIcon.view {
                         if imageIconView.superview == nil {
                             if let badgeView = self.badge?.view {
@@ -1367,6 +1368,7 @@ private final class ItemComponent: Component {
                     self.contextContainerView.contentView.addSubview(titleView)
                 }
                 titleView.frame = titleFrame
+                titleView.isAccessibilityElement = false
                 alphaTransition.setAlpha(view: titleView, alpha: (component.isSearchActive || !component.showsTitle) ? 0.0 : 1.0)
             }
 
@@ -1411,7 +1413,7 @@ private final class ItemComponent: Component {
             self.contextContainerView.contentRect = CGRect(origin: CGPoint(), size: availableSize)
 
             if component.isUnconstrained {
-                return CGSize(width: titleSize.width + 10.0 * 2.0, height: availableSize.height)
+                return CGSize(width: tabBarUnconstrainedItemWidth(titleWidth: titleSize.width, showsTitle: component.showsTitle), height: availableSize.height)
             } else {
                 return availableSize
             }

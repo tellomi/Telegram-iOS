@@ -137,6 +137,33 @@ public func tabBarUpstreamIconFrame(itemWidth: CGFloat, imageSize: CGSize) -> CG
     return CGRect(x: floor((itemWidth - fitted.width) / 2.0), y: tabBarUpstreamItemContentOriginY, width: fitted.width, height: fitted.height)
 }
 
+/// Icon frame inside one item. With a title it stays in the upstream 45pt block. Without one it
+/// uses the same fitted size, centered in the item, so the hidden label does not leave a top gap.
+public func tabBarIconFrame(itemSize: CGSize, imageSize: CGSize, showsTitle: Bool) -> CGRect {
+    let upstream = tabBarUpstreamIconFrame(itemWidth: itemSize.width, imageSize: imageSize)
+    if showsTitle {
+        return upstream
+    }
+    return CGRect(x: upstream.minX, y: floor((itemSize.height - upstream.height) * 0.5), width: upstream.width, height: upstream.height)
+}
+
+/// How far a badge drawn for the titled icon position must move when the icon is centered.
+public func tabBarBadgeOffsetY(iconFrame: CGRect, showsTitle: Bool) -> CGFloat {
+    if showsTitle {
+        return 0.0
+    }
+    return iconFrame.minY - tabBarUpstreamItemContentOriginY
+}
+
+/// Unconstrained item width. A hidden title does not keep its measured width, so every icon-only
+/// item shares one slot instead of the short "Me" label making a tight capsule.
+public func tabBarUnconstrainedItemWidth(titleWidth: CGFloat, showsTitle: Bool) -> CGFloat {
+    if showsTitle {
+        return titleWidth + 10.0 * 2.0
+    }
+    return tabBarItemLength
+}
+
 public func tabBarUpstreamTitleFrame(itemWidth: CGFloat, titleSize: CGSize) -> CGRect {
     let y = tabBarUpstreamItemContentOriginY + tabBarUpstreamItemContentHeight - tabBarUpstreamTitleBottomInset - titleSize.height
     return CGRect(x: floor((itemWidth - titleSize.width) / 2.0), y: y, width: titleSize.width, height: titleSize.height)
