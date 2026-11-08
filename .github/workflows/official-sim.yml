@@ -77,3 +77,14 @@ jobs:
           for n in brand[:40]:
               print(n)
           '
+
+      - name: Launch on the simulator without signing in
+        run: bash tools/official_sim_launch.sh
+
+      - name: Upload launch screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-sim-launch
+          path: official-sim-launch
+          if-no-files-found: ignore
