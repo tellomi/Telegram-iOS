@@ -138,11 +138,118 @@ def check_declared_port() -> None:
     print("dcOption.this_port_only skips ports 80 and 5222; other addresses still probe them")
 
 
+# submodules/Postbox/Sources/Upgrades.swift is the same blob as release 14.0.4 (c75e2177).
+RELEASE_UPGRADES = "c1fddb31635e736fd00ccce66784a53e00e24d26"
+KEYCHAIN_KEYS = (
+    "authTokenById",
+    "cleanupSessionIdsByAuthKeyId",
+    "datacenterAddressSetById",
+    "datacenterAuthInfoById",
+    "datacenterId",
+    "datacenterManuallySelectedSchemeById_v1",
+    "datacenterPublicKeysById",
+    "globalTimeDifference",
+    "isMedia",
+    "isProxy",
+    "transportSchemeStats_v1",
+)
+
+
+def check_upgrade_layout() -> None:
+    postbox = read("submodules/Postbox/Sources/Postbox.swift")
+    if "let currentUserVersion: Int32 = 25" not in postbox:
+        fail("Postbox user version is not 25, the version stored by 14.0.4")
+    upgrades = subprocess.check_output(
+        ["git", "hash-object", "submodules/Postbox/Sources/Upgrades.swift"],
+        cwd=ROOT,
+        text=True,
+    ).strip()
+    if upgrades != RELEASE_UPGRADES:
+        fail("Postbox upgrade table no longer matches 14.0.4")
+    account = read("submodules/TelegramCore/Sources/Account/Account.swift")
+    if 'return "account-\\(UInt64(bitPattern: id.int64))"' not in account:
+        fail("account directory name changed")
+    if 'basePath: path + "/postbox"' not in account:
+        fail("account database is not under postbox/")
+    manager = read("submodules/TelegramCore/Sources/Account/AccountManager.swift")
+    if 'return appGroupPath + "/telegram-data"' not in manager:
+        fail("the data root is not <app group>/telegram-data")
+    delegate = read("submodules/TelegramUI/Sources/AppDelegate.swift")
+    if 'rootPath + "/accounts-metadata"' not in delegate:
+        fail("account metadata path changed")
+    context = read("submodules/MtProtoKit/Sources/MTContext.m")
+    for key in KEYCHAIN_KEYS:
+        if f'forKey:@"{key}"' not in context:
+            fail(f"keychain key {key} is gone")
+    address = read("submodules/MtProtoKit/Sources/MTDatacenterAddress.m")
+    if 'decodeBoolForKey:@"thisPortOnly"' not in address:
+        fail("old datacenter archives are not decoded with a missing thisPortOnly key")
+    build = read("Telegram/BUILD")
+    if "group.{telegram_bundle_id}" not in build or "{telegram_team_id}.{telegram_bundle_id}" not in build:
+        fail("app group or application identifier no longer follows the bundle id")
+    config = read("submodules/BuildConfig/Sources/BuildConfig.m")
+    if "stringByAppendingFormat:@\".%@\", baseAppBundleId" not in config:
+        fail("keychain access group is not <team seed>.<bundle id>")
+    print("upgrade layout matches 14.0.4 paths, Postbox version 25, and keychain key names")
+
+
+def check_icons() -> None:
+    root_build = read("BUILD.bazel")
+    app_build = read("Telegram/BUILD")
+    if 'name = "TellomiAppIcon"' not in root_build or 'app_icons = ["//:TellomiAppIcon"]' not in app_build:
+        fail("the home icon target is not TellomiAppIcon")
+    resources = app_build.split("resources = [", 1)[1].split("]", 1)[0]
+    for line in resources.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if "DefaultAppIcon" in stripped:
+            fail("the Telegram DefaultAppIcon is still a packaged resource")
+    catalog = json.loads(read("Tellomi/Brand/AppIcon.xcassets/AppIcon.appiconset/Contents.json"))
+    icon_dir = ROOT / "Tellomi/Brand/AppIcon.xcassets/AppIcon.appiconset"
+    names = []
+    for image in catalog["images"]:
+        filename = image.get("filename")
+        if not filename:
+            fail("an icon slot has no filename")
+        if not (icon_dir / filename).is_file():
+            fail(f"referenced icon {filename} is missing")
+        names.append(filename)
+    for required in (
+        "AppIcon-ios-marketing-1024x1024@1x.png",
+        "AppIcon-ios-marketing-1024x1024@1x-dark.png",
+        "AppIcon-ios-marketing-1024x1024@1x-tinted.png",
+        "AppIcon-ipad-76x76@2x.png",
+        "AppIcon-ipad-83_5x83_5@2x.png",
+    ):
+        if required not in names:
+            fail(f"the icon catalog does not reference {required}")
+    folders = [
+        "BlackIcon", "BlackClassicIcon", "BlackFilledIcon", "BlueIcon", "BlueClassicIcon",
+        "BlueFilledIcon", "WhiteFilledIcon", "New1", "New2", "Premium", "PremiumBlack", "PremiumTurbo",
+    ]
+    if 'name = "TellomiAlternate_{}".format(name)' not in root_build:
+        fail("alternate icons are not Bazel filegroups")
+    if 'Tellomi/Brand/Alternates/{}.alticon/*.png' not in root_build:
+        fail("alternate filegroups do not read the Tellomi alticon directories")
+    if '"//:TellomiAlternate_{}".format(name)' not in app_build:
+        fail("the app does not package the Tellomi alternate filegroups")
+    for name in folders:
+        if f'"{name}"' not in root_build or f'"{name}"' not in app_build:
+            fail(f"alternate icon {name} is not in the packaged name list")
+        folder = ROOT / "Tellomi/Brand/Alternates" / f"{name}.alticon"
+        if not any(folder.glob("*.png")):
+            fail(f"{name} has no PNGs")
+    print(f"home icon slots {len(names)}; {len(folders)} alternate icon sets are packaged")
+
+
 def main() -> None:
     check_server()
     check_login_errors()
     check_released_identity()
     check_declared_port()
+    check_upgrade_layout()
+    check_icons()
     print("restore contract passed")
     print("not claimed: device login, media send, or a 14.0.4 database opened by this build")
 

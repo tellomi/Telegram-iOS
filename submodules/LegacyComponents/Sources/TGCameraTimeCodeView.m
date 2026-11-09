@@ -39,7 +39,7 @@
         
         _timeLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, self.frame.size.width, self.frame.size.height)];
         _timeLabel.backgroundColor = [UIColor clearColor];
-        _timeLabel.font = [TGCameraInterfaceAssets regularFontOfSize:21];
+        _timeLabel.font = [UIFont monospacedDigitSystemFontOfSize:21 weight:UIFontWeightRegular];
         _timeLabel.text = @"00:00";
         _timeLabel.textAlignment = NSTextAlignmentCenter;
         _timeLabel.textColor = [TGCameraInterfaceAssets normalColor];
