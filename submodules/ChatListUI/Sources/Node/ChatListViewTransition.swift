@@ -50,6 +50,29 @@ public enum ChatListNodeViewScrollPosition {
     case index(index: EngineChatListIndex, position: ListViewScrollPosition, directionHint: ListViewScrollToItemDirectionHint, animated: Bool)
 }
 
+/// Same folder and the same set of peers. Peer order in a `messages.getDialogFilters`
+/// reply is not part of what the list shows (the predicate uses sets), so a refresh
+/// that only shuffles that order must not rebuild the list from the top.
+func chatListFilterChangePreservesScrollAnchor(from: ChatListFilter?, to: ChatListFilter?) -> Bool {
+    switch (from, to) {
+    case (.none, .none), (.some(.allChats), .some(.allChats)):
+        return true
+    case let (.some(.filter(lhsId, _, _, lhsData)), .some(.filter(rhsId, _, _, rhsData))):
+        if lhsId != rhsId {
+            return false
+        }
+        if lhsData.categories != rhsData.categories || lhsData.excludeMuted != rhsData.excludeMuted || lhsData.excludeRead != rhsData.excludeRead || lhsData.excludeArchived != rhsData.excludeArchived {
+            return false
+        }
+        if Set(lhsData.includePeers.peers) != Set(rhsData.includePeers.peers) || Set(lhsData.includePeers.pinnedPeers) != Set(rhsData.includePeers.pinnedPeers) || Set(lhsData.excludePeers) != Set(rhsData.excludePeers) {
+            return false
+        }
+        return true
+    default:
+        return false
+    }
+}
+
 func preparedChatListNodeViewTransition(from fromView: ChatListNodeView?, to toView: ChatListNodeView, reason: ChatListNodeViewTransitionReason, previewing: Bool, disableAnimations: Bool, scrollPosition: ChatListNodeViewScrollPosition?, searchMode: Bool, forceAllUpdated: Bool) -> Signal<ChatListNodeViewTransition, NoError> {
     return Signal<ChatListNodeViewTransition, NoError> { subscriber in
         let (deleteIndices, indicesAndItems, updateIndices) = mergeListsStableWithUpdates(leftList: fromView?.filteredEntries ?? [], rightList: toView.filteredEntries, allUpdated: forceAllUpdated)
@@ -185,12 +208,11 @@ func preparedChatListNodeViewTransition(from fromView: ChatListNodeView?, to toV
                 }
             } else if fromView.filteredEntries.isEmpty || fromView.filter != toView.filter {
                 var updateEmpty = true
-                if !fromView.filteredEntries.isEmpty, let fromFilter = fromView.filter, let toFilter = toView.filter, case var .filter(_, _, _, fromData) = fromFilter, case let .filter(_, _, _, toData) = toFilter, fromData.includePeers.pinnedPeers != toData.includePeers.pinnedPeers {
-                    fromData.includePeers = toData.includePeers
-                    if fromData == toData {
+                if !fromView.filteredEntries.isEmpty && chatListFilterChangePreservesScrollAnchor(from: fromView.filter, to: toView.filter) {
+                    if fromView.filter != toView.filter {
                         options.insert(.AnimateInsertion)
-                        updateEmpty = false
                     }
+                    updateEmpty = false
                 }
                 
                 if updateEmpty {
