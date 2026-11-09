@@ -60,17 +60,26 @@ def list_groups(client, app_id):
 
 
 def group_has_build(client, group_id, version):
+    # The group builds relationship rejects filter[version]. Match locally.
     query = urllib.parse.urlencode({
-        "limit": 20,
+        "limit": 200,
         "fields[builds]": "version,processingState",
-        "filter[version]": version,
     })
     try:
         matches = list(pages(client, "/v1/betaGroups/{}/builds?{}".format(group_id, query)))
     except ApiError as error:
         print("  group builds unreadable: {}".format(error))
         return None
-    return len(matches) > 0
+    versions = []
+    for item in matches:
+        attrs = item.get("attributes") or {}
+        number = str(attrs.get("version") or "")
+        if number:
+            versions.append(number)
+    print("  group lists {} builds; includes 73={} 74={}".format(
+        len(versions), "73" in versions, version in versions,
+    ))
+    return version in versions
 
 
 def report_build(client, app_id, version):
