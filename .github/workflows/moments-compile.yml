@@ -103,7 +103,7 @@ jobs:
             test \
             --configurationPath "${RUNNER_TEMP}/tellomi-configuration.json" \
             --codesigningInformationPath "${RUNNER_TEMP}/tellomi-signing" \
-            --target //submodules/TelegramCore:TelegramCoreTests \
+            --target //submodules/TelegramCore:MomentsRulesTests \
             --testFilter MomentsRulesTests
 
       - name: Summarize compiler errors

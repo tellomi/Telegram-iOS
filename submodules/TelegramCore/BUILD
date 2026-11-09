@@ -72,3 +72,22 @@ ios_unit_test(
         "//visibility:public",
     ],
 )
+
+# The Moments compile runner is Xcode 27, which only has iOS 27 simulators.
+ios_test_runner(
+    name = "MomentsRulesTestRunner",
+    device_type = "iPhone 17",
+    os_version = "27.1",
+)
+
+ios_unit_test(
+    name = "MomentsRulesTests",
+    minimum_os_version = "15.0",
+    runner = ":MomentsRulesTestRunner",
+    deps = [
+        ":TelegramCoreTestsLib",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+)
