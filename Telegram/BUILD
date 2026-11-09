@@ -1715,6 +1715,9 @@ plist_fragment(
     <key>LSApplicationQueriesSchemes</key>
     <array>
         <string>instagram</string>
+        <string>iosamap</string>
+        <string>baidumap</string>
+        <string>qqmap</string>
         <string>comgooglemaps-x-callback</string>
         <string>foursquare</string>
         <string>here-location</string>
