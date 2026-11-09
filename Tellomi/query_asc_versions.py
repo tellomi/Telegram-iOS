@@ -59,24 +59,18 @@ def list_groups(client, app_id):
     return list(pages(client, "/v1/apps/{}/betaGroups?{}".format(app_id, query)))
 
 
-def linked_group_names(client, build_id):
+def group_has_build(client, group_id, version):
     query = urllib.parse.urlencode({
-        "limit": 50,
-        "fields[betaGroups]": "name,isInternalGroup,publicLinkEnabled,hasAccessToAllBuilds",
+        "limit": 20,
+        "fields[builds]": "version,processingState",
+        "filter[version]": version,
     })
-    names = []
-    for item in pages(client, "/v1/builds/{}/betaGroups?{}".format(build_id, query)):
-        attrs = item.get("attributes") or {}
-        names.append((attrs.get("name") or item["id"], attrs))
-    return names
-
-
-def safe_links(client, build_id):
     try:
-        return linked_group_names(client, build_id)
+        matches = list(pages(client, "/v1/betaGroups/{}/builds?{}".format(group_id, query)))
     except ApiError as error:
-        print("  groups unreadable: {}".format(error))
-        return []
+        print("  group builds unreadable: {}".format(error))
+        return None
+    return len(matches) > 0
 
 
 def report_build(client, app_id, version):
@@ -116,32 +110,19 @@ def report_build(client, app_id, version):
             attrs.get("publicLinkEnabled"),
             attrs.get("hasAccessToAllBuilds"),
         ))
-    print("build {} groups before:".format(version))
-    before = safe_links(client, build_id)
-    if before:
-        for name, attrs in before:
-            print("  {} internal={} publicLink={}".format(
-                name, attrs.get("isInternalGroup"), attrs.get("publicLinkEnabled"),
-            ))
-    else:
-        print("  (none)")
-    external = [
-        name for name, attrs in before
-        if attrs.get("isInternalGroup") is not True or attrs.get("publicLinkEnabled") is True
-    ]
-    if external:
-        print("build {} is in a non-internal group: {}".format(version, ", ".join(external)))
-        raise SystemExit(1)
+    print("build {} membership:".format(version))
+    for item in groups:
+        attrs = item.get("attributes") or {}
+        name = attrs.get("name") or item["id"]
+        present = group_has_build(client, item["id"], version)
+        print("  {} present={} internal={} publicLink={}".format(
+            name, present, attrs.get("isInternalGroup"), attrs.get("publicLinkEnabled"),
+        ))
+        if present is True and (attrs.get("isInternalGroup") is not True or attrs.get("publicLinkEnabled") is True):
+            print("build {} is in a non-internal group: {}".format(version, name))
+            raise SystemExit(1)
     if state != "VALID":
         print("build {} not attached: processingState {}".format(version, state))
-        return
-    linked_ids = set()
-    query = urllib.parse.urlencode({"limit": 50, "fields[betaGroups]": "name"})
-    try:
-        for item in pages(client, "/v1/builds/{}/betaGroups?{}".format(build_id, query)):
-            linked_ids.add(item["id"])
-    except ApiError as error:
-        print("build {} group ids unreadable: {}".format(version, error))
         return
     for item in groups:
         attrs = item.get("attributes") or {}
@@ -151,8 +132,12 @@ def report_build(client, app_id, version):
                 name, attrs.get("isInternalGroup"), attrs.get("publicLinkEnabled"),
             ))
             continue
-        if item["id"] in linked_ids:
+        present = group_has_build(client, item["id"], version)
+        if present is True:
             print("build {} already in internal group {}".format(version, name))
+            continue
+        if present is None:
+            print("skipped attach to {}: membership unreadable".format(name))
             continue
         try:
             client.request("POST", "/v1/betaGroups/{}/relationships/builds".format(item["id"]), {
@@ -162,22 +147,14 @@ def report_build(client, app_id, version):
             print("attach build {} to {} failed: {}".format(version, name, error))
             continue
         print("attached build {} to internal group {}".format(version, name))
-    print("build {} groups after:".format(version))
-    after = safe_links(client, build_id)
-    if after:
-        for name, attrs in after:
-            print("  {} internal={} publicLink={}".format(
-                name, attrs.get("isInternalGroup"), attrs.get("publicLinkEnabled"),
-            ))
-    else:
-        print("  (none)")
-    external = [
-        name for name, attrs in after
-        if attrs.get("isInternalGroup") is not True or attrs.get("publicLinkEnabled") is True
-    ]
-    if external:
-        print("build {} is in a non-internal group: {}".format(version, ", ".join(external)))
-        raise SystemExit(1)
+    print("build {} membership after:".format(version))
+    for item in groups:
+        attrs = item.get("attributes") or {}
+        name = attrs.get("name") or item["id"]
+        present = group_has_build(client, item["id"], version)
+        print("  {} present={} internal={} publicLink={}".format(
+            name, present, attrs.get("isInternalGroup"), attrs.get("publicLinkEnabled"),
+        ))
 
 
 def main():
