@@ -6,7 +6,6 @@ import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
 import AccountContext
-import Postbox
 import StickerPickerScreen
 import EntityKeyboard
 import MediaEditor
@@ -115,7 +114,7 @@ public final class MomentsDetailScreen: ViewController {
     private func handlers() -> MomentsPostHandlers {
         return MomentsPostHandlers(open: { _ in }, author: { [weak self] card in
             guard let id = card.author?.telegramUserId, id != 0 else { return }
-            self?.openPeer?(PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(id)))
+            self?.openPeer?(EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(id)))
         }, like: { [weak self] card in
             guard let self else { return }
             self.card.viewer.liked.toggle()
@@ -306,7 +305,7 @@ public final class MomentsNotificationsScreen: ViewController {
                     if item.unavailable {
                         self.present(textAlertController(context: self.context, title: nil, text: momentsText(strings, .unavailable), actions: [TextAlertAction(type: .defaultAction, title: momentsText(strings, .cancel), action: {})]), in: .window(.root))
                     } else if item.kind == .follow || item.kind == .mutual, let id = item.actors.first?.telegramUserId, id != 0 {
-                        self.openPeer?(PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(id)))
+                        self.openPeer?(EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(id)))
                     }
                 }))
             }

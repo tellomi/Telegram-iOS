@@ -9,7 +9,6 @@ import AccountContext
 import MediaPickerUI
 import LegacyMediaPickerUI
 import ShareWithPeersScreen
-import Postbox
 
 public final class MomentsComposerScreen: ViewController {
     private let context: AccountContext
@@ -156,7 +155,7 @@ public final class MomentsComposerScreen: ViewController {
                 continue
             }
             let media = mediaReference.media
-            let resource: MediaResource
+            let resource: TelegramMediaResource
             let type: MomentsMediaType
             let width: Int
             let height: Int
@@ -201,8 +200,8 @@ public final class MomentsComposerScreen: ViewController {
             if let local = resource as? LocalFileReferenceMediaResource, FileManager.default.fileExists(atPath: local.localFilePath) {
                 resolved = .single(local.localFilePath)
             } else {
-                resolved = self.context.account.postbox.mediaBox.resourceData(resource, option: .complete(waitUntilFetchStatus: false))
-                |> filter { $0.complete && !$0.path.isEmpty }
+                resolved = self.context.engine.resources.data(id: EngineMediaResource(resource).id)
+                |> filter { $0.isComplete && !$0.path.isEmpty }
                 |> take(1)
                 |> map { $0.path }
             }

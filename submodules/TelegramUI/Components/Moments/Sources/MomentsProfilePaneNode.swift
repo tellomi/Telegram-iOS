@@ -6,7 +6,6 @@ import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
 import AccountContext
-import Postbox
 import PeerInfoPaneNode
 
 public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
@@ -118,7 +117,7 @@ public final class MomentsSearchContentNode: ASDisplayNode {
         for user in self.result.users {
             rows.append(MomentsStatusItem(text: user.displayName, theme: theme, action: { [weak self] in
                 guard user.telegramUserId != 0 else { return }
-                self?.openPeer?(PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(user.telegramUserId)))
+                self?.openPeer?(EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(user.telegramUserId)))
             }))
         }
         for topic in self.result.topics {

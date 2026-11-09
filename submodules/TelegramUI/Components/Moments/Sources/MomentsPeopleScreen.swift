@@ -4,7 +4,6 @@ import Display
 import AsyncDisplayKit
 import SwiftSignalKit
 import TelegramCore
-import Postbox
 import TelegramPresentationData
 import TelegramUIPreferences
 import AccountContext
@@ -99,7 +98,7 @@ func momentsPeopleController(context: AccountContext, title: String, load: Signa
                 guard author.telegramUserId != 0 else {
                     return .single(nil)
                 }
-                let peerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(author.telegramUserId))
+                let peerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(author.telegramUserId))
                 return context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
             }
             return combineLatest(people) |> map { (section, $0) }

@@ -6,7 +6,6 @@ import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
 import AccountContext
-import Postbox
 import TelegramUniversalVideoContent
 
 public struct MomentsPostHandlers {
@@ -478,7 +477,7 @@ private func momentsVideoNode(context: AccountContext, url: String, size: CGSize
     let width = Int32(max(size.width, 1))
     let height = Int32(max(size.height, 1))
     let file = TelegramMediaFile(
-        fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: Int64(url.hashValue)),
+        fileId: EngineMedia.Id(namespace: Namespaces.Media.LocalFile, id: Int64(url.hashValue)),
         partialReference: nil,
         resource: HttpReferenceMediaResource(url: url, size: nil),
         previewRepresentations: [],

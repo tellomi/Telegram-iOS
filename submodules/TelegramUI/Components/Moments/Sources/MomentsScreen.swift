@@ -9,7 +9,6 @@ import AccountContext
 import ContextUI
 import ComponentFlow
 import HorizontalTabsComponent
-import Postbox
 import CoreLocation
 import DeviceLocationManager
 
@@ -454,7 +453,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
 
     private func openAuthor(_ card: MomentsCard) {
         guard let id = card.author?.telegramUserId, id != 0 else { return }
-        let peerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(id))
+        let peerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(id))
         self.controller?.openPeer?(peerId)
     }
 
@@ -583,7 +582,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
 
     private func report(_ card: MomentsCard) {
         guard let controller = self.controller, let authorId = card.author?.telegramUserId else { return }
-        let peerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(authorId))
+        let peerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(authorId))
         presentPeerReportOptions(context: self.context, parent: controller, contextController: nil, subject: .peer(peerId), passthrough: true, completion: { [weak self] reason, _ in
             guard let self, let reason else { return }
             self.hides.reportedPosts.insert(card.id)
