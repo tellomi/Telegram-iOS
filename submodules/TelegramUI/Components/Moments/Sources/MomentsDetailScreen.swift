@@ -122,8 +122,7 @@ public final class MomentsDetailScreen: ViewController {
             self.card.counts.likes += self.card.viewer.liked ? 1 : -1
             let _ = self.context.engine.moments.setLiked(card.id, liked: self.card.viewer.liked).start()
             self.render()
-        }, comment: { _ in }, repost: { _ in }, share: { [weak self] card in
-            guard let self else { return }
+        }, comment: { _ in }, repost: { _ in }, share: { card in
             UIPasteboard.general.string = momentsPostLink(id: card.id)
         }, save: { [weak self] card in
             guard let self else { return }
