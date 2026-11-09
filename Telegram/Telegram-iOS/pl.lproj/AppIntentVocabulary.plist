@@ -9,7 +9,7 @@
 			<string>INSendMessageIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Send a Telegram message to Alex saying I&apos;ll be there in 10 minutes</string>
+				<string>Wyślij Alexowi wiadomość w Tellomi, że będę za 10 minut</string>
 			</array>
 		</dict>
 		<dict>
@@ -17,7 +17,7 @@
 			<string>INStartAudioCallIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Zadzwoń do Alicji przez Telegram</string>
+				<string>Zadzwoń do Alicji przez Tellomi</string>
 			</array>
 		</dict>
 		<dict>
@@ -25,7 +25,7 @@
 			<string>INSearchForMessagesIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Przeczytaj moje nieprzeczytane wiadomości w Telegramie</string>
+				<string>Przeczytaj moje nieprzeczytane wiadomości w Tellomi</string>
 			</array>
 		</dict>
 		<dict>
@@ -33,7 +33,7 @@
 			<string>INSetMessageAttributeIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Oznacz moje wiadomości w Telegramie jako przeczytane</string>
+				<string>Oznacz moje wiadomości w Tellomi jako przeczytane</string>
 			</array>
 		</dict>
 		<dict>
@@ -41,7 +41,7 @@
 			<string>INSearchCallHistoryIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Pokaż moje nieodebrane połączenia w Telegramie</string>
+				<string>Pokaż moje nieodebrane połączenia w Tellomi</string>
 			</array>
 		</dict>
 	</array>

@@ -1268,3 +1268,19 @@ The chat PIN is 4 to 8 digits. The stored value is a salted SHA-256 in the app d
 ## Discover compose button
 
 The Discover list keeps the existing `composePressed` publish path. A bottom-right control uses `Chat List/AddIcon` through `generateItemListPlusIcon`, on `list.itemAccentColor`, with the check-foreground glyph. It sits above `intrinsicInsets.bottom` and the keyboard `inputHeight`. Scrolling a non-empty list calls `TabBarController.updateIsTabBarHidden`; an empty list, the top of the list, a tab change, and returning to the page show the bar again. Reduce Motion uses an immediate transition. Tab-title hiding is unchanged.
+
+## Siri example phrases
+
+App Store build 77 (14.0.5, from `release/ios`) was rejected with ITMS-90626: no example phrase for `INSendMessageIntent`, `INSearchForMessagesIntent`, `INSetMessageAttributeIntent`, `INStartAudioCallIntent`, and `INSearchCallHistoryIntent` in `zh-hans` and `zh-hant`. Those two plists were added on master in `#38` and removed again when `release/ios` restored the client tree (`fc420b8589`). The other localizations still had phrases, which is why Apple named only Chinese. Official Telegram keeps `AppIntentVocabulary.plist` in the main app (`Lib` `data`), not in the Intents extension, and does not ship `ParameterVocabularies`. This copy does the same. Each shipped `.lproj`, including `Base`, `zh-Hans`, and `zh-Hant`, has one Tellomi example for each of those five intents. Languages Siri speaks that this app does not localize (Japanese, Thai, Hebrew, and the regional variants) are not given an empty `.lproj`.
+
+`AppIntentVocabularyResources` lists every plist by path. A glob would omit a deleted file and the IPA would still build. The filegroup stays on `Lib`'s `data`, which is how `en.lproj` already reaches `Telegram.app/<lang>.lproj/`.
+
+The bundled English fallback, the share sheet, and the widget login line said Telegram. String keys are unchanged. Values say Tellomi, including `UPDATE TELLOMI` and the tips username `TellomiTips` (`Settings.TipsUsername`, resolved with `resolvePeerByName`). `telegram.org`, `core.telegram.org`, `ads.telegram.org`, and `promote.telegram.org` stay: they are upstream hosts, not the app name. `org.telegram.Telegram-iOS.theme` and the `telegram` URL scheme stay. Permission strings in `InfoPlist.strings` and the Intents definitions already said Tellomi or did not say Telegram. The watch `CFBundleDisplayName` is still Telegram; `Telegram/WatchApp` is a synced snapshot and is not embedded unless `--embedWatchApp` is set.
+
+| File | Change |
+| --- | --- |
+| `Telegram/Telegram-iOS/*.lproj/AppIntentVocabulary.plist` | Tellomi example for each of the five intents. Chinese phrases are simplified and traditional. |
+| `Telegram/BUILD` `AppIntentVocabularyResources` | Explicit srcs, still on `Lib` `data`. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Product name in values. Keys unchanged. |
+| `Telegram/Share/en.lproj/Localizable.strings`, `Telegram/WidgetKitWidget/en.lproj/Localizable.strings` | Login lines. |
+| `Tellomi/check_server_config.py` `check_siri_vocabulary` | Runs from `main`. Requires the five phrases, the explicit srcs, and no Telegram left in those bundle values. |

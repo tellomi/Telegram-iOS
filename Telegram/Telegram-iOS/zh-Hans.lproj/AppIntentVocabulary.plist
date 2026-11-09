@@ -9,7 +9,7 @@
 			<string>INSendMessageIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>用 Tellomi 给 Alex 发消息，说我十分钟后到</string>
+				<string>用 Tellomi 给 Alex 发一条消息，告诉他我十分钟后到</string>
 			</array>
 		</dict>
 		<dict>
@@ -17,7 +17,7 @@
 			<string>INStartAudioCallIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>用 Tellomi 给 Alice 打电话</string>
+				<string>用 Tellomi 给 Alice 打语音电话</string>
 			</array>
 		</dict>
 		<dict>

@@ -304,11 +304,34 @@ filegroup(
     visibility = ["//Tests:__subpackages__"],
 )
 
+# Listed by name so a deleted plist fails analysis. A glob would ship the app
+# without that language's example phrases, which is the ITMS-90626 rejection.
 filegroup(
     name = "AppIntentVocabularyResources",
-    srcs = glob([
-        "Telegram-iOS/*.lproj/AppIntentVocabulary.plist",
-    ], exclude = ["Telegram-iOS/*.lproj/**/.*"]),
+    srcs = [
+        "Telegram-iOS/Base.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/ar.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/be.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/ca.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/de.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/en.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/es.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/fa.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/fr.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/id.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/it.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/ko.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/ms.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/nl.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/pl.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/pt.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/ru.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/tr.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/uk.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/uz.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/zh-Hans.lproj/AppIntentVocabulary.plist",
+        "Telegram-iOS/zh-Hant.lproj/AppIntentVocabulary.plist",
+    ],
 )
 
 filegroup(
