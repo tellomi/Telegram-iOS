@@ -37,6 +37,18 @@ static MTSocksProxySettings *makeWebProxy(void) {
     return [[MTSocksProxySettings alloc] initWithIp:@"relay.example.org" port:443 username:nil password:nil secret:secret webProxy:true];
 }
 
+@interface LegacyDatacenterAddressCoder : NSCoder
+@property (nonatomic, strong) NSDictionary<NSString *, id> *values;
+@end
+
+@implementation LegacyDatacenterAddressCoder
+- (BOOL)allowsKeyedCoding { return YES; }
+- (BOOL)containsValueForKey:(NSString *)key { return self.values[key] != nil; }
+- (id)decodeObjectForKey:(NSString *)key { return self.values[key]; }
+- (int)decodeIntForKey:(NSString *)key { return [self.values[key] intValue]; }
+- (BOOL)decodeBoolForKey:(NSString *)key { return [self.values[key] boolValue]; }
+@end
+
 @interface MTDiscoverConnectionSignalsTests : XCTestCase
 @end
 
@@ -86,18 +98,6 @@ static MTSocksProxySettings *makeWebProxy(void) {
     XCTAssertEqual(probes.firstObject.port, 10443);
     XCTAssertEqual([MTDiscoverConnectionSignals alternatePortsForAddress:probes.firstObject inAddressList:@[media] proxySettings:nil].count, 0u);
 }
-
-@interface LegacyDatacenterAddressCoder : NSCoder
-@property (nonatomic, strong) NSDictionary<NSString *, id> *values;
-@end
-
-@implementation LegacyDatacenterAddressCoder
-- (BOOL)allowsKeyedCoding { return YES; }
-- (BOOL)containsValueForKey:(NSString *)key { return self.values[key] != nil; }
-- (id)decodeObjectForKey:(NSString *)key { return self.values[key]; }
-- (int)decodeIntForKey:(NSString *)key { return [self.values[key] intValue]; }
-- (BOOL)decodeBoolForKey:(NSString *)key { return [self.values[key] boolValue]; }
-@end
 
 - (void)testArchiveWithoutThisPortOnlyKeyStaysUnlocked {
     // The keys an address saved before thisPortOnly existed. decodeBoolForKey:
