@@ -176,7 +176,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.setViewBlock { UITracingLayerView() }
         for kind in self.visibleTabs {
             self.models[kind] = MomentsFeedModel()
-            let list = ListView()
+            let list = ListViewImpl()
             list.didScrollWithOffset = { [weak self] _, _, _, _ in
                 self?.updateVisiblePlayback()
             }
@@ -318,7 +318,8 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             theme: self.presentationData.theme,
             tabs: titles.enumerated().map { index, title in
                 HorizontalTabsComponent.Tab(id: AnyHashable(index), content: .title(HorizontalTabsComponent.Tab.Title(text: title, entities: [], enableAnimations: false)), badge: nil, action: { [weak self] in
-                    self?.select(self.visibleTabs[index], animated: true)
+                    guard let self else { return }
+                    self.select(self.visibleTabs[index], animated: true)
                 })
             },
             selectedTab: AnyHashable(selectedIndex),
@@ -364,7 +365,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 
     private func load(_ kind: MomentsFeedKind, refresh: Bool) {
-        guard var model = self.models[kind], !model.loading else { return }
+        guard let model = self.models[kind], !model.loading else { return }
         if !refresh && model.loaded && model.cursor == nil && !model.items.isEmpty { return }
         model.loading = true
         model.failed = false
@@ -379,7 +380,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         }
         self.disposable.add((self.context.engine.moments.loadFeed(kind, cursor: cursor, city: self.city, sort: self.nearbySort) |> deliverOnMainQueue).start(next: { [weak self] page in
             guard let self else { return }
-            var model = self.models[kind] ?? MomentsFeedModel()
+            let model = self.models[kind] ?? MomentsFeedModel()
             model.loading = false
             model.loaded = true
             model.failed = false
@@ -395,7 +396,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             self.pill.isHidden = self.models[self.selected]?.newCount ?? 0 == 0
         }, error: { [weak self] _ in
             guard let self else { return }
-            var model = self.models[kind] ?? MomentsFeedModel()
+            let model = self.models[kind] ?? MomentsFeedModel()
             model.loading = false
             model.failed = true
             model.loaded = true
@@ -578,7 +579,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         items.append(.action(ContextMenuActionItem(text: momentsText(strings, .copyLink), icon: { _ in nil }, action: { _, f in
             f(.default)
             UIPasteboard.general.string = momentsPostLink(id: card.id)
-        }))
+        })))
         let sourceView = source
         let contextController = makeContextController(presentationData: self.presentationData, source: .reference(MomentsContextSource(controller: controller, sourceView: sourceView)), items: .single(ContextController.Items(content: .list(items))), gesture: nil)
         controller.presentInGlobalOverlay(contextController)
@@ -620,7 +621,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
 
     private func mapCard(_ id: String, _ transform: (MomentsCard) -> MomentsCard) {
         for kind in self.visibleTabs {
-            guard var model = self.models[kind] else { continue }
+            guard let model = self.models[kind] else { continue }
             model.items = model.items.map { $0.id == id ? transform($0) : $0 }
             self.models[kind] = model
         }

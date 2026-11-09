@@ -11,7 +11,7 @@ import PeerInfoPaneNode
 public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
     private let context: AccountContext
     private let peerId: EnginePeer.Id
-    private let list = ListView()
+    private let list = ListViewImpl()
     private let ready = Promise<Bool>(false)
     private var items: [MomentsCard] = []
     private var rendered = 0
@@ -75,7 +75,7 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
 
 public final class MomentsSearchContentNode: ASDisplayNode {
     private let context: AccountContext
-    private let list = ListView()
+    private let list = ListViewImpl()
     private var query = ""
     private var result = MomentsSearchResult()
     private var rendered = 0

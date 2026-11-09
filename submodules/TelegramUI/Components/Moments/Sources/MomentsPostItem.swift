@@ -129,7 +129,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     private var videoURL: String?
     private let pollHost = UIView()
 
-    override init() {
+    init() {
         super.init(layerBacked: false)
         self.name.font = Font.semibold(15)
         self.meta.font = Font.regular(13)
@@ -575,7 +575,7 @@ private final class MomentsStatusItemNode: ListViewItemNode {
     private let label = UILabel()
     private var action: (() -> Void)?
 
-    override init() {
+    init() {
         super.init(layerBacked: false)
         self.label.numberOfLines = 0
         self.label.textAlignment = .center

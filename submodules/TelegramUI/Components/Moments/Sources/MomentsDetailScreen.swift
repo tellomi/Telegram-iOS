@@ -18,7 +18,7 @@ public final class MomentsDetailScreen: ViewController {
     private var sort = "hot"
     public var openPeer: ((EnginePeer.Id) -> Void)?
     private var presentationData: PresentationData
-    private let list = ListView()
+    private let list = ListViewImpl()
     private let field = UITextField()
     private var rendered = 0
 
@@ -130,7 +130,10 @@ public final class MomentsDetailScreen: ViewController {
             self.card.viewer.saved.toggle()
             let _ = self.context.engine.moments.setSaved(card.id, saved: self.card.viewer.saved).start()
             self.render()
-        }, more: { _, _ in }, follow: { _ in }, undo: { _ in }, fullText: { _ in }, topic: { _ in }, likers: { [weak self] card in
+        }, more: { _, _ in }, follow: { _ in }, undo: { _ in }, fullText: { _ in }, topic: { _ in }, link: { [weak self] url in
+            guard let self else { return }
+            self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: false, presentationData: self.presentationData, navigationController: self.navigationController as? NavigationController, dismissInput: {})
+        }, likers: { [weak self] card in
             guard let self else { return }
             self.openPeople(title: momentsText(self.presentationData.strings, .like), load: self.context.engine.moments.likers(postId: card.id) |> map { authors in
                 [MomentsPeopleSection(title: nil, people: authors)]
@@ -140,9 +143,6 @@ public final class MomentsDetailScreen: ViewController {
             self.openPeople(title: momentsText(self.presentationData.strings, .endPoll), load: self.context.engine.moments.pollVoters(postId: card.id) |> map { options in
                 options.map { MomentsPeopleSection(title: $0.text, people: $0.voters) }
             })
-        }, link: { [weak self] url in
-            guard let self else { return }
-            self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: false, presentationData: self.presentationData, navigationController: self.navigationController as? NavigationController, dismissInput: {})
         })
     }
 
@@ -247,7 +247,7 @@ public final class MomentsNotificationsScreen: ViewController {
     private let context: AccountContext
     public var openPeer: ((EnginePeer.Id) -> Void)?
     private var presentationData: PresentationData
-    private let list = ListView()
+    private let list = ListViewImpl()
     private var items: [MomentsNotification] = []
     private var kind = "interactions"
     private var rendered = 0
@@ -321,7 +321,7 @@ public final class MomentsCityScreen: ViewController {
     private let context: AccountContext
     private let picked: (MomentsCity) -> Void
     private var cities: [MomentsCity] = []
-    private let list = ListView()
+    private let list = ListViewImpl()
     private var rendered = 0
     private var presentationData: PresentationData
 
