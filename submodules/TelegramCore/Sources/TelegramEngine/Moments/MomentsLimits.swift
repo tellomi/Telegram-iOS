@@ -30,10 +30,10 @@ public struct MomentsLimits: Equatable {
 
     public init(
         pageSize: Int = 20,
-        textLimit: Int = 2000,
-        textCounterFrom: Int = 1800,
+        textLimit: Int = 500,
+        textCounterFrom: Int = 400,
         collapsedLineCount: Int = 5,
-        imageLimit: Int = 12,
+        imageLimit: Int = 10,
         videoLimit: Int = 3,
         videoMaxDuration: Double = 60,
         voiceMaxDuration: Double = 180,
@@ -117,6 +117,28 @@ public struct MomentsRemoteConfig: Equatable {
         self.tabs = tabs
         self.mediaBaseURL = mediaBaseURL
     }
+}
+
+public struct MomentsFeedStatus: Equatable {
+    public var visible: Bool
+
+    public init(visible: Bool) {
+        self.visible = visible
+    }
+}
+
+func momentsCapabilityTabs(_ data: Data) -> [String] {
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return []
+    }
+    var raw = momentsStringList(json["tabs"])
+    if raw.isEmpty, let feed = momentsObject(json["feed"]) {
+        raw = momentsStringList(feed["tabs"])
+    }
+    if raw.isEmpty, let config = momentsObject(json["config"]) {
+        raw = momentsStringList(config["tabs"])
+    }
+    return raw.filter { $0 != "friends" && !$0.isEmpty }
 }
 
 public struct MomentsFeedEndpoint: Equatable {

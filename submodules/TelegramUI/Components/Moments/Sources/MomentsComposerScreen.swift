@@ -27,6 +27,7 @@ public final class MomentsComposerScreen: ViewController {
     private var videoCount = 0
     private var hasVoice = false
     private var hasPoll = false
+    private var limits = MomentsLimits.standard
 
     public init(context: AccountContext, quoteId: String?) {
         self.context = context
@@ -58,6 +59,24 @@ public final class MomentsComposerScreen: ViewController {
         self.displayNode.view.addSubview(photos)
         photos.tag = 41
         self.refresh()
+        let _ = (self.context.engine.moments.remoteConfig() |> deliverOnMainQueue).start(next: { [weak self] config in
+            self?.limits = MomentsLimits.standard.applying(config: config)
+            self?.refresh()
+        })
+        let _ = (self.context.engine.moments.storedDraft() |> deliverOnMainQueue).start(next: { [weak self] draft in
+            guard let self, let draft else { return }
+            self.textView.text = draft.text
+            self.allowNearby = draft.allowNearby
+            self.media = draft.media
+            self.imageCount = draft.media.filter { $0.type == .image }.count
+            self.videoCount = draft.media.filter { $0.type == .video }.count
+            if let base = EngineStoryPrivacy.Base(rawValue: draft.privacyBase) {
+                let peers = draft.peerIds.map { EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value($0)) }
+                self.privacy = EngineStoryPrivacy(base: base, additionallyIncludePeers: peers)
+                self.didLoadPrivacy = true
+            }
+            self.refresh()
+        })
         let _ = (self.context.engine.moments.storedAudience() |> deliverOnMainQueue).start(next: { [weak self] stored in
             guard let self, !self.didLoadPrivacy else { return }
             self.didLoadPrivacy = true
@@ -127,7 +146,7 @@ public final class MomentsComposerScreen: ViewController {
             self.presentRejection(rejection)
             return
         }
-        let picker = MediaPickerScreenImpl(context: self.context, peer: nil, threadTitle: nil, chatLocation: nil, bannedSendVideos: self.imageCount > 0 ? (Int32(0), true) : nil, selectionLimit: MomentsLimits.standard.imageLimit - self.imageCount, subject: .assets(nil, .default))
+        let picker = MediaPickerScreenImpl(context: self.context, peer: nil, threadTitle: nil, chatLocation: nil, bannedSendVideos: self.imageCount > 0 ? (Int32(0), true) : nil, selectionLimit: max(1, self.limits.imageLimit - self.imageCount), subject: .assets(nil, .default))
         picker.legacyCompletion = { [weak self] _, signals, _, _, _, _, done in
             guard let self else {
                 done()
@@ -255,6 +274,18 @@ public final class MomentsComposerScreen: ViewController {
         self.present(textAlertController(context: self.context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .cancel), action: {})]), in: .window(.root))
     }
 
+    private func saveDraft() {
+        let draft = MomentsComposerDraft(
+            text: self.textView.text ?? "",
+            privacyBase: self.privacy.base.rawValue,
+            peerIds: self.privacy.additionallyIncludePeers.map { $0.toInt64() },
+            allowNearby: self.allowNearby,
+            quoteId: self.quoteId,
+            media: self.media
+        )
+        self.context.engine.moments.storeDraft(draft)
+    }
+
     @objc private func cancelPressed() {
         let dirty = !(self.textView.text ?? "").isEmpty || !self.media.isEmpty || self.privacy.base != .everyone || !self.privacy.additionallyIncludePeers.isEmpty
         guard dirty else {
@@ -263,8 +294,14 @@ public final class MomentsComposerScreen: ViewController {
         }
         let strings = self.presentationData.strings
         self.present(textAlertController(context: self.context, title: momentsText(strings, .draftTitle), text: momentsText(strings, .friendsHint), actions: [
-            TextAlertAction(type: .defaultAction, title: momentsText(strings, .draftSave), action: { [weak self] in self?.navigationController?.popViewController(animated: true) }),
-            TextAlertAction(type: .destructiveAction, title: momentsText(strings, .draftDiscard), action: { [weak self] in self?.navigationController?.popViewController(animated: true) }),
+            TextAlertAction(type: .defaultAction, title: momentsText(strings, .draftSave), action: { [weak self] in
+                self?.saveDraft()
+                self?.navigationController?.popViewController(animated: true)
+            }),
+            TextAlertAction(type: .destructiveAction, title: momentsText(strings, .draftDiscard), action: { [weak self] in
+                self?.context.engine.moments.storeDraft(nil)
+                self?.navigationController?.popViewController(animated: true)
+            }),
             TextAlertAction(type: .genericAction, title: momentsText(strings, .draftContinue), action: {})
         ], actionLayout: .vertical), in: .window(.root))
     }
@@ -310,6 +347,7 @@ public final class MomentsComposerScreen: ViewController {
                 body["link_preview"] = ["url": url]
             }
             let _ = (self.context.engine.moments.publish(body) |> deliverOnMainQueue).start(next: { [weak self] _ in
+                self?.context.engine.moments.storeDraft(nil)
                 self?.navigationController?.popViewController(animated: true)
             }, error: { [weak self] _ in
                 guard let self else { return }
@@ -329,8 +367,8 @@ public final class MomentsComposerScreen: ViewController {
 
 extension MomentsComposerScreen: UITextViewDelegate {
     public func textViewDidChange(_ textView: UITextView) {
-        if textView.text.count > MomentsLimits.standard.textLimit {
-            textView.text = String(textView.text.prefix(MomentsLimits.standard.textLimit))
+        if textView.text.count > self.limits.textLimit {
+            textView.text = String(textView.text.prefix(self.limits.textLimit))
         }
         self.refresh()
     }

@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Display
+import AppBundle
 import AsyncDisplayKit
 import SwiftSignalKit
 import TelegramCore
@@ -90,7 +91,7 @@ public final class MomentsScreen: ViewController {
     }
 
     public func refreshBadge() {
-        let _ = (self.context.engine.moments.notifications(kind: "all") |> deliverOnMainQueue).start(next: { [weak self] items in
+        let _ = (self.context.engine.moments.notifications(tab: "interactions") |> deliverOnMainQueue).start(next: { [weak self] items in
             let unread = items.contains(where: { !$0.read })
             self?.tabBarItem.badgeValue = unread ? "•" : nil
         }, error: { _ in })
@@ -149,6 +150,8 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var lists: [MomentsFeedKind: ListView] = [:]
     private var models: [MomentsFeedKind: MomentsFeedModel] = [:]
     private var selected: MomentsFeedKind = .recommend
+    /// Server `tabs`, minus `friends` (that path does not exist). Until config arrives, recommend / following / nearby.
+    private var visibleTabs: [MomentsFeedKind] = [.recommend, .following, .nearby]
     private var expanded: Set<String> = []
     private var albumIndex: [String: Int] = [:]
     private var sessionHidden: Set<String> = []
@@ -169,7 +172,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init()
         self.setViewBlock { UITracingLayerView() }
-        for kind in MomentsFeedKind.allCases {
+        for kind in self.visibleTabs {
             self.models[kind] = MomentsFeedModel()
             let list = ListView()
             list.didScrollWithOffset = { [weak self] _, _, _, _ in
@@ -178,6 +181,18 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             self.lists[kind] = list
             self.pager.addSubview(list.view)
         }
+        let _ = (self.context.engine.moments.feedTabs() |> deliverOnMainQueue).start(next: { [weak self] tabs in
+            guard let self else { return }
+            let matched = tabs.compactMap { MomentsFeedKind(rawValue: $0) }.filter { $0 != .friends }
+            guard !matched.isEmpty, matched != self.visibleTabs else { return }
+            self.visibleTabs = matched
+            if !matched.contains(self.selected) {
+                self.selected = matched[0]
+            }
+            if let layout = self.validLayout {
+                self.containerLayoutUpdated(layout, transition: .immediate)
+            }
+        })
         self.view.addSubview(self.titleLabel)
         self.view.addSubview(self.compose)
         self.view.addSubview(self.heart)
@@ -251,8 +266,11 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.titleLabel.frame = CGRect(x: 16, y: top, width: width - 140, height: 44)
         self.heart.frame = CGRect(x: width - 96, y: top + 6, width: 36, height: 32)
         self.compose.frame = CGRect(x: width - 52, y: top + 6, width: 40, height: 32)
-        self.heart.setTitle("♡", for: .normal)
-        self.compose.setTitle("+", for: .normal)
+        let iconColor = self.presentationData.theme.list.itemPrimaryTextColor
+        self.heart.setTitle(nil, for: .normal)
+        self.compose.setTitle(nil, for: .normal)
+        self.heart.setImage(generateTintedImage(image: UIImage(bundleImageName: "Stories/InputLikeOff"), color: iconColor), for: .normal)
+        self.compose.setImage(PresentationResourcesRootController.navigationComposeIcon(self.presentationData.theme), for: .normal)
         self.heart.accessibilityLabel = momentsText(self.presentationData.strings, .notifications)
         self.compose.accessibilityLabel = momentsText(self.presentationData.strings, .compose)
         let tabSize = self.tabs.update(transition: .immediate, component: AnyComponent(self.tabsComponent(width: width)), environment: {}, containerSize: CGSize(width: width - 16, height: 36))
@@ -268,8 +286,8 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         let listTop = pillY + 8
         let listHeight = layout.size.height - listTop - layout.intrinsicInsets.bottom
         self.pager.frame = CGRect(x: 0, y: listTop, width: width, height: listHeight)
-        self.pager.contentSize = CGSize(width: width * CGFloat(MomentsFeedKind.allCases.count), height: listHeight)
-        for (index, kind) in MomentsFeedKind.allCases.enumerated() {
+        self.pager.contentSize = CGSize(width: width * CGFloat(self.visibleTabs.count), height: listHeight)
+        for (index, kind) in self.visibleTabs.enumerated() {
             self.lists[kind]?.frame = CGRect(x: width * CGFloat(index), y: 0, width: width, height: listHeight)
             self.render(kind, resetScroll: false)
         }
@@ -280,19 +298,25 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
 
     private func tabsComponent(width: CGFloat) -> HorizontalTabsComponent {
         let strings = self.presentationData.strings
-        let titles = [
-            momentsText(strings, .recommend),
-            momentsText(strings, .following),
-            momentsText(strings, .friends),
-            self.cityName.map { "\(momentsText(strings, .nearby)) \($0)" } ?? momentsText(strings, .nearby)
-        ]
-        let selectedIndex = MomentsFeedKind.allCases.firstIndex(of: self.selected) ?? 0
+        let titles = self.visibleTabs.map { kind -> String in
+            switch kind {
+            case .recommend:
+                return momentsText(strings, .recommend)
+            case .following:
+                return momentsText(strings, .following)
+            case .friends:
+                return momentsText(strings, .friends)
+            case .nearby:
+                return self.cityName.map { "\(momentsText(strings, .nearby)) \($0)" } ?? momentsText(strings, .nearby)
+            }
+        }
+        let selectedIndex = self.visibleTabs.firstIndex(of: self.selected) ?? 0
         return HorizontalTabsComponent(
             context: self.context,
             theme: self.presentationData.theme,
             tabs: titles.enumerated().map { index, title in
                 HorizontalTabsComponent.Tab(id: AnyHashable(index), content: .title(HorizontalTabsComponent.Tab.Title(text: title, entities: [], enableAnimations: false)), badge: nil, action: { [weak self] in
-                    self?.select(MomentsFeedKind.allCases[index], animated: true)
+                    self?.select(self.visibleTabs[index], animated: true)
                 })
             },
             selectedTab: AnyHashable(selectedIndex),
@@ -309,7 +333,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         }
         self.sessionHidden.removeAll()
         self.selected = kind
-        let index = MomentsFeedKind.allCases.firstIndex(of: kind) ?? 0
+        let index = self.visibleTabs.firstIndex(of: kind) ?? 0
         self.pager.setContentOffset(CGPoint(x: self.pager.bounds.width * CGFloat(index), y: 0), animated: animated)
         if self.models[kind]?.loaded != true {
             if kind == .nearby && self.city == nil {
@@ -327,7 +351,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         let width = max(scrollView.bounds.width, 1)
         let index = Int(round(scrollView.contentOffset.x / width))
-        let kind = MomentsFeedKind.allCases[max(0, min(index, MomentsFeedKind.allCases.count - 1))]
+        let kind = self.visibleTabs[max(0, min(index, self.visibleTabs.count - 1))]
         if kind != self.selected {
             self.sessionHidden.removeAll()
             self.selected = kind
@@ -593,7 +617,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 
     private func mapCard(_ id: String, _ transform: (MomentsCard) -> MomentsCard) {
-        for kind in MomentsFeedKind.allCases {
+        for kind in self.visibleTabs {
             guard var model = self.models[kind] else { continue }
             model.items = model.items.map { $0.id == id ? transform($0) : $0 }
             self.models[kind] = model
@@ -675,17 +699,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
 
     private func scheduleProbe() {
         self.probe?.invalidate()
-        guard self.selected.probesForNewPosts else { return }
-        let timer = SwiftSignalKit.Timer(timeout: MomentsLimits.standard.newPostsProbeInterval, repeat: true, completion: { [weak self] in
-            guard let self, let since = self.models[self.selected]?.items.first?.id else { return }
-            let _ = (self.context.engine.moments.newCount(self.selected, since: since) |> deliverOnMainQueue).start(next: { [weak self] count in
-                guard let self else { return }
-                self.models[self.selected]?.newCount = count
-                self.pill.isHidden = count == 0
-            })
-        }, queue: Queue.mainQueue())
-        timer.start()
-        self.probe = timer
+        self.probe = nil
     }
 
     private func autoplayAllowed() -> Bool {

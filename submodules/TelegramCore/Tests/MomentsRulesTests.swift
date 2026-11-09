@@ -7,7 +7,7 @@ final class MomentsRulesTests: XCTestCase {
         let limits = MomentsLimits.standard
         var state = MomentsComposerAttachmentState()
         XCTAssertNil(momentsCanAdd(kind: .image, to: state, limits: limits))
-        state.imageCount = 12
+        state.imageCount = MomentsLimits.standard.imageLimit
         XCTAssertEqual(momentsCanAdd(kind: .image, to: state, limits: limits), .imageLimit)
         XCTAssertEqual(momentsCanAdd(kind: .video, to: state, limits: limits), .imagesAndVideos)
 
@@ -200,6 +200,14 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(momentsMediaUploadKey(body: Data(), headerFields: [:], location: "https://feed.example/v1/feed/media/uploads/xyz"), "xyz")
         XCTAssertEqual(momentsResolvedUploadLocation(base: "https://feed.example", location: "/v1/feed/media/uploads/xyz"), "https://feed.example/v1/feed/media/uploads/xyz")
         XCTAssertNil(momentsResolvedUploadLocation(base: "https://feed.example", location: "http://other.example/x"))
+    }
+
+    func testFeedListIsIdsUntilCardsHydrate() {
+        let raw = #"{"items":[{"id":"a","reason":"recommend"},{"id":"b","reason":"following"}],"cursor":"n"}"#.data(using: .utf8)!
+        let page = momentsFeedRefPage(data: raw)
+        XCTAssertEqual(page?.ids, ["a", "b"])
+        XCTAssertEqual(page?.cursor, "n")
+        XCTAssertEqual(momentsCapabilityTabs(#"{"tabs":["recommend","friends","following"]}"#.data(using: .utf8)!), ["recommend", "following"])
     }
 
     func testDraftCapKeepsNewest() {

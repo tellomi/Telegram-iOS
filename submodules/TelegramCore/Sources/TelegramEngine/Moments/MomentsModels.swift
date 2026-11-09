@@ -180,6 +180,24 @@ public struct MomentsPollOption: Codable, Equatable {
     }
 }
 
+public struct MomentsComposerDraft: Codable, Equatable {
+    public var text: String
+    public var privacyBase: Int32
+    public var peerIds: [Int64]
+    public var allowNearby: Bool
+    public var quoteId: String?
+    public var media: [MomentsMedia]
+
+    public init(text: String, privacyBase: Int32, peerIds: [Int64], allowNearby: Bool, quoteId: String?, media: [MomentsMedia]) {
+        self.text = text
+        self.privacyBase = privacyBase
+        self.peerIds = peerIds
+        self.allowNearby = allowNearby
+        self.quoteId = quoteId
+        self.media = media
+    }
+}
+
 public struct MomentsStoredAudience: Codable, Equatable {
     public var base: Int32
     public var peers: [Int64]

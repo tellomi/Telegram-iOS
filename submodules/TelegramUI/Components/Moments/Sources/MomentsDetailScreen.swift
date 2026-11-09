@@ -248,7 +248,7 @@ public final class MomentsNotificationsScreen: ViewController {
     private var presentationData: PresentationData
     private let list = ListView()
     private var items: [MomentsNotification] = []
-    private var kind = "all"
+    private var kind = "interactions"
     private var rendered = 0
 
     public init(context: AccountContext) {
@@ -275,7 +275,7 @@ public final class MomentsNotificationsScreen: ViewController {
     }
 
     private func reload() {
-        let _ = (self.context.engine.moments.notifications(kind: self.kind) |> deliverOnMainQueue).start(next: { [weak self] items in
+        let _ = (self.context.engine.moments.notifications(tab: self.kind) |> deliverOnMainQueue).start(next: { [weak self] items in
             self?.items = items
             self?.render()
         }, error: { [weak self] error in

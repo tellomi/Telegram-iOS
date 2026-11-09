@@ -187,6 +187,37 @@ func momentsCard(json: [String: Any], mediaBaseURL: String? = nil) -> MomentsCar
     )
 }
 
+public struct MomentsFeedRefPage: Equatable {
+    public var ids: [String]
+    public var cursor: String?
+
+    public init(ids: [String], cursor: String?) {
+        self.ids = ids
+        self.cursor = cursor
+    }
+}
+
+/// Feed lists are `{items:[{id,reason}],cursor}`. Full cards come from `POST /v1/feed/cards`.
+public func momentsFeedRefPage(data: Data) -> MomentsFeedRefPage? {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return nil
+    }
+    let ids = momentsArray(root["items"]).compactMap { item -> String? in
+        return momentsString(item, "id")
+    }
+    return MomentsFeedRefPage(ids: ids, cursor: momentsString(root, "cursor", "next_cursor"))
+}
+
+func momentsStringList(_ value: Any?) -> [String] {
+    if let list = value as? [String] {
+        return list
+    }
+    if let list = value as? [Any] {
+        return list.compactMap { $0 as? String }
+    }
+    return []
+}
+
 func momentsPage(data: Data, mediaBaseURL: String? = nil) -> MomentsPage? {
     guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         return nil

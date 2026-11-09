@@ -843,6 +843,19 @@ final class AuthorizedApplicationContext {
             return isMomentsFeedEnabled(appConfiguration: appConfiguration)
         }
         |> distinctUntilChanged
+        |> mapToSignal { enabled -> Signal<Bool, NoError> in
+            if !enabled {
+                return .single(false)
+            }
+            return context.engine.moments.feedStatus()
+            |> map { status -> Bool in
+                return status.visible
+            }
+            |> `catch` { _ -> Signal<Bool, NoError> in
+                return .single(true)
+            }
+        }
+        |> distinctUntilChanged
         |> deliverOnMainQueue).start(next: { [weak self] value in
             guard let self, self.showMomentsTab != value else {
                 return

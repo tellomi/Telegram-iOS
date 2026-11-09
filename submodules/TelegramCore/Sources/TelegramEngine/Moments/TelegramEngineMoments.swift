@@ -237,21 +237,42 @@ public extension TelegramEngine {
             |> mapToSignal { _ in
                 return self.call(method: "GET", path: "/v1/feed/\(kind.rawValue)", query: query)
             }
-            |> mapToSignal { data -> Signal<MomentsPage, MomentsAPIError> in
-                guard let page = momentsPage(data: data, mediaBaseURL: self.mediaBaseURL.with { $0 }) else {
-                    return .fail(.invalid("page"))
-                }
-                return .single(page)
+            |> mapToSignal { data in
+                return self.hydrateFeedPage(data)
             }
         }
 
-        public func newCount(_ kind: MomentsFeedKind, since: String) -> Signal<Int, MomentsAPIError> {
-            return self.call(method: "GET", path: "/v1/feed/\(kind.rawValue)/new-count", query: ["since": since])
+        public func feedStatus() -> Signal<MomentsFeedStatus, MomentsAPIError> {
+            return self.call(method: "GET", path: "/v1/feed/status")
             |> map { data in
                 guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    return 0
+                    return MomentsFeedStatus(visible: true)
                 }
-                return momentsInt(json, "count")
+                if json["visible"] == nil {
+                    return MomentsFeedStatus(visible: true)
+                }
+                return MomentsFeedStatus(visible: momentsBool(json, "visible"))
+            }
+        }
+
+        /// Tab ids from `GET /v1/capabilities`, then `GET /v1/feed/config`. `friends` is not an endpoint.
+        public func feedTabs() -> Signal<[String], MomentsAPIError> {
+            let fromConfig = self.remoteConfig()
+            |> map { config -> [String] in
+                return config.tabs.filter { $0 != "friends" && !$0.isEmpty }
+            }
+            return self.call(method: "GET", path: "/v1/capabilities")
+            |> map { data -> [String] in
+                return momentsCapabilityTabs(data)
+            }
+            |> mapToSignal { tabs -> Signal<[String], MomentsAPIError> in
+                if tabs.isEmpty {
+                    return fromConfig
+                }
+                return .single(tabs)
+            }
+            |> `catch` { _ -> Signal<[String], MomentsAPIError> in
+                return fromConfig
             }
         }
 
@@ -361,6 +382,27 @@ public extension TelegramEngine {
             }
         }
 
+        public func storedDraft() -> Signal<MomentsComposerDraft?, NoError> {
+            return self.account.postbox.transaction { transaction -> MomentsComposerDraft? in
+                guard let payload = momentsReadBlob(transaction: transaction, id: momentsDraftsCacheId()), let data = payload.data(using: .utf8) else {
+                    return nil
+                }
+                return try? JSONDecoder().decode(MomentsComposerDraft.self, from: data)
+            }
+        }
+
+        public func storeDraft(_ draft: MomentsComposerDraft?) {
+            let payload: String?
+            if let draft, let data = try? JSONEncoder().encode(draft) {
+                payload = String(data: data, encoding: .utf8)
+            } else {
+                payload = nil
+            }
+            let _ = self.account.postbox.transaction { transaction in
+                momentsWriteBlob(transaction: transaction, id: momentsDraftsCacheId(), payload: payload)
+            }.start()
+        }
+
         public func storeAudience(_ privacy: EngineStoryPrivacy) {
             let stored = MomentsStoredAudience(base: privacy.base.rawValue, peers: privacy.additionallyIncludePeers.map { $0.toInt64() })
             guard let data = try? JSONEncoder().encode(stored), let payload = String(data: data, encoding: .utf8) else {
@@ -451,10 +493,7 @@ public extension TelegramEngine {
                 return self.call(method: "GET", path: "/v1/feed/profiles/\(id)/posts", query: query)
             }
             |> mapToSignal { data in
-                guard let page = momentsPage(data: data, mediaBaseURL: self.mediaBaseURL.with { $0 }) else {
-                    return .fail(.invalid("profile"))
-                }
-                return .single(page)
+                return self.hydrateFeedPage(data)
             }
         }
 
@@ -495,9 +534,15 @@ public extension TelegramEngine {
             }
         }
 
-        public func notifications(kind: String) -> Signal<[MomentsNotification], MomentsAPIError> {
-            let query = kind == "all" ? [:] : ["kind": kind]
-            return self.call(method: "GET", path: "/v1/feed/me/notifications", query: query)
+        public func notifications(tab: String) -> Signal<[MomentsNotification], MomentsAPIError> {
+            let normalized: String
+            switch tab {
+            case "follows", "system":
+                normalized = tab
+            default:
+                normalized = "interactions"
+            }
+            return self.call(method: "GET", path: "/v1/feed/me/notifications", query: ["tab": normalized])
             |> map { data in
                 guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                     return []
@@ -559,21 +604,6 @@ public extension TelegramEngine {
             }
         }
 
-        public func places(city: String, query: String) -> Signal<[MomentsPlace], MomentsAPIError> {
-            return self.call(method: "GET", path: "/v1/feed/places", query: ["city": city, "q": query])
-            |> map { data in
-                guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    return []
-                }
-                return momentsArray(root["items"] ?? root["places"]).compactMap { item in
-                    guard let id = momentsString(item, "id") else {
-                        return nil
-                    }
-                    return MomentsPlace(id: id, name: momentsString(item, "name") ?? id)
-                }
-            }
-        }
-
         public func remoteConfig() -> Signal<MomentsRemoteConfig, MomentsAPIError> {
             return self.call(method: "GET", path: "/v1/feed/config")
             |> map { data in
@@ -598,14 +628,16 @@ public extension TelegramEngine {
             }
         }
 
-        private func prepareMediaBase() -> Signal<Never, MomentsAPIError> {
+        /// Emits once, after `media_base_url` is known. A `Signal<Never, _>` here would complete
+        /// without a value and every `mapToSignal` chained after it would never run.
+        private func prepareMediaBase() -> Signal<Void, MomentsAPIError> {
             if self.didLoadMediaBase.with({ $0 }) {
-                return .complete()
+                return .single(Void())
             }
             return self.remoteConfig()
-            |> mapToSignal { _ -> Signal<Never, MomentsAPIError> in
+            |> map { _ -> Void in
                 let _ = self.didLoadMediaBase.swap(true)
-                return .complete()
+                return Void()
             }
         }
 
@@ -637,10 +669,21 @@ public extension TelegramEngine {
                 return self.call(method: "GET", path: path, query: query)
             }
             |> mapToSignal { data in
-                guard let page = momentsPage(data: data, mediaBaseURL: self.mediaBaseURL.with { $0 }) else {
-                    return .fail(.invalid("list"))
+                return self.hydrateFeedPage(data)
+            }
+        }
+
+        private func hydrateFeedPage(_ data: Data) -> Signal<MomentsPage, MomentsAPIError> {
+            let refs = momentsFeedRefPage(data: data) ?? MomentsFeedRefPage(ids: [], cursor: nil)
+            if refs.ids.isEmpty {
+                return .single(MomentsPage(items: [], nextCursor: refs.cursor))
+            }
+            return self.call(method: "POST", path: "/v1/feed/cards", body: ["ids": refs.ids])
+            |> mapToSignal { cardData in
+                guard let page = momentsPage(data: cardData, mediaBaseURL: self.mediaBaseURL.with { $0 }) else {
+                    return .fail(.invalid("cards"))
                 }
-                return .single(page)
+                return .single(MomentsPage(items: page.items, nextCursor: refs.cursor))
             }
         }
     }
