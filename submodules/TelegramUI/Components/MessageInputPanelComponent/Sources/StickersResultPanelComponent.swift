@@ -247,7 +247,7 @@ final class StickersResultPanelComponent: Component {
 //                                )
 //
 //                                menuItems.append(
-//                                    .action(ContextMenuActionItem(text: presentationData.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
+//                                    .action(ContextMenuActionItem(text: presentationData.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
 //                                        f(.default)
 //
 //                                        if let self, let component = self.component {

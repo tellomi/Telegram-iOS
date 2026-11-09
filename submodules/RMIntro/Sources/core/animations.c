@@ -77,8 +77,6 @@ static mat4x4 main_matrix;
 static mat4x4 ribbons_layer;
 
 static int test_texture[6];
-static TexturedShape tellomi_page_icons[6];
-static int tellomi_page_icons_ready;
 
 static TexturedShape ic_bubble_dot, ic_bubble, ic_cam_lens, ic_cam, ic_pencil, ic_pin, ic_smile_eye, ic_smile, ic_videocam;
 static int ic_bubble_dot_texture, ic_bubble_texture, ic_cam_lens_texture, ic_cam_texture, ic_pencil_texture, ic_pin_texture, ic_smile_eye_texture, ic_smile_texture, ic_videocam_texture;
@@ -417,48 +415,6 @@ set_y_offset_objects(-100*k*0);
 }
 
 
-void rglNormalDraw();
-
-static void tellomi_draw_page_icons(void) {
-    int page_index;
-    float page;
-    float travel;
-
-    if (!tellomi_page_icons_ready) {
-        return;
-    }
-
-    rglNormalDraw();
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    /* current_page + scroll_offset is the scroll position in pages, so the
-       marks slide with the same finger movement as the text pages. */
-    page = (float)current_page + scroll_offset;
-    travel = frame_width > 1 ? (float)frame_width : 200.f;
-
-    for (page_index = 0; page_index < 6; page_index++) {
-        float rel = (float)page_index - page;
-        float dist = rel < 0.f ? -rel : rel;
-        float alpha;
-        float scale;
-
-        if (dist > 1.05f) {
-            continue;
-        }
-        alpha = 1.f - dist;
-        if (alpha < 0.f) {
-            alpha = 0.f;
-        }
-        scale = 1.f - 0.06f * dist;
-        tellomi_page_icons[page_index].params.position = xyzMake(rel * travel, 0, 0);
-        tellomi_page_icons[page_index].params.alpha = alpha;
-        tellomi_page_icons[page_index].params.scale = xyzMake(scale, scale, 1);
-        tellomi_page_icons[page_index].params.rotation = 0;
-        draw_textured_shape(&tellomi_page_icons[page_index], main_matrix, NORMAL);
-    }
-}
-
 void on_surface_created() {
     setup_shaders();
 
@@ -470,14 +426,6 @@ void on_surface_created() {
     telegram_sphere = create_textured_rectangle(CSizeMake(148, 148), telegram_sphere_texture);
     telegram_plane = create_textured_rectangle(CSizeMake(82, 74), telegram_plane_texture);
     telegram_plane.params.anchor=xyzMake(6, -5, 0);
-
-    tellomi_page_icons_ready = 0;
-    for (i = 0; i < 6; i++) {
-        if (test_texture[i] > 0) {
-            tellomi_page_icons[i] = create_textured_rectangle(CSizeMake(148, 148), (GLuint)test_texture[i]);
-            tellomi_page_icons_ready = 1;
-        }
-    }
 
 
 
@@ -1562,13 +1510,6 @@ void on_draw_frame() {
 
     glClearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], 1);
     glClear(GL_COLOR_BUFFER_BIT);
-
-    /* Page 0 is the logo. Pages 1-5 are one MingCute mark each. They slide
-       with scroll_offset; the old per-page Telegram scenes stay below and
-       are not drawn. */
-    tellomi_draw_page_icons();
-    prev_page = current_page;
-    return;
 
     /*
     rglNormalDraw();

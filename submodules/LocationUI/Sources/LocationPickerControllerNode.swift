@@ -170,11 +170,11 @@ private enum LocationPickerEntry: Comparable, Identifiable {
                 }
                 return LocationActionListItem(presentationData: ItemListPresentationData(presentationData), engine: engine, title: title, subtitle: subtitle, icon: icon, beginTimeAndTimeout: nil, action: {
                     if let coordinate = coordinate {
-                        interaction?.sendLocation(coordinate, name, address?.withUpdated(street: nil), nil)
+                        interaction?.sendLocation(coordinate, name, address?.withUpdated(street: nil))
                     }
                 }, highlighted: { _ in
                 })
-            case let .location(_, title, subtitle, venue, queryId, resultId, coordinate, name, address, isCurrentLocation):
+            case let .location(_, title, subtitle, venue, queryId, resultId, coordinate, name, address, _):
                 let icon: LocationActionListItemIcon
                 if let venue = venue {
                     icon = .venue(venue)
@@ -185,8 +185,7 @@ private enum LocationPickerEntry: Comparable, Identifiable {
                     if let venue {
                         interaction?.sendVenue(venue, queryId, resultId)
                     } else if let coordinate {
-                        let accuracy = isCurrentLocation ? interaction?.currentUserAccuracy : nil
-                        interaction?.sendLocation(coordinate, name, address, accuracy)
+                        interaction?.sendLocation(coordinate, name, address)
                     }
                 }, highlighted: { _ in
                 })
@@ -613,9 +612,6 @@ final class LocationPickerControllerNode: ViewControllerTracingNode, CLLocationM
         
         self.disposable = (combineLatest(self.presentationDataPromise.get(), self.statePromise.get(), userLocation, venues, foundVenues, self.locationContext.locationAccess())
         |> deliverOnMainQueue).start(next: { [weak self] presentationData, state, userLocation, venues, foundVenuesAndLocation, access in
-            if let userLocation, userLocation.horizontalAccuracy >= 0.0 {
-                self?.interaction.currentUserAccuracy = userLocation.horizontalAccuracy
-            }
             if let strongSelf = self {
                 let (foundVenues, _, foundVenuesLocation) = foundVenuesAndLocation ?? (nil, nil, nil)
                                       
@@ -1635,7 +1631,7 @@ final class LocationPickerControllerNode: ViewControllerTracingNode, CLLocationM
                                     return
                                 }
                                 if case let .location(coordinate, _, _) = self.state.selectedLocation {
-                                    self.interaction.sendLocation(coordinate, nil, nil, nil)
+                                    self.interaction.sendLocation(coordinate, nil, nil)
                                 }
                             }
                         )

@@ -132,14 +132,14 @@ extension PeerInfoScreenNode {
                 content = .linkCopied(title: nil, text: self.presentationData.strings.Conversation_LinkCopied)
             } else if let addressName = peer.addressName {
                 if case .channel = peer {
-                    text = "https://\(TellomiLinks.host)/\(addressName)"
+                    text = "https://t.me/\(addressName)"
                     content = .linkCopied(title: nil, text: self.presentationData.strings.Conversation_LinkCopied)
                 } else {
                     text = "@" + addressName
                     content = .copy(text: self.presentationData.strings.Conversation_UsernameCopied)
                 }
             } else {
-                text = "https://\(TellomiLinks.host)/@id\(peer.id.id._internalGetInt64Value())"
+                text = "https://t.me/@id\(peer.id.id._internalGetInt64Value())"
                 content = .linkCopied(title: nil, text: self.presentationData.strings.Conversation_LinkCopied)
             }
         

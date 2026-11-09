@@ -507,7 +507,7 @@ extension PeerInfoScreenNode {
                             } else if botInfo.commands.contains(where: { $0.text == "privacy" }) {
                                 
                             } else {
-                                privacyPolicyUrl = TellomiLinks.localizedSiteURL(presentationData.strings.WebApp_PrivacyPolicy_URL, fallback: "privacy-tpa")
+                                privacyPolicyUrl = presentationData.strings.WebApp_PrivacyPolicy_URL
                             }
                         }
                         if let privacyPolicyUrl {
@@ -633,7 +633,7 @@ extension PeerInfoScreenNode {
                         })))
                     }
                     
-                    if TellomiFeatureGate.with(appConfiguration: strongSelf.context.currentAppConfiguration.with { $0 }).giftsEnabled, strongSelf.peerId.namespace == Namespaces.Peer.CloudUser, !user.isDeleted && user.botInfo == nil && !user.flags.contains(.isSupport) {
+                    if strongSelf.peerId.namespace == Namespaces.Peer.CloudUser, !user.isDeleted && user.botInfo == nil && !user.flags.contains(.isSupport) {
                         if let cachedData = data.cachedData as? CachedUserData, cachedData.disallowedGifts == .All {
                         } else {
                             items.append(.action(ContextMenuActionItem(text: presentationData.strings.Profile_SendGift, icon: { theme in
@@ -915,7 +915,7 @@ extension PeerInfoScreenNode {
                     }
                 } else if case let .channel(channel) = peer {
                     if let cachedData = strongSelf.data?.cachedData as? CachedChannelData {
-                        if TellomiFeatureGate.with(appConfiguration: strongSelf.context.currentAppConfiguration.with { $0 }).giftsEnabled, case .broadcast = channel.info, cachedData.flags.contains(.starGiftsAvailable) {
+                        if case .broadcast = channel.info, cachedData.flags.contains(.starGiftsAvailable) {
                             items.append(.action(ContextMenuActionItem(text: presentationData.strings.Profile_SendGift, badge: nil, icon: { theme in
                                 generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Gift"), color: theme.contextMenu.primaryColor)
                             }, action: { [weak self] _, f in
@@ -925,22 +925,20 @@ extension PeerInfoScreenNode {
                             })))
                         }
                         
-                        if TellomiFeatureGate.with(appConfiguration: strongSelf.context.currentAppConfiguration.with { $0 }).boostsEnabled {
-                            let boostTitle: String
-                            switch channel.info {
-                            case .group:
-                                boostTitle = presentationData.strings.PeerInfo_Group_Boost
-                            case .broadcast:
-                                boostTitle = presentationData.strings.PeerInfo_Channel_Boost
-                            }
-                            items.append(.action(ContextMenuActionItem(text: boostTitle, badge: nil, icon: { theme in
-                                generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Boost"), color: theme.contextMenu.primaryColor)
-                            }, action: { [weak self] _, f in
-                                f(.dismissWithoutContent)
-                                
-                                self?.openBoost()
-                            })))
+                        let boostTitle: String
+                        switch channel.info {
+                        case .group:
+                            boostTitle = presentationData.strings.PeerInfo_Group_Boost
+                        case .broadcast:
+                            boostTitle = presentationData.strings.PeerInfo_Channel_Boost
                         }
+                        items.append(.action(ContextMenuActionItem(text: boostTitle, badge: nil, icon: { theme in
+                            generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Boost"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, f in
+                            f(.dismissWithoutContent)
+                            
+                            self?.openBoost()
+                        })))
                                                 
                         if channel.hasPermission(.editStories) {
                             items.append(.action(ContextMenuActionItem(text: presentationData.strings.PeerInfo_Channel_ArchivedStories, icon: { theme in

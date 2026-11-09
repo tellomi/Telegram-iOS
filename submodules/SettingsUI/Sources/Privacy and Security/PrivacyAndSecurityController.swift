@@ -74,8 +74,6 @@ private final class PrivacyAndSecurityControllerArguments {
         self.openMessagePrivacy = openMessagePrivacy
         self.openGiftsPrivacy = openGiftsPrivacy
     }
-
-    var togglePersonalizedRecommendation: (Bool) -> Void = { _ in }
 }
 
 private enum PrivacyAndSecuritySection: Int32 {
@@ -87,8 +85,6 @@ private enum PrivacyAndSecuritySection: Int32 {
     case dataSettings
     case loginEmail
     case linkHandling
-    /// After the privacy block and before auto-archive, matching Android #87.
-    case discover
 }
 
 public enum PrivacyAndSecurityEntryTag: ItemListItemTag {
@@ -139,9 +135,6 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
     case dataSettings(PresentationTheme, String)
     case dataSettingsInfo(PresentationTheme, String)
     case openLinksIn(PresentationTheme, String, String)
-    case personalizedRecommendationHeader(String)
-    case personalizedRecommendation(String, Bool)
-    case personalizedRecommendationFooter(String)
     
     var section: ItemListSectionId {
         switch self {
@@ -159,8 +152,6 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
             return PrivacyAndSecuritySection.dataSettings.rawValue
         case .openLinksIn:
             return PrivacyAndSecuritySection.linkHandling.rawValue
-        case .personalizedRecommendationHeader, .personalizedRecommendation, .personalizedRecommendationFooter:
-            return PrivacyAndSecuritySection.discover.rawValue
         }
     }
     
@@ -214,30 +205,24 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
                 return 23
             case .selectivePrivacyInfo:
                 return 24
-            case .personalizedRecommendationHeader:
-                return 25
-            case .personalizedRecommendation:
-                return 26
-            case .personalizedRecommendationFooter:
-                return 27
             case .autoArchiveHeader:
-                return 28
+                return 25
             case .autoArchive:
-                return 29
+                return 26
             case .autoArchiveInfo:
-                return 30
+                return 27
             case .accountHeader:
-                return 31
+                return 28
             case .accountTimeout:
-                return 32
+                return 29
             case .accountInfo:
-                return 33
+                return 30
             case .dataSettings:
-                return 34
+                return 31
             case .dataSettingsInfo:
-                return 35
+                return 32
             case .openLinksIn:
-                return 36
+                return 33
         }
     }
     
@@ -441,24 +426,6 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
                 } else {
                     return false
                 }
-            case let .personalizedRecommendationHeader(lhsText):
-                if case let .personalizedRecommendationHeader(rhsText) = rhs, lhsText == rhsText {
-                    return true
-                } else {
-                    return false
-                }
-            case let .personalizedRecommendation(lhsText, lhsValue):
-                if case let .personalizedRecommendation(rhsText, rhsValue) = rhs, lhsText == rhsText, lhsValue == rhsValue {
-                    return true
-                } else {
-                    return false
-                }
-            case let .personalizedRecommendationFooter(lhsText):
-                if case let .personalizedRecommendationFooter(rhsText) = rhs, lhsText == rhsText {
-                    return true
-                } else {
-                    return false
-                }
         }
     }
     
@@ -582,14 +549,6 @@ private enum PrivacyAndSecurityEntry: ItemListNodeEntry {
                 return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: text, label: value, sectionId: self.section, style: .blocks, action: {
                     arguments.openBrowserSelection()
                 })
-            case let .personalizedRecommendationHeader(text):
-                return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
-            case let .personalizedRecommendation(text, value):
-                return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: text, value: value, sectionId: self.section, style: .blocks, updated: { updated in
-                    arguments.togglePersonalizedRecommendation(updated)
-                })
-            case let .personalizedRecommendationFooter(text):
-                return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         }
     }
 }
@@ -701,8 +660,7 @@ private func privacyAndSecurityControllerEntries(
     loginEmail: String?,
     accountPeer: EnginePeer?,
     defaultWebBrowser: String,
-    appConfiguration: AppConfiguration,
-    personalizedRecommendation: Bool
+    appConfiguration: AppConfiguration
 ) -> [PrivacyAndSecurityEntry] {
     var entries: [PrivacyAndSecurityEntry] = []
     
@@ -785,9 +743,7 @@ private func privacyAndSecurityControllerEntries(
         entries.append(.lastSeenPrivacy(presentationData.theme, presentationData.strings.PrivacySettings_LastSeen, stringForSelectiveSettings(strings: presentationData.strings, settings: privacySettings.presence)))
         entries.append(.profilePhotoPrivacy(presentationData.theme, presentationData.strings.Privacy_ProfilePhoto, stringForSelectiveSettings(strings: presentationData.strings, settings: privacySettings.profilePhoto)))
         entries.append(.bioPrivacy(presentationData.theme, presentationData.strings.Privacy_Bio, stringForSelectiveSettings(strings: presentationData.strings, settings: privacySettings.bio)))
-        if TellomiFeatureGate.with(appConfiguration: appConfiguration).giftsEnabled {
-            entries.append(.giftsAutoSavePrivacy(presentationData.theme, presentationData.strings.Privacy_Gifts, stringForSelectiveSettings(strings: presentationData.strings, settings: privacySettings.giftsAutoSave)))
-        }
+        entries.append(.giftsAutoSavePrivacy(presentationData.theme, presentationData.strings.Privacy_Gifts, stringForSelectiveSettings(strings: presentationData.strings, settings: privacySettings.giftsAutoSave)))
         entries.append(.birthdayPrivacy(presentationData.theme, presentationData.strings.Privacy_Birthday, stringForSelectiveSettings(strings: presentationData.strings, settings: privacySettings.birthday)))
         entries.append(.savedMusicPrivacy(presentationData.theme, presentationData.strings.Privacy_SavedMusic, stringForSelectiveSettings(strings: presentationData.strings, settings: privacySettings.savedMusic)))
         entries.append(.forwardPrivacy(presentationData.theme, presentationData.strings.Privacy_Forwards, stringForSelectiveSettings(strings: presentationData.strings, settings: privacySettings.forwards)))
@@ -817,9 +773,7 @@ private func privacyAndSecurityControllerEntries(
         entries.append(.lastSeenPrivacy(presentationData.theme, presentationData.strings.PrivacySettings_LastSeen, presentationData.strings.Channel_NotificationLoading))
         entries.append(.profilePhotoPrivacy(presentationData.theme, presentationData.strings.Privacy_ProfilePhoto, presentationData.strings.Channel_NotificationLoading))
         entries.append(.bioPrivacy(presentationData.theme, presentationData.strings.Privacy_GroupsAndChannels, presentationData.strings.Channel_NotificationLoading))
-        if TellomiFeatureGate.with(appConfiguration: appConfiguration).giftsEnabled {
-            entries.append(.giftsAutoSavePrivacy(presentationData.theme, presentationData.strings.Privacy_Gifts, presentationData.strings.Channel_NotificationLoading))
-        }
+        entries.append(.giftsAutoSavePrivacy(presentationData.theme, presentationData.strings.Privacy_Gifts, presentationData.strings.Channel_NotificationLoading))
         entries.append(.birthdayPrivacy(presentationData.theme, presentationData.strings.Privacy_Birthday, presentationData.strings.Channel_NotificationLoading))
         entries.append(.savedMusicPrivacy(presentationData.theme, presentationData.strings.Privacy_SavedMusic, presentationData.strings.Channel_NotificationLoading))
         entries.append(.forwardPrivacy(presentationData.theme, presentationData.strings.Privacy_Forwards, presentationData.strings.Channel_NotificationLoading))
@@ -831,18 +785,6 @@ private func privacyAndSecurityControllerEntries(
         entries.append(.groupPrivacy(presentationData.theme, presentationData.strings.Privacy_GroupsAndChannels, presentationData.strings.Channel_NotificationLoading))
         entries.append(.groupPrivacyFooter)
         //entries.append(.selectivePrivacyInfo(presentationData.theme, presentationData.strings.PrivacyLastSeenSettings_GroupsAndChannelsHelp))
-    }
-
-    // D-58, aligned with Android #87. Discover section after privacy and before
-    // auto-archive. `personalization_toggle_visible` is not read: a missing
-    // key and an explicit false both parse as false, which would hide the only
-    // control that can send `personalized=false`.
-    let engineFlagThatWouldHideTheRow = false
-    if tellomiPersonalizedRecommendationRowVisible(personalizationToggleVisible: engineFlagThatWouldHideTheRow) {
-        let recommendationCopy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
-        entries.append(.personalizedRecommendationHeader(recommendationCopy.personalizedRecommendationSection.uppercased()))
-        entries.append(.personalizedRecommendation(recommendationCopy.personalizedRecommendation, personalizedRecommendation))
-        entries.append(.personalizedRecommendationFooter(recommendationCopy.personalizedRecommendationFooter))
     }
     
     if canAutoarchive {
@@ -1643,12 +1585,6 @@ public func privacyAndSecurityController(
         context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.ApplicationSpecificPreference(key: PreferencesKeys.webBrowserSettings))
     )
     
-    arguments.togglePersonalizedRecommendation = { value in
-        let _ = updateTellomiRecommendationSettings(engine: context.engine, { settings in
-            return settings.withUpdatedPersonalized(value)
-        }).start()
-    }
-
     let signal = combineLatest(
         queue: .mainQueue(),
         context.sharedContext.presentationData,
@@ -1664,11 +1600,9 @@ public func privacyAndSecurityController(
         combineLatest(passkeys.get(), passkeysDataValue.get()),
         context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.App()),
         context.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId)),
-        combineLatest(loginEmail, context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.ApplicationSpecificPreference(key: ApplicationSpecificPreferencesKeys.tellomiRecommendationSettings)))
+        loginEmail
     )
-    |> map { presentationData, state, privacySettings, noticeView, webBrowserData, recentPeers, blockedPeersState, activeWebsitesState, accessChallengeData, twoStepAuth, passkeys, appConfiguration, accountPeer, recommendationInput -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let loginEmail = recommendationInput.0
-        let personalizedRecommendation = tellomiRecommendationSettings(entry: recommendationInput.1).personalized
+    |> map { presentationData, state, privacySettings, noticeView, webBrowserData, recentPeers, blockedPeersState, activeWebsitesState, accessChallengeData, twoStepAuth, passkeys, appConfiguration, accountPeer, loginEmail -> (ItemListControllerState, (ItemListNodeState, Any)) in
         var canAutoarchive = false
         if let data = appConfiguration.data, let hasAutoarchive = data["autoarchive_setting_available"] as? Bool {
             canAutoarchive = hasAutoarchive
@@ -1702,7 +1636,7 @@ public func privacyAndSecurityController(
             defaultWebBrowser = presentationData.strings.WebBrowser_Telegram
         }
         
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: privacyAndSecurityControllerEntries(presentationData: presentationData, state: state, privacySettings: privacySettings, accessChallengeData: accessChallengeData.data, blockedPeerCount: blockedPeersState.totalCount, activeWebsitesCount: activeWebsitesState.sessions.count, hasTwoStepAuth: twoStepAuth.0, twoStepAuthData: twoStepAuth.1, hasPasskeys: passkeys.0, displayPasskeys: displayPasskeys, canAutoarchive: canAutoarchive, isPremiumDisabled: isPremiumDisabled, isPremium: isPremium, loginEmail: loginEmail, accountPeer: accountPeer, defaultWebBrowser: defaultWebBrowser, appConfiguration: appConfiguration, personalizedRecommendation: personalizedRecommendation), style: .blocks, ensureVisibleItemTag: focusOnItemTag, animateChanges: false)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: privacyAndSecurityControllerEntries(presentationData: presentationData, state: state, privacySettings: privacySettings, accessChallengeData: accessChallengeData.data, blockedPeerCount: blockedPeersState.totalCount, activeWebsitesCount: activeWebsitesState.sessions.count, hasTwoStepAuth: twoStepAuth.0, twoStepAuthData: twoStepAuth.1, hasPasskeys: passkeys.0, displayPasskeys: displayPasskeys, canAutoarchive: canAutoarchive, isPremiumDisabled: isPremiumDisabled, isPremium: isPremium, loginEmail: loginEmail, accountPeer: accountPeer, defaultWebBrowser: defaultWebBrowser, appConfiguration: appConfiguration), style: .blocks, ensureVisibleItemTag: focusOnItemTag, animateChanges: false)
         
         return (controllerState, (listState, arguments))
     }
@@ -1778,30 +1712,10 @@ public func privacyAndSecurityController(
     }
         
     setupEmailImpl = { emailPattern in
-        let peerId = context.account.peerId
-        let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
-        |> deliverOnMainQueue).start(next: { peer in
-            let phone: String?
-            if case let .user(user) = peer {
-                phone = user.phone
-            } else {
-                phone = nil
-            }
-            let action = tellomiSettingsEmailAction(TellomiEmailChannels(phone: phone, cachedSignInAddress: tellomiStoredAccountLoginEmail(peerId: peerId), loginEmailPattern: emailPattern, recoveryEmailPattern: nil))
-            switch action {
-            case let .showIdentity(_, fullAddress):
-                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-                let pack = tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)
-                let copy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: pack)
-                let notice = textAlertController(context: context, title: copy.signInEmailTitle, text: fullAddress == nil ? copy.signInEmailMaskBody : copy.signInEmailBody, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})])
-                presentControllerImpl?(notice)
-            case .phoneAccountLoginEmail:
-                let controller = loginEmailSetupController(context: context, blocking: false, emailPattern: emailPattern, navigationController: getNavigationControllerImpl?(), completion: {
-                    updatedTwoStepAuthData?()
-                }, dismiss: {})
-                pushControllerImpl?(controller, true)
-            }
-        })
+        let controller = loginEmailSetupController(context: context, blocking: false, emailPattern: emailPattern, navigationController: getNavigationControllerImpl?(), completion: {
+            updatedTwoStepAuthData?()
+        }, dismiss: {})
+        pushControllerImpl?(controller, true)
     }
     
     if let focusOnItemTag {

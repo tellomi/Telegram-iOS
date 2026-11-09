@@ -49,8 +49,7 @@ public struct CreateBotUsername: Equatable {
         case tooLong
     }
 
-    /// Same minimum as a public username (`addressNameMinimumLength`).
-    public static let minLength = 4
+    public static let minLength = 5
     public static let maxLength = 32
     /// How many Premium-ending usernames an account may hold across its bots, for the error text when
     /// the server's error does not carry the number.

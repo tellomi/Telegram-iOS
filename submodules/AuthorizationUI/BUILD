@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
 
 swift_library(
     name = "AuthorizationUI",
@@ -48,25 +48,9 @@ swift_library(
         "//submodules/TelegramUI/Components/PlainButtonComponent",
         "//submodules/Utils/DeviceModel",
         "//submodules/PresentationDataUtils",
-        "//submodules/UIKitRuntimeUtils:UIKitRuntimeUtils",
         "//submodules/TelegramUI/Components/GlassBarButtonComponent",
     ],
     visibility = [
         "//visibility:public",
-    ],
-)
-
-# Host test. Field colors do not touch UIKit.
-# `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/AuthorizationUI:TellomiLoginFieldColorsTests`
-swift_test(
-    name = "TellomiLoginFieldColorsTests",
-    srcs = [
-        "Sources/TellomiLoginFieldColors.swift",
-        "Sources/TellomiLoginDecisions.swift",
-        "Tests/TellomiLoginFieldColorsTests.swift",
-        "Tests/TellomiLoginFlowDecisionsTests.swift",
-    ],
-    copts = [
-        "-warnings-as-errors",
     ],
 )

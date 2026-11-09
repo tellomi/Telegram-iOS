@@ -17,7 +17,6 @@ import MergeLists
 import MediaResources
 import StickerResources
 import WallpaperResources
-import TellomiWallpapers
 import TooltipUI
 import AnimatedStickerNode
 import TelegramAnimatedStickerNode
@@ -31,23 +30,6 @@ import GlassBarButtonComponent
 import BundleIconComponent
 import LottieComponent
 import MultilineTextComponent
-
-private func chatThemePreviewWallpaper(theme: TelegramTheme, night: Bool) -> TelegramWallpaper? {
-    let settings = theme.settings ?? []
-    let match = settings.first { setting in
-        if night {
-            return setting.baseTheme == .night || setting.baseTheme == .tinted
-        }
-        return setting.baseTheme == .classic || setting.baseTheme == .day
-    }
-    if let wallpaper = match?.wallpaper {
-        return wallpaper
-    }
-    if let accent = chatThemePreviewFill(accent: match?.accentColor, hasWallpaper: false) {
-        return .color(accent)
-    }
-    return nil
-}
 
 private struct ThemeSettingsThemeEntry: Comparable, Identifiable {
     let index: Int
@@ -450,15 +432,8 @@ private final class ThemeSettingsThemeItemIconNode : ListViewItemNode {
             let (textLayout, textApply) = makeTextLayout(TextNodeLayoutArguments(attributedString: text, backgroundColor: nil, maximumNumberOfLines: 2, truncationType: .end, constrainedSize: CGSize(width: params.width, height: CGFloat.greatestFiniteMagnitude), alignment: .center, cutout: nil, insets: UIEdgeInsets()))
             
             let emoticon: String
-            if let chatTheme = item.chatTheme {
-                let value: String?
-                switch chatTheme {
-                case let .emoticon(text):
-                    value = text
-                default:
-                    value = nil
-                }
-                emoticon = chatThemeEmoticonLabel(hasEmojiFile: item.emojiFile != nil, emoticon: value) ?? ""
+            if let _ = item.chatTheme {
+                emoticon = ""
             } else {
                 emoticon = "❌"
             }
@@ -1327,18 +1302,18 @@ private final class ChatThemeSheetContentComponent: Component {
                     guard let emoticon = theme.emoticon else {
                         continue
                     }
-                entries.append(ThemeSettingsThemeEntry(
-                    index: entries.count,
-                    chatTheme: .emoticon(emoticon),
-                    emojiFile: component.animatedEmojiStickers[emoticon]?.first?.file._parse(),
-                    themeReference: .cloud(PresentationCloudTheme(theme: theme, resolvedWallpaper: nil, creatorAccountId: nil)),
-                    peer: nil,
-                    nightMode: isDarkAppearance,
-                    selected: selectedTheme?.id == ChatTheme.emoticon(emoticon).id,
-                    theme: presentationData.theme,
-                    strings: presentationData.strings,
-                    wallpaper: chatThemePreviewWallpaper(theme: theme, night: isDarkAppearance)
-                ))
+                    entries.append(ThemeSettingsThemeEntry(
+                        index: entries.count,
+                        chatTheme: .emoticon(emoticon),
+                        emojiFile: component.animatedEmojiStickers[emoticon]?.first?.file._parse(),
+                        themeReference: .cloud(PresentationCloudTheme(theme: theme, resolvedWallpaper: nil, creatorAccountId: nil)),
+                        peer: nil,
+                        nightMode: isDarkAppearance,
+                        selected: selectedTheme?.id == ChatTheme.emoticon(emoticon).id,
+                        theme: presentationData.theme,
+                        strings: presentationData.strings,
+                        wallpaper: nil
+                    ))
                 }
             }
             

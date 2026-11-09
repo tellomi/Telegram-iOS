@@ -251,31 +251,6 @@ private func filtersWithAppliedOrder(filters: [(ChatListFilter, Int)], order: [I
     return sortedFilters
 }
 
-/// Suggested folders arrive from the server with English names. The rest of this
-/// screen is already in the active language pack.
-private func tellomiSuggestedFolderCopy(title: String, description: String, languageCode: String) -> (title: String, description: String) {
-    let code = languageCode.lowercased()
-    let hant = code.hasPrefix("zh-hant") || code == "zh-tw" || code.hasPrefix("zh-tw") || code == "zh-hk" || code.hasPrefix("zh-hk") || code == "zh-mo" || code.hasPrefix("zh-mo")
-    let hans = !hant && (code == "zh" || code == "zh-cn" || code.hasPrefix("zh-hans") || code.hasPrefix("zh-"))
-    guard hans || hant else {
-        return (title, description)
-    }
-    let table: [String: (hansTitle: String, hansBody: String, hantTitle: String, hantBody: String)] = [
-        "Unread": ("未读", "所有聊天中的新消息。", "未讀", "所有聊天中的新訊息。"),
-        "Personal": ("个人", "仅显示个人聊天中的消息。", "個人", "僅顯示個人聊天中的訊息。"),
-        "Groups": ("群组", "群组中的消息。", "群組", "群組中的訊息。"),
-        "Channels": ("频道", "频道中的消息。", "頻道", "頻道中的訊息。"),
-        "Bots": ("机器人", "与机器人的对话。", "機器人", "與機器人的對話。")
-    ]
-    guard let row = table[title] else {
-        return (title, description)
-    }
-    if hant {
-        return (row.hantTitle, row.hantBody)
-    }
-    return (row.hansTitle, row.hansBody)
-}
-
 private func chatListFilterPresetListControllerEntries(presentationData: PresentationData, state: ChatListFilterPresetListControllerState, filters: [(ChatListFilter, Int)], updatedFilterOrder: [Int32]?, suggestedFilters: [ChatListFeaturedFilter], displayTags: Bool, isPremium: Bool, limits: EngineConfiguration.UserLimits, premiumLimits: EngineConfiguration.UserLimits) -> [ChatListFilterPresetListEntry] {
     var entries: [ChatListFilterPresetListEntry] = []
 
@@ -327,9 +302,7 @@ private func chatListFilterPresetListControllerEntries(presentationData: Present
     if !filteredSuggestedFilters.isEmpty && actualFilters.count < limits.maxFoldersCount {
         entries.append(.suggestedListHeader(presentationData.strings.ChatListFolderSettings_RecommendedFoldersSection))
         for filter in filteredSuggestedFilters {
-            let copy = tellomiSuggestedFolderCopy(title: filter.title.text, description: filter.description, languageCode: presentationData.strings.primaryComponent.languageCode)
-            let title = ChatFolderTitle(text: copy.title, entities: copy.title == filter.title.text ? filter.title.entities : [], enableAnimations: filter.title.enableAnimations)
-            entries.append(.suggestedPreset(index: PresetIndex(value: entries.count), title: title, label: copy.description, preset: filter.data))
+            entries.append(.suggestedPreset(index: PresetIndex(value: entries.count), title: filter.title, label: filter.description, preset: filter.data))
         }
         if filters.isEmpty {
             entries.append(.suggestedAddCustom(presentationData.strings.ChatListFolderSettings_RecommendedNewFolder))

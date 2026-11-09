@@ -1311,16 +1311,12 @@ public final class ChatListNode: ListViewImpl {
     }
     
     private var currentLocation: ChatListNodeLocation?
-    /// The row that was at the viewport edge, kept across a clear that clamps the offset to 0.
-    private var scrollAnchor: ChatListScrollAnchor?
-    /// Set while a folder switch or a Chats-tab tap is scrolling to the top, so the old row is not saved again.
-    private var suppressAnchorCapture = false
     public private(set) var chatListFilter: ChatListFilter? {
         didSet {
             self.chatListFilterValue.set(.single(self.chatListFilter))
             
             if self.chatListFilter != oldValue {
-                self.applyChatListFilterLocationChange(from: oldValue)
+                self.setChatListLocation(.initial(count: 50, filter: self.chatListFilter))
             }
         }
     }
@@ -3183,7 +3179,6 @@ public final class ChatListNode: ListViewImpl {
             strongSelf.contentOffsetChanged?(offset)
             strongSelf.pinnedScrollFraction = pinnedScrollFraction
             strongSelf.pinnedHeaderDisplayFractionUpdated?(transition)
-            strongSelf.noteScrollAnchorCapture()
         }
         
         self.dynamicVisualInsets = { [weak self] in
@@ -3590,41 +3585,20 @@ public final class ChatListNode: ListViewImpl {
                 }
             }
             
-            self.noteScrollAnchorCapture()
             var scrollToItem = transition.scrollToItem
-            if scrollToItem == nil {
-                let scrolledDown: Bool
-                switch self.visibleContentOffset() {
-                case .unknown:
-                    scrolledDown = true
-                case let .known(value) where value > 1.0:
-                    scrolledDown = true
-                default:
-                    scrolledDown = false
+            if transition.adjustScrollToFirstItem {
+                var offset: CGFloat = 0.0
+                if let visibleTopInset = self.visibleTopInset {
+                    offset = visibleTopInset - self.insets.top
+                } else {
+                    switch self.visibleContentOffset() {
+                    case let .known(value) where abs(value) < .ulpOfOne:
+                        offset = 0.0
+                    default:
+                        offset = -self.scrollHeightTopInset
+                    }
                 }
-                let preservesAnchor = chatListFilterChangePreservesScrollAnchor(from: self.chatListView?.filter, to: transition.chatListView.filter)
-                let command = chatListScrollCommand(folderChanged: !preservesAnchor, chatsTabRetapped: false)
-                if case .scrollToTop = command {
-                    self.scrollAnchor = nil
-                    self.suppressAnchorCapture = true
-                }
-                let resolution = resolveChatListScroll(ChatListScrollRequest(
-                    anchor: self.scrollAnchor,
-                    nextRowIds: self.visualScrollRowIds(transition.chatListView.filteredEntries),
-                    command: command,
-                    wouldScrollToFirstItem: transition.adjustScrollToFirstItem,
-                    structureChanged: !transition.deleteItems.isEmpty || !transition.insertItems.isEmpty,
-                    currentlyScrolledDown: scrolledDown
-                ))
-                self.scrollAnchor = resolution.anchor
-                switch resolution.target {
-                case .unchanged:
-                    break
-                case .top:
-                    scrollToItem = self.scrollItemAtTop()
-                case let .row(index, rowTopFromTop):
-                    scrollToItem = ListViewScrollToItem(index: index, position: .top(CGFloat(rowTopFromTop)), animated: false, curve: .Default(duration: 0.0), directionHint: .Up)
-                }
+                scrollToItem = ListViewScrollToItem(index: 0, position: .top(offset), animated: false, curve: .Default(duration: 0.0), directionHint: .Up)
             }
             
             let updatedOpaqueState: Any? = ChatListOpaqueTransactionState(chatListView: transition.chatListView)
@@ -3770,9 +3744,6 @@ public final class ChatListNode: ListViewImpl {
     }
     
     public func scrollToPosition(_ position: ChatListNodeScrollPosition, animated: Bool = true) {
-        // A second tap on the Chats tab. The saved row must not pull the list back down.
-        self.scrollAnchor = nil
-        self.suppressAnchorCapture = true
         var additionalDelta: CGFloat = 0.0
         switch position {
         case let .top(adjustForTempInset):
@@ -3798,94 +3769,6 @@ public final class ChatListNode: ListViewImpl {
     private func setChatListLocation(_ location: ChatListNodeLocation) {
         self.currentLocation = location
         self.chatListLocation.set(location)
-    }
-
-    /// A folder refresh that still describes the same chats keeps the anchor the
-    /// list is already sampling. Replacing it with `.initial` reloads the top of
-    /// the list and the scroll offset follows.
-    private func applyChatListFilterLocationChange(from oldValue: ChatListFilter?) {
-        if chatListFilterChangePreservesScrollAnchor(from: oldValue, to: self.chatListFilter), let currentLocation = self.currentLocation {
-            let updated: ChatListNodeLocation
-            switch currentLocation {
-            case let .initial(count, _):
-                updated = .initial(count: count, filter: self.chatListFilter)
-            case let .navigation(index, _):
-                updated = .navigation(index: index, filter: self.chatListFilter)
-            case let .scroll(index, _, _, _, _):
-                updated = .navigation(index: index, filter: self.chatListFilter)
-            }
-            self.setChatListLocation(updated)
-        } else {
-            self.scrollAnchor = nil
-            self.suppressAnchorCapture = true
-            self.setChatListLocation(.initial(count: 50, filter: self.chatListFilter))
-        }
-    }
-
-    private func scrollItemAtTop() -> ListViewScrollToItem {
-        var offset: CGFloat = 0.0
-        if let visibleTopInset = self.visibleTopInset {
-            offset = visibleTopInset - self.insets.top
-        } else {
-            switch self.visibleContentOffset() {
-            case let .known(value) where abs(value) < .ulpOfOne:
-                offset = 0.0
-            default:
-                offset = -self.scrollHeightTopInset
-            }
-        }
-        return ListViewScrollToItem(index: 0, position: .top(offset), animated: false, curve: .Default(duration: 0.0), directionHint: .Up)
-    }
-
-    private func noteScrollAnchorCapture() {
-        let capture = self.captureScrollAnchorFromNodes()
-        if self.suppressAnchorCapture {
-            if self.isTracking {
-                self.suppressAnchorCapture = false
-            } else if case .atTop = capture {
-                self.suppressAnchorCapture = false
-                self.scrollAnchor = nil
-                return
-            } else {
-                return
-            }
-        }
-        self.scrollAnchor = rememberChatListScrollAnchor(previous: self.scrollAnchor, capture: capture)
-    }
-
-    private func captureScrollAnchorFromNodes() -> ChatListAnchorCapture {
-        var best: (id: ChatListScrollRowId, minY: CGFloat)?
-        self.forEachItemNode { node in
-            guard let itemNode = node as? ChatListItemNode, let item = itemNode.item else {
-                return
-            }
-            guard let rowId = chatListScrollRowId(item: item) else {
-                return
-            }
-            let frame = itemNode.apparentFrame
-            guard frame.maxY > self.insets.top + 0.5 else {
-                return
-            }
-            if best == nil || frame.minY < best!.minY {
-                best = (rowId, frame.minY)
-            }
-        }
-        guard let best else {
-            return .unavailable
-        }
-        if case let .known(value) = self.visibleContentOffset(), value <= 1.0 {
-            return .atTop
-        }
-        return .anchored(ChatListScrollAnchor(id: best.id, rowTopFromTop: Double(best.minY - self.insets.top)))
-    }
-
-    private func visualScrollRowIds(_ entries: [ChatListNodeEntry]) -> [ChatListScrollRowId] {
-        var ids: [ChatListScrollRowId] = []
-        ids.reserveCapacity(entries.count)
-        for entry in entries.reversed() {
-            ids.append(chatListScrollRowId(entry: entry))
-        }
-        return ids
     }
     
     private func relativeUnreadChatListIndex(position: EngineChatList.RelativePosition) -> Signal<EngineChatList.Item.Index?, NoError> {
@@ -4462,46 +4345,4 @@ func chatListItemTags(location: ChatListControllerLocation, accountPeerId: Engin
         }
     }
     return result
-}
-
-func chatListScrollRowId(item: ChatListItem) -> ChatListScrollRowId? {
-    switch item.content {
-    case .loading:
-        return nil
-    case .peer:
-        switch item.index {
-        case let .chatList(index):
-            return .peer(index.messageIndex.id.peerId.toInt64())
-        case let .forum(_, _, threadId, _, _):
-            return .thread(threadId)
-        }
-    case let .groupReference(group):
-        switch group.groupId {
-        case .root:
-            return .group(0)
-        case .archive:
-            return .group(1)
-        }
-    }
-}
-
-func chatListScrollRowId(entry: ChatListNodeEntry) -> ChatListScrollRowId {
-    switch entry {
-    case let .PeerEntry(data):
-        switch data.index {
-        case let .chatList(index):
-            return .peer(index.messageIndex.id.peerId.toInt64())
-        case let .forum(_, _, threadId, _, _):
-            return .thread(threadId)
-        }
-    case let .GroupReferenceEntry(data):
-        switch data.groupId {
-        case .root:
-            return .group(0)
-        case .archive:
-            return .group(1)
-        }
-    default:
-        return .header
-    }
 }

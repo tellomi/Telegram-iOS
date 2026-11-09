@@ -978,7 +978,7 @@ private func selectivePrivacySettingsControllerEntries(presentationData: Present
     let disableForText: String
     let enableForText: String
     
-    let phoneLink = "https://\(TellomiLinks.host)/+\(phoneNumber)"
+    let phoneLink = "https://t.me/+\(phoneNumber)"
     var settingInfoLink = phoneLink
     
     switch kind {

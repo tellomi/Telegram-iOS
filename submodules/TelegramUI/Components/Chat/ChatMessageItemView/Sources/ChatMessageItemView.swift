@@ -816,7 +816,7 @@ open class ChatMessageItemView: ListViewItemNode, ChatMessageItemNodeProtocol {
                     item.controllerInteraction.sendMessage(button.title, item.message.id)
                 case let .url(url):
                     var concealed = true
-                    if TellomiLinks.hasDeepLinkPrefix(url) {
+                    if url.hasPrefix("tg://") {
                         concealed = false
                     }
                 item.controllerInteraction.openUrl(ChatControllerInteraction.OpenUrl(url: url, concealed: concealed, progress: progress))

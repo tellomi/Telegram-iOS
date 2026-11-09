@@ -69,8 +69,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.titleNode = ASTextNode()
         self.titleNode.isUserInteractionEnabled = false
         self.titleNode.displaysAsynchronously = false
-        self.titleNode.maximumNumberOfLines = 0
-        self.titleNode.attributedText = NSAttributedString(string: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings)).cloudPasswordTitle, font: TellomiLoginChrome.scaledFont(size: 28.0, weight: .semibold), textColor: self.theme.list.itemPrimaryTextColor)
+        self.titleNode.attributedText = NSAttributedString(string: strings.LoginPassword_Title, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
         
         self.titleActivateAreaNode = AccessibilityAreaNode()
         self.titleActivateAreaNode.accessibilityTraits = .staticText
@@ -78,7 +77,6 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.noticeNode = ASTextNode()
         self.noticeNode.isUserInteractionEnabled = false
         self.noticeNode.displaysAsynchronously = false
-        self.noticeNode.maximumNumberOfLines = 0
         self.noticeNode.lineSpacing = 0.1
         self.noticeNode.attributedText = NSAttributedString(string: strings.TwoStepAuth_EnterPasswordHelp, font: Font.regular(17.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         
@@ -87,30 +85,30 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         
         self.forgotNode = HighlightableButtonNode()
         self.forgotNode.displaysAsynchronously = false
-        self.forgotNode.setAttributedTitle(NSAttributedString(string: self.strings.TwoStepAuth_EnterPasswordForgot, font: Font.regular(16.0), textColor: TellomiLoginChrome.palette(theme: theme).link, paragraphAlignment: .center), for: [])
+        self.forgotNode.setAttributedTitle(NSAttributedString(string: self.strings.TwoStepAuth_EnterPasswordForgot, font: Font.regular(16.0), textColor: self.theme.list.itemAccentColor, paragraphAlignment: .center), for: [])
         self.forgotNode.accessibilityLabel = self.strings.TwoStepAuth_EnterPasswordForgot
         self.forgotNode.accessibilityTraits = [.button]
         
         self.resetNode = HighlightableButtonNode()
         self.resetNode.displaysAsynchronously = false
-        self.resetNode.setAttributedTitle(NSAttributedString(string: self.strings.LoginPassword_ResetAccount, font: Font.regular(16.0), textColor: TellomiLoginChrome.palette(theme: theme).error, paragraphAlignment: .center), for: [])
+        self.resetNode.setAttributedTitle(NSAttributedString(string: self.strings.LoginPassword_ResetAccount, font: Font.regular(16.0), textColor: self.theme.list.itemDestructiveColor, paragraphAlignment: .center), for: [])
         
         self.codeSeparatorNode = ASDisplayNode()
         self.codeSeparatorNode.isLayerBacked = true
-        self.codeSeparatorNode.backgroundColor = TellomiLoginChrome.palette(theme: theme).fieldBorder
+        self.codeSeparatorNode.backgroundColor = self.theme.list.itemPlainSeparatorColor
         
         self.codeField = TextFieldNode()
         self.codeField.textField.font = Font.regular(20.0)
-        self.codeField.textField.textColor = TellomiLoginChrome.palette(theme: theme).fieldText
+        self.codeField.textField.textColor = self.theme.list.itemPrimaryTextColor
         self.codeField.textField.textAlignment = .natural
         self.codeField.textField.isSecureTextEntry = true
         self.codeField.textField.returnKeyType = .done
         self.codeField.textField.keyboardAppearance = self.theme.rootController.keyboardColor.keyboardAppearance
         self.codeField.textField.disableAutomaticKeyboardHandling = [.forward, .backward]
-        self.codeField.textField.tintColor = TellomiLoginChrome.palette(theme: theme).accent
+        self.codeField.textField.tintColor = self.theme.list.itemAccentColor
         self.codeField.textField.accessibilityHint = self.strings.Login_VoiceOver_Password
         
-        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings)).login, theme: TellomiLoginChrome.buttonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 25.0)
+        self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5)
         self.proceedNode.progressType = .embedded
         self.proceedNode.isEnabled = false
         
@@ -158,7 +156,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
     func updateData(hint: String, didForgotWithNoRecovery: Bool, suggestReset: Bool) {
         self.didForgotWithNoRecovery = didForgotWithNoRecovery
         self.suggestReset = suggestReset
-        self.codeField.textField.attributedPlaceholder = NSAttributedString(string: hint, font: Font.regular(20.0), textColor: TellomiLoginChrome.palette(theme: self.theme).placeholder)
+        self.codeField.textField.attributedPlaceholder = NSAttributedString(string: hint, font: Font.regular(20.0), textColor: self.theme.list.itemPlaceholderTextColor)
         if let (layout, navigationHeight) = self.layoutArguments {
             self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: .immediate)
         }
@@ -199,13 +197,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         let titleInset: CGFloat = layout.size.width > 320.0 ? 18.0 : 0.0
         let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 110.0 : 20.0
         
-        let passwordCopy = tellomiCloudPasswordCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
-        self.titleNode.attributedText = NSAttributedString(string: passwordCopy.title, font: TellomiLoginChrome.scaledFont(size: 28.0, weight: .semibold), textColor: self.theme.list.itemPrimaryTextColor)
-        let palette = TellomiLoginChrome.palette(theme: self.theme)
-        self.noticeNode.attributedText = NSAttributedString(string: passwordCopy.notice, font: TellomiLoginChrome.scaledFont(size: 17.0), textColor: palette.secondaryText, paragraphAlignment: .center)
-        self.forgotNode.setAttributedTitle(NSAttributedString(string: passwordCopy.forgot, font: Font.regular(16.0), textColor: palette.link, paragraphAlignment: .center), for: [])
-        self.codeSeparatorNode.backgroundColor = palette.fieldBorder
-        self.forgotNode.accessibilityLabel = passwordCopy.forgot
+        self.titleNode.attributedText = NSAttributedString(string: self.strings.LoginPassword_Title, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
         
         let animationSize = CGSize(width: 100.0, height: 100.0)
         let titleSize = self.titleNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
@@ -232,16 +224,15 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
             self.resetNode.isHidden = true
         }
         
-        // The peeking-monkey sticker is Telegram art. It stays out of the column.
-        // The button and the insets are still the upstream ones, so the field
-        // compresses above the keyboard instead of the column jumping.
-        self.animationNode.isHidden = true
-        self.animationNode.visibility = false
         if layout.size.width > 320.0 {
+            items.insert(AuthorizationLayoutItem(node: self.animationNode, size: animationSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 10.0, maxValue: 10.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)), at: 0)
             self.proceedNode.isHidden = false
+            self.animationNode.isHidden = false
+            self.animationNode.visibility = true
         } else {
             insets.top = navigationBarHeight
             self.proceedNode.isHidden = true
+            self.animationNode.isHidden = true
         }
         
         transition.updateFrame(node: self.proceedNode, frame: CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize))
@@ -255,7 +246,6 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         
         self.titleActivateAreaNode.frame = self.titleNode.frame
         self.noticeActivateAreaNode.frame = self.noticeNode.frame
-        self.proceedNode.title = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).login
     }
     
     func activateInput() {
@@ -274,14 +264,6 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.proceedNode.isEnabled = !(self.codeField.textField.text ?? "").isEmpty
     }
         
-    func textFieldDidBeginEditing(_ textField: UITextField) {
-        self.codeSeparatorNode.backgroundColor = TellomiLoginChrome.palette(theme: self.theme).accent
-    }
-
-    func textFieldDidEndEditing(_ textField: UITextField) {
-        self.codeSeparatorNode.backgroundColor = TellomiLoginChrome.palette(theme: self.theme).fieldBorder
-    }
-
     func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
         if self.clearOnce {
             self.clearOnce = false

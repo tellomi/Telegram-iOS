@@ -155,7 +155,7 @@ public class UnauthorizedAccount {
                             isSupportUser = true
                         }
                         let state = AuthorizedAccountState(isTestingEnvironment: testingEnvironment, masterDatacenterId: masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
-                        tellomiStoreAuthorizedUser(transaction: transaction, user: user)
+                        storeAuthorizedUser(transaction: transaction, user: user)
                         initializedAppSettingsAfterLogin(transaction: transaction, appVersion: networkArguments.appVersion, syncContacts: syncContacts)
                         transaction.setState(state)
                         return accountManager.transaction { [weak self] transaction -> SendAuthorizationCodeResult in
@@ -393,8 +393,8 @@ public func accountWithId(accountManager: AccountManager<TelegramAccountManagerT
                             }
                         }
                         
-                        // Release used to open datacenter 2. Tellomi's server has the
-                        // id in Tellomi/tellomi-server.json (1 for a stock Teamgram docker).
+                        // Release builds open datacenter 2. This server has one datacenter,
+                        // the id in Tellomi/tellomi-server.json.
                         let initialDatacenterId = Int(TellomiDefaultDatacenterId())
                         
                         return initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: initialDatacenterId, keychain: keychain, basePath: path, testingEnvironment: beginWithTestingEnvironment, languageCode: localizationSettings?.primaryComponent.languageCode, proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
@@ -1365,7 +1365,7 @@ public class Account {
         
         self.stateManager = AccountStateManager(accountPeerId: self.peerId, accountManager: accountManager, postbox: self.postbox, network: self.network, callSessionManager: self.callSessionManager, addIsContactUpdates: { [weak self] updates in
             self?.contactSyncManager?.addIsContactUpdates(updates)
-        }, shouldKeepOnlinePresence: self.shouldKeepOnlinePresence.get(), peerInputActivityManager: self.peerInputActivityManager, auxiliaryMethods: auxiliaryMethods)
+        }, shouldKeepOnlinePresence: self.shouldKeepOnlinePresence.get(), peerInputActivityManager: self.peerInputActivityManager, auxiliaryMethods: auxiliaryMethods, ignoresShortSentMessages: supplementary)
         
         self.viewTracker = AccountViewTracker(account: self)
         self.viewTracker.resetPeerHoleManagement = { [weak self] peerId in
@@ -1944,7 +1944,8 @@ public func standaloneStateManager(
                                         },
                                         shouldKeepOnlinePresence: .single(false),
                                         peerInputActivityManager: nil,
-                                        auxiliaryMethods: auxiliaryMethods
+                                        auxiliaryMethods: auxiliaryMethods,
+                                        ignoresShortSentMessages: true
                                     )
                                 }
                             }

@@ -98,7 +98,10 @@ public class LegacyMessageInputPanelNode: ASDisplayNode, TGCaptionPanelView {
 
         super.init()
 
-        self.isAIEnabled = TellomiFeatureGate.aiComposeEnabled(appConfiguration: context.currentAppConfiguration.with { $0 }, peerId: chatLocation.peerId, killSwitchKey: "ios_disable_ai_attach")
+        if let data = context.currentAppConfiguration.with({ $0 }).data, let value = data["ios_disable_ai_attach"] as? Double, value == 1.0 {
+        } else if let peerId = chatLocation.peerId, peerId.namespace != Namespaces.Peer.SecretChat {
+            self.isAIEnabled = true
+        }
 
         self.inputMediaNodeDataPromise.set(
             ChatEntityKeyboardInputNode.inputData(

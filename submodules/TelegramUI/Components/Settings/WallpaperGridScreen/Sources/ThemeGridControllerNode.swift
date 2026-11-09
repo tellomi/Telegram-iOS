@@ -476,6 +476,16 @@ final class ThemeGridControllerNode: ASDisplayNode {
                     sortedWallpapers = wallpapers.map(\.wallpaper)
                 }
                 
+                if let builtinIndex = sortedWallpapers.firstIndex(where: { wallpaper in
+                    if case .builtin = wallpaper {
+                        return true
+                    } else {
+                        return false
+                    }
+                }) {
+                    sortedWallpapers[builtinIndex] = defaultBuiltinWallpaper(data: .legacy, colors: legacyBuiltinWallpaperGradientColors.map(\.rgb))
+                }
+                
                 for wallpaper in sortedWallpapers {
                     if case let .file(file) = wallpaper, (wallpaper.isPattern && file.settings.colors.isEmpty) {
                         continue
@@ -644,6 +654,7 @@ final class ThemeGridControllerNode: ASDisplayNode {
                         wallpapers.append(Wallpaper(wallpaper: wallpaper, isLocal: false))
                     }
                 }
+
                 return wallpapers
             })
             self.themesPromise.set(.single([]))

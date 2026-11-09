@@ -12,7 +12,6 @@ import AlertUI
 import PresentationDataUtils
 import MediaResources
 import WallpaperResources
-import TellomiWallpapers
 
 import AccountContext
 import ContextUI
@@ -776,7 +775,7 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
                 }
                 items.append(.action(ContextMenuActionItem(text: presentationData.strings.Appearance_ShareTheme, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Share"), color: theme.contextMenu.primaryColor) }, action: { c, f in
                     c?.dismiss(completion: {
-                        let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://\(TellomiLinks.host)/addtheme/\(theme.theme.slug)"), preferredAction: .default, actionCompleted: {
+                        let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://t.me/addtheme/\(theme.theme.slug)"), preferredAction: .default, actionCompleted: {
                             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
                             presentControllerImpl?(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), nil)
                         }))
@@ -799,8 +798,12 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
                                 })))
                                 
                                 if isCurrent, let currentThemeIndex = themes.firstIndex(where: { $0.id == theme.theme.id }) {
-                                    if theme.theme.settings?.first != nil {
-                                        selectAccentColorImpl?(nil)
+                                    if let settings = theme.theme.settings?.first {
+                                        if settings.baseTheme == .night {
+                                            selectAccentColorImpl?(PresentationThemeAccentColor(baseColor: .blue))
+                                        } else {
+                                            selectAccentColorImpl?(nil)
+                                        }
                                     } else {
                                         let previousThemeIndex = themes.prefix(upTo: currentThemeIndex).reversed().firstIndex(where: { $0.file != nil })
                                         let newTheme: PresentationThemeReference
@@ -808,7 +811,7 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
                                             let theme = themes[themes.index(before: previousThemeIndex.base)]
                                             newTheme = .cloud(PresentationCloudTheme(theme: theme, resolvedWallpaper: nil, creatorAccountId: theme.isCreator ? context.account.id : nil))
                                         } else {
-                                            newTheme = .builtin(.night)
+                                            newTheme = .builtin(.nightAccent)
                                         }
                                         selectThemeImpl?(newTheme)
                                     }
@@ -1022,7 +1025,7 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
                     }
                     items.append(.action(ContextMenuActionItem(text: presentationData.strings.Appearance_ShareTheme, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Share"), color: theme.contextMenu.primaryColor) }, action: { c, f in
                         c?.dismiss(completion: {
-                            let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://\(TellomiLinks.host)/addtheme/\(cloudTheme.theme.slug)"), preferredAction: .default, actionCompleted: {
+                            let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://t.me/addtheme/\(cloudTheme.theme.slug)"), preferredAction: .default, actionCompleted: {
                                 let presentationData = context.sharedContext.currentPresentationData.with { $0 }
                                 presentControllerImpl?(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), nil)
                             }))
@@ -1045,7 +1048,7 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
                                              return updated
                                          })))
                                         
-                                        if isCurrent, cloudTheme.theme.settings?.first != nil {
+                                        if isCurrent, let settings = cloudTheme.theme.settings?.first {
                                             let colorThemes = themes.filter { theme in
                                                 if let _ = theme.settings {
                                                     return true
@@ -1060,7 +1063,11 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
                                                     let theme = themes[themes.index(before: previousThemeIndex.base)]
                                                     selectThemeImpl?(.cloud(PresentationCloudTheme(theme: theme, resolvedWallpaper: nil, creatorAccountId: theme.isCreator ? context.account.id : nil)))
                                                 } else {
-                                                    selectAccentColorImpl?(nil)
+                                                    if settings.baseTheme == .night {
+                                                        selectAccentColorImpl?(PresentationThemeAccentColor(baseColor: .blue))
+                                                    } else {
+                                                        selectAccentColorImpl?(nil)
+                                                    }
                                                 }
                                             }
                                         }
@@ -1120,17 +1127,15 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
         }
         
         var defaultThemes: [PresentationThemeReference] = []
-        for builtin in themePickerBuiltinOrder(autoNight: presentationData.autoNightModeTriggered) {
-            switch builtin {
-            case .dayClassic:
-                defaultThemes.append(.builtin(.dayClassic))
-            case .nightAccent:
-                defaultThemes.append(.builtin(.nightAccent))
-            case .day:
-                defaultThemes.append(.builtin(.day))
-            case .night:
-                defaultThemes.append(.builtin(.night))
-            }
+        if presentationData.autoNightModeTriggered {
+            defaultThemes.append(contentsOf: [.builtin(.nightAccent), .builtin(.night)])
+        } else {
+            defaultThemes.append(contentsOf: [
+                .builtin(.dayClassic),
+                .builtin(.nightAccent),
+                .builtin(.day),
+                .builtin(.night)
+            ])
         }
         
         let cloudThemes: [PresentationThemeReference] = cloudThemes.map { .cloud(PresentationCloudTheme(theme: $0, resolvedWallpaper: nil, creatorAccountId: $0.isCreator ? context.account.id : nil)) }.filter { !removedThemeIndexes.contains($0.index) }

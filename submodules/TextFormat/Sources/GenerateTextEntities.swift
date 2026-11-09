@@ -3,8 +3,10 @@ import UIKit
 import TelegramCore
 import Emoji
 
-private let whitelistedHosts: Set<String> = Set(TellomiLinks.linkHosts + [
+private let whitelistedHosts: Set<String> = Set([
     "telegram.org",
+    "t.me",
+    "telegram.me",
     "telegra.ph",
     "telesco.pe",
     "fragment.com"

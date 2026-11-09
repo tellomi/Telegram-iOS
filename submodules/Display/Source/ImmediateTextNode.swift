@@ -184,7 +184,6 @@ open class ImmediateTextNode: TextNode {
                         }
                     }
                 }
-                self.tapRecognizer = tapRecognizer
                 self.view.addGestureRecognizer(tapRecognizer)
             }
         } else if let tapRecognizer = self.tapRecognizer {

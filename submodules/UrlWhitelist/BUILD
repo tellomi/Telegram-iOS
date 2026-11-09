@@ -10,7 +10,6 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
-        "//submodules/TellomiLinks:TellomiLinks",
         "//submodules/UrlEscaping",
     ],
     visibility = [

@@ -1088,18 +1088,18 @@ private final class StickerPackContainer: ASDisplayNode {
                     links += "\n"
                 }
                 if info.id.namespace == Namespaces.ItemCollection.CloudEmojiPacks {
-                    links += "https://\(TellomiLinks.host)/addemoji/\(info.shortName)"
+                    links += "https://t.me/addemoji/\(info.shortName)"
                 } else {
-                    links += "https://\(TellomiLinks.host)/addstickers/\(info.shortName)"
+                    links += "https://t.me/addstickers/\(info.shortName)"
                 }
             }
             text = links
             shareSubject = .text(text)
         } else if let (info, _, _) = self.currentStickerPack {
             if info.id.namespace == Namespaces.ItemCollection.CloudEmojiPacks {
-                text = "https://\(TellomiLinks.host)/addemoji/\(info.shortName)"
+                text = "https://t.me/addemoji/\(info.shortName)"
             } else {
-                text = "https://\(TellomiLinks.host)/addstickers/\(info.shortName)"
+                text = "https://t.me/addstickers/\(info.shortName)"
             }
             shareSubject = .url(text)
         } else {
@@ -1224,7 +1224,7 @@ private final class StickerPackContainer: ASDisplayNode {
         let presentationData = self.presentationData
         var items: [ContextMenuItem] = []
         items.append(.action(ContextMenuActionItem(text: presentationData.strings.StickerPack_CreateNew, icon: { theme in
-            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.contextMenu.primaryColor)
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.contextMenu.primaryColor)
         }, action: { [weak self] _, f in
             f(.default)
 

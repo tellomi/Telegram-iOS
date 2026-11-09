@@ -1,13 +1,12 @@
 /* Localized versions of Info.plist keys */
 
-"NSContactsUsageDescription" = "当你与朋友联系时，Tellomi 会把通讯录同步到加密的云端，以便在你的设备上找到他们。";
-"NSLocationWhenInUseUsageDescription" = "当你向朋友发送位置时，Tellomi 需要使用你的位置来显示地图。";
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "When you share your location, send a live location, or see people nearby, Tellomi needs access to your location. While a live location is on, the app keeps using your location in the background.";
-"NSLocationAlwaysUsageDescription" = "当你在聊天中与朋友分享实时位置时，Tellomi 需要在后台使用位置，以便在分享期间持续更新。从 Apple Watch 发送位置也需要这项权限。";
-"NSCameraUsageDescription" = "需要相机权限，以便拍照、录像和进行视频通话。";
-"NSPhotoLibraryUsageDescription" = "需要照片权限，以便从相册分享照片和视频，并保存你拍摄的内容。";
-"NSPhotoLibraryAddUsageDescription" = "需要权限，以便把照片和视频保存到相册。";
-"NSMicrophoneUsageDescription" = "需要麦克风权限，以便录制并分享语音消息和有声视频。";
-"NSSiriUsageDescription" = "你可以使用 Siri 发送消息。";
-"NSFaceIDUsageDescription" = "你可以使用面容 ID 解锁应用。";
-"CFBundleDisplayName" = "Tellomi";
+"NSContactsUsageDescription" = "Telegram will continuously upload your contacts to its heavily encrypted cloud servers to let you connect with your friends across all your devices.";
+"NSLocationWhenInUseUsageDescription" = "When you send your location to your friends, Telegram needs access to show them a map.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "When you choose to share your Live Location with friends in a chat, Telegram needs background access to your location to keep them updated for the duration of the live sharing.";
+"NSLocationAlwaysUsageDescription" = "When you choose to share your live location with friends in a chat, Telegram needs background access to your location to keep them updated for the duration of the live sharing. You also need this to send locations from an Apple Watch.";
+"NSCameraUsageDescription" = "We need this so that you can take and share photos and videos, as well as make video calls.";
+"NSPhotoLibraryUsageDescription" = "We need this so that you can share photos and videos from your photo library and save the ones you capture.";
+"NSPhotoLibraryAddUsageDescription" = "We need this so that you can save photos and videos to your photo library and save the ones you capture.";
+"NSMicrophoneUsageDescription" = "We need this so that you can record and share voice messages and videos with sound.";
+"NSSiriUsageDescription" = "You can use Siri to send messages.";
+"NSFaceIDUsageDescription" = "You can use Face ID to unlock the app.";

@@ -12,7 +12,6 @@ import AccountUtils
 import OverlayStatusController
 import PremiumUI
 import TelegramPresentationData
-import TelegramUIPreferences
 import PresentationDataUtils
 import PasswordSetupUI
 import InstantPageCache
@@ -200,59 +199,18 @@ extension PeerInfoScreenNode {
             self.openFaq()
         case .tips:
             self.openTips()
-        case .openSourceLicenses:
-            push(tellomiOpenSourceLicensesController(context: self.context))
         case .phoneNumber:
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
                 return
             }
-            if case let .user(user) = self.data?.peer {
-                let contact = tellomiAccountContact(phone: user.phone, peerId: user.id)
-                if let phoneNumber = contact.phone, !phoneNumber.isEmpty {
-                    let introController = PrivacyIntroController(context: self.context, mode: .changePhoneNumber(phoneNumber), proceedAction: { [weak self] in
-                        if let strongSelf = self, let navigationController = strongSelf.controller?.navigationController as? NavigationController {
-                            navigationController.replaceTopController(ChangePhoneNumberController(context: strongSelf.context, bindPhone: false), animated: true)
-                        }
-                    })
-                    push(introController)
-                } else {
-                    push(ChangePhoneNumberController(context: self.context, bindPhone: true))
-                }
+            if case let .user(user) = self.data?.peer, let phoneNumber = user.phone {
+                let introController = PrivacyIntroController(context: self.context, mode: .changePhoneNumber(phoneNumber), proceedAction: { [weak self] in
+                    if let strongSelf = self, let navigationController = strongSelf.controller?.navigationController as? NavigationController {
+                        navigationController.replaceTopController(ChangePhoneNumberController(context: strongSelf.context), animated: true)
+                    }
+                })
+                push(introController)
             }
-        case .loginEmail:
-            guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
-                return
-            }
-            let phone: String?
-            let peerId: EnginePeer.Id
-            if case let .user(user) = self.data?.peer {
-                phone = user.phone
-                peerId = user.id
-            } else {
-                phone = nil
-                peerId = self.context.account.peerId
-            }
-            // Phone accounts may still open the native login-email screen.
-            // An email-only identity (users.email, surfaced as login_email_pattern)
-            // does not. The mask is not sent as a new address.
-            let _ = (self.twoStepAuthData.get()
-            |> take(1)
-            |> deliverOnMainQueue).start(next: { [weak self] data in
-                guard let self, let navigationController = self.controller?.navigationController as? NavigationController else {
-                    return
-                }
-                let action = tellomiSettingsEmailAction(tellomiSettingsEmailChannels(phone: phone, peerId: peerId, loginEmailPattern: data?.loginEmailPattern))
-                switch action {
-                case let .showIdentity(_, fullAddress):
-                    let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
-                    let pack = tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)
-                    tellomiPresentSignInEmailNotice(context: self.context, controller: self.controller, languageCode: presentationData.strings.primaryComponent.languageCode, pack: pack, masked: fullAddress == nil)
-                case let .phoneAccountLoginEmail(pattern):
-                    push(loginEmailSetupController(context: self.context, blocking: false, emailPattern: pattern, navigationController: navigationController, completion: {
-                    }, dismiss: {
-                    }))
-                }
-            })
         case .username:
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
                 return
@@ -298,14 +256,10 @@ extension PeerInfoScreenNode {
                 }
             })
         case .logout:
-            if let controller = self.controller, let navigationController = controller.navigationController as? NavigationController {
-                let phoneNumber: String
-                if case let .user(user) = self.data?.peer {
-                    phoneNumber = tellomiAccountContact(phone: user.phone, peerId: user.id).phone ?? ""
-                } else {
-                    phoneNumber = ""
+            if case let .user(user) = self.data?.peer, let phoneNumber = user.phone {
+                if let controller = self.controller, let navigationController = controller.navigationController as? NavigationController {
+                    self.controller?.push(logoutOptionsController(context: self.context, navigationController: navigationController, canAddAccounts: true, phoneNumber: phoneNumber))
                 }
-                self.controller?.push(logoutOptionsController(context: self.context, navigationController: navigationController, canAddAccounts: true, phoneNumber: phoneNumber))
             }
         case .rememberPassword:
             let context = self.context
@@ -338,7 +292,7 @@ extension PeerInfoScreenNode {
             guard !url.isEmpty else {
                 return
             }
-            self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: !TellomiLinks.hasDeepLinkPrefix(url) && !url.contains("?start="), presentationData: self.context.sharedContext.currentPresentationData.with({$0}), navigationController: controller.navigationController as? NavigationController, dismissInput: {})
+            self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: !url.hasPrefix("tg://") && !url.contains("?start="), presentationData: self.context.sharedContext.currentPresentationData.with({$0}), navigationController: controller.navigationController as? NavigationController, dismissInput: {})
         case .stars:
             if let starsContext = self.controller?.starsContext {
                 push(self.context.sharedContext.makeStarsTransactionsScreen(context: self.context, starsContext: starsContext))

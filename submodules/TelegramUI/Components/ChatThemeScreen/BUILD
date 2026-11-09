@@ -30,7 +30,6 @@ swift_library(
         "//submodules/MediaResources",
         "//submodules/StickerResources",
         "//submodules/WallpaperResources",
-        "//submodules/TellomiWallpapers",
         "//submodules/TooltipUI",
         "//submodules/AnimatedStickerNode",
         "//submodules/TelegramAnimatedStickerNode",

@@ -5,30 +5,6 @@ import Display
 import SwiftSignalKit
 import PhoneNumberFormat
 
-/// Width of one digit box when the row should span `width`.
-/// The preferred box is kept when it fits, and grows when the row is wider.
-/// On a 320pt phone, six boxes at that preferred size run past the row; spacing
-/// then drops to 4pt and the boxes shrink so the last one stays inside `width`.
-private func tellomiExpandedCodeMetrics(width: CGFloat, count: Int, prefixWidth: CGFloat, prefixSpacing: CGFloat, preferredSpacing: CGFloat, preferredItemWidth: CGFloat) -> (itemWidth: CGFloat, spacing: CGFloat) {
-    guard count > 0, width > 0.0 else {
-        return (max(1.0, preferredItemWidth), preferredSpacing)
-    }
-    let gaps = CGFloat(max(count - 1, 0))
-    func fitted(spacing: CGFloat) -> CGFloat {
-        let available = width - prefixWidth - prefixSpacing - spacing * gaps
-        return floor(available / CGFloat(count))
-    }
-    var spacing = preferredSpacing
-    var itemWidth = fitted(spacing: spacing)
-    if itemWidth < preferredItemWidth, gaps > 0.0 {
-        let minItem = min(preferredItemWidth, 32.0)
-        let room = width - prefixWidth - prefixSpacing - minItem * CGFloat(count)
-        spacing = min(preferredSpacing, max(4.0, floor(room / gaps)))
-        itemWidth = fitted(spacing: spacing)
-    }
-    return (max(1.0, itemWidth), spacing)
-}
-
 public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
     public struct Theme: Equatable {
         public var inactiveBorder: UInt32
@@ -37,7 +13,6 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
         public var failedBorder: UInt32
         public var foreground: UInt32
         public var isDark: Bool
-        public var fill: UInt32?
         
         public init(
             inactiveBorder: UInt32,
@@ -45,8 +20,7 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
             succeedBorder: UInt32,
             failedBorder: UInt32,
             foreground: UInt32,
-            isDark: Bool,
-            fill: UInt32? = nil
+            isDark: Bool
         ) {
             self.inactiveBorder = inactiveBorder
             self.activeBorder = activeBorder
@@ -54,7 +28,6 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
             self.failedBorder = failedBorder
             self.foreground = foreground
             self.isDark = isDark
-            self.fill = fill
         }
     }
     
@@ -88,10 +61,7 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
             self.textNode.layer.anchorPoint = CGPoint(x: 0.5, y: 1.0)
         }
         
-        func update(borderColor: UInt32, fill: UInt32?, isHighlighted: Bool) {
-            if let fill {
-                self.backgroundView.backgroundColor = UIColor(argb: fill)
-            }
+        func update(borderColor: UInt32, isHighlighted: Bool) {
             if self.borderColorValue != borderColor {
                 self.borderColorValue = borderColor
                 
@@ -124,7 +94,7 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
                 }
             }
             
-            self.backgroundView.layer.cornerRadius = size.width >= size.height ? 12.0 : (size.height == 28.0 ? 12.0 : 15.0)
+            self.backgroundView.layer.cornerRadius = size.height == 28.0 ? 12.0 : 15.0
             if #available(iOS 13.0, *) {
                 self.backgroundView.layer.cornerCurve = .continuous
             }
@@ -324,7 +294,7 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
                 borderColor = self.focusIndex == i ? theme.activeBorder : theme.inactiveBorder
             }
             
-            itemView.update(borderColor: borderColor, fill: theme.fill, isHighlighted: self.focusIndex == i)
+            itemView.update(borderColor: borderColor, isHighlighted: self.focusIndex == i)
             let itemText: String
             if i < self.textValue.count {
                 itemText = String(self.textValue[self.textValue.index(self.textValue.startIndex, offsetBy: i)])
@@ -338,7 +308,7 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
         }
     }
     
-    public func update(theme: Theme, prefix: String, count: Int, width: CGFloat, compact: Bool, expandItems: Bool = false) -> CGSize {
+    public func update(theme: Theme, prefix: String, count: Int, width: CGFloat, compact: Bool) -> CGSize {
         self.theme = theme
         self.count = count
         self.prefix = prefix
@@ -368,14 +338,9 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
         let prefixSize = self.prefixLabel.updateLayout(CGSize(width: width, height: 100.0))
         let prefixSpacing: CGFloat = prefix.isEmpty ? 0.0 : 8.0
         
-        var itemSize = CGSize(width: floor(24.0 * height / 28.0), height: height)
-        var itemSpacing: CGFloat = expandItems ? 12.0 : (prefix.isEmpty ? 15.0 : 5.0)
-        if expandItems, count > 0 {
-            let fitted = tellomiExpandedCodeMetrics(width: width, count: count, prefixWidth: prefixSize.width, prefixSpacing: prefixSpacing, preferredSpacing: itemSpacing, preferredItemWidth: itemSize.width)
-            itemSize.width = fitted.itemWidth
-            itemSpacing = fitted.spacing
-        }
-        let itemsWidth: CGFloat = itemSize.width * CGFloat(count) + itemSpacing * CGFloat(max(count - 1, 0))
+        let itemSize = CGSize(width: floor(24.0 * height / 28.0), height: height)
+        let itemSpacing: CGFloat = prefix.isEmpty ? 15.0 : 5.0
+        let itemsWidth: CGFloat = itemSize.width * CGFloat(count) + itemSpacing * CGFloat(count - 1)
         
         let contentWidth: CGFloat = prefixSize.width + prefixSpacing + itemsWidth
         let contentOriginX: CGFloat = floor((width - contentWidth) / 2.0)
@@ -401,7 +366,7 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
                 borderColor = self.focusIndex == i ? theme.activeBorder : theme.inactiveBorder
             }
             
-            itemView.update(borderColor: borderColor, fill: theme.fill, isHighlighted: self.focusIndex == i)
+            itemView.update(borderColor: borderColor, isHighlighted: self.focusIndex == i)
             let itemText: String
             if i < self.textValue.count {
                 itemText = String(self.textValue[self.textValue.index(self.textValue.startIndex, offsetBy: i)])

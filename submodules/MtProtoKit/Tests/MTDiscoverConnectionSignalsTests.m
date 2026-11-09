@@ -37,12 +37,99 @@ static MTSocksProxySettings *makeWebProxy(void) {
     return [[MTSocksProxySettings alloc] initWithIp:@"relay.example.org" port:443 username:nil password:nil secret:secret webProxy:true];
 }
 
+@interface LegacyDatacenterAddressCoder : NSCoder
+@property (nonatomic, strong) NSDictionary<NSString *, id> *values;
+@end
+
+@implementation LegacyDatacenterAddressCoder
+- (BOOL)allowsKeyedCoding { return YES; }
+- (BOOL)containsValueForKey:(NSString *)key { return self.values[key] != nil; }
+- (id)decodeObjectForKey:(NSString *)key { return self.values[key]; }
+- (int)decodeIntForKey:(NSString *)key { return [self.values[key] intValue]; }
+- (BOOL)decodeBoolForKey:(NSString *)key { return [self.values[key] boolValue]; }
+@end
+
 @interface MTDiscoverConnectionSignalsTests : XCTestCase
 @end
 
 @implementation MTDiscoverConnectionSignalsTests
 
 #pragma mark - Probe list under a proxy
+
+- (MTDatacenterAddress *)addressWithPortOnly:(NSString *)ip port:(uint16_t)port media:(bool)media {
+    return [[MTDatacenterAddress alloc] initWithIp:ip port:port preferForMedia:media restrictToTcp:false cdn:false preferForProxy:false secret:nil thisPortOnly:true];
+}
+
+- (void)testThisPortOnlyDoesNotAddPorts80Or5222 {
+    MTDatacenterAddress *locked = [self addressWithPortOnly:@"203.0.113.10" port:10443 media:false];
+    NSArray *ports = [MTDiscoverConnectionSignals alternatePortsForAddress:locked inAddressList:@[locked] proxySettings:nil];
+    XCTAssertEqual(ports.count, 0u);
+
+    MTDatacenterAddress *open = makeAddress(@"149.154.175.50", 443, false);
+    XCTAssertEqualObjects([MTDiscoverConnectionSignals alternatePortsForAddress:open inAddressList:@[open] proxySettings:nil], (@[@80, @5222]));
+    XCTAssertEqual([MTDiscoverConnectionSignals alternatePortsForAddress:open inAddressList:@[open] proxySettings:makeSocksProxy()].count, 0u);
+}
+
+- (void)testSavedAddressInheritsTheSeedPortLockForTheSameIpAndPort {
+    // An address saved before the flag existed compares unequal to the seed that
+    // now carries it, so both are in the discovery list. The extra ports follow
+    // the locked copy. A different port on the same host is a separate address.
+    MTDatacenterAddress *saved = makeAddress(@"203.0.113.10", 10443, false);
+    MTDatacenterAddress *seed = [self addressWithPortOnly:@"203.0.113.10" port:10443 media:false];
+    MTDatacenterAddress *media = makeAddressWithMedia(@"203.0.113.10", 5222, true, false);
+    NSArray *list = @[saved, seed, media];
+
+    XCTAssertEqual([MTDiscoverConnectionSignals alternatePortsForAddress:saved inAddressList:list proxySettings:nil].count, 0u);
+    XCTAssertEqual([MTDiscoverConnectionSignals alternatePortsForAddress:seed inAddressList:list proxySettings:nil].count, 0u);
+    XCTAssertEqualObjects([MTDiscoverConnectionSignals alternatePortsForAddress:media inAddressList:list proxySettings:nil], (@[@80, @5222]));
+
+    NSArray<MTDatacenterAddress *> *mediaProbes = [MTDiscoverConnectionSignals probeAddressesForAddressList:list media:true isProxy:false proxySettings:nil];
+    XCTAssertEqual(mediaProbes.count, 1u);
+    XCTAssertEqual(mediaProbes.firstObject.port, 5222);
+    XCTAssertTrue(mediaProbes.firstObject.preferForMedia);
+}
+
+- (void)testThisPortOnlyMediaAddressRemainsTheMediaProbe {
+    MTDatacenterAddress *media = [self addressWithPortOnly:@"203.0.113.11" port:10443 media:true];
+    NSArray<MTDatacenterAddress *> *probes = [MTDiscoverConnectionSignals probeAddressesForAddressList:@[media] media:true isProxy:false proxySettings:nil];
+    XCTAssertEqual(probes.count, 1u);
+    XCTAssertTrue(probes.firstObject.preferForMedia);
+    XCTAssertTrue(probes.firstObject.thisPortOnly);
+    XCTAssertEqual(probes.firstObject.port, 10443);
+    XCTAssertEqual([MTDiscoverConnectionSignals alternatePortsForAddress:probes.firstObject inAddressList:@[media] proxySettings:nil].count, 0u);
+}
+
+- (void)testArchiveWithoutThisPortOnlyKeyStaysUnlocked {
+    // The keys an address saved before thisPortOnly existed. decodeBoolForKey:
+    // is false when the key is absent, so the old datacenter list still loads
+    // and still probes 80 and 5222.
+    LegacyDatacenterAddressCoder *coder = [[LegacyDatacenterAddressCoder alloc] init];
+    coder.values = @{
+        @"ip": @"203.0.113.10",
+        @"port": @10443,
+        @"preferForMedia": @YES,
+    };
+    MTDatacenterAddress *decoded = [[MTDatacenterAddress alloc] initWithCoder:coder];
+    XCTAssertEqualObjects(decoded.ip, @"203.0.113.10");
+    XCTAssertEqual(decoded.port, 10443);
+    XCTAssertTrue(decoded.preferForMedia);
+    XCTAssertFalse(decoded.thisPortOnly);
+    XCTAssertEqual([MTDiscoverConnectionSignals alternatePortsForAddress:decoded inAddressList:@[decoded] proxySettings:nil].count, 2u);
+}
+
+- (void)testThisPortOnlyRoundTripKeepsMediaAndTheLock {
+    MTDatacenterAddress *locked = [self addressWithPortOnly:@"203.0.113.10" port:10443 media:true];
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:locked];
+    MTDatacenterAddress *decoded = [NSKeyedUnarchiver unarchiveObjectWithData:data];
+    XCTAssertEqualObjects(decoded.ip, @"203.0.113.10");
+    XCTAssertEqual(decoded.port, 10443);
+    XCTAssertTrue(decoded.preferForMedia);
+    XCTAssertTrue(decoded.thisPortOnly);
+
+    NSData *openData = [NSKeyedArchiver archivedDataWithRootObject:makeAddress(@"149.154.175.50", 443, false)];
+    MTDatacenterAddress *decodedOpen = [NSKeyedUnarchiver unarchiveObjectWithData:openData];
+    XCTAssertFalse(decodedOpen.thisPortOnly);
+}
 
 - (void)testWithoutProxyEveryAddressAndAlternatePortIsProbed {
     NSArray *list = @[

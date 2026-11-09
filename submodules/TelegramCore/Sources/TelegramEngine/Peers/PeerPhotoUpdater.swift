@@ -9,11 +9,8 @@ public enum UpdatePeerPhotoStatus {
     case complete([TelegramMediaImageRepresentation])
 }
 
-public enum UploadPeerPhotoError: Equatable {
+public enum UploadPeerPhotoError {
     case generic
-    /// `photos.uploadProfilePhoto` (and the contact-photo request on the same path) failed.
-    /// `code` is the RPC error code. `description` is the RPC error text, such as `PHOTO_CROP_SIZE_SMALL`.
-    case server(code: Int32, description: String)
 }
 
 public enum UploadPeerPhotoMarkup {
@@ -232,9 +229,7 @@ func _internal_updatePeerPhotoInternal(postbox: Postbox, network: Network, state
                                     }
                                     
                                     return request
-                                    |> mapError { error -> UploadPeerPhotoError in
-                                        return .server(code: error.errorCode, description: error.errorDescription ?? "")
-                                    }
+                                    |> mapError { _ in return UploadPeerPhotoError.generic }
                                     |> mapToSignal { photo -> Signal<(UpdatePeerPhotoStatus, MediaResource?, MediaResource?), UploadPeerPhotoError> in
                                         var representations: [TelegramMediaImageRepresentation] = []
                                         var videoRepresentations: [TelegramMediaImage.VideoRepresentation] = []

@@ -1842,7 +1842,8 @@ public final class WebAppController: ViewController, AttachmentContainable {
                             self.webView?.sendEvent(name: "device_storage_failed", data: data.string)
                             return
                         }
-                        let _ = self.context.engine.peers.setBotStorageValue(peerId: controller.botId, key: key, value: effectiveValue).start(error: { [weak self] error in
+                        let _ = (self.context.engine.peers.setBotStorageValue(peerId: controller.botId, key: key, value: effectiveValue)
+                        |> deliverOnMainQueue).start(error: { [weak self] error in
                             var errorValue = "UNKNOWN_ERROR"
                             if case .quotaExceeded = error {
                                 errorValue = "QUOTA_EXCEEDED"
@@ -2416,13 +2417,14 @@ public final class WebAppController: ViewController, AttachmentContainable {
                                 initialUsername: createBot.suggestedUsername,
                                 initialTitle: createBot.suggestedName,
                                 openAutomatically: false,
+                                viaDeeplink: false,
                                 completion: { [weak self] resultId in
                                     guard let self, let controller = self.controller else {
                                         return
                                     }
                                     if let resultId {
-                                        let _ = self.context.engine.peers.sendBotRequestedPeer(peerId: controller.botId, requestId: requestId, buttonId: buttonId, requestedPeerIds: [resultId]
-                                        ).startStandalone(error: { [weak self] _ in
+                                        let _ = (self.context.engine.peers.sendBotRequestedPeer(peerId: controller.botId, requestId: requestId, buttonId: buttonId, requestedPeerIds: [resultId])
+                                        |> deliverOnMainQueue).startStandalone(error: { [weak self] _ in
                                             guard let self else {
                                                 return
                                             }
@@ -3407,7 +3409,7 @@ public final class WebAppController: ViewController, AttachmentContainable {
                 } else {
                     scheme = "https"
                 }
-                let url = URL(string: "\(scheme)://\(TellomiLinks.host)/\(addressName)\(appName)?startapp&addToHomeScreen")!
+                let url = URL(string: "\(scheme)://t.me/\(addressName)\(appName)?startapp&addToHomeScreen")!
                 UIApplication.shared.open(url)
             })
         }
@@ -3981,7 +3983,7 @@ public final class WebAppController: ViewController, AttachmentContainable {
                     guard let self else {
                         return
                     }
-                    let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://\(TellomiLinks.host)/\(addressName)?profile"), actionCompleted: { [weak self] in
+                    let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://t.me/\(addressName)?profile"), actionCompleted: { [weak self] in
                         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
                         self?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
                     }))
@@ -4047,7 +4049,7 @@ public final class WebAppController: ViewController, AttachmentContainable {
                         self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: .peer(botPeer)))
                     }
                 } else {
-                    self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(self.presentationData.strings.WebApp_PrivacyPolicy_URL, fallback: "privacy-tpa"), forceExternal: false, presentationData: self.presentationData, navigationController: self.getNavigationController(), dismissInput: {})
+                    self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: self.presentationData.strings.WebApp_PrivacyPolicy_URL, forceExternal: false, presentationData: self.presentationData, navigationController: self.getNavigationController(), dismissInput: {})
                 }
             })))
                         

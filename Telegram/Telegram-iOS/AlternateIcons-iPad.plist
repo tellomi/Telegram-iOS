@@ -68,41 +68,6 @@
         <key>CFBundleIconFiles</key>
         <array>
             <string>WhiteFilledIcon</string>
-            <string>WhiteFilledIconIpad</string>
-            <string>WhiteFilledIconLargeIpad</string>
-        </array>
-        <key>UIPrerenderedIcon</key>
-        <true/>
-    </dict>
-    <key>Premium</key>
-    <dict>
-        <key>CFBundleIconFiles</key>
-        <array>
-            <string>Premium</string>
-            <string>PremiumIpad</string>
-            <string>PremiumLargeIpad</string>
-        </array>
-        <key>UIPrerenderedIcon</key>
-        <true/>
-    </dict>
-    <key>PremiumBlack</key>
-    <dict>
-        <key>CFBundleIconFiles</key>
-        <array>
-            <string>PremiumBlack</string>
-            <string>PremiumBlackIpad</string>
-            <string>PremiumBlackLargeIpad</string>
-        </array>
-        <key>UIPrerenderedIcon</key>
-        <true/>
-    </dict>
-    <key>PremiumTurbo</key>
-    <dict>
-        <key>CFBundleIconFiles</key>
-        <array>
-            <string>PremiumTurbo</string>
-            <string>PremiumTurboIpad</string>
-            <string>PremiumTurboLargeIpad</string>
         </array>
         <key>UIPrerenderedIcon</key>
         <true/>

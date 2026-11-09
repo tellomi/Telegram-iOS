@@ -10,7 +10,6 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
-        "//submodules/TellomiLinks:TellomiLinks",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/Display:Display",
     ],

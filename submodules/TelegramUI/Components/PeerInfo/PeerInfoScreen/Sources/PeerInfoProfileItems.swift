@@ -232,17 +232,14 @@ func infoItems(
                     birthdayAction = { node, _ in
                         birthdayContextAction(node, nil, nil)
                     }
-                } else if isBirthdayToday && TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).giftsEnabled && cachedData.disallowedGifts != TelegramDisallowedGifts.All {
+                } else if isBirthdayToday && cachedData.disallowedGifts != TelegramDisallowedGifts.All {
                     birthdayAction = { _, _ in
                         interaction.openPremiumGift()
                     }
                 }
                 
-                let showBirthdayGift = isBirthdayToday && TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).giftsEnabled && cachedData.disallowedGifts != TelegramDisallowedGifts.All
-                items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemBirthdate, context: context, label: isBirthdayToday ? presentationData.strings.UserInfo_BirthdayToday : presentationData.strings.UserInfo_Birthday, text: stringForCompactBirthday(birthday, strings: presentationData.strings, showAge: true), textColor: .primary, leftIcon: isBirthdayToday ? .birthday : nil, icon: showBirthdayGift ? .premiumGift : nil, action: birthdayAction, longTapAction: nil, iconAction: {
-                    if showBirthdayGift {
-                        interaction.openPremiumGift()
-                    }
+                items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemBirthdate, context: context, label: isBirthdayToday ? presentationData.strings.UserInfo_BirthdayToday : presentationData.strings.UserInfo_Birthday, text: stringForCompactBirthday(birthday, strings: presentationData.strings, showAge: true), textColor: .primary, leftIcon: isBirthdayToday ? .birthday : nil, icon: isBirthdayToday ? .premiumGift : nil, action: birthdayAction, longTapAction: nil, iconAction: {
+                    interaction.openPremiumGift()
                 }, contextAction: birthdayContextAction, requestLayout: { _ in
                 }))
             }
@@ -451,11 +448,10 @@ func infoItems(
                 
                 let starsBalance = data.starsRevenueStatsState?.balances.currentBalance.amount ?? StarsAmount.zero
                 let overallStarsBalance = data.starsRevenueStatsState?.balances.overallRevenue.amount ?? StarsAmount.zero
-                let profileFeatures = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
                 
-                if (profileFeatures.walletEnabled && overallRevenueBalance > 0) || (profileFeatures.starsEnabled && overallStarsBalance > StarsAmount.zero) {
+                if overallRevenueBalance > 0 || overallStarsBalance > StarsAmount.zero {
                     items[.balances]!.append(PeerInfoScreenHeaderItem(id: ItemBalanceHeader, text: presentationData.strings.PeerInfo_BotBalance_Title))
-                    if profileFeatures.walletEnabled && overallRevenueBalance > 0 {
+                    if overallRevenueBalance > 0 {
                         let string = "*\(formatTonAmountText(revenueBalance, dateTimeFormat: presentationData.dateTimeFormat))"
                         let attributedString = NSMutableAttributedString(string: string, font: Font.regular(presentationData.listsFontSize.itemListBaseFontSize), textColor: presentationData.theme.list.itemSecondaryTextColor)
                         if let range = attributedString.string.range(of: "*") {
@@ -467,7 +463,7 @@ func infoItems(
                         }))
                     }
 
-                    if profileFeatures.starsEnabled && overallStarsBalance > StarsAmount.zero {
+                    if overallStarsBalance > StarsAmount.zero {
                         let formattedLabel = formatStarsAmountText(starsBalance, dateTimeFormat: presentationData.dateTimeFormat)
                         let smallLabelFont = Font.regular(floor(presentationData.listsFontSize.itemListBaseFontSize / 17.0 * 13.0))
                         let labelFont = Font.regular(presentationData.listsFontSize.itemListBaseFontSize)
@@ -581,7 +577,7 @@ func infoItems(
                 threadId = message.threadId
             }
             
-            let linkText = "https://\(TellomiLinks.host)/\(mainUsername)/\(threadId)"
+            let linkText = "https://t.me/\(mainUsername)/\(threadId)"
             
             items[currentPeerInfoSection]!.append(
                 PeerInfoScreenLabeledValueItem(
@@ -639,7 +635,7 @@ func infoItems(
                     PeerInfoScreenLabeledValueItem(
                         id: ItemUsername,
                         label: presentationData.strings.Channel_LinkItem,
-                        text: "https://\(TellomiLinks.host)/\(mainUsername)",
+                        text: "https://t.me/\(mainUsername)",
                         additionalText: additionalUsernames,
                         textColor: .accent,
                         icon: .qrCode,
@@ -757,24 +753,23 @@ func infoItems(
                     } else {
                         section = .peerMembers
                     }
-                    let channelFeatures = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
-                    if (channelFeatures.channelAdsEnabled && cachedData.flags.contains(.canViewRevenue)) || (channelFeatures.starsEnabled && cachedData.flags.contains(.canViewStarsRevenue)) {
+                    if cachedData.flags.contains(.canViewRevenue) || cachedData.flags.contains(.canViewStarsRevenue) {
                         let revenueBalance = data.revenueStatsState?.balances.currentBalance.amount.value ?? 0
                         let starsBalance = data.starsRevenueStatsState?.balances.currentBalance.amount ?? StarsAmount.zero
                         
                         let overallRevenueBalance = data.revenueStatsState?.balances.overallRevenue.amount.value ?? 0
                         let overallStarsBalance = data.starsRevenueStatsState?.balances.overallRevenue.amount ?? StarsAmount.zero
                         
-                        if (channelFeatures.channelAdsEnabled && overallRevenueBalance > 0) || (channelFeatures.starsEnabled && overallStarsBalance > StarsAmount.zero) {
+                        if overallRevenueBalance > 0 || overallStarsBalance > StarsAmount.zero {
                             let smallLabelFont = Font.regular(floor(presentationData.listsFontSize.itemListBaseFontSize / 17.0 * 13.0))
                             let labelFont = Font.regular(presentationData.listsFontSize.itemListBaseFontSize)
                             let labelColor = presentationData.theme.list.itemSecondaryTextColor
                             
                             let attributedString = NSMutableAttributedString()
-                            if channelFeatures.channelAdsEnabled && overallRevenueBalance > 0 {
+                            if overallRevenueBalance > 0 {
                                 attributedString.append(NSAttributedString(string: "#\(formatTonAmountText(revenueBalance, dateTimeFormat: presentationData.dateTimeFormat))", font: labelFont, textColor: labelColor))
                             }
-                            if channelFeatures.starsEnabled && overallStarsBalance > StarsAmount.zero {
+                            if overallStarsBalance > StarsAmount.zero {
                                 if !attributedString.string.isEmpty {
                                     attributedString.append(NSAttributedString(string: " ", font: labelFont, textColor: labelColor))
                                 }

@@ -204,7 +204,7 @@ private final class PremiumGiftCodeSheetContent: CombinedComponent {
                     additionalText = strings.GiftLink_Footer
                     buttonText = strings.GiftLink_UseLink
                 }
-                link = "https://\(TellomiLinks.host)/giftcode/\(giftCode.slug)"
+                link = "https://t.me/giftcode/\(giftCode.slug)"
                 date = giftCode.date
                 if let fromPeerId = giftCode.fromPeerId {
                     fromPeer = state.peerMap[fromPeerId]
@@ -238,7 +238,7 @@ private final class PremiumGiftCodeSheetContent: CombinedComponent {
                 }
                 buttonText = strings.Common_OK
                 if let slug = boost.slug {
-                    link = "https://\(TellomiLinks.host)/giftcode/\(slug)"
+                    link = "https://t.me/giftcode/\(slug)"
                 } else {
                     link = nil
                 }

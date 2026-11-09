@@ -742,33 +742,17 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                     let isTestingEnvironment: Bool
                 }
                 
-                var existingAccountPeerKeys: [AccountPeerKey: AccountRecordId] = [:]
-                for (id, context, _) in self.activeAccountsValue?.accounts ?? [] {
-                    existingAccountPeerKeys[AccountPeerKey(peerId: context.account.peerId, isTestingEnvironment: context.account.testingEnvironment)] = id
-                }
+                var existingAccountPeerKeys = Set<AccountPeerKey>()
                 for accountRecord in addedAccounts {
                     if let account = accountRecord.1 {
-                        let peerKey = AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment)
-                        if let existingId = existingAccountPeerKeys[peerKey] {
-                            // Already signed in on this device. Log the new authorization out
-                            // before the local record is dropped, so the server does not keep it.
-                            let engine = TelegramEngine(account: account)
-                            let accountId = account.id
-                            self.managedAccountDisposables.set((engine.auth.logOut()
-                            |> deliverOnMainQueue).start(completed: { [engine] in
-                                withExtendedLifetime(engine) {}
-                                self.managedAccountDisposables.set(nil, forKey: accountId)
-                            }), forKey: accountId)
+                        if existingAccountPeerKeys.contains(AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment)) {
                             let _ = accountManager.transaction({ transaction in
-                                if transaction.getCurrent()?.0 == accountRecord.0 {
-                                    transaction.setCurrentId(existingId)
-                                }
                                 transaction.updateRecord(accountRecord.0, { _ in
                                     return nil
                                 })
                             }).start()
                         } else {
-                            existingAccountPeerKeys[peerKey] = accountRecord.0
+                            existingAccountPeerKeys.insert(AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment))
                             if let index = self.activeAccountsValue?.accounts.firstIndex(where: { $0.0 == account.id }) {
                                 self.activeAccountsValue?.accounts.remove(at: index)
                                 self.managedAccountDisposables.set(nil, forKey: account.id)
@@ -4895,6 +4879,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         initialUsername: String?,
         initialTitle: String?,
         openAutomatically: Bool,
+        viaDeeplink: Bool,
         completion: @escaping (EnginePeer.Id?) -> Void
     ) async -> ViewController? {
         return await CreateBotScreen(
@@ -4903,6 +4888,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             initialUsername: initialUsername,
             initialTitle: initialTitle,
             openAutomatically: openAutomatically,
+            viaDeeplink: viaDeeplink,
             completion: completion
         )
     }

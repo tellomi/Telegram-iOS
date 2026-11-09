@@ -17,7 +17,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
     
     private let accountManager: AccountManager<TelegramAccountManagerTypes>
     private let account: UnauthorizedAccount
-    private var theme: PresentationTheme
+    private let theme: PresentationTheme
     
     private let controller: RMIntroViewController
     
@@ -35,8 +35,8 @@ public final class AuthorizationSequenceSplashController: ViewController {
         self.account = account
         self.theme = theme
         
-        // One button only. The suggested-language row is 「使用英文继续」/ "Continue with English".
-        self.suggestedLocalization.set(.single(nil))
+        self.suggestedLocalization.set(.single(nil)
+        |> then(TelegramEngineUnauthorized(account: self.account).localization.currentlySuggestedLocalization(extractKeys: ["Login.ContinueWithLocalization"])))
         let suggestedLocalization = self.suggestedLocalization
         
         let localizationSignal = SSignal(generator: { subscriber in
@@ -71,10 +71,8 @@ public final class AuthorizationSequenceSplashController: ViewController {
         })
         
         self.controller = RMIntroViewController(backgroundColor: theme.list.plainBackgroundColor, primaryColor: theme.list.itemPrimaryTextColor, buttonColor: theme.intro.startButtonColor, accentColor: theme.list.itemAccentColor, regularDotColor: theme.intro.dotColor, highlightedDotColor: theme.list.itemAccentColor, suggestedLocalizationSignal: localizationSignal)
-        let intro = tellomiIntroCopy()
-        self.controller.setIntroHeadlines(intro.headlines, descriptions: intro.descriptions)
-
-        self.startButton = SolidRoundedButtonNode(title: intro.startButton, theme: TellomiLoginChrome.buttonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
+        
+        self.startButton = SolidRoundedButtonNode(title: "Start Messaging", theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
         self.startButton.accessibilityIdentifier = "Auth.Welcome.StartButton"
 
         super.init(navigationBarPresentationData: nil)
@@ -117,19 +115,6 @@ public final class AuthorizationSequenceSplashController: ViewController {
         self.displayNodeDidLoad()
     }
     
-    func applyPresentationTheme(_ theme: PresentationTheme) {
-        self.theme = theme
-        self.statusBar.statusBarStyle = theme.intro.statusBarStyle.style
-        self.startButton.updateTheme(TellomiLoginChrome.buttonTheme(theme: theme))
-        self.controller.updateAppearanceBackgroundColor(theme.list.plainBackgroundColor, primaryColor: theme.list.itemPrimaryTextColor, buttonColor: theme.intro.startButtonColor, accentColor: theme.list.itemAccentColor, regularDotColor: theme.intro.dotColor, highlightedDotColor: theme.list.itemAccentColor)
-        if self.isNodeLoaded {
-            self.controllerNode.backgroundColor = theme.list.plainBackgroundColor
-        }
-        if self.isViewLoaded {
-            self.view.backgroundColor = theme.list.plainBackgroundColor
-        }
-    }
-
     func animateIn() {
         self.controller.animateIn()
     }
@@ -153,10 +138,6 @@ public final class AuthorizationSequenceSplashController: ViewController {
         return snapshot
     }
     
-    func suppressLiveIntroPages() {
-        self.controller.tellomiSuppressLivePages()
-    }
-
     var textSnaphot: UIView? {
         let snapshotView: UIView? = self.controller.createTextSnapshot()
         guard let snapshot = snapshotView else {
@@ -251,23 +232,8 @@ public final class AuthorizationSequenceSplashController: ViewController {
             if let suggestedCode = suggestedCode {
                 _ = TelegramEngineUnauthorized(account: strongSelf.account).localization.markSuggestedLocalizationAsSeenInteractively(languageCode: suggestedCode).start()
             }
-
-            // The stock button always requested "en". A Chinese system language downloads
-            // the server langpack (zh-hans / zh-hant) instead. Once that has been applied,
-            // later taps keep the saved language, including a choice made in Settings.
-            let resolvedCode: String
-            if UserDefaults.standard.bool(forKey: tellomiSystemLangPackDefaultsKey) {
-                resolvedCode = currentCode
-            } else if let preferred = tellomiSystemLangPackCode() {
-                resolvedCode = preferred
-            } else {
-                resolvedCode = code
-            }
             
-            if currentCode == resolvedCode {
-                if tellomiSystemLangPackCode() == resolvedCode {
-                    tellomiMarkSystemLangPackApplied()
-                }
+            if currentCode == code {
                 strongSelf.pressNext(strings: nil)
                 return
             }
@@ -276,19 +242,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
             strongSelf.startButton.alpha = 0.6
             let accountManager = strongSelf.accountManager
             
-            strongSelf.activateLocalizationDisposable.set(TelegramEngineUnauthorized(account: strongSelf.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: resolvedCode).start(error: { [weak self] _ in
-                Queue.mainQueue().async {
-                    guard let self else {
-                        return
-                    }
-                    self.controller.isEnabled = true
-                    self.startButton.alpha = 1.0
-                    self.pressNext(strings: nil)
-                }
-            }, completed: {
-                if tellomiSystemLangPackCode() == resolvedCode {
-                    tellomiMarkSystemLangPackApplied()
-                }
+            strongSelf.activateLocalizationDisposable.set(TelegramEngineUnauthorized(account: strongSelf.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: code).start(completed: {
                 let _ = (accountManager.transaction { transaction -> PresentationStrings? in
                     let localizationSettings: LocalizationSettings?
                     if let current = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self) {

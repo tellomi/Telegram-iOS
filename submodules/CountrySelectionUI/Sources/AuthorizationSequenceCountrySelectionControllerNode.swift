@@ -63,9 +63,24 @@ private func loadCountryCodes() -> [(String, Int)] {
 
 private let countryCodes: [(String, Int)] = loadCountryCodes()
 
-public func localizedCountryNamesAndCodes(strings: PresentationStrings, regionLocale: Locale? = nil) -> [((String, String), String, [Int])] {
-    let locale = regionLocale ?? localeWithStrings(strings)
-    return tellomiCountryNamesAndCodes(countries: AuthorizationSequenceCountrySelectionController.countries(), locale: locale)
+public func localizedCountryNamesAndCodes(strings: PresentationStrings) -> [((String, String), String, [Int])] {
+    let locale = localeWithStrings(strings)
+    var result: [((String, String), String, [Int])] = []
+    for country in AuthorizationSequenceCountrySelectionController.countries() {
+        if country.hidden || country.id == "FT" {
+            continue
+        }
+        if let englishCountryName = usEnglishLocale.localizedString(forRegionCode: country.id), let countryName = locale.localizedString(forRegionCode: country.id) {
+            var codes: [Int] = []
+            for codeValue in country.countryCodes {
+                if let code = Int(codeValue.code) {
+                    codes.append(code)
+                }
+            }
+            result.append(((englishCountryName, countryName), country.id, codes))
+        }
+    }
+    return result
 }
 
 private func stringTokens(_ string: String) -> [Data] {
@@ -185,43 +200,29 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
     private let tableView: UITableView
     private let searchTableView: UITableView
     
-    private var sections: [(String, [((String, String), String, Int)])]
-    private var sectionTitles: [String]
+    private let sections: [(String, [((String, String), String, Int)])]
+    private let sectionTitles: [String]
     
     private var searchResults: [((String, String), String, Int)] = []
-    private var countryNamesAndCodes: [((String, String), String, [Int])]
+    private let countryNamesAndCodes: [((String, String), String, [Int])]
     
     private let topEdgeEffectView: EdgeEffectView
     
     private var searchInput: ComponentView<Empty>?
-    private let regionLocale: Locale?
-    private let searchPlaceholder: String?
-    private let focusSearchOnAppear: Bool
-    private let monochromeSectionIndex: Bool
     var isSearching = true
     
     private var validLayout: ContainerViewLayout?
     
-    init(theme: PresentationTheme, strings: PresentationStrings, displayCodes: Bool, glass: Bool, regionLocale: Locale? = nil, searchPlaceholder: String? = nil, focusSearchOnAppear: Bool = true, monochromeSectionIndex: Bool = false, itemSelected: @escaping (((String, String), String, Int)) -> Void) {
+    init(theme: PresentationTheme, strings: PresentationStrings, displayCodes: Bool, glass: Bool, itemSelected: @escaping (((String, String), String, Int)) -> Void) {
         self.theme = theme
         self.strings = strings
         self.displayCodes = displayCodes
         self.glass = glass
-        self.regionLocale = regionLocale
-        self.searchPlaceholder = searchPlaceholder
-        self.focusSearchOnAppear = focusSearchOnAppear
-        self.monochromeSectionIndex = monochromeSectionIndex
         self.itemSelected = itemSelected
         
-        if let regionLocale = regionLocale {
-            let identifier = regionLocale.identifier.lowercased()
-            self.needsSubtitle = !(identifier == "en" || identifier.hasPrefix("en_") || identifier.hasPrefix("en-"))
-        } else {
-            self.needsSubtitle = strings.baseLanguageCode != "en"
-        }
+        self.needsSubtitle = strings.baseLanguageCode != "en"
         
         self.tableView = UITableView(frame: CGRect(), style: glass ? .insetGrouped : .plain)
-        self.tableView.accessibilityIdentifier = "Auth.Country.List"
         if #available(iOS 15.0, *) {
             self.tableView.sectionHeaderTopPadding = 0.0
         }
@@ -233,10 +234,23 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
             self.searchTableView.contentInsetAdjustmentBehavior = .never
         }
         
-        let cachedCountryList = tellomiCachedCountryList(locale: regionLocale)
-        self.countryNamesAndCodes = cachedCountryList?.namesAndCodes ?? []
-        self.sections = cachedCountryList?.sections ?? []
-        self.sectionTitles = cachedCountryList?.sectionTitles ?? []
+        let countryNamesAndCodes = localizedCountryNamesAndCodes(strings: strings)
+        self.countryNamesAndCodes = countryNamesAndCodes
+        
+        var sections: [(String, [((String, String), String, Int)])] = []
+        for (names, id, codes) in countryNamesAndCodes.sorted(by: { lhs, rhs in
+            return lhs.0.1 < rhs.0.1
+        }) {
+            let title = String(names.1[names.1.startIndex ..< names.1.index(after: names.1.startIndex)]).uppercased()
+            if sections.isEmpty || sections[sections.count - 1].0 != title {
+                sections.append((title, []))
+            }
+            for code in codes {
+                sections[sections.count - 1].1.append((names, id, code))
+            }
+        }
+        self.sections = sections
+        self.sectionTitles = sections.map { $0.0 }
         
         self.topEdgeEffectView = EdgeEffectView()
         
@@ -263,11 +277,6 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
             self.searchTableView.backgroundView = UIView()
             self.searchTableView.sectionIndexColor = self.theme.list.itemAccentColor
             }
-        if self.monochromeSectionIndex {
-            let indexColor = self.theme.list.itemPrimaryTextColor
-            self.tableView.sectionIndexColor = indexColor
-            self.searchTableView.sectionIndexColor = indexColor
-        }
     
         self.tableView.delegate = self
         self.tableView.dataSource = self
@@ -277,25 +286,12 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
         
         self.view.addSubview(self.tableView)
         self.view.addSubview(self.searchTableView)
-
-        if cachedCountryList == nil {
-            tellomiLoadCountryList(strings: strings, locale: regionLocale) { [weak self] snapshot in
-                self?.applyCountryList(snapshot)
-            }
-        }
         
         if glass {
             self.view.addSubview(self.topEdgeEffectView)
         }
     }
         
-    private func applyCountryList(_ snapshot: TellomiCountryListSnapshot) {
-        self.countryNamesAndCodes = snapshot.namesAndCodes
-        self.sections = snapshot.sections
-        self.sectionTitles = snapshot.sectionTitles
-        self.tableView.reloadData()
-    }
-
     func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
         self.validLayout = layout
         self.tableView.contentInset = UIEdgeInsets(top: navigationBarHeight, left: 0.0, bottom: layout.intrinsicInsets.bottom, right: 0.0)
@@ -327,7 +323,6 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
                         strings: self.strings,
                         metrics: layout.metrics,
                         safeInsets: layout.safeInsets,
-                        placeholder: self.searchPlaceholder,
                         updated: { [weak self] query in
                             guard let self else {
                                 return
@@ -353,9 +348,7 @@ final class AuthorizationSequenceCountrySelectionControllerNode: ASDisplayNode, 
                     self.view.addSubview(searchInputView)
                     searchInputView.frame = CGRect(origin: CGPoint(x: searchInputFrame.minX, y: layout.size.height), size: searchInputFrame.size)
 
-                    if self.focusSearchOnAppear {
-                        searchInputView.activateInput()
-                    }
+                    searchInputView.activateInput()
                 }
                 transition.updateFrame(view: searchInputView, frame: searchInputFrame)
             }

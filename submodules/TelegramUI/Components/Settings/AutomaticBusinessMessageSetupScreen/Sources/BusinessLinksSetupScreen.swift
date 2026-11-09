@@ -475,9 +475,9 @@ final class BusinessLinksSetupScreenComponent: Component {
                             
                             let linkValue: String
                             if url == "phone", let phoneNumber = component.initialData.accountPeer?.phone {
-                                linkValue = "\(TellomiLinks.host)/+\(phoneNumber)"
+                                linkValue = "t.me/+\(phoneNumber)"
                             } else if url == "username", let addressName = component.initialData.accountPeer?.addressName {
-                                linkValue = "\(TellomiLinks.host)/\(addressName)"
+                                linkValue = "t.me/\(addressName)"
                             } else {
                                 return
                             }

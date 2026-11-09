@@ -254,18 +254,10 @@ public class ChatMessageInstantVideoBubbleContentNode: ChatMessageBubbleContentN
                 isReplyThread = true
             }
                         
-            let transcriptFact: RoundVideoTranscriptFact
-            if let transcribed = transcribedText(message: EngineMessage(item.message)) {
-                switch transcribed {
-                case let .success(text, isPending):
-                    transcriptFact = roundVideoTranscriptFact(nonEmptyText: text, isPending: isPending, failed: false)
-                case .error:
-                    transcriptFact = roundVideoTranscriptFact(nonEmptyText: nil, isPending: false, failed: true)
-                }
-            } else {
-                transcriptFact = roundVideoTranscriptFact(nonEmptyText: nil, isPending: false, failed: false)
+            var isExpanded = false
+            if case .expanded = audioTranscriptionState {
+                isExpanded = true
             }
-            let isExpanded = roundVideoTranscriptLayout(phase: roundVideoTranscriptPhase(audioTranscriptionState), fact: transcriptFact).replaceVideo
             
             var isPlaying = false
             let normalDisplaySize = layoutConstants.instantVideo.dimensions
@@ -334,11 +326,10 @@ public class ChatMessageInstantVideoBubbleContentNode: ChatMessageBubbleContentN
                             strongSelf.backdropMaskLayer.frame = strongSelf.maskLayer.frame
                                           
                             let bubbleSize = strongSelf.bubbleBackgroundNode?.backgroundFrame.size ?? finalSize
-                            let expandedMaskSize = CGSize(width: max(bubbleSize.width, finalSize.width), height: max(bubbleSize.height, finalSize.height))
                             
                             let radius: CGFloat = displaySize.width / 2.0
                             let maskCornerRadius = isExpanded ? 1.0 : radius
-                            let maskFrame = CGRect(origin: CGPoint(x: isExpanded ? 1.0 : (incoming ? 7.0 : 1.0), y: isExpanded ? 0.0 : 1.0), size: isExpanded ? expandedMaskSize : CGSize(width: radius * 2.0, height: radius * 2.0))
+                            let maskFrame = CGRect(origin: CGPoint(x: isExpanded ? 1.0 : (incoming ? 7.0 : 1.0), y: isExpanded ? 0.0 : 1.0), size: isExpanded ? bubbleSize : CGSize(width: radius * 2.0, height: radius * 2.0))
                             animation.animator.updateCornerRadius(layer: strongSelf.maskForeground, cornerRadius: maskCornerRadius, completion: nil)
                             animation.animator.updateFrame(layer: strongSelf.maskForeground, frame: maskFrame, completion: nil)
                             

@@ -33,6 +33,11 @@ let package = Package(
             name: "MtProtoKitTests",
             dependencies: ["MtProtoKit"],
             path: "Tests",
+            // This file assigns `MTRequest.mayHaveReachedServer`. That property is
+            // `direct`, so the library has no Objective-C setter, and this SwiftPM
+            // test target's module import still emits one. The Bazel test target
+            // is unchanged.
+            exclude: ["MTRequestHandoverTests.m"],
             cSettings: [
                 .headerSearchPath("../Sources"),
             ]),

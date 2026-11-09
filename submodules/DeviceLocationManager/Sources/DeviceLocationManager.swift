@@ -53,7 +53,7 @@ public final class DeviceLocationManager: NSObject {
         super.init()
         
         self.manager.delegate = self
-        self.manager.desiredAccuracy = kCLLocationAccuracyBest
+        self.manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
         self.manager.distanceFilter = kCLDistanceFilterNone
         self.manager.activityType = .other
         self.manager.pausesLocationUpdatesAutomatically = false
@@ -95,17 +95,6 @@ public final class DeviceLocationManager: NSObject {
         }
     }
     
-    /// iOS 14 reports a coarse location until the app asks for temporary full accuracy.
-    /// The purpose key matches `NSLocationTemporaryUsageDescriptionDictionary`.
-    private func requestPreciseLocationIfNeeded() {
-        if #available(iOS 14.0, *) {
-            guard self.manager.accuracyAuthorization != .fullAccuracy else {
-                return
-            }
-            self.manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: "PreciseLocation") { _ in }
-        }
-    }
-
     private func updateTopMode() {
         assert(self.queue.isCurrent())
         
@@ -127,7 +116,6 @@ public final class DeviceLocationManager: NSObject {
                         self.requestedAuthorization = true
                         self.manager.requestAlwaysAuthorization()
                     }
-                    self.requestPreciseLocationIfNeeded()
 
                     self.manager.startUpdatingLocation()
                     self.manager.startUpdatingHeading()

@@ -1,0 +1,144 @@
+# Unsigned simulator compile of the official client plus the Tellomi seed.
+# Does not upload, does not sign for the App Store, and does not call TestFlight.
+
+name: Official sim
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: official-sim-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    if: github.head_ref == 'cursor/official-ios-restore-458c'
+    runs-on: xcode-27
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Select Xcode from versions.json
+        run: |
+          set -euo pipefail
+          sw_vers
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [ ! -d "$CANDIDATE" ]; then
+            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=${CANDIDATE}/Contents/Developer" >> "$GITHUB_ENV"
+          export DEVELOPER_DIR="${CANDIDATE}/Contents/Developer"
+          xcodebuild -version
+
+      - name: Check the restore contract
+        run: python3 Tellomi/check_restore_contract.py
+
+      - name: Run MtProtoKit tests
+        run: |
+          set -euo pipefail
+          # Address discovery, backup addresses, and the auth-key tests.
+          # MTHandshakeHardeningTests and one MTKeyLifetimeTests case fail on this
+          # Xcode before any of those suites; they are not the port check.
+          swift test --package-path submodules/MtProtoKit \
+            --filter 'MTDiscoverConnectionSignalsTests|MTBackupAddressApplyTests|MTDiscoverDatacenterAddressActionTests|MTAuthKeyRecoveryTests|MTPersistentKeyWriteTests|MTLoggedOutCheckTests|MTProtoMessageEncryptionTests|MTProtoIncomingDecryptTests|MTAesFailureTests|MTGzipUnwrapTests|MTQuickAckTests|MTTransferAuthRecoveryTests'
+
+      - name: Decide whether the simulator package changed
+        id: scope
+        run: |
+          set -euo pipefail
+          base=5e2fc60c7f2e7032196e5f45d8d3b6332ab92562
+          git diff --name-only "$base" HEAD > /tmp/since-sim
+          echo "Changes since the verified simulator package:"
+          cat /tmp/since-sim
+          python3 - << 'PY'
+          from pathlib import Path
+          changed = [line.strip() for line in Path("/tmp/since-sim").read_text().splitlines() if line.strip()]
+          prefixes = (
+              "submodules/",
+              "Telegram/",
+              "BUILD.bazel",
+              "build-system/",
+              "Tellomi/tellomi-server.json",
+              "Tellomi/Brand/",
+              "Tellomi/generate_server_config.py",
+              "versions.json",
+          )
+          extra = [line for line in changed if line.startswith(prefixes) or line in prefixes]
+          Path("/tmp/rebuild").write_text("1" if extra else "0")
+          print("rebuild" if extra else "keep verified package")
+          for line in extra:
+              print(line)
+          PY
+          echo "rebuild=$(cat /tmp/rebuild)" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the verified simulator package
+        if: steps.scope.outputs.rebuild != '1'
+        run: |
+          echo "Simulator package was not rebuilt."
+          echo "Last launch: commit 5e2fc60c run 42523579119."
+          echo "That launch does not cover later source changes."
+
+      - name: Checkout submodules
+        if: steps.scope.outputs.rebuild == '1'
+        run: bash .github/checkout-submodules.sh
+
+      - name: Pin Bazel from versions.json
+        if: steps.scope.outputs.rebuild == '1'
+        run: |
+          set -euo pipefail
+          spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
+          version="${spec%%:*}"
+          sha="${spec##*:}"
+          name="bazel-${version}-darwin-arm64"
+          url="https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
+          mkdir -p build-input
+          bash .github/fetch_pinned.sh "$url" "build-input/${name}" "${sha}"
+          chmod +x "build-input/${name}"
+
+      - name: Build the unsigned simulator app
+        if: steps.scope.outputs.rebuild == '1'
+        run: |
+          set -euo pipefail
+          export APP_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')"
+          test "$APP_VERSION" = "14.0.5"
+          python3 -u build-system/Make/Make.py \
+            --bazelUserRoot="/private/var/tmp/_bazel_official_sim" \
+            --cacheDir "${HOME}/telegram-bazel-cache" \
+            build \
+            --configurationPath="build-system/appstore-configuration.json" \
+            --xcodeManagedCodesigning \
+            --disableProvisioningProfiles \
+            --configuration=release_sim_arm64 \
+            --buildNumber=1
+          test -e bazel-bin/Telegram/Telegram.ipa
+          unzip -l bazel-bin/Telegram/Telegram.ipa | python3 -c '
+          import sys
+          names = [line.split()[-1] for line in sys.stdin if line.strip() and not line.startswith("Archive")]
+          brand = [n for n in names if "Tellomi" in n or "AppIcon" in n or "Assets.car" in n]
+          print("brand-or-catalog entries", len(brand))
+          for n in brand[:40]:
+              print(n)
+          '
+
+      - name: Launch on the simulator without signing in
+        if: steps.scope.outputs.rebuild == '1'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash tools/official_sim_launch.sh
+
+      - name: Upload launch screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-sim-launch
+          path: official-sim-launch
+          if-no-files-found: ignore
