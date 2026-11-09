@@ -87,7 +87,6 @@ public final class MomentsScreen: ViewController {
             self.resetWhenShown = false
             self.nodeIfLoaded.resetToRecommend()
         }
-        self.nodeIfLoaded.installCredential()
         self.refreshBadge()
     }
 
@@ -235,14 +234,6 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             self.pager.setContentOffset(.zero, animated: false)
         }
         self.load(.recommend, refresh: true)
-    }
-
-    func installCredential() {
-        let data = self.context.currentAppConfiguration.with { $0 }.data
-        let base = (data?["moments_engine_base_url"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? MomentsEndpoint.defaultBaseURL
-        if let token = data?["moments_engine_token"] as? String, !token.isEmpty {
-            MomentsCredentialStore.shared.set(MomentsCredential(token: token, baseURL: base), accountPeerId: self.context.account.peerId.toInt64())
-        }
     }
 
     func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {

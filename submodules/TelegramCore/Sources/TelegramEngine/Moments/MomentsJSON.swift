@@ -66,24 +66,25 @@ func momentsAuthor(_ json: [String: Any]?) -> MomentsAuthor? {
     )
 }
 
-func momentsMedia(_ json: [String: Any]) -> MomentsMedia? {
+func momentsMedia(_ json: [String: Any], mediaBaseURL: String? = nil) -> MomentsMedia? {
     guard let key = momentsString(json, "key", "id"), let rawType = momentsString(json, "type"), let type = MomentsMediaType(rawValue: rawType) else {
         return nil
     }
+    let cover = momentsString(json, "cover_key", "cover")
     return MomentsMedia(
         type: type,
         key: key,
         width: momentsInt(json, "w", "width"),
         height: momentsInt(json, "h", "height"),
         durationMs: momentsInt(json, "duration_ms", "duration"),
-        coverKey: momentsString(json, "cover_key", "cover"),
+        coverKey: momentsMediaURL(base: mediaBaseURL, key: cover) ?? cover,
         isOriginal: momentsBool(json, "is_original", "original"),
         order: momentsInt(json, "order"),
-        remoteURL: momentsString(json, "url")
+        remoteURL: momentsMediaURL(base: mediaBaseURL, key: momentsString(json, "url") ?? key)
     )
 }
 
-func momentsCard(json: [String: Any]) -> MomentsCard? {
+func momentsCard(json: [String: Any], mediaBaseURL: String? = nil) -> MomentsCard? {
     guard let id = momentsString(json, "id") else {
         return nil
     }
@@ -91,7 +92,7 @@ func momentsCard(json: [String: Any]) -> MomentsCard? {
     if state == "unavailable" || state == "deleted" {
         return MomentsCard(id: id, state: "unavailable")
     }
-    let media = momentsArray(json["media"]).compactMap(momentsMedia)
+    let media = momentsArray(json["media"]).compactMap { momentsMedia($0, mediaBaseURL: mediaBaseURL) }
     var quote: MomentsQuote?
     if let quoteJSON = momentsObject(json["quote_of"] ?? json["quote"]) {
         if momentsString(quoteJSON, "state") == "unavailable" || momentsBool(quoteJSON, "unavailable") {
@@ -186,12 +187,31 @@ func momentsCard(json: [String: Any]) -> MomentsCard? {
     )
 }
 
-func momentsPage(data: Data) -> MomentsPage? {
+func momentsPage(data: Data, mediaBaseURL: String? = nil) -> MomentsPage? {
     guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         return nil
     }
     let rows = momentsArray(root["items"] ?? root["cards"] ?? root["posts"])
-    return MomentsPage(items: rows.compactMap(momentsCard), nextCursor: momentsString(root, "next_cursor", "cursor"))
+    return MomentsPage(items: rows.compactMap { momentsCard(json: $0, mediaBaseURL: mediaBaseURL) }, nextCursor: momentsString(root, "next_cursor", "cursor"))
+}
+
+func momentsConfigMediaBase(_ data: Data) -> String? {
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let raw = momentsString(json, "media_base_url") else {
+        return nil
+    }
+    guard let components = URLComponents(string: raw), components.scheme == "https", components.user == nil, components.password == nil, components.query == nil, components.fragment == nil, let host = components.host, !host.isEmpty else {
+        return nil
+    }
+    var path = components.path
+    if path == "/" {
+        path = ""
+    }
+    while path.hasSuffix("/") {
+        path.removeLast()
+    }
+    let renderedHost = host.contains(":") ? "[\(host)]" : host
+    let origin = components.port.map { "https://\(renderedHost):\($0)" } ?? "https://\(renderedHost)"
+    return origin + path
 }
 
 func momentsError(data: Data, status: Int) -> MomentsAPIError {

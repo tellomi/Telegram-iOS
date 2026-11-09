@@ -25,7 +25,7 @@ public struct MomentsLimits: Equatable {
     public var linkBase: String
     /// Tellomi builds keep the upstream News tab off (TBD-04). The moments tab does not borrow that switch.
     public var newsStaysOff: Bool
-    /// Master switch for the moments tab. On for this client; flip it here to hide the tab.
+    /// Local kill switch. The tab is shown only when this is on and app config publishes a feed origin.
     public var tabEnabled: Bool
 
     public init(
@@ -103,8 +103,10 @@ public struct MomentsRemoteConfig: Equatable {
     public var commentTextLimit: Int?
     public var pageSize: Int?
     public var tabs: [String]
+    /// From `GET /v1/feed/config`. Image and other media keys are joined onto this. Not a feed host.
+    public var mediaBaseURL: String?
 
-    public init(textLimit: Int? = nil, imageLimit: Int? = nil, videoLimit: Int? = nil, videoMaxDuration: Double? = nil, voiceMaxDuration: Double? = nil, commentTextLimit: Int? = nil, pageSize: Int? = nil, tabs: [String] = []) {
+    public init(textLimit: Int? = nil, imageLimit: Int? = nil, videoLimit: Int? = nil, videoMaxDuration: Double? = nil, voiceMaxDuration: Double? = nil, commentTextLimit: Int? = nil, pageSize: Int? = nil, tabs: [String] = [], mediaBaseURL: String? = nil) {
         self.textLimit = textLimit
         self.imageLimit = imageLimit
         self.videoLimit = videoLimit
@@ -113,7 +115,84 @@ public struct MomentsRemoteConfig: Equatable {
         self.commentTextLimit = commentTextLimit
         self.pageSize = pageSize
         self.tabs = tabs
+        self.mediaBaseURL = mediaBaseURL
     }
+}
+
+public struct MomentsFeedEndpoint: Equatable {
+    public var baseURL: String
+
+    public init(baseURL: String) {
+        self.baseURL = baseURL
+    }
+}
+
+/// The feed is on only when app config has both keys. Anything else stays off. No default host.
+public func momentsFeedEndpoint(appConfiguration: AppConfiguration) -> MomentsFeedEndpoint? {
+    guard let data = appConfiguration.data else {
+        return nil
+    }
+    guard data["tellomi_discover_feed_enabled"] as? Bool == true else {
+        return nil
+    }
+    guard let raw = data["tellomi_discover_feed_base_url"] as? String else {
+        return nil
+    }
+    guard let baseURL = momentsFeedBaseURL(raw) else {
+        return nil
+    }
+    return MomentsFeedEndpoint(baseURL: baseURL)
+}
+
+public func isMomentsFeedEnabled(appConfiguration: AppConfiguration) -> Bool {
+    guard MomentsLimits.standard.tabEnabled else {
+        return false
+    }
+    return momentsFeedEndpoint(appConfiguration: appConfiguration) != nil
+}
+
+/// `https://host` or `https://host:port`. No user, path, query, or fragment. `region` is not accepted.
+public func momentsFeedBaseURL(_ raw: String) -> String? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let components = URLComponents(string: trimmed), components.scheme == "https" else {
+        return nil
+    }
+    guard components.user == nil, components.password == nil else {
+        return nil
+    }
+    guard let host = components.host, !host.isEmpty, host != "cn", host != "global" else {
+        return nil
+    }
+    if let path = components.path.isEmpty ? nil : components.path, path != "/" {
+        return nil
+    }
+    guard components.query == nil, components.fragment == nil else {
+        return nil
+    }
+    if let port = components.port, !(1...65535).contains(port) {
+        return nil
+    }
+    let renderedHost = host.contains(":") ? "[\(host)]" : host
+    if let port = components.port {
+        return "https://\(renderedHost):\(port)"
+    }
+    return "https://\(renderedHost)"
+}
+
+/// Join a relative media key onto `media_base_url`. Absolute https URLs are left alone.
+public func momentsMediaURL(base: String?, key: String?) -> String? {
+    guard let key, !key.isEmpty else {
+        return nil
+    }
+    if key.hasPrefix("https://") || key.hasPrefix("http://") {
+        return key
+    }
+    guard let base, base.hasPrefix("https://") else {
+        return nil
+    }
+    let root = base.hasSuffix("/") ? String(base.dropLast()) : base
+    let suffix = key.hasPrefix("/") ? String(key.dropFirst()) : key
+    return root + "/" + suffix
 }
 
 /// Where a moments object is being shown. The server's `canView` is the authority; the client uses the

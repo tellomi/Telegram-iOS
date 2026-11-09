@@ -118,6 +118,66 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertTrue(MomentsFeedKind.following.probesForNewPosts)
     }
 
+    func testFeedOriginComesOnlyFromAppConfig() {
+        XCTAssertNil(momentsFeedEndpoint(appConfiguration: .defaultValue))
+        XCTAssertFalse(isMomentsFeedEnabled(appConfiguration: .defaultValue))
+
+        let disabled = AppConfiguration(data: JSON(dictionary: [
+            "tellomi_discover_feed_enabled": false,
+            "tellomi_discover_feed_base_url": "https://feed.example"
+        ]), hash: 0)
+        XCTAssertNil(momentsFeedEndpoint(appConfiguration: disabled))
+
+        let missingHost = AppConfiguration(data: JSON(dictionary: [
+            "tellomi_discover_feed_enabled": true
+        ]), hash: 0)
+        XCTAssertNil(momentsFeedEndpoint(appConfiguration: missingHost))
+
+        let enabled = AppConfiguration(data: JSON(dictionary: [
+            "tellomi_discover_feed_enabled": true,
+            "tellomi_discover_feed_base_url": "https://feed.example:8443/"
+        ]), hash: 0)
+        XCTAssertEqual(momentsFeedEndpoint(appConfiguration: enabled)?.baseURL, "https://feed.example:8443")
+        XCTAssertTrue(isMomentsFeedEnabled(appConfiguration: enabled))
+    }
+
+    func testFeedOriginRejectsAnythingButAnHttpsHost() {
+        XCTAssertEqual(momentsFeedBaseURL("https://feed.example"), "https://feed.example")
+        XCTAssertEqual(momentsFeedBaseURL(" https://feed.example:443 "), "https://feed.example:443")
+        XCTAssertNil(momentsFeedBaseURL("http://feed.example"))
+        XCTAssertNil(momentsFeedBaseURL("https://feed.example/v1/feed"))
+        XCTAssertNil(momentsFeedBaseURL("https://feed.example?x=1"))
+        XCTAssertNil(momentsFeedBaseURL("https://feed.example#frag"))
+        XCTAssertNil(momentsFeedBaseURL("https://user:pass@feed.example"))
+        XCTAssertNil(momentsFeedBaseURL("cn"))
+        XCTAssertNil(momentsFeedBaseURL("global"))
+        XCTAssertNil(momentsFeedBaseURL("https://cn"))
+        XCTAssertNil(momentsFeedBaseURL("https://global"))
+        XCTAssertNil(momentsFeedBaseURL(""))
+    }
+
+    func testMediaUrlsComeFromConfigBase() {
+        XCTAssertEqual(momentsMediaURL(base: "https://cdn.example/media/", key: "a/b.jpg"), "https://cdn.example/media/a/b.jpg")
+        XCTAssertEqual(momentsMediaURL(base: "https://cdn.example", key: "https://other.example/a.jpg"), "https://other.example/a.jpg")
+        XCTAssertNil(momentsMediaURL(base: nil, key: "a/b.jpg"))
+        XCTAssertNil(momentsMediaURL(base: "http://cdn.example", key: "a/b.jpg"))
+
+        let raw = #"{"media_base_url":"https://cdn.example/media/"}"#.data(using: .utf8)!
+        XCTAssertEqual(momentsConfigMediaBase(raw), "https://cdn.example/media")
+        let page = #"{"items":[{"id":"p","media":[{"type":"image","key":"pic.jpg"}]}]}"#.data(using: .utf8)!
+        let card = momentsPage(data: page, mediaBaseURL: momentsConfigMediaBase(raw))?.items.first
+        XCTAssertEqual(card?.media.first?.remoteURL, "https://cdn.example/media/pic.jpg")
+    }
+
+    func testCredentialRefreshesBeforeExpiryAndKeepsRegionOffTheHost() {
+        let credential = MomentsCredential(token: "abc", baseURL: "https://feed.example", expiresAt: 1_000, region: "cn")
+        XCTAssertFalse(credential.needsRefresh(now: 1_000 - MomentsCredential.refreshMargin - 1))
+        XCTAssertTrue(credential.needsRefresh(now: 1_000 - MomentsCredential.refreshMargin))
+        XCTAssertEqual(credential.region, "cn")
+        XCTAssertNotEqual(credential.baseURL, credential.region)
+        XCTAssertTrue(MomentsCredential(token: "abc", baseURL: "https://feed.example", expiresAt: nil, region: "global").needsRefresh(now: 0))
+    }
+
     func testDraftCapKeepsNewest() {
         let kept = momentsTrimDrafts([1, 2, 3, 4], limit: 2, newer: >)
         XCTAssertEqual(kept, [4, 3])

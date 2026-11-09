@@ -470,19 +470,26 @@ public enum MomentsAPIError: Equatable, Error {
 
 public struct MomentsCredential: Equatable {
     public var token: String
+    /// HTTPS origin from `help.getAppConfig`, never the credential's `region`.
     public var baseURL: String
     public var expiresAt: Int64?
+    /// `cn` or `global`. Not a hostname.
+    public var region: String
 
-    public init(token: String, baseURL: String, expiresAt: Int64? = nil) {
+    public init(token: String, baseURL: String, expiresAt: Int64? = nil, region: String) {
         self.token = token
         self.baseURL = baseURL
         self.expiresAt = expiresAt
+        self.region = region
     }
 
-    public func isExpired(now: Int64) -> Bool {
+    /// Refresh this many seconds before `expires` so a call does not race the server clock.
+    public static let refreshMargin: Int64 = 60
+
+    public func needsRefresh(now: Int64) -> Bool {
         guard let expiresAt = self.expiresAt else {
-            return false
+            return true
         }
-        return now >= expiresAt
+        return now + MomentsCredential.refreshMargin >= expiresAt
     }
 }

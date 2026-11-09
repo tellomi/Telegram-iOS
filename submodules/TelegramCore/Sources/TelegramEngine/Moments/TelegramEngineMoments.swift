@@ -1,37 +1,31 @@
 import Foundation
 import Postbox
 import SwiftSignalKit
+internal import TelegramApi
 
-/// Per-account bearer token for content-engine. Production fills this from teamgram
-/// `discover.getEngineCredential` (TBD-15 A). That method is not in the layer-232 schema, so the
-/// call stays behind this store: the UI writes a token from app config (`moments_engine_token`,
-/// `moments_engine_base_url`) until the MTProto method exists, and nothing here invents a TL constructor.
-public final class MomentsCredentialStore {
-    public static let shared = MomentsCredentialStore()
+/// In-memory bearer token from `discover.getEngineCredential`. The host is not stored here:
+/// `region` is only `cn` or `global`, and the https origin comes from `help.getAppConfig`.
+final class MomentsCredentialStore {
+    static let shared = MomentsCredentialStore()
 
     private let lock = NSLock()
     private var values: [Int64: MomentsCredential] = [:]
 
-    public func set(_ credential: MomentsCredential, accountPeerId: Int64) {
+    func set(_ credential: MomentsCredential, accountPeerId: Int64) {
         self.lock.lock()
         self.values[accountPeerId] = credential
         self.lock.unlock()
     }
 
-    public func get(accountPeerId: Int64, now: Int64) -> MomentsCredential? {
+    func get(accountPeerId: Int64, now: Int64, baseURL: String) -> MomentsCredential? {
         self.lock.lock()
         let value = self.values[accountPeerId]
         self.lock.unlock()
-        guard let value, !value.isExpired(now: now) else {
+        guard let value, value.baseURL == baseURL, !value.needsRefresh(now: now) else {
             return nil
         }
         return value
     }
-}
-
-public enum MomentsEndpoint {
-    /// Override from app config. The path prefix is `/v1/feed` (spec §7.4).
-    public static var defaultBaseURL = "https://engine.tellomi.cn"
 }
 
 private final class MomentsHTTP {
@@ -91,6 +85,8 @@ public extension TelegramEngine {
     final class Moments {
         private let account: Account
         private let http = MomentsHTTP()
+        private let mediaBaseURL = Atomic<String?>(value: nil)
+        private let didLoadMediaBase = Atomic<Bool>(value: false)
 
         init(account: Account) {
             self.account = account
@@ -100,12 +96,42 @@ public extension TelegramEngine {
             return self.account.peerId.toInt64()
         }
 
-        private func credential() -> Signal<MomentsCredential, MomentsAPIError> {
-            let now = Int64(Date().timeIntervalSince1970)
-            if let credential = MomentsCredentialStore.shared.get(accountPeerId: self.accountPeerId, now: now) {
-                return .single(credential)
+        private func endpoint() -> Signal<String, MomentsAPIError> {
+            return self.account.postbox.transaction { transaction -> String? in
+                return momentsFeedEndpoint(appConfiguration: currentAppConfiguration(transaction: transaction))?.baseURL
             }
-            return .fail(.credentialUnavailable)
+            |> mapToSignal { base -> Signal<String, MomentsAPIError> in
+                guard let base else {
+                    return .fail(.credentialUnavailable)
+                }
+                return .single(base)
+            }
+        }
+
+        /// Bearer from `discover.getEngineCredential`. Refreshed before `expires`. `region` is checked and never used as a host.
+        private func credential() -> Signal<MomentsCredential, MomentsAPIError> {
+            return self.endpoint()
+            |> mapToSignal { base in
+                let now = Int64(Date().timeIntervalSince1970)
+                if let credential = MomentsCredentialStore.shared.get(accountPeerId: self.accountPeerId, now: now, baseURL: base) {
+                    return .single(credential)
+                }
+                return self.account.network.request(Api.functions.discover.getEngineCredential())
+                |> mapError { _ -> MomentsAPIError in
+                    return .credentialUnavailable
+                }
+                |> mapToSignal { result -> Signal<MomentsCredential, MomentsAPIError> in
+                    switch result {
+                    case let .engineCredential(value):
+                        guard value.region == "cn" || value.region == "global", !value.token.isEmpty else {
+                            return .fail(.credentialUnavailable)
+                        }
+                        let credential = MomentsCredential(token: value.token, baseURL: base, expiresAt: Int64(value.expires), region: value.region)
+                        MomentsCredentialStore.shared.set(credential, accountPeerId: self.accountPeerId)
+                        return .single(credential)
+                    }
+                }
+            }
         }
 
         private func call(method: String, path: String, query: [String: String] = [:], body: [String: Any]? = nil) -> Signal<Data, MomentsAPIError> {
@@ -121,7 +147,7 @@ public extension TelegramEngine {
                 guard let payload = momentsReadBlob(transaction: transaction, id: momentsFeedCacheId(kind)), let data = payload.data(using: .utf8) else {
                     return nil
                 }
-                return momentsPage(data: data)
+                return momentsPage(data: data, mediaBaseURL: self.mediaBaseURL.with { $0 })
             }
         }
 
@@ -145,9 +171,12 @@ public extension TelegramEngine {
                 }
                 query["sort"] = sort ?? "latest"
             }
-            return self.call(method: "GET", path: "/v1/feed/\(kind.rawValue)", query: query)
+            return self.prepareMediaBase()
+            |> mapToSignal { _ in
+                return self.call(method: "GET", path: "/v1/feed/\(kind.rawValue)", query: query)
+            }
             |> mapToSignal { data -> Signal<MomentsPage, MomentsAPIError> in
-                guard let page = momentsPage(data: data) else {
+                guard let page = momentsPage(data: data, mediaBaseURL: self.mediaBaseURL.with { $0 }) else {
                     return .fail(.invalid("page"))
                 }
                 return .single(page)
@@ -214,12 +243,16 @@ public extension TelegramEngine {
             if let cursor {
                 query["cursor"] = cursor
             }
-            return self.call(method: "GET", path: "/v1/feed/posts/\(postId)/comments", query: query)
+            return self.prepareMediaBase()
+            |> mapToSignal { _ in
+                return self.call(method: "GET", path: "/v1/feed/posts/\(postId)/comments", query: query)
+            }
             |> map { data in
                 guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                     return []
                 }
-                return momentsArray(root["items"] ?? root["comments"]).compactMap(momentsComment)
+                let mediaBaseURL = self.mediaBaseURL.with { $0 }
+                return momentsArray(root["items"] ?? root["comments"]).compactMap { momentsComment($0, mediaBaseURL: mediaBaseURL) }
             }
         }
 
@@ -228,12 +261,16 @@ public extension TelegramEngine {
             if let cursor {
                 query["cursor"] = cursor
             }
-            return self.call(method: "GET", path: "/v1/feed/comments/\(rootId)/replies", query: query)
+            return self.prepareMediaBase()
+            |> mapToSignal { _ in
+                return self.call(method: "GET", path: "/v1/feed/comments/\(rootId)/replies", query: query)
+            }
             |> map { data in
                 guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                     return []
                 }
-                return momentsArray(root["items"] ?? root["replies"]).compactMap { momentsReply($0, rootId: rootId) }
+                let mediaBaseURL = self.mediaBaseURL.with { $0 }
+                return momentsArray(root["items"] ?? root["replies"]).compactMap { momentsReply($0, rootId: rootId, mediaBaseURL: mediaBaseURL) }
             }
         }
 
@@ -292,9 +329,12 @@ public extension TelegramEngine {
             if let cursor {
                 query["cursor"] = cursor
             }
-            return self.call(method: "GET", path: "/v1/feed/profiles/\(id)/posts", query: query)
+            return self.prepareMediaBase()
+            |> mapToSignal { _ in
+                return self.call(method: "GET", path: "/v1/feed/profiles/\(id)/posts", query: query)
+            }
             |> mapToSignal { data in
-                guard let page = momentsPage(data: data) else {
+                guard let page = momentsPage(data: data, mediaBaseURL: self.mediaBaseURL.with { $0 }) else {
                     return .fail(.invalid("profile"))
                 }
                 return .single(page)
@@ -314,9 +354,12 @@ public extension TelegramEngine {
             if let cursor {
                 query["cursor"] = cursor
             }
-            return self.call(method: "GET", path: "/v1/feed/search", query: query)
+            return self.prepareMediaBase()
+            |> mapToSignal { _ in
+                return self.call(method: "GET", path: "/v1/feed/search", query: query)
+            }
             |> map { data in
-                momentsSearchResult(data: data)
+                momentsSearchResult(data: data, mediaBaseURL: self.mediaBaseURL.with { $0 })
             }
         }
 
@@ -326,9 +369,12 @@ public extension TelegramEngine {
                 query["cursor"] = cursor
             }
             let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
-            return self.call(method: "GET", path: "/v1/feed/topics/\(encoded)", query: query)
+            return self.prepareMediaBase()
+            |> mapToSignal { _ in
+                return self.call(method: "GET", path: "/v1/feed/topics/\(encoded)", query: query)
+            }
             |> map { data in
-                momentsTopicPage(data: data, name: name)
+                momentsTopicPage(data: data, name: name, mediaBaseURL: self.mediaBaseURL.with { $0 })
             }
         }
 
@@ -417,7 +463,7 @@ public extension TelegramEngine {
                 guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                     return MomentsRemoteConfig()
                 }
-                return MomentsRemoteConfig(
+                let config = MomentsRemoteConfig(
                     textLimit: json["text_limit"] == nil ? nil : momentsInt(json, "text_limit"),
                     imageLimit: json["image_limit"] == nil ? nil : momentsInt(json, "image_limit"),
                     videoLimit: json["video_limit"] == nil ? nil : momentsInt(json, "video_limit"),
@@ -425,8 +471,24 @@ public extension TelegramEngine {
                     voiceMaxDuration: json["voice_max_seconds"] == nil ? nil : Double(momentsInt(json, "voice_max_seconds")),
                     commentTextLimit: json["comment_text_limit"] == nil ? nil : momentsInt(json, "comment_text_limit"),
                     pageSize: json["page_size"] == nil ? nil : momentsInt(json, "page_size"),
-                    tabs: json["tabs"] as? [String] ?? []
+                    tabs: json["tabs"] as? [String] ?? [],
+                    mediaBaseURL: momentsConfigMediaBase(data)
                 )
+                if let mediaBaseURL = config.mediaBaseURL {
+                    let _ = self.mediaBaseURL.swap(mediaBaseURL)
+                }
+                return config
+            }
+        }
+
+        private func prepareMediaBase() -> Signal<Never, MomentsAPIError> {
+            if self.didLoadMediaBase.with({ $0 }) {
+                return .complete()
+            }
+            return self.remoteConfig()
+            |> mapToSignal { _ -> Signal<Never, MomentsAPIError> in
+                let _ = self.didLoadMediaBase.swap(true)
+                return .complete()
             }
         }
 
@@ -453,9 +515,12 @@ public extension TelegramEngine {
             if let cursor {
                 query["cursor"] = cursor
             }
-            return self.call(method: "GET", path: path, query: query)
+            return self.prepareMediaBase()
+            |> mapToSignal { _ in
+                return self.call(method: "GET", path: path, query: query)
+            }
             |> mapToSignal { data in
-                guard let page = momentsPage(data: data) else {
+                guard let page = momentsPage(data: data, mediaBaseURL: self.mediaBaseURL.with { $0 }) else {
                     return .fail(.invalid("list"))
                 }
                 return .single(page)
@@ -502,17 +567,17 @@ public struct MomentsTopicPage: Equatable {
     }
 }
 
-func momentsComment(_ json: [String: Any]) -> MomentsComment? {
+func momentsComment(_ json: [String: Any], mediaBaseURL: String? = nil) -> MomentsComment? {
     guard let id = momentsString(json, "id") else {
         return nil
     }
-    let replies = momentsArray(json["replies"]).compactMap { momentsReply($0, rootId: id) }
+    let replies = momentsArray(json["replies"]).compactMap { momentsReply($0, rootId: id, mediaBaseURL: mediaBaseURL) }
     return MomentsComment(
         id: id,
         postId: momentsString(json, "post_id") ?? "",
         author: momentsAuthor(momentsObject(json["author"])),
         text: momentsString(json, "text") ?? "",
-        attachment: momentsObject(json["attachment"]).flatMap(momentsMedia),
+        attachment: momentsObject(json["attachment"]).flatMap { momentsMedia($0, mediaBaseURL: mediaBaseURL) },
         createdAt: momentsInt64(json, "created_at"),
         likeCount: momentsInt(json, "like_count"),
         liked: momentsBool(json, "liked"),
@@ -521,7 +586,7 @@ func momentsComment(_ json: [String: Any]) -> MomentsComment? {
     )
 }
 
-func momentsReply(_ json: [String: Any], rootId: String) -> MomentsReply? {
+func momentsReply(_ json: [String: Any], rootId: String, mediaBaseURL: String? = nil) -> MomentsReply? {
     guard let id = momentsString(json, "id") else {
         return nil
     }
@@ -532,7 +597,7 @@ func momentsReply(_ json: [String: Any], rootId: String) -> MomentsReply? {
         replyToName: momentsString(json, "reply_to_name", "reply_to_user"),
         author: momentsAuthor(momentsObject(json["author"])),
         text: momentsString(json, "text") ?? "",
-        attachment: momentsObject(json["attachment"]).flatMap(momentsMedia),
+        attachment: momentsObject(json["attachment"]).flatMap { momentsMedia($0, mediaBaseURL: mediaBaseURL) },
         createdAt: momentsInt64(json, "created_at"),
         likeCount: momentsInt(json, "like_count"),
         liked: momentsBool(json, "liked")
@@ -562,7 +627,7 @@ func momentsNotification(_ json: [String: Any]) -> MomentsNotification? {
     )
 }
 
-func momentsSearchResult(data: Data) -> MomentsSearchResult {
+func momentsSearchResult(data: Data, mediaBaseURL: String? = nil) -> MomentsSearchResult {
     guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         return MomentsSearchResult()
     }
@@ -574,21 +639,21 @@ func momentsSearchResult(data: Data) -> MomentsSearchResult {
     }
     let users = momentsArray(root["users"]).compactMap { momentsAuthor($0) }
     return MomentsSearchResult(
-        posts: momentsArray(root["posts"] ?? root["items"]).compactMap(momentsCard),
+        posts: momentsArray(root["posts"] ?? root["items"]).compactMap { momentsCard(json: $0, mediaBaseURL: mediaBaseURL) },
         topics: topics,
         users: users,
         nextCursor: momentsString(root, "next_cursor")
     )
 }
 
-func momentsTopicPage(data: Data, name: String) -> MomentsTopicPage {
+func momentsTopicPage(data: Data, name: String, mediaBaseURL: String? = nil) -> MomentsTopicPage {
     guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         return MomentsTopicPage(name: name, visibleCount: 0, items: [], nextCursor: nil)
     }
     return MomentsTopicPage(
         name: momentsString(root, "name") ?? name,
         visibleCount: momentsInt(root, "visible_count"),
-        items: momentsArray(root["items"] ?? root["posts"]).compactMap(momentsCard),
+        items: momentsArray(root["items"] ?? root["posts"]).compactMap { momentsCard(json: $0, mediaBaseURL: mediaBaseURL) },
         nextCursor: momentsString(root, "next_cursor")
     )
 }
