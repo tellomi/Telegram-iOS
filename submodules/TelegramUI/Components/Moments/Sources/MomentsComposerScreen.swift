@@ -29,6 +29,11 @@ public final class MomentsComposerScreen: ViewController {
     private var hasVoice = false
     private var hasPoll = false
     private var limits = MomentsLimits.standard
+    private var audioRecorder: ManagedAudioRecorder?
+    private var voiceDisposable: Disposable?
+    private var voiceStateDisposable: Disposable?
+    private var isRecordingVoice = false
+    private var isFinishingVoice = false
 
     public init(context: AccountContext, quoteId: String?) {
         self.context = context
@@ -41,6 +46,12 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     required init(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    deinit {
+        self.voiceDisposable?.dispose()
+        self.voiceStateDisposable?.dispose()
+        self.audioRecorder?.stop()
+    }
 
     override public func loadDisplayNode() {
         self.displayNode = ASDisplayNode()
@@ -59,6 +70,12 @@ public final class MomentsComposerScreen: ViewController {
         photos.accessibilityLabel = momentsText(self.presentationData.strings, .publish)
         self.displayNode.view.addSubview(photos)
         photos.tag = 41
+        let voice = UIButton(type: .system)
+        voice.tag = 42
+        voice.setTitle(momentsText(self.presentationData.strings, .voice), for: .normal)
+        voice.addTarget(self, action: #selector(self.voicePressed), for: .touchUpInside)
+        voice.accessibilityLabel = momentsText(self.presentationData.strings, .voice)
+        self.displayNode.view.addSubview(voice)
         self.refresh()
         let _ = (self.context.engine.moments.remoteConfig() |> deliverOnMainQueue).start(next: { [weak self] config in
             self?.limits = MomentsLimits.standard.applying(config: config)
@@ -98,6 +115,9 @@ public final class MomentsComposerScreen: ViewController {
         if let photos = self.displayNode.view.viewWithTag(41) {
             photos.frame = CGRect(x: 16, y: top + 236, width: 120, height: 36)
         }
+        if let voice = self.displayNode.view.viewWithTag(42) {
+            voice.frame = CGRect(x: 144, y: top + 236, width: 120, height: 36)
+        }
     }
 
     private func refresh() {
@@ -106,8 +126,8 @@ public final class MomentsComposerScreen: ViewController {
         self.audienceButton.setTitle(momentsAudienceTitle(strings, audience.kind), for: .normal)
         let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll, hasLinkPreview: !self.linkRemoved && momentsScanText(self.textView.text ?? "").firstURL != nil)
         let hasBody = !(self.textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.isEmpty || !self.media.isEmpty
-        self.navigationItem.rightBarButtonItem?.isEnabled = hasBody
-        self.publishButton.isEnabled = hasBody
+        self.navigationItem.rightBarButtonItem?.isEnabled = hasBody && !self.isRecordingVoice
+        self.publishButton.isEnabled = hasBody && !self.isRecordingVoice
         self.nearbySwitch.isHidden = audience.kind != .everyone
         self.nearbySwitch.isOn = self.allowNearby
     }
@@ -259,6 +279,105 @@ public final class MomentsComposerScreen: ViewController {
                 return [first] + rest
             }
         }
+    }
+
+    @objc private func voicePressed() {
+        if let recorder = self.audioRecorder {
+            self.finishVoice(recorder)
+            return
+        }
+        let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll)
+        if let rejection = momentsCanAdd(kind: .voice, to: state, limits: self.limits) {
+            self.presentRejection(rejection)
+            return
+        }
+        self.voiceDisposable?.dispose()
+        self.voiceDisposable = (self.context.sharedContext.mediaManager.audioRecorder(
+            resumeData: nil,
+            beginWithTone: false,
+            pauseMusicOnRecording: self.context.sharedContext.currentMediaInputSettings.with { $0.pauseMusicOnRecording },
+            applicationBindings: self.context.sharedContext.applicationBindings,
+            beganWithTone: { _ in }
+        ) |> deliverOnMainQueue).start(next: { [weak self] recorder in
+            guard let self, let recorder else {
+                self?.presentVoiceFailure()
+                return
+            }
+            self.audioRecorder = recorder
+            self.isRecordingVoice = true
+            self.refresh()
+            (self.displayNode.view.viewWithTag(42) as? UIButton)?.setTitle(momentsText(self.presentationData.strings, .voiceStop), for: .normal)
+            recorder.start()
+            self.voiceStateDisposable?.dispose()
+            self.voiceStateDisposable = (recorder.recordingState |> deliverOnMainQueue).start(next: { [weak self, weak recorder] state in
+                guard let self, let recorder else { return }
+                if case let .recording(duration, _) = state, duration >= self.limits.voiceMaxDuration {
+                    self.finishVoice(recorder)
+                }
+            })
+        })
+    }
+
+    private func finishVoice(_ recorder: ManagedAudioRecorder) {
+        guard !self.isFinishingVoice else { return }
+        self.isFinishingVoice = true
+        self.isRecordingVoice = false
+        self.audioRecorder = nil
+        recorder.stop()
+        (self.displayNode.view.viewWithTag(42) as? UIButton)?.setTitle(momentsText(self.presentationData.strings, .voice), for: .normal)
+        self.refresh()
+        self.voiceStateDisposable?.dispose()
+        self.voiceStateDisposable = (recorder.takenRecordedData() |> deliverOnMainQueue).start(next: { [weak self] data in
+            guard let self else { return }
+            self.isFinishingVoice = false
+            guard let data, data.duration >= 0.5, !data.compressedData.isEmpty else {
+                self.presentVoiceFailure()
+                return
+            }
+            let duration = min(data.duration, self.limits.voiceMaxDuration)
+            let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll)
+            if let rejection = momentsCanAdd(kind: .voice, to: state, limits: self.limits, duration: duration) {
+                self.presentRejection(rejection)
+                return
+            }
+            self.uploadVoice(data.compressedData, duration: duration)
+        })
+    }
+
+    private func uploadVoice(_ data: Data, duration: Double) {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("moments-voice-\(UUID().uuidString).ogg")
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            self.presentVoiceFailure()
+            return
+        }
+        self.hasVoice = true
+        self.refresh()
+        let file = MomentsUploadFile(
+            path: url.path,
+            filename: "voice.ogg",
+            mimeType: "audio/ogg",
+            type: .audio,
+            width: 0,
+            height: 0,
+            durationMs: Int(duration * 1000),
+            order: self.media.count
+        )
+        let _ = (self.context.engine.moments.uploadFile(file) |> deliverOnMainQueue).start(next: { [weak self] media in
+            guard let self else { return }
+            self.media.append(media)
+            self.refresh()
+        }, error: { [weak self] _ in
+            guard let self else { return }
+            self.hasVoice = false
+            self.refresh()
+            self.presentVoiceFailure()
+        })
+    }
+
+    private func presentVoiceFailure() {
+        momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .voiceFailed))
     }
 
     private func presentRejection(_ rejection: MomentsAttachmentRejection) {

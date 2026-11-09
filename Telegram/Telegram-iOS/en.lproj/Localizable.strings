@@ -17337,3 +17337,6 @@ Error: %8$@";
 "Moments.Pinned" = "Pinned";
 "Moments.Sort.Relevance" = "Relevance";
 "Moments.RepostHeader" = "reposted";
+"Moments.Voice" = "Voice";
+"Moments.VoiceStop" = "Stop";
+"Moments.VoiceFailed" = "Could not record a voice post.";

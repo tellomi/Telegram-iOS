@@ -23,6 +23,7 @@ swift_library(
         "//submodules/ContextUI",
         "//submodules/ItemListUI",
         "//submodules/PresentationDataUtils",
+        "//submodules/UndoUI",
         "//submodules/MediaPickerUI",
         "//submodules/LegacyMediaPickerUI",
         "//submodules/TelegramUI/Components/ShareWithPeersScreen",

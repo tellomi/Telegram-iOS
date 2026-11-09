@@ -10,6 +10,7 @@ import StickerPickerScreen
 import EntityKeyboard
 import MediaEditor
 import PresentationDataUtils
+import UndoUI
 
 public final class MomentsDetailScreen: ViewController {
     private let context: AccountContext
@@ -208,18 +209,9 @@ public final class MomentsDetailScreen: ViewController {
     /// Comments store the same media object as a post: a tus key, not a Telegram document id.
     private func uploadCommentMedia(file: TelegramMediaFile, type: MomentsMediaType, parentId: String?) {
         let resource = file.resource
-        let resolved: Signal<String, NoError>
-        if let local = resource as? LocalFileReferenceMediaResource, FileManager.default.fileExists(atPath: local.localFilePath) {
-            resolved = .single(local.localFilePath)
-        } else {
-            resolved = self.context.engine.resources.data(id: EngineMediaResource(resource).id)
-            |> filter { $0.isComplete && !$0.path.isEmpty }
-            |> take(1)
-            |> map { $0.path }
-        }
+        let resolved = self.commentMediaPath(resource)
         let dimensions = file.dimensions
         let upload = resolved
-        |> castError(MomentsAPIError.self)
         |> mapToSignal { [weak self] path -> Signal<MomentsMedia, MomentsAPIError> in
             guard let self else {
                 return .complete()
@@ -248,8 +240,43 @@ public final class MomentsDetailScreen: ViewController {
             self.reload()
         }, error: { [weak self] _ in
             guard let self else { return }
-            self.present(textAlertController(context: self.context, title: nil, text: momentsText(self.presentationData.strings, .loadFailed), actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .cancel), action: {})]), in: .window(.root))
+            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .loadFailed))
         })
+    }
+
+    /// Download the sticker or GIF, give up after 12 seconds, and try once more.
+    private func commentMediaPath(_ resource: TelegramMediaResource) -> Signal<String, MomentsAPIError> {
+        if let local = resource as? LocalFileReferenceMediaResource, FileManager.default.fileExists(atPath: local.localFilePath) {
+            return .single(local.localFilePath)
+        }
+        let engineResource = EngineMediaResource(resource)
+        func once() -> Signal<String, MomentsAPIError> {
+            return Signal<String, MomentsAPIError> { [weak self] subscriber in
+                guard let self else {
+                    subscriber.putError(.cancelled)
+                    return EmptyDisposable
+                }
+                let fetch = self.context.engine.resources.fetchedResource(resource: engineResource).start(error: { _ in
+                    subscriber.putError(.transport("fetch"))
+                })
+                let data = self.context.engine.resources.data(resource: engineResource, waitUntilFetchStatus: true)
+                |> filter { $0.isComplete && !$0.path.isEmpty }
+                |> take(1)
+                |> start(next: { item in
+                    subscriber.putNext(item.path)
+                    subscriber.putCompletion()
+                })
+                return ActionDisposable {
+                    fetch.dispose()
+                    data.dispose()
+                }
+            }
+            |> timeout(12.0, queue: Queue.concurrentDefaultQueue(), alternate: .fail(.transport("timeout")))
+        }
+        return once()
+        |> `catch` { _ -> Signal<String, MomentsAPIError> in
+            return once()
+        }
     }
 
     @objc private func toggleSort() {
@@ -257,6 +284,10 @@ public final class MomentsDetailScreen: ViewController {
         (self.displayNode.view.viewWithTag(7) as? UIButton)?.setTitle(momentsText(self.presentationData.strings, self.sort == "hot" ? .sortHot : .sortLatest), for: .normal)
         self.reload()
     }
+}
+
+func momentsPresentErrorToast(controller: ViewController, presentationData: PresentationData, text: String) {
+    controller.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: 3.0, customUndoText: nil), elevatedLayout: false, action: { _ in true }), in: .current)
 }
 
 extension MomentsDetailScreen: UITextFieldDelegate {

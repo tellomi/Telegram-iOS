@@ -96,6 +96,9 @@ public enum MomentsTextKey {
     case pinned
     case sortRelevance
     case repostHeader
+    case voice
+    case voiceStop
+    case voiceFailed
 }
 
 public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -> String {
@@ -289,6 +292,12 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
         (resolved, english, chinese) = (strings.Moments_Sort_Relevance, "Relevance", "相关度")
     case .repostHeader:
         (resolved, english, chinese) = (strings.Moments_RepostHeader, "reposted", "转发了")
+    case .voice:
+        (resolved, english, chinese) = (strings.Moments_Voice, "Voice", "语音")
+    case .voiceStop:
+        (resolved, english, chinese) = (strings.Moments_VoiceStop, "Stop", "停止")
+    case .voiceFailed:
+        (resolved, english, chinese) = (strings.Moments_VoiceFailed, "Could not record a voice post.", "语音没有录上")
     }
     if strings.baseLanguageCode.hasPrefix("zh"), resolved == english {
         return chinese
