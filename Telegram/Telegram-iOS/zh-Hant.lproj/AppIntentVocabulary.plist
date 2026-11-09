@@ -9,7 +9,7 @@
 			<string>INSendMessageIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>用 Tellomi 給 Alex 發訊息，說我十分鐘後到</string>
+				<string>用 Tellomi 給 Alex 發一則訊息，告訴他我十分鐘後到</string>
 			</array>
 		</dict>
 		<dict>
