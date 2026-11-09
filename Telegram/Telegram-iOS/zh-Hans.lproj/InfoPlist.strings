@@ -1,0 +1,5 @@
+/* Localized versions of Info.plist keys */
+
+"NSLocationWhenInUseUsageDescription" = "当你把位置发送给朋友时，Tellomi 需要访问位置信息，以便向他们显示地图。";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "当你选择在聊天中与朋友分享实时位置时，Tellomi 需要在后台访问你的位置，以便在分享期间持续更新。";
+"NSLocationAlwaysUsageDescription" = "当你选择在聊天中与朋友分享实时位置时，Tellomi 需要在后台访问你的位置，以便在分享期间持续更新。从 Apple Watch 发送位置也需要此权限。";

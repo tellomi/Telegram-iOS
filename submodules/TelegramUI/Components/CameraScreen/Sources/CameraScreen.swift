@@ -2063,7 +2063,7 @@ private final class CameraScreenComponent: CombinedComponent {
                 let durationString =  String(format: "%02d:%02d", (duration / 60) % 60, duration % 60)
                 let timeLabel = timeLabel.update(
                     component: MultilineTextComponent(
-                        text: .plain(NSAttributedString(string: durationString, font: Font.with(size: 21.0, design: .camera), textColor: controlsTintColor)),
+                        text: .plain(NSAttributedString(string: durationString, font: UIFont.monospacedDigitSystemFont(ofSize: 21.0, weight: .regular), textColor: controlsTintColor)),
                         horizontalAlignment: .center,
                         textShadowColor: controlsTintColor == .black ? .clear : UIColor(rgb: 0x000000, alpha: 0.2)
                     ),
