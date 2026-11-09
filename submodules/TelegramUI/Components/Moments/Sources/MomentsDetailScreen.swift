@@ -199,11 +199,57 @@ public final class MomentsDetailScreen: ViewController {
             default:
                 return true
             }
-            let _ = self.context.engine.moments.addComment(postId: self.card.id, text: "", parentId: self.field.accessibilityHint, attachment: momentsCommentAttachment(file: file, type: type)).start()
-            self.reload()
+            self.uploadCommentMedia(file: file, type: type, parentId: self.field.accessibilityHint)
             return true
         }
         (self.navigationController as? NavigationController)?.pushViewController(screen)
+    }
+
+    /// Comments store the same media object as a post: a tus key, not a Telegram document id.
+    private func uploadCommentMedia(file: TelegramMediaFile, type: MomentsMediaType, parentId: String?) {
+        let resource = file.resource
+        let resolved: Signal<String, NoError>
+        if let local = resource as? LocalFileReferenceMediaResource, FileManager.default.fileExists(atPath: local.localFilePath) {
+            resolved = .single(local.localFilePath)
+        } else {
+            resolved = self.context.engine.resources.data(id: EngineMediaResource(resource).id)
+            |> filter { $0.isComplete && !$0.path.isEmpty }
+            |> take(1)
+            |> map { $0.path }
+        }
+        let dimensions = file.dimensions
+        let upload = resolved
+        |> castError(MomentsAPIError.self)
+        |> mapToSignal { [weak self] path -> Signal<MomentsMedia, MomentsAPIError> in
+            guard let self else {
+                return .complete()
+            }
+            return self.context.engine.moments.uploadFile(MomentsUploadFile(
+                path: path,
+                filename: file.fileName ?? momentsPlaybackFileName(type),
+                mimeType: file.mimeType.isEmpty ? momentsPlaybackMimeType(type) : file.mimeType,
+                type: type,
+                width: Int(dimensions?.width ?? 0),
+                height: Int(dimensions?.height ?? 0),
+                durationMs: Int((file.duration ?? 0) * 1000),
+                order: 0
+            ))
+        }
+        let _ = (upload |> deliverOnMainQueue).start(next: { [weak self] media in
+            guard let self else { return }
+            let attachment: [String: Any] = [
+                "type": media.type.rawValue,
+                "key": media.key,
+                "w": media.width,
+                "h": media.height,
+                "duration_ms": media.durationMs
+            ]
+            let _ = self.context.engine.moments.addComment(postId: self.card.id, text: "", parentId: parentId, attachment: attachment).start()
+            self.reload()
+        }, error: { [weak self] _ in
+            guard let self else { return }
+            self.present(textAlertController(context: self.context, title: nil, text: momentsText(self.presentationData.strings, .loadFailed), actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .cancel), action: {})]), in: .window(.root))
+        })
     }
 
     @objc private func toggleSort() {
@@ -211,21 +257,6 @@ public final class MomentsDetailScreen: ViewController {
         (self.displayNode.view.viewWithTag(7) as? UIButton)?.setTitle(momentsText(self.presentationData.strings, self.sort == "hot" ? .sortHot : .sortLatest), for: .normal)
         self.reload()
     }
-}
-
-func momentsCommentAttachment(file: TelegramMediaFile, type: MomentsMediaType) -> [String: Any] {
-    var body: [String: Any] = [
-        "type": type.rawValue,
-        "key": "\(file.fileId.id)",
-        "document_id": "\(file.fileId.id)",
-        "mime": file.mimeType
-    ]
-    if let resource = file.resource as? CloudDocumentMediaResource {
-        body["document_id"] = "\(resource.fileId)"
-        body["access_hash"] = "\(resource.accessHash)"
-        body["key"] = "\(resource.fileId)"
-    }
-    return body
 }
 
 extension MomentsDetailScreen: UITextFieldDelegate {
@@ -309,66 +340,6 @@ public final class MomentsNotificationsScreen: ViewController {
                     }
                 }))
             }
-        }
-        let previous = self.rendered
-        self.rendered = rows.count
-        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: rows.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { _ in })
-    }
-}
-
-public final class MomentsCityScreen: ViewController {
-    private let context: AccountContext
-    private let picked: (MomentsCity) -> Void
-    private var cities: [MomentsCity] = []
-    private let list = ListViewImpl()
-    private var rendered = 0
-    private var presentationData: PresentationData
-
-    public init(context: AccountContext, picked: @escaping (MomentsCity) -> Void) {
-        self.context = context
-        self.picked = picked
-        self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
-        self.title = momentsText(self.presentationData.strings, .switchCity)
-    }
-
-    required init(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override public func loadDisplayNode() {
-        self.displayNode = ASDisplayNode()
-        self.displayNode.addSubnode(self.list)
-        let field = UITextField()
-        field.tag = 3
-        field.placeholder = momentsText(self.presentationData.strings, .search)
-        field.borderStyle = .roundedRect
-        field.addTarget(self, action: #selector(self.queryChanged), for: .editingChanged)
-        self.displayNode.view.addSubview(field)
-        self.displayNodeDidLoad()
-    }
-
-    override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
-        super.containerLayoutUpdated(layout, transition: transition)
-        let top = self.navigationLayout(layout: layout).navigationFrame.maxY
-        self.displayNode.view.viewWithTag(3)?.frame = CGRect(x: 12, y: top + 8, width: layout.size.width - 24, height: 36)
-        self.list.frame = CGRect(x: 0, y: top + 52, width: layout.size.width, height: layout.size.height - top - 52)
-        self.render()
-    }
-
-    @objc private func queryChanged(_ field: UITextField) {
-        let _ = (self.context.engine.moments.cities(query: field.text ?? "") |> deliverOnMainQueue).start(next: { [weak self] cities in
-            self?.cities = cities
-            self?.render()
-        })
-    }
-
-    private func render() {
-        guard self.list.bounds.width > 0 else { return }
-        let theme = self.presentationData.theme
-        let rows: [ListViewItem] = self.cities.map { city in
-            MomentsStatusItem(text: city.name, theme: theme, action: { [weak self] in
-                self?.picked(city)
-                self?.navigationController?.popViewController(animated: true)
-            })
         }
         let previous = self.rendered
         self.rendered = rows.count

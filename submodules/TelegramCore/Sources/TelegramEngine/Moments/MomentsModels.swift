@@ -549,16 +549,6 @@ public struct MomentsListVisibilitySettings: Codable, Equatable {
     public static let defaults = MomentsListVisibilitySettings()
 }
 
-public struct MomentsCity: Codable, Equatable {
-    public var code: String
-    public var name: String
-
-    public init(code: String, name: String) {
-        self.code = code
-        self.name = name
-    }
-}
-
 public enum MomentsAPIError: Equatable, Error {
     case credentialUnavailable
     case notFound

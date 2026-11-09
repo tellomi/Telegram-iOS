@@ -36,7 +36,7 @@ public struct MomentsLimits: Equatable {
         imageLimit: Int = 10,
         videoLimit: Int = 3,
         videoMaxDuration: Double = 60,
-        voiceMaxDuration: Double = 180,
+        voiceMaxDuration: Double = 60,
         commentTextLimit: Int = 1000,
         mentionLimit: Int = 10,
         topicLimit: Int = 3,
@@ -201,20 +201,72 @@ public func momentsFeedBaseURL(_ raw: String) -> String? {
     return "https://\(renderedHost)"
 }
 
-/// Join a relative media key onto `media_base_url`. Absolute https URLs are left alone.
+/// Public objects are served here. Signed R2 URLs stay absolute and are not rewritten.
+public let momentsPublicMediaBaseURL = "https://media.tellomi.app/feed"
+
+/// Join a relative media key onto `media_base_url`, or the public CDN when config has no https base.
+/// An absolute https URL (a signed non-public object) is returned unchanged. `http` keys are dropped.
 public func momentsMediaURL(base: String?, key: String?) -> String? {
     guard let key, !key.isEmpty else {
         return nil
     }
-    if key.hasPrefix("https://") || key.hasPrefix("http://") {
+    if key.hasPrefix("https://") {
         return key
     }
-    guard let base, base.hasPrefix("https://") else {
+    if key.hasPrefix("http://") {
         return nil
     }
-    let root = base.hasSuffix("/") ? String(base.dropLast()) : base
+    let chosen: String
+    if let base, base.hasPrefix("https://") {
+        chosen = base
+    } else {
+        chosen = momentsPublicMediaBaseURL
+    }
+    let root = chosen.hasSuffix("/") ? String(chosen.dropLast()) : chosen
     let suffix = key.hasPrefix("/") ? String(key.dropFirst()) : key
     return root + "/" + suffix
+}
+
+/// Image versus video comes from the card's `type`, never from the HTTP content-type.
+/// Signed objects often arrive as `application/octet-stream`.
+public func momentsPresentsAsVideo(_ type: MomentsMediaType) -> Bool {
+    switch type {
+    case .video, .gif:
+        return true
+    case .image, .sticker, .audio:
+        return false
+    }
+}
+
+public func momentsPresentsAsImage(_ type: MomentsMediaType) -> Bool {
+    switch type {
+    case .image, .sticker:
+        return true
+    case .video, .gif, .audio:
+        return false
+    }
+}
+
+public func momentsPlaybackMimeType(_ type: MomentsMediaType) -> String {
+    switch type {
+    case .video, .gif:
+        return "video/mp4"
+    case .image, .sticker:
+        return "image/jpeg"
+    case .audio:
+        return "audio/mpeg"
+    }
+}
+
+public func momentsPlaybackFileName(_ type: MomentsMediaType) -> String {
+    switch type {
+    case .video, .gif:
+        return "media.mp4"
+    case .image, .sticker:
+        return "media.jpg"
+    case .audio:
+        return "media.mp3"
+    }
 }
 
 /// Where a moments object is being shown. The server's `canView` is the authority; the client uses the

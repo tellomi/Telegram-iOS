@@ -589,21 +589,6 @@ public extension TelegramEngine {
             ]) |> ignoreValues
         }
 
-        public func cities(query: String) -> Signal<[MomentsCity], MomentsAPIError> {
-            return self.call(method: "GET", path: "/v1/feed/cities", query: ["q": query])
-            |> map { data in
-                guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    return []
-                }
-                return momentsArray(root["items"] ?? root["cities"]).compactMap { item in
-                    guard let code = momentsString(item, "code") else {
-                        return nil
-                    }
-                    return MomentsCity(code: code, name: momentsString(item, "name") ?? code)
-                }
-            }
-        }
-
         public func remoteConfig() -> Signal<MomentsRemoteConfig, MomentsAPIError> {
             return self.call(method: "GET", path: "/v1/feed/config")
             |> map { data in

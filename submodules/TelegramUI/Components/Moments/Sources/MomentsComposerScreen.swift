@@ -143,7 +143,7 @@ public final class MomentsComposerScreen: ViewController {
 
     @objc private func pickImages() {
         let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll)
-        if let rejection = momentsCanAdd(kind: .image, to: state) {
+        if let rejection = momentsCanAdd(kind: .image, to: state, limits: self.limits) {
             self.presentRejection(rejection)
             return
         }
@@ -197,14 +197,14 @@ public final class MomentsComposerScreen: ViewController {
                 durationMs = Int((file.duration ?? 0) * 1000)
                 filename = file.fileName ?? "video-\(index).mp4"
                 mime = file.mimeType
-                if Double(durationMs) / 1000.0 > MomentsLimits.standard.videoMaxDuration {
+                if Double(durationMs) / 1000.0 > self.limits.videoMaxDuration {
                     self.presentRejection(.videoTooLong)
                     return
                 }
             } else {
                 continue
             }
-            if let rejection = momentsCanAdd(kind: type == .image ? .image : .video, to: MomentsComposerAttachmentState(imageCount: nextImages, videoCount: nextVideos, hasVoice: self.hasVoice, hasPoll: self.hasPoll)) {
+            if let rejection = momentsCanAdd(kind: type == .image ? .image : .video, to: MomentsComposerAttachmentState(imageCount: nextImages, videoCount: nextVideos, hasVoice: self.hasVoice, hasPoll: self.hasPoll), limits: self.limits) {
                 self.presentRejection(rejection)
                 return
             }

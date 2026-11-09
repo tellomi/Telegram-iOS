@@ -94,6 +94,18 @@ jobs:
           test -f bazel-bin/Telegram/Telegram.ipa
           echo "Built bazel-bin/Telegram/Telegram.ipa. Not uploaded."
 
+      - name: Run MomentsRulesTests
+        run: |
+          set -euo pipefail
+          python3 -u build-system/Make/Make.py \
+            --overrideXcodeVersion \
+            --cacheDir /Users/runner/telegram-bazel-cache \
+            test \
+            --configurationPath "${RUNNER_TEMP}/tellomi-configuration.json" \
+            --codesigningInformationPath "${RUNNER_TEMP}/tellomi-signing" \
+            --target //submodules/TelegramCore:TelegramCoreTests \
+            --testFilter MomentsRulesTests
+
       - name: Summarize compiler errors
         if: failure()
         run: |

@@ -335,7 +335,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     }
 
     private func layoutAlbum(_ item: MomentsPostItem, x: CGFloat, y: CGFloat, width: CGFloat) {
-        let slides = item.card.images + item.card.videos
+        let slides = item.card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
         self.album.frame = CGRect(x: x, y: y, width: width, height: slides.isEmpty ? 0 : 212)
         self.album.contentSize = CGSize(width: width * CGFloat(max(slides.count, 1)), height: 212)
         self.album.subviews.forEach { $0.removeFromSuperview() }
@@ -346,13 +346,14 @@ final class MomentsPostItemNode: ListViewItemNode {
             label.textAlignment = .center
             label.textColor = item.theme.list.itemSecondaryTextColor
             label.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
-            if media.type == .video {
+            if momentsPresentsAsVideo(media.type) {
                 let seconds = media.durationMs / 1000
                 label.text = "\(seconds)s"
                 label.accessibilityLabel = "\(seconds)s"
                 if item.playing && index == item.albumIndex {
                     playingURL = media.remoteURL
                 }
+                label.accessibilityIdentifier = media.type.rawValue
             } else if let remoteURL = media.remoteURL {
                 let imageView = UIImageView(frame: frame)
                 imageView.contentMode = .scaleAspectFill
@@ -371,7 +372,8 @@ final class MomentsPostItemNode: ListViewItemNode {
         let page = min(item.albumIndex, max(slides.count - 1, 0))
         self.albumIndex = page
         self.album.setContentOffset(CGPoint(x: width * CGFloat(page), y: 0), animated: false)
-        self.attachVideo(url: playingURL, item: item, frame: CGRect(x: x + width * CGFloat(page), y: y, width: width, height: 212))
+        let playingType = slides.indices.contains(page) ? slides[page].type : .video
+        self.attachVideo(url: playingURL, type: playingType, item: item, frame: CGRect(x: x + width * CGFloat(page), y: y, width: width, height: 212))
     }
 
     private func layoutPoll(_ item: MomentsPostItem, x: CGFloat, y: CGFloat, width: CGFloat) {
@@ -395,7 +397,7 @@ final class MomentsPostItemNode: ListViewItemNode {
         }
     }
 
-    private func attachVideo(url: String?, item: MomentsPostItem, frame: CGRect) {
+    private func attachVideo(url: String?, type: MomentsMediaType, item: MomentsPostItem, frame: CGRect) {
         guard let url, let context = item.context, url.hasPrefix("https://") else {
             self.videoNode?.canAttachContent = false
             self.videoNode?.removeFromSupernode()
@@ -410,7 +412,7 @@ final class MomentsPostItemNode: ListViewItemNode {
         }
         self.videoNode?.canAttachContent = false
         self.videoNode?.removeFromSupernode()
-        let node = momentsVideoNode(context: context, url: url, size: frame.size)
+        let node = momentsVideoNode(context: context, url: url, type: type, size: frame.size)
         node.frame = frame
         self.addSubnode(node)
         node.updateLayout(size: frame.size, transition: .immediate)
@@ -428,8 +430,8 @@ final class MomentsPostItemNode: ListViewItemNode {
         guard frame.intersects(visible) else {
             return nil
         }
-        let slides = item.card.images + item.card.videos
-        guard self.albumIndex < slides.count, slides[self.albumIndex].type == .video, slides[self.albumIndex].remoteURL != nil else {
+        let slides = item.card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
+        guard self.albumIndex < slides.count, momentsPresentsAsVideo(slides[self.albumIndex].type), slides[self.albumIndex].remoteURL != nil else {
             return nil
         }
         return (item.card.id, self.albumIndex)
@@ -473,7 +475,7 @@ private func momentsLoadImage(_ urlString: String, into imageView: UIImageView) 
     task.resume()
 }
 
-private func momentsVideoNode(context: AccountContext, url: String, size: CGSize) -> UniversalVideoNode {
+private func momentsVideoNode(context: AccountContext, url: String, type: MomentsMediaType, size: CGSize) -> UniversalVideoNode {
     let width = Int32(max(size.width, 1))
     let height = Int32(max(size.height, 1))
     let file = TelegramMediaFile(
@@ -483,9 +485,12 @@ private func momentsVideoNode(context: AccountContext, url: String, size: CGSize
         previewRepresentations: [],
         videoThumbnails: [],
         immediateThumbnailData: nil,
-        mimeType: "video/mp4",
+        mimeType: momentsPlaybackMimeType(type),
         size: nil,
-        attributes: [.Video(duration: 0, size: PixelDimensions(width: width, height: height), flags: TelegramMediaVideoFlags(), preloadSize: nil, coverTime: nil, videoCodec: nil)],
+        attributes: [
+            .FileName(fileName: momentsPlaybackFileName(type)),
+            .Video(duration: 0, size: PixelDimensions(width: width, height: height), flags: TelegramMediaVideoFlags(), preloadSize: nil, coverTime: nil, videoCodec: nil)
+        ],
         alternativeRepresentations: []
     )
     let content = NativeVideoContent(

@@ -112,7 +112,9 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(limits.textLimit, 500)
         XCTAssertEqual(limits.imageLimit, 10)
         XCTAssertEqual(limits.videoMaxDuration, 30)
-        XCTAssertEqual(limits.voiceMaxDuration, MomentsLimits.standard.voiceMaxDuration)
+        XCTAssertEqual(MomentsLimits.standard.voiceMaxDuration, 60)
+        XCTAssertEqual(limits.voiceMaxDuration, 60)
+        XCTAssertEqual(MomentsLimits.standard.applying(config: MomentsRemoteConfig(voiceMaxDuration: 45)).voiceMaxDuration, 45)
         XCTAssertTrue(limits.newsStaysOff)
         XCTAssertTrue(limits.tabEnabled)
         XCTAssertFalse(MomentsFeedKind.recommend.probesForNewPosts)
@@ -160,8 +162,18 @@ final class MomentsRulesTests: XCTestCase {
     func testMediaUrlsComeFromConfigBase() {
         XCTAssertEqual(momentsMediaURL(base: "https://cdn.example/media/", key: "a/b.jpg"), "https://cdn.example/media/a/b.jpg")
         XCTAssertEqual(momentsMediaURL(base: "https://cdn.example", key: "https://other.example/a.jpg"), "https://other.example/a.jpg")
-        XCTAssertNil(momentsMediaURL(base: nil, key: "a/b.jpg"))
-        XCTAssertNil(momentsMediaURL(base: "http://cdn.example", key: "a/b.jpg"))
+        XCTAssertEqual(momentsMediaURL(base: nil, key: "a/b.jpg"), "https://media.tellomi.app/feed/a/b.jpg")
+        XCTAssertEqual(momentsMediaURL(base: "http://cdn.example", key: "a/b.jpg"), "https://media.tellomi.app/feed/a/b.jpg")
+        XCTAssertNil(momentsMediaURL(base: momentsPublicMediaBaseURL, key: "http://cdn.example/a.jpg"))
+        let signed = "https://r2.example/obj?X-Amz-Signature=abc"
+        XCTAssertEqual(momentsMediaURL(base: momentsPublicMediaBaseURL, key: signed), signed)
+        XCTAssertTrue(momentsPresentsAsVideo(.video))
+        XCTAssertTrue(momentsPresentsAsVideo(.gif))
+        XCTAssertTrue(momentsPresentsAsImage(.image))
+        XCTAssertTrue(momentsPresentsAsImage(.sticker))
+        XCTAssertFalse(momentsPresentsAsVideo(.image))
+        XCTAssertEqual(momentsPlaybackMimeType(.video), "video/mp4")
+        XCTAssertEqual(momentsPlaybackFileName(.image), "media.jpg")
 
         let raw = #"{"media_base_url":"https://cdn.example/media/"}"#.data(using: .utf8)!
         XCTAssertEqual(momentsConfigMediaBase(raw), "https://cdn.example/media")

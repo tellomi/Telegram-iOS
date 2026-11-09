@@ -10,9 +10,6 @@ import AccountContext
 import ContextUI
 import ComponentFlow
 import HorizontalTabsComponent
-import CoreLocation
-import DeviceLocationManager
-import PresentationDataUtils
 import PeerReportScreen
 
 public final class MomentsScreen: ViewController {
@@ -158,8 +155,6 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var albumIndex: [String: Int] = [:]
     private var sessionHidden: Set<String> = []
     private var hides = MomentsLocalHides()
-    private var city: String?
-    private var cityName: String?
     private var nearbySort = "latest"
     private var playing: MomentsPlaybackRequest = .none
     private var resolvingPlayback = false
@@ -309,7 +304,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             case .friends:
                 return momentsText(strings, .friends)
             case .nearby:
-                return self.cityName.map { "\(momentsText(strings, .nearby)) \($0)" } ?? momentsText(strings, .nearby)
+                return momentsText(strings, .nearby)
             }
         }
         let selectedIndex = self.visibleTabs.firstIndex(of: self.selected) ?? 0
@@ -339,11 +334,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         let index = self.visibleTabs.firstIndex(of: kind) ?? 0
         self.pager.setContentOffset(CGPoint(x: self.pager.bounds.width * CGFloat(index), y: 0), animated: animated)
         if self.models[kind]?.loaded != true {
-            if kind == .nearby && self.city == nil {
-                self.prepareNearby()
-            } else {
-                self.load(kind, refresh: false)
-            }
+            self.load(kind, refresh: false)
         }
         self.scheduleProbe()
         if let layout = self.validLayout {
@@ -378,7 +369,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
                 self.render(kind, resetScroll: false)
             }))
         }
-        self.disposable.add((self.context.engine.moments.loadFeed(kind, cursor: cursor, city: self.city, sort: self.nearbySort) |> deliverOnMainQueue).start(next: { [weak self] page in
+        self.disposable.add((self.context.engine.moments.loadFeed(kind, cursor: cursor, city: nil, sort: self.nearbySort) |> deliverOnMainQueue).start(next: { [weak self] page in
             guard let self else { return }
             let model = self.models[kind] ?? MomentsFeedModel()
             model.loading = false
@@ -425,11 +416,11 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
                 case .recommend: text = momentsText(strings, .emptyRecommend)
                 case .following: text = momentsText(strings, .emptyFollowing)
                 case .friends: text = momentsText(strings, .emptyFriends) + "\n" + momentsText(strings, .findPeople)
-                case .nearby: text = momentsText(strings, .emptyNearby) + "\n" + momentsText(strings, .switchCity)
+                case .nearby: text = momentsText(strings, .emptyNearby)
                 }
             }
             entries = [MomentsStatusItem(text: text, theme: theme, action: { [weak self] in
-                if kind == .nearby { self?.prepareNearby() } else { self?.load(kind, refresh: true) }
+                self?.load(kind, refresh: true)
             })]
         } else {
             for card in visible {
@@ -653,51 +644,6 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private func openURL(_ url: String) {
         guard let controller = self.controller else { return }
         self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: false, presentationData: self.presentationData, navigationController: controller.navigationController as? NavigationController, dismissInput: {})
-    }
-
-    private func prepareNearby() {
-        guard let controller = self.controller else { return }
-        let alert = textAlertController(context: self.context, title: momentsText(self.presentationData.strings, .nearby), text: momentsText(self.presentationData.strings, .nearbyPermission), actions: [
-            TextAlertAction(type: .genericAction, title: momentsText(self.presentationData.strings, .cancel), action: { [weak self] in self?.pickCity() }),
-            TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .nearby), action: { [weak self] in self?.requestCity() })
-        ], actionLayout: .vertical)
-        controller.present(alert, in: .window(.root))
-    }
-
-    private func requestCity() {
-        guard let manager = self.context.sharedContext.locationManager else {
-            self.pickCity()
-            return
-        }
-        self.disposable.add((currentLocationManagerCoordinate(manager: manager, timeout: 8) |> deliverOnMainQueue).start(next: { [weak self] coordinate in
-            guard let self else { return }
-            guard let coordinate else {
-                self.pickCity()
-                return
-            }
-            CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)) { marks, _ in
-                let city = marks?.first?.locality
-                Queue.mainQueue().async {
-                    if let city {
-                        self.cityName = city
-                        self.city = city
-                        self.load(.nearby, refresh: true)
-                    } else {
-                        self.pickCity()
-                    }
-                }
-            }
-        }))
-    }
-
-    private func pickCity() {
-        guard let controller = self.controller else { return }
-        let screen = MomentsCityScreen(context: self.context, picked: { [weak self] city in
-            self?.city = city.code
-            self?.cityName = city.name
-            self?.load(.nearby, refresh: true)
-        })
-        (controller.navigationController as? NavigationController)?.pushViewController(screen)
     }
 
     private func scheduleProbe() {
