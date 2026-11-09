@@ -161,6 +161,7 @@ public extension TelegramEngine {
             return self.account.postbox.transaction { transaction -> String? in
                 return momentsFeedEndpoint(appConfiguration: currentAppConfiguration(transaction: transaction))?.baseURL
             }
+            |> castError(MomentsAPIError.self)
             |> mapToSignal { base -> Signal<String, MomentsAPIError> in
                 guard let base else {
                     return .fail(.credentialUnavailable)
