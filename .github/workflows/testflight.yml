@@ -23,7 +23,10 @@
 # already on it does not start a run; the push has to add a commit.
 # workflow_dispatch remains, but the integration account cannot call it
 # (403). Docs-only pushes are ignored. A newer release/ios push cancels
-# an older in-progress upload.
+# an older in-progress upload. The concurrency group below is what keeps
+# two overlapping runs from uploading the same CFBundleVersion: the
+# cancelled run does not finish, and the survivor picks its number only
+# after reading App Store Connect.
 
 name: TestFlight
 
@@ -74,8 +77,10 @@ jobs:
         run: bash .github/checkout-submodules.sh
 
       # A v* tag must match Tellomi/version. A master push or a manual
-      # dispatch from a branch does not: the marketing version is that file,
-      # and the next step picks a build number above the latest ASC build.
+      # dispatch from a branch does not: the marketing version is that file.
+      # The next step picks a CFBundleVersion above every App Store Connect
+      # build of this app (every marketing version, including processing,
+      # failed, invalid, expired, and uploads that are not builds yet).
       - name: Check marketing version
         run: python3 Tellomi/check_marketing_version.py
 
@@ -121,7 +126,8 @@ jobs:
             --output "${RUNNER_TEMP}/tellomi-signing" \
             --cert-dir "${GITHUB_WORKSPACE}/tellomi-distribution-cert" \
             --build-number-out "${RUNNER_TEMP}/build-number.txt" \
-            --build-number-floor "${{ github.run_number }}"
+            --build-number-floor "${{ github.run_number }}" \
+            --build-number-offset "1000"
           echo "BUILD_NUMBER=$(tr -d '[:space:]' < "${RUNNER_TEMP}/build-number.txt")" >> "${GITHUB_ENV}"
 
       - name: Save distribution certificate
