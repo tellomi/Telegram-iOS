@@ -118,7 +118,9 @@ jobs:
           existing = json.loads(simctl("list", "devices", "available", "-j")).get("devices", {}).get(runtime_id, [])
           iphones = [d for d in existing if "iPhone" in d.get("name", "") and d.get("isAvailable", True) and d.get("udid")]
           if iphones:
-              chosen = iphones[0]
+              sys.stderr.write("available iPhones: %s\n" % ", ".join(d["name"] for d in iphones))
+              regular = [d for d in iphones if "Duo" not in d["name"]]
+              chosen = (regular or iphones)[0]
               sys.stderr.write("reusing %s %s on %s\n" % (chosen["udid"], chosen["name"], runtime.get("name")))
               print(chosen["udid"])
               sys.exit(0)
@@ -161,7 +163,7 @@ jobs:
             --target //submodules/TelegramCore:MomentsRulesTests \
             --testFilter MomentsRulesTests \
             --testOutput all \
-            --testArg "--destination=platform=ios_simulator,id=${SIM_UDID}"
+            --testArg=--destination=platform=ios_simulator,id=${SIM_UDID}
 
       - name: Summarize compiler errors
         if: failure()
