@@ -114,21 +114,39 @@ jobs:
           if not ios:
               sys.exit("no available iOS simulator runtime")
           runtime = next((r for r in ios if r.get("name") in ("iOS 27.1", "iOS 27.1.0")), ios[-1])
-          names = [d["name"] for d in json.loads(simctl("list", "devicetypes", "-j"))["devicetypes"] if d["name"].startswith("iPhone")]
-          candidates = [name for name in ("iPhone 17", "iPhone 16", "iPhone 15") if name in names]
-          if names:
-              candidates.append(names[-1])
-          last = "no iPhone simulator device type"
-          for name in candidates:
+          runtime_id = runtime["identifier"]
+          existing = json.loads(simctl("list", "devices", "available", "-j")).get("devices", {}).get(runtime_id, [])
+          iphones = [d for d in existing if "iPhone" in d.get("name", "") and d.get("isAvailable", True) and d.get("udid")]
+          if iphones:
+              chosen = iphones[0]
+              sys.stderr.write("reusing %s %s on %s\n" % (chosen["udid"], chosen["name"], runtime.get("name")))
+              print(chosen["udid"])
+              sys.exit(0)
+          supported = [d for d in (runtime.get("supportedDeviceTypes") or []) if "iPhone" in d.get("name", "")]
+          if not supported:
+              supported = [d for d in json.loads(simctl("list", "devicetypes", "-j"))["devicetypes"] if d["name"].startswith("iPhone")]
+              sys.stderr.write("no supportedDeviceTypes on %s\n" % runtime.get("name"))
+          sys.stderr.write("iPhone candidates: %s\n" % ", ".join(d["name"] for d in supported[:6] + supported[-6:]))
+          # The list order is not stable across Xcode versions, so try both ends.
+          ordered = []
+          seen = set()
+          for device in list(supported[:6]) + list(reversed(supported[-6:])):
+              key = device.get("identifier") or device["name"]
+              if key not in seen:
+                  seen.add(key)
+                  ordered.append(device)
+          last = "no compatible iPhone for %s" % runtime.get("name")
+          for device in ordered:
+              token = device.get("identifier") or device["name"]
               result = subprocess.run(
-                  ["xcrun", "simctl", "create", "MomentsRules", name, runtime["identifier"]],
+                  ["xcrun", "simctl", "create", "MomentsRules", token, runtime_id],
                   text=True, capture_output=True)
               if result.returncode == 0 and result.stdout.strip():
+                  sys.stderr.write("simulator %s %s %s\n" % (result.stdout.strip(), device.get("name"), runtime_id))
                   print(result.stdout.strip())
-                  sys.stderr.write("simulator %s %s %s\n" % (result.stdout.strip(), name, runtime["identifier"]))
                   sys.exit(0)
               last = (result.stdout + result.stderr).strip()
-              sys.stderr.write("create %s failed: %s\n" % (name, last))
+              sys.stderr.write("create %s failed: %s\n" % (device.get("name"), last))
           sys.exit(last)
           PY
           )"
