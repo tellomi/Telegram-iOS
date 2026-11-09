@@ -11,7 +11,7 @@ import FlatBuffers
 import FlatSerialization
 
 public extension EmojiPagerContentComponent {
-    public static func momentsStickerInput(
+    static func momentsStickerInput(
         context: AccountContext,
         animationCache: AnimationCache,
         animationRenderer: MultiAnimationRenderer,

@@ -12,6 +12,8 @@ import ComponentFlow
 import HorizontalTabsComponent
 import CoreLocation
 import DeviceLocationManager
+import PresentationDataUtils
+import PeerReportScreen
 
 public final class MomentsScreen: ViewController {
     private let context: AccountContext

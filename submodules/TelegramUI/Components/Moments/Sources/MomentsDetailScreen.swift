@@ -9,6 +9,7 @@ import AccountContext
 import StickerPickerScreen
 import EntityKeyboard
 import MediaEditor
+import PresentationDataUtils
 
 public final class MomentsDetailScreen: ViewController {
     private let context: AccountContext

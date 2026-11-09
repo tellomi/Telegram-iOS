@@ -14,3 +14,5 @@ The feed is new client code. It does not revive the cancelled Discover/Feed work
 - Gallery media goes through `legacyAssetPickerEnqueueMessages` and tus `POST /v1/feed/media/uploads`.
 - A visible video uses `UniversalVideoNode` only when autoplay is on and Reduce Motion is off.
 - Comment stickers and GIFs use `StickerPickerScreen` (`hasGifs`). Likes and poll votes open an `ItemListPeerItem` list filled from `/v1/feed`.
+- Feed list endpoints return `{items:[{id,reason}],cursor}`. The client hydrates with `POST /v1/feed/cards`. Notifications use `?tab=interactions|follows|system`. Top tabs come from config `tabs`. `GET /v1/feed/status` hides the root tab when `visible` is false. The composer stops at 500 characters and 10 images.
+- `prepareMediaBase()` emits one `Void` so the requests chained after it actually run.

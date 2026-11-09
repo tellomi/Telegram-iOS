@@ -9,6 +9,7 @@ import AccountContext
 import MediaPickerUI
 import LegacyMediaPickerUI
 import ShareWithPeersScreen
+import PresentationDataUtils
 
 public final class MomentsComposerScreen: ViewController {
     private let context: AccountContext
@@ -155,8 +156,6 @@ public final class MomentsComposerScreen: ViewController {
             let _ = (legacyAssetPickerEnqueueMessages(context: self.context, account: self.context.account, signals: signals)
             |> deliverOnMainQueue).start(next: { [weak self] messages in
                 self?.uploadPicked(messages.map(\.message))
-            }, error: { [weak self] _ in
-                self?.presentRejection(.imageLimit)
             })
             done()
         }
@@ -232,6 +231,7 @@ public final class MomentsComposerScreen: ViewController {
         self.imageCount = nextImages
         self.videoCount = nextVideos
         let _ = (combineLatest(files)
+        |> castError(MomentsAPIError.self)
         |> mapToSignal { [weak self] files -> Signal<[MomentsMedia], MomentsAPIError> in
             guard let self else { return .complete() }
             return self.uploadSequentially(files)
