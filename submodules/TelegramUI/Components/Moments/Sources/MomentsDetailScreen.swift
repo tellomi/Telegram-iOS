@@ -259,10 +259,10 @@ public final class MomentsDetailScreen: ViewController {
                 let fetch = self.context.engine.resources.fetchedResource(resource: engineResource).start(error: { _ in
                     subscriber.putError(.transport("fetch"))
                 })
-                let data = self.context.engine.resources.data(resource: engineResource, waitUntilFetchStatus: true)
+                let watched = self.context.engine.resources.data(resource: engineResource, waitUntilFetchStatus: true)
                 |> filter { $0.isComplete && !$0.path.isEmpty }
                 |> take(1)
-                |> start(next: { item in
+                let data = watched.start(next: { item in
                     subscriber.putNext(item.path)
                     subscriber.putCompletion()
                 })
