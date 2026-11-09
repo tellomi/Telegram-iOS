@@ -97,6 +97,43 @@ jobs:
       - name: Run MomentsRulesTests
         run: |
           set -euo pipefail
+          # xctestrunner builds a runtime id itself and hides the simctl error
+          # behind exit 15. Create the simulator here, from the runtime id
+          # simctl actually lists, and hand that device to the test runner.
+          SIM_UDID="$(python3 - << 'PY'
+          import json, subprocess, sys
+          def simctl(*args):
+              result = subprocess.run(["xcrun", "simctl", *args], text=True, capture_output=True)
+              if result.returncode != 0:
+                  sys.stderr.write(result.stdout)
+                  sys.stderr.write(result.stderr)
+                  raise SystemExit(result.returncode)
+              return result.stdout
+          runtimes = json.loads(simctl("list", "runtimes", "-j"))["runtimes"]
+          ios = [r for r in runtimes if str(r.get("name", "")).startswith("iOS") and r.get("isAvailable", True)]
+          if not ios:
+              sys.exit("no available iOS simulator runtime")
+          runtime = next((r for r in ios if r.get("name") in ("iOS 27.1", "iOS 27.1.0")), ios[-1])
+          names = [d["name"] for d in json.loads(simctl("list", "devicetypes", "-j"))["devicetypes"] if d["name"].startswith("iPhone")]
+          candidates = [name for name in ("iPhone 17", "iPhone 16", "iPhone 15") if name in names]
+          if names:
+              candidates.append(names[-1])
+          last = "no iPhone simulator device type"
+          for name in candidates:
+              result = subprocess.run(
+                  ["xcrun", "simctl", "create", "MomentsRules", name, runtime["identifier"]],
+                  text=True, capture_output=True)
+              if result.returncode == 0 and result.stdout.strip():
+                  print(result.stdout.strip())
+                  sys.stderr.write("simulator %s %s %s\n" % (result.stdout.strip(), name, runtime["identifier"]))
+                  sys.exit(0)
+              last = (result.stdout + result.stderr).strip()
+              sys.stderr.write("create %s failed: %s\n" % (name, last))
+          sys.exit(last)
+          PY
+          )"
+          xcrun simctl boot "${SIM_UDID}" || true
+          xcrun simctl bootstatus "${SIM_UDID}" -b
           python3 -u build-system/Make/Make.py \
             --overrideXcodeVersion \
             --cacheDir /Users/runner/telegram-bazel-cache \
@@ -104,7 +141,9 @@ jobs:
             --configurationPath "${RUNNER_TEMP}/tellomi-configuration.json" \
             --codesigningInformationPath "${RUNNER_TEMP}/tellomi-signing" \
             --target //submodules/TelegramCore:MomentsRulesTests \
-            --testFilter MomentsRulesTests
+            --testFilter MomentsRulesTests \
+            --testOutput all \
+            --testArg "--destination=platform=ios_simulator,id=${SIM_UDID}"
 
       - name: Summarize compiler errors
         if: failure()

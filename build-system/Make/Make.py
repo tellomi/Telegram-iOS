@@ -326,7 +326,7 @@ class BazelCommandLine:
         print(subprocess.list2cmdline(combined_arguments))
         call_executable(combined_arguments)
 
-    def invoke_test(self, test_target='Tests/AllTests', test_filter=None):
+    def invoke_test(self, test_target='Tests/AllTests', test_filter=None, test_args=None, test_output='errors'):
         combined_arguments = [
             self.build_environment.bazel_path
         ]
@@ -334,9 +334,12 @@ class BazelCommandLine:
         combined_arguments += ['test']
 
         combined_arguments += ['--cache_test_results=no']
-        combined_arguments += ['--test_output=errors']
+        combined_arguments += ['--test_output={}'.format(test_output or 'errors')]
         if test_filter:
             combined_arguments += ['--test_filter={}'.format(test_filter)]
+        if test_args:
+            for test_arg in test_args:
+                combined_arguments += ['--test_arg={}'.format(test_arg)]
 
         combined_arguments += [test_target]
 
@@ -719,7 +722,12 @@ def test(bazel, arguments):
     bazel_command_line.set_configuration('debug_sim_arm64')
     bazel_command_line.set_build_number('10000')
 
-    bazel_command_line.invoke_test(test_target=arguments.target, test_filter=getattr(arguments, 'testFilter', None))
+    bazel_command_line.invoke_test(
+        test_target=arguments.target,
+        test_filter=getattr(arguments, 'testFilter', None),
+        test_args=getattr(arguments, 'testArg', None),
+        test_output=getattr(arguments, 'testOutput', None)
+    )
 
 
 def query(bazel, arguments):
@@ -962,6 +970,18 @@ if __name__ == '__main__':
         type=str,
         default=None,
         help='Passed to bazel as --test_filter (for example MomentsRulesTests).'
+    )
+    testParser.add_argument(
+        '--testArg',
+        action='append',
+        default=None,
+        help='Passed to bazel as --test_arg. Repeat for more than one.'
+    )
+    testParser.add_argument(
+        '--testOutput',
+        type=str,
+        default='errors',
+        help='Passed to bazel as --test_output.'
     )
 
     generateProjectParser = subparsers.add_parser('generateProject', help='Generate Xcode project')
