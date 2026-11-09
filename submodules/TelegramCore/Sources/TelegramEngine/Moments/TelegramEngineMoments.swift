@@ -79,6 +79,67 @@ private final class MomentsHTTP {
             }
         }
     }
+
+    func upload(credential: MomentsCredential, file: MomentsUploadFile) -> Signal<MomentsMedia, MomentsAPIError> {
+        return Signal { [session] subscriber in
+            let fileURL = URL(fileURLWithPath: file.path)
+            let length = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?.int64Value ?? 0
+            guard length > 0, let createURL = URL(string: credential.baseURL + "/v1/feed/media/uploads") else {
+                subscriber.putError(.invalid("upload"))
+                return EmptyDisposable
+            }
+            var create = URLRequest(url: createURL)
+            create.httpMethod = "POST"
+            create.setValue("Bearer \(credential.token)", forHTTPHeaderField: "Authorization")
+            create.setValue("1.0.0", forHTTPHeaderField: "Tus-Resumable")
+            create.setValue(String(length), forHTTPHeaderField: "Upload-Length")
+            create.setValue(momentsTusUploadMetadata(filename: file.filename, mimeType: file.mimeType), forHTTPHeaderField: "Upload-Metadata")
+            let createTask = session.dataTask(with: create) { data, response, error in
+                if let error {
+                    subscriber.putError(.transport(error.localizedDescription))
+                    return
+                }
+                let http = response as? HTTPURLResponse
+                let status = http?.statusCode ?? 0
+                let payload = data ?? Data()
+                guard (200..<300).contains(status), let locationHeader = http?.value(forHTTPHeaderField: "Location"), let location = momentsResolvedUploadLocation(base: credential.baseURL, location: locationHeader), let patchURL = URL(string: location) else {
+                    subscriber.putError(momentsError(data: payload, status: status))
+                    return
+                }
+                var patch = URLRequest(url: patchURL)
+                patch.httpMethod = "PATCH"
+                patch.setValue("Bearer \(credential.token)", forHTTPHeaderField: "Authorization")
+                patch.setValue("1.0.0", forHTTPHeaderField: "Tus-Resumable")
+                patch.setValue("0", forHTTPHeaderField: "Upload-Offset")
+                patch.setValue("application/offset+octet-stream", forHTTPHeaderField: "Content-Type")
+                let patchTask = session.uploadTask(with: patch, fromFile: fileURL) { patchData, patchResponse, patchError in
+                    if let patchError {
+                        subscriber.putError(.transport(patchError.localizedDescription))
+                        return
+                    }
+                    let patchHTTP = patchResponse as? HTTPURLResponse
+                    let patchStatus = patchHTTP?.statusCode ?? 0
+                    let patchPayload = patchData ?? Data()
+                    guard (200..<300).contains(patchStatus) else {
+                        subscriber.putError(momentsError(data: patchPayload, status: patchStatus))
+                        return
+                    }
+                    let headers = patchHTTP?.allHeaderFields ?? http?.allHeaderFields ?? [:]
+                    guard let key = momentsMediaUploadKey(body: patchPayload.isEmpty ? payload : patchPayload, headerFields: headers, location: location) else {
+                        subscriber.putError(.invalid("upload-key"))
+                        return
+                    }
+                    subscriber.putNext(MomentsMedia(type: file.type, key: key, width: file.width, height: file.height, durationMs: file.durationMs, order: file.order))
+                    subscriber.putCompletion()
+                }
+                patchTask.resume()
+            }
+            createTask.resume()
+            return ActionDisposable {
+                createTask.cancel()
+            }
+        }
+    }
 }
 
 public extension TelegramEngine {
@@ -274,16 +335,71 @@ public extension TelegramEngine {
             }
         }
 
-        public func addComment(postId: String, text: String, parentId: String?) -> Signal<Never, MomentsAPIError> {
+        public func addComment(postId: String, text: String, parentId: String?, attachment: [String: Any]? = nil) -> Signal<Never, MomentsAPIError> {
             var body: [String: Any] = ["text": text]
             if let parentId {
                 body["parent_id"] = parentId
+            }
+            if let attachment {
+                body["attachment"] = attachment
             }
             return self.call(method: "POST", path: "/v1/feed/posts/\(postId)/comments", body: body) |> ignoreValues
         }
 
         public func deleteComment(id: String) -> Signal<Never, MomentsAPIError> {
             return self.call(method: "DELETE", path: "/v1/feed/posts/\(id)") |> ignoreValues
+        }
+
+        public func storedAudience() -> Signal<EngineStoryPrivacy?, NoError> {
+            return self.account.postbox.transaction { transaction -> EngineStoryPrivacy? in
+                guard let payload = momentsReadBlob(transaction: transaction, id: momentsAudienceCacheId()), let data = payload.data(using: .utf8), let stored = try? JSONDecoder().decode(MomentsStoredAudience.self, from: data), let base = EngineStoryPrivacy.Base(rawValue: stored.base) else {
+                    return nil
+                }
+                let peers = stored.peers.map { PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value($0)) }
+                return EngineStoryPrivacy(base: base, additionallyIncludePeers: peers)
+            }
+        }
+
+        public func storeAudience(_ privacy: EngineStoryPrivacy) {
+            let stored = MomentsStoredAudience(base: privacy.base.rawValue, peers: privacy.additionallyIncludePeers.map { $0.toInt64() })
+            guard let data = try? JSONEncoder().encode(stored), let payload = String(data: data, encoding: .utf8) else {
+                return
+            }
+            let _ = self.account.postbox.transaction { transaction in
+                momentsWriteBlob(transaction: transaction, id: momentsAudienceCacheId(), payload: payload)
+            }.start()
+        }
+
+        public func uploadFile(_ file: MomentsUploadFile) -> Signal<MomentsMedia, MomentsAPIError> {
+            return self.credential()
+            |> mapToSignal { credential in
+                self.http.upload(credential: credential, file: file)
+            }
+        }
+
+        public func likers(postId: String) -> Signal<[MomentsAuthor], MomentsAPIError> {
+            return self.call(method: "GET", path: "/v1/feed/posts/\(postId)/likers")
+            |> map { data in
+                guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    return []
+                }
+                return momentsArray(root["items"] ?? root["likers"] ?? root["users"]).compactMap { momentsAuthor($0) }
+            }
+        }
+
+        public func pollVoters(postId: String) -> Signal<[MomentsPollOptionVoters], MomentsAPIError> {
+            return self.call(method: "GET", path: "/v1/feed/posts/\(postId)/poll/voters")
+            |> map { data in
+                guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    return []
+                }
+                return momentsArray(root["options"] ?? root["items"]).compactMap { item in
+                    guard let id = momentsString(item, "id", "option_id") else {
+                        return nil
+                    }
+                    return MomentsPollOptionVoters(id: id, text: momentsString(item, "text", "option") ?? id, voters: momentsArray(item["voters"] ?? item["users"]).compactMap { momentsAuthor($0) })
+                }
+            }
         }
 
         public func publish(_ body: [String: Any]) -> Signal<String, MomentsAPIError> {

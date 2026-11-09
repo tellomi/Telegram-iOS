@@ -195,6 +195,44 @@ func momentsPage(data: Data, mediaBaseURL: String? = nil) -> MomentsPage? {
     return MomentsPage(items: rows.compactMap { momentsCard(json: $0, mediaBaseURL: mediaBaseURL) }, nextCursor: momentsString(root, "next_cursor", "cursor"))
 }
 
+public func momentsTusUploadMetadata(filename: String, mimeType: String) -> String {
+    let name = Data(filename.utf8).base64EncodedString()
+    let type = Data(mimeType.utf8).base64EncodedString()
+    return "filename \(name),filetype \(type)"
+}
+
+public func momentsMediaUploadKey(body: Data, headerFields: [AnyHashable: Any], location: String?) -> String? {
+    if let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any], let key = momentsString(json, "key", "id"), !key.isEmpty {
+        return key
+    }
+    for (field, value) in headerFields {
+        let name = (field as? String) ?? (field as? NSString).map { $0 as String }
+        if name?.lowercased() == "upload-key", let text = value as? String, !text.isEmpty {
+            return text
+        }
+    }
+    if let location, let url = URL(string: location) {
+        let last = url.lastPathComponent
+        if !last.isEmpty && last != "uploads" {
+            return last
+        }
+    }
+    return nil
+}
+
+func momentsResolvedUploadLocation(base: String, location: String) -> String? {
+    if location.hasPrefix("https://") {
+        return location
+    }
+    if location.hasPrefix("http://") {
+        return nil
+    }
+    if location.hasPrefix("/") {
+        return base + location
+    }
+    return base + "/" + location
+}
+
 func momentsConfigMediaBase(_ data: Data) -> String? {
     guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let raw = momentsString(json, "media_base_url") else {
         return nil

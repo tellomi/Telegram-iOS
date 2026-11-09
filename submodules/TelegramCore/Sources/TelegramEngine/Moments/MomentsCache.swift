@@ -8,6 +8,7 @@ private enum MomentsCacheKind: UInt8 {
     case browse = 4
     case notifications = 5
     case outbox = 6
+    case audience = 7
 }
 
 private func momentsCacheId(_ kind: MomentsCacheKind, extra: UInt8 = 0) -> ItemCacheEntryId {
@@ -68,4 +69,8 @@ func momentsNotificationsCacheId() -> ItemCacheEntryId {
 
 func momentsOutboxCacheId() -> ItemCacheEntryId {
     return momentsCacheId(.outbox)
+}
+
+func momentsAudienceCacheId() -> ItemCacheEntryId {
+    return momentsCacheId(.audience)
 }

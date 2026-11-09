@@ -1,4 +1,5 @@
 import Foundation
+import Postbox
 
 public enum MomentsAudienceKind: String, Codable, Equatable, CaseIterable {
     case everyone = "public"
@@ -36,6 +37,44 @@ public enum MomentsMediaType: String, Codable, Equatable {
     case image
     case video
     case audio
+    case sticker
+    case gif
+}
+
+public func momentsAudience(from privacy: EngineStoryPrivacy) -> MomentsAudience {
+    let peerIds = privacy.additionallyIncludePeers.map { $0.toInt64() }
+    switch privacy.base {
+    case .everyone:
+        return MomentsAudience(kind: .everyone, exclude: peerIds)
+    case .contacts:
+        return MomentsAudience(kind: .contacts, exclude: peerIds)
+    case .closeFriends:
+        return MomentsAudience(kind: .closeFriends)
+    case .nobody:
+        return MomentsAudience(kind: .selected, include: peerIds)
+    case .mutualFollowers:
+        return MomentsAudience(kind: .mutualFollowers)
+    }
+}
+
+public func momentsStoryPrivacy(_ audience: MomentsAudience) -> EngineStoryPrivacy {
+    let peers = (audience.kind == .selected ? audience.include : audience.exclude).map { id in
+        PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(id))
+    }
+    let base: EngineStoryPrivacy.Base
+    switch audience.kind {
+    case .everyone:
+        base = .everyone
+    case .contacts:
+        base = .contacts
+    case .closeFriends:
+        base = .closeFriends
+    case .selected:
+        base = .nobody
+    case .mutualFollowers:
+        base = .mutualFollowers
+    }
+    return EngineStoryPrivacy(base: base, additionallyIncludePeers: peers)
 }
 
 public struct MomentsMedia: Codable, Equatable {
@@ -138,6 +177,50 @@ public struct MomentsPollOption: Codable, Equatable {
         self.text = text
         self.count = count
         self.chosen = chosen
+    }
+}
+
+public struct MomentsStoredAudience: Codable, Equatable {
+    public var base: Int32
+    public var peers: [Int64]
+
+    public init(base: Int32, peers: [Int64]) {
+        self.base = base
+        self.peers = peers
+    }
+}
+
+public struct MomentsUploadFile: Equatable {
+    public var path: String
+    public var filename: String
+    public var mimeType: String
+    public var type: MomentsMediaType
+    public var width: Int
+    public var height: Int
+    public var durationMs: Int
+    public var order: Int
+
+    public init(path: String, filename: String, mimeType: String, type: MomentsMediaType, width: Int, height: Int, durationMs: Int, order: Int) {
+        self.path = path
+        self.filename = filename
+        self.mimeType = mimeType
+        self.type = type
+        self.width = width
+        self.height = height
+        self.durationMs = durationMs
+        self.order = order
+    }
+}
+
+public struct MomentsPollOptionVoters: Equatable {
+    public var id: String
+    public var text: String
+    public var voters: [MomentsAuthor]
+
+    public init(id: String, text: String, voters: [MomentsAuthor]) {
+        self.id = id
+        self.text = text
+        self.voters = voters
     }
 }
 

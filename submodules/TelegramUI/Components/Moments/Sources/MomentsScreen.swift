@@ -158,6 +158,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var cityName: String?
     private var nearbySort = "latest"
     private var playing: MomentsPlaybackRequest = .none
+    private var resolvingPlayback = false
     private let disposable = DisposableSet()
     private var probe: SwiftSignalKit.Timer?
     private let sortControl = UIButton(type: .system)
@@ -172,6 +173,9 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         for kind in MomentsFeedKind.allCases {
             self.models[kind] = MomentsFeedModel()
             let list = ListView()
+            list.didScrollWithOffset = { [weak self] _, _, _, _ in
+                self?.updateVisiblePlayback()
+            }
             self.lists[kind] = list
             self.pager.addSubview(list.view)
         }
@@ -405,7 +409,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             for card in visible {
                 let playingVideo: Bool
                 if case let .video(postId, _) = self.playing { playingVideo = postId == card.id } else { playingVideo = false }
-                entries.append(MomentsPostItem(card: card, strings: strings, theme: theme, fontSize: font, showFollow: kind == .recommend, expanded: self.expanded.contains(card.id), hidden: self.sessionHidden.contains(card.id), albumIndex: self.albumIndex[card.id] ?? 0, playing: playingVideo, handlers: handlers))
+                entries.append(MomentsPostItem(card: card, strings: strings, theme: theme, fontSize: font, showFollow: kind == .recommend, expanded: self.expanded.contains(card.id), hidden: self.sessionHidden.contains(card.id), albumIndex: self.albumIndex[card.id] ?? 0, playing: playingVideo, context: self.context, handlers: handlers))
             }
             if model.failed {
                 entries.append(MomentsStatusItem(text: momentsText(strings, .loadFailed), theme: theme, action: { [weak self] in self?.load(kind, refresh: false) }))
@@ -419,19 +423,26 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.models[kind]?.renderedIds = ids
         let insets = UIEdgeInsets(top: 0, left: 0, bottom: 8, right: 0)
         if previous == ids && !resetScroll {
-            list.transaction(deleteIndices: [], insertIndicesAndItems: [], updateIndicesAndItems: entries.enumerated().map { ListViewUpdateItem(index: $0.offset, previousIndex: $0.offset, item: $0.element, directionHint: nil) }, options: [.Synchronous, .LowLatency], scrollToItem: nil, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), stationaryItemRange: nil, updateOpaqueState: nil, completion: { _ in })
+            list.transaction(deleteIndices: [], insertIndicesAndItems: [], updateIndicesAndItems: entries.enumerated().map { ListViewUpdateItem(index: $0.offset, previousIndex: $0.offset, item: $0.element, directionHint: nil) }, options: [.Synchronous, .LowLatency], scrollToItem: nil, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), stationaryItemRange: nil, updateOpaqueState: nil, completion: { [weak self] _ in
+            if kind == self?.selected {
+                self?.updateVisiblePlayback()
+            }
+        })
         } else {
-            list.transaction(deleteIndices: previous.enumerated().map { ListViewDeleteItem(index: $0.offset, directionHint: nil) }, insertIndicesAndItems: entries.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous, .LowLatency], scrollToItem: resetScroll ? ListViewScrollToItem(index: 0, position: .top(0), animated: false, curve: .Default(duration: nil), directionHint: .Up) : nil, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), stationaryItemRange: nil, updateOpaqueState: nil, completion: { _ in })
+            list.transaction(deleteIndices: previous.enumerated().map { ListViewDeleteItem(index: $0.offset, directionHint: nil) }, insertIndicesAndItems: entries.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous, .LowLatency], scrollToItem: resetScroll ? ListViewScrollToItem(index: 0, position: .top(0), animated: false, curve: .Default(duration: nil), directionHint: .Up) : nil, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), stationaryItemRange: nil, updateOpaqueState: nil, completion: { [weak self] _ in
+            if kind == self?.selected {
+                self?.updateVisiblePlayback()
+            }
+        })
         }
         self.pill.setTitle(momentsText(strings, .newPosts), for: .normal)
         self.pill.backgroundColor = theme.list.itemAccentColor
         self.pill.setTitleColor(theme.list.plainBackgroundColor, for: .normal)
         self.pill.isHidden = kind != self.selected || (self.models[self.selected]?.newCount ?? 0) == 0
-        self.updatePlayback()
     }
 
     private func handlers() -> MomentsPostHandlers {
-        return MomentsPostHandlers(open: { [weak self] card in self?.open(card) }, author: { [weak self] card in self?.openAuthor(card) }, like: { [weak self] card in self?.toggleLike(card) }, comment: { [weak self] card in self?.open(card) }, repost: { [weak self] card in self?.repost(card) }, share: { [weak self] card in self?.share(card) }, save: { [weak self] card in self?.toggleSave(card) }, more: { [weak self] card, view in self?.more(card, view) }, follow: { [weak self] card in self?.follow(card) }, undo: { [weak self] id in self?.undo(id) }, fullText: { [weak self] card in self?.expanded.insert(card.id); self?.render(self?.selected ?? .recommend, resetScroll: false) }, topic: { _ in }, link: { [weak self] url in self?.openURL(url) })
+        return MomentsPostHandlers(open: { [weak self] card in self?.open(card) }, author: { [weak self] card in self?.openAuthor(card) }, like: { [weak self] card in self?.toggleLike(card) }, comment: { [weak self] card in self?.open(card) }, repost: { [weak self] card in self?.repost(card) }, share: { [weak self] card in self?.share(card) }, save: { [weak self] card in self?.toggleSave(card) }, more: { [weak self] card, view in self?.more(card, view) }, follow: { [weak self] card in self?.follow(card) }, undo: { [weak self] id in self?.undo(id) }, fullText: { [weak self] card in self?.expanded.insert(card.id); self?.render(self?.selected ?? .recommend, resetScroll: false) }, topic: { _ in }, link: { [weak self] url in self?.openURL(url) }, likers: { [weak self] card in self?.openLikers(card) }, voters: { [weak self] card in self?.openVoters(card) })
     }
 
     private func open(_ card: MomentsCard) {
@@ -678,12 +689,50 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.probe = timer
     }
 
-    private func updatePlayback() {
+    private func autoplayAllowed() -> Bool {
         let reduce = self.presentationData.reduceMotion || UIAccessibility.isReduceMotionEnabled
-        let autoplay = self.context.sharedContext.energyUsageSettings.autoplayVideo && !reduce
-        if !autoplay {
-            self.playing = momentsNextPlayback(current: self.playing, event: .autoplayDisabled)
+        return self.context.sharedContext.energyUsageSettings.autoplayVideo && !reduce
+    }
+
+    private func updateVisiblePlayback() {
+        guard !self.resolvingPlayback, let list = self.lists[self.selected] else { return }
+        let next: MomentsPlaybackRequest
+        if !self.autoplayAllowed() {
+            next = momentsNextPlayback(current: self.playing, event: .autoplayDisabled)
+        } else {
+            var candidate: (String, Int)?
+            list.forEachItemNode { node in
+                if candidate == nil, let post = node as? MomentsPostItemNode, let found = post.autoplayTarget(listView: list.view) {
+                    candidate = found
+                }
+            }
+            if let candidate {
+                next = momentsNextPlayback(current: self.playing, event: .videoBecameVisible(postId: candidate.0, index: candidate.1))
+            } else if case .video = self.playing {
+                next = .none
+            } else {
+                next = self.playing
+            }
         }
+        guard next != self.playing else { return }
+        self.playing = next
+        self.resolvingPlayback = true
+        self.render(self.selected, resetScroll: false)
+        self.resolvingPlayback = false
+    }
+
+    private func openLikers(_ card: MomentsCard) {
+        guard let controller = self.controller else { return }
+        (controller.navigationController as? NavigationController)?.pushViewController(momentsPeopleController(context: self.context, title: momentsText(self.presentationData.strings, .like), load: self.context.engine.moments.likers(postId: card.id) |> map { authors in
+            [MomentsPeopleSection(title: nil, people: authors)]
+        }))
+    }
+
+    private func openVoters(_ card: MomentsCard) {
+        guard let controller = self.controller, card.poll != nil else { return }
+        (controller.navigationController as? NavigationController)?.pushViewController(momentsPeopleController(context: self.context, title: momentsText(self.presentationData.strings, .endPoll), load: self.context.engine.moments.pollVoters(postId: card.id) |> map { options in
+            options.map { MomentsPeopleSection(title: $0.text, people: $0.voters) }
+        }))
     }
 
     private func pointHitsAlbum(_ point: CGPoint) -> Bool {

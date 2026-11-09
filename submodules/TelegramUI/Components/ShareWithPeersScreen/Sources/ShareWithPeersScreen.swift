@@ -217,6 +217,7 @@ final class ShareWithPeersScreenComponent: Component {
         case contacts = 1
         case closeFriends = 2
         case selectedContacts = 3
+        case mutualFollowers = 4
     }
     
     final class CategoryItem: Equatable {
@@ -1426,6 +1427,8 @@ final class ShareWithPeersScreenComponent: Component {
                                             base = .closeFriends
                                         case .selectedContacts:
                                             base = .nobody
+                                        case .mutualFollowers:
+                                            base = .mutualFollowers
                                         }
                                         let selectedPeers = component.stateContext.stateValue?.savedSelectedPeers[base] ?? []
                                         
@@ -1469,6 +1472,14 @@ final class ShareWithPeersScreenComponent: Component {
                                         base = .closeFriends
                                     case .selectedContacts:
                                         base = .nobody
+                                    case .mutualFollowers:
+                                        base = .mutualFollowers
+                                    }
+                                    if categoryId == .mutualFollowers {
+                                        self.selectedCategories.removeAll()
+                                        self.selectedCategories.insert(.mutualFollowers)
+                                        self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.35, curve: .spring)))
+                                        return
                                     }
                                     let selectedPeers = component.stateContext.stateValue?.savedSelectedPeers[base] ?? []
                                     
@@ -1518,7 +1529,9 @@ final class ShareWithPeersScreenComponent: Component {
                     let link = MarkdownAttributeSet(font: Font.regular(13.0), textColor: environment.theme.list.itemAccentColor)
                     
                     let footerText: String
-                    if let grayListPeers = component.stateContext.stateValue?.grayListPeers, !grayListPeers.isEmpty {
+                    if component.stateContext.momentsAudience {
+                        footerText = ""
+                    } else if let grayListPeers = component.stateContext.stateValue?.grayListPeers, !grayListPeers.isEmpty {
                         let footerValue = environment.strings.Story_Privacy_GrayListPeople(Int32(grayListPeers.count))
                         footerText = environment.strings.Story_Privacy_GrayListSelected(footerValue).string
                     } else {
@@ -1546,7 +1559,7 @@ final class ShareWithPeersScreenComponent: Component {
                                 }
                             },
                             tapAction: { [weak self] _, _ in
-                                guard let self, let environment = self.environment, let controller = environment.controller() as? ShareWithPeersScreen else {
+                                guard let self, let component = self.component, !component.stateContext.momentsAudience, let environment = self.environment, let controller = environment.controller() as? ShareWithPeersScreen else {
                                     return
                                 }
                                 let base: EngineStoryPrivacy.Base
@@ -1558,6 +1571,8 @@ final class ShareWithPeersScreenComponent: Component {
                                     base = .contacts
                                 } else if self.selectedCategories.contains(.selectedContacts) {
                                     base = .nobody
+                                } else if self.selectedCategories.contains(.mutualFollowers) {
+                                    base = .mutualFollowers
                                 } else {
                                     base = .nobody
                                 }
@@ -1579,6 +1594,7 @@ final class ShareWithPeersScreenComponent: Component {
                         if footerView.superview == nil {
                             self.itemContainerView.addSubview(footerView)
                         }
+                        footerView.isHidden = component.stateContext.momentsAudience
                         sectionFooterTransition.setFrame(view: footerView, frame: footerFrame)
                     }
                     
@@ -2275,6 +2291,8 @@ final class ShareWithPeersScreenComponent: Component {
                 base = .contacts
             } else if self.selectedCategories.contains(.selectedContacts) {
                 base = .nobody
+            } else if self.selectedCategories.contains(.mutualFollowers) {
+                base = .mutualFollowers
             } else {
                 base = .nobody
             }
@@ -2386,6 +2404,8 @@ final class ShareWithPeersScreenComponent: Component {
                     self.selectedCategories.insert(.contacts)
                 case .nobody:
                     self.selectedCategories.insert(.selectedContacts)
+                case .mutualFollowers:
+                    self.selectedCategories.insert(.mutualFollowers)
                 }
                 
                 if component.screenshot {
@@ -2651,7 +2671,7 @@ final class ShareWithPeersScreenComponent: Component {
                 let link = MarkdownAttributeSet(font: Font.regular(13.0), textColor: environment.theme.list.itemAccentColor)
                 
                 let footerInset: CGFloat = 7.0
-                if hasCategories {
+                if hasCategories && !component.stateContext.momentsAudience {
                     let firstFooterText: String
                     if let grayListPeers = component.stateContext.stateValue?.grayListPeers, !grayListPeers.isEmpty {
                         let footerValue = environment.strings.Story_Privacy_GrayListPeople(Int32(grayListPeers.count))
@@ -2686,7 +2706,7 @@ final class ShareWithPeersScreenComponent: Component {
                     footersTotalHeight += firstFooterSize.height + footerInset
                 }
                 
-                if !editing {
+                if !editing && !component.stateContext.momentsAudience {
                     let footerValue = environment.strings.Story_Privacy_KeepOnMyPageHours(Int32(component.timeout / 3600))
                     let secondFooterText = environment.strings.Story_Privacy_KeepOnMyPageInfo(footerValue).string
                     let secondFooterSize = self.footerTemplateItem.update(
@@ -2847,7 +2867,10 @@ final class ShareWithPeersScreenComponent: Component {
                     title = environment.strings.Story_Privacy_PostStoryAs
                 }
             case let .stories(editing, count):
-                if editing {
+                if component.stateContext.momentsAudience {
+                    title = environment.strings.Story_Privacy_WhoCanViewMoment
+                    actionButtonTitle = environment.strings.Story_Privacy_SaveList
+                } else if editing {
                     title = environment.strings.Story_Privacy_EditStory
                 } else {
                     if count > 1 {
@@ -2874,6 +2897,8 @@ final class ShareWithPeersScreenComponent: Component {
                     title = environment.strings.Story_Privacy_CategorySelectedContacts
                 case .everyone:
                     title = environment.strings.Story_Privacy_ExcludedPeople
+                case .mutualFollowers:
+                    title = environment.strings.Story_Privacy_CategoryMutualFollowers
                 }
             case .contactsSearch:
                 title = ""
@@ -3040,6 +3065,8 @@ final class ShareWithPeersScreenComponent: Component {
                                 base = .contacts
                             } else if self.selectedCategories.contains(.selectedContacts) {
                                 base = .nobody
+                            } else if self.selectedCategories.contains(.mutualFollowers) {
+                                base = .mutualFollowers
                             } else {
                                 base = .nobody
                             }
@@ -3489,8 +3516,17 @@ public class ShareWithPeersScreen: ViewControllerComponentContainer {
                 iconColor: .yellow,
                 actionTitle: selectedContactsSubtitle
             ))
+            if stateContext.momentsAudience {
+                categoryItems.append(ShareWithPeersScreenComponent.CategoryItem(
+                    id: .mutualFollowers,
+                    title: presentationData.strings.Story_Privacy_CategoryMutualFollowers,
+                    icon: "Media Editor/Privacy/Contacts",
+                    iconColor: .purple,
+                    actionTitle: nil
+                ))
+            }
             
-            if !editing {
+            if !editing && !stateContext.momentsAudience {
                 optionItems.append(ShareWithPeersScreenComponent.OptionItem(
                     id: .screenshot,
                     title: presentationData.strings.Story_Privacy_AllowScreenshots
@@ -3502,7 +3538,7 @@ public class ShareWithPeersScreen: ViewControllerComponentContainer {
                 ))
             }
             
-            if !editing || pin, coverImage != nil {
+            if !stateContext.momentsAudience && (!editing || pin), coverImage != nil {
                 coverItem = ShareWithPeersScreenComponent.CoverItem(id: .choose, title: presentationData.strings.Story_Privacy_ChooseCover, image: coverImage)
             }
         }

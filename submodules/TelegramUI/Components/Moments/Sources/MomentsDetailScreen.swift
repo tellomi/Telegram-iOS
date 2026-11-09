@@ -7,6 +7,9 @@ import TelegramCore
 import TelegramPresentationData
 import AccountContext
 import Postbox
+import StickerPickerScreen
+import EntityKeyboard
+import MediaEditor
 
 public final class MomentsDetailScreen: ViewController {
     private let context: AccountContext
@@ -54,7 +57,15 @@ public final class MomentsDetailScreen: ViewController {
             sortButton.frame = CGRect(x: layout.size.width - 100, y: top, width: 88, height: 32)
         }
         self.list.frame = CGRect(x: 0, y: top + 32, width: layout.size.width, height: layout.size.height - top - 32 - bottom)
-        self.field.frame = CGRect(x: 12, y: layout.size.height - bottom + 6, width: layout.size.width - 24, height: 34)
+        self.field.frame = CGRect(x: 56, y: layout.size.height - bottom + 6, width: layout.size.width - 68, height: 34)
+        if self.displayNode.view.viewWithTag(11) == nil {
+            let stickers = UIButton(type: .system)
+            stickers.tag = 11
+            stickers.setTitle("GIF", for: .normal)
+            stickers.addTarget(self, action: #selector(self.stickerPressed), for: .touchUpInside)
+            self.displayNode.view.addSubview(stickers)
+        }
+        self.displayNode.view.viewWithTag(11)?.frame = CGRect(x: 8, y: layout.size.height - bottom + 6, width: 44, height: 34)
         self.render()
     }
 
@@ -94,7 +105,11 @@ public final class MomentsDetailScreen: ViewController {
     }
 
     private func commentLine(_ comment: MomentsComment) -> String {
-        return "\(comment.author?.displayName ?? "")  \(comment.text)"
+        let name = comment.author?.displayName ?? ""
+        if comment.text.isEmpty, let attachment = comment.attachment {
+            return "\(name)  \(attachment.type.rawValue)"
+        }
+        return "\(name)  \(comment.text)"
     }
 
     private func handlers() -> MomentsPostHandlers {
@@ -115,7 +130,17 @@ public final class MomentsDetailScreen: ViewController {
             self.card.viewer.saved.toggle()
             let _ = self.context.engine.moments.setSaved(card.id, saved: self.card.viewer.saved).start()
             self.render()
-        }, more: { _, _ in }, follow: { _ in }, undo: { _ in }, fullText: { _ in }, topic: { _ in }, link: { [weak self] url in
+        }, more: { _, _ in }, follow: { _ in }, undo: { _ in }, fullText: { _ in }, topic: { _ in }, likers: { [weak self] card in
+            guard let self else { return }
+            self.openPeople(title: momentsText(self.presentationData.strings, .like), load: self.context.engine.moments.likers(postId: card.id) |> map { authors in
+                [MomentsPeopleSection(title: nil, people: authors)]
+            })
+        }, voters: { [weak self] card in
+            guard let self else { return }
+            self.openPeople(title: momentsText(self.presentationData.strings, .endPoll), load: self.context.engine.moments.pollVoters(postId: card.id) |> map { options in
+                options.map { MomentsPeopleSection(title: $0.text, people: $0.voters) }
+            })
+        }, link: { [weak self] url in
             guard let self else { return }
             self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: false, presentationData: self.presentationData, navigationController: self.navigationController as? NavigationController, dismissInput: {})
         })
@@ -141,11 +166,67 @@ public final class MomentsDetailScreen: ViewController {
         })
     }
 
+    private func openPeople(title: String, load: Signal<[MomentsPeopleSection], MomentsAPIError>) {
+        (self.navigationController as? NavigationController)?.pushViewController(momentsPeopleController(context: self.context, title: title, load: load))
+    }
+
+    @objc private func stickerPressed() {
+        guard self.card.viewer.canComment, self.card.commentPolicy != .closed else { return }
+        let input = EmojiPagerContentComponent.momentsStickerInput(
+            context: self.context,
+            animationCache: self.context.animationCache,
+            animationRenderer: self.context.animationRenderer,
+            stickerNamespaces: [Namespaces.ItemCollection.CloudStickerPacks],
+            stickerOrderedItemListCollectionIds: [Namespaces.OrderedItemList.CloudSavedStickers, Namespaces.OrderedItemList.CloudRecentStickers, Namespaces.OrderedItemList.CloudAllPremiumStickers],
+            chatPeerId: self.context.account.peerId
+        )
+        |> map { stickers -> StickerPickerInput in
+            return StickerPickerInputData(emoji: nil, stickers: stickers, gifs: nil)
+        }
+        let screen = StickerPickerScreen(context: self.context, inputData: input, expanded: true, hasEmoji: false, hasGifs: true, hasInteractiveStickers: false)
+        screen.completion = { [weak self] content in
+            guard let self, let content else {
+                return true
+            }
+            let file: TelegramMediaFile
+            let type: MomentsMediaType
+            switch content {
+            case let .file(reference, _):
+                file = reference.media
+                type = reference.media.mimeType == "video/mp4" ? .gif : .sticker
+            case let .video(media):
+                file = media
+                type = .gif
+            default:
+                return true
+            }
+            let _ = self.context.engine.moments.addComment(postId: self.card.id, text: "", parentId: self.field.accessibilityHint, attachment: momentsCommentAttachment(file: file, type: type)).start()
+            self.reload()
+            return true
+        }
+        (self.navigationController as? NavigationController)?.pushViewController(screen)
+    }
+
     @objc private func toggleSort() {
         self.sort = self.sort == "hot" ? "latest" : "hot"
         (self.displayNode.view.viewWithTag(7) as? UIButton)?.setTitle(momentsText(self.presentationData.strings, self.sort == "hot" ? .sortHot : .sortLatest), for: .normal)
         self.reload()
     }
+}
+
+func momentsCommentAttachment(file: TelegramMediaFile, type: MomentsMediaType) -> [String: Any] {
+    var body: [String: Any] = [
+        "type": type.rawValue,
+        "key": "\(file.fileId.id)",
+        "document_id": "\(file.fileId.id)",
+        "mime": file.mimeType
+    ]
+    if let resource = file.resource as? CloudDocumentMediaResource {
+        body["document_id"] = "\(resource.fileId)"
+        body["access_hash"] = "\(resource.accessHash)"
+        body["key"] = "\(resource.fileId)"
+    }
+    return body
 }
 
 extension MomentsDetailScreen: UITextFieldDelegate {

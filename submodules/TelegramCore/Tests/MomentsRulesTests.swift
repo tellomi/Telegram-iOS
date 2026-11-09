@@ -1,4 +1,5 @@
 import XCTest
+import Postbox
 @testable import TelegramCore
 
 final class MomentsRulesTests: XCTestCase {
@@ -176,6 +177,29 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(credential.region, "cn")
         XCTAssertNotEqual(credential.baseURL, credential.region)
         XCTAssertTrue(MomentsCredential(token: "abc", baseURL: "https://feed.example", expiresAt: nil, region: "global").needsRefresh(now: 0))
+    }
+
+    func testAudienceMapsOntoStoryPrivacy() {
+        let everyone = momentsAudience(from: EngineStoryPrivacy(base: .everyone, additionallyIncludePeers: [PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(7))]))
+        XCTAssertEqual(everyone.kind, .everyone)
+        XCTAssertEqual(everyone.exclude, [7])
+        let selected = momentsStoryPrivacy(MomentsAudience(kind: .selected, include: [9]))
+        XCTAssertEqual(selected.base, .nobody)
+        XCTAssertEqual(selected.additionallyIncludePeers.map { $0.toInt64() }, [9])
+        XCTAssertEqual(momentsAudience(from: EngineStoryPrivacy(base: .mutualFollowers, additionallyIncludePeers: [])).kind, .mutualFollowers)
+    }
+
+    func testTusUploadKeyAndMetadata() {
+        let metadata = momentsTusUploadMetadata(filename: "a.jpg", mimeType: "image/jpeg")
+        XCTAssertTrue(metadata.hasPrefix("filename "))
+        XCTAssertTrue(metadata.contains("filetype "))
+        let body = #"{"key":"media/1"}"#.data(using: .utf8)!
+        XCTAssertEqual(momentsMediaUploadKey(body: body, headerFields: [:], location: nil), "media/1")
+        let headers: [AnyHashable: Any] = ["Upload-Key": "abc"]
+        XCTAssertEqual(momentsMediaUploadKey(body: Data(), headerFields: headers, location: nil), "abc")
+        XCTAssertEqual(momentsMediaUploadKey(body: Data(), headerFields: [:], location: "https://feed.example/v1/feed/media/uploads/xyz"), "xyz")
+        XCTAssertEqual(momentsResolvedUploadLocation(base: "https://feed.example", location: "/v1/feed/media/uploads/xyz"), "https://feed.example/v1/feed/media/uploads/xyz")
+        XCTAssertNil(momentsResolvedUploadLocation(base: "https://feed.example", location: "http://other.example/x"))
     }
 
     func testDraftCapKeepsNewest() {

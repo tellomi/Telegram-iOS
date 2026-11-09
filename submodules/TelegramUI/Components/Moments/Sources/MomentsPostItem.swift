@@ -5,6 +5,9 @@ import AsyncDisplayKit
 import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
+import AccountContext
+import Postbox
+import TelegramUniversalVideoContent
 
 public struct MomentsPostHandlers {
     public var open: (MomentsCard) -> Void
@@ -20,8 +23,10 @@ public struct MomentsPostHandlers {
     public var fullText: (MomentsCard) -> Void
     public var topic: (String) -> Void
     public var link: (String) -> Void
+    public var likers: (MomentsCard) -> Void
+    public var voters: (MomentsCard) -> Void
 
-    public init(open: @escaping (MomentsCard) -> Void, author: @escaping (MomentsCard) -> Void, like: @escaping (MomentsCard) -> Void, comment: @escaping (MomentsCard) -> Void, repost: @escaping (MomentsCard) -> Void, share: @escaping (MomentsCard) -> Void, save: @escaping (MomentsCard) -> Void, more: @escaping (MomentsCard, UIView) -> Void, follow: @escaping (MomentsCard) -> Void, undo: @escaping (String) -> Void, fullText: @escaping (MomentsCard) -> Void, topic: @escaping (String) -> Void, link: @escaping (String) -> Void) {
+    public init(open: @escaping (MomentsCard) -> Void, author: @escaping (MomentsCard) -> Void, like: @escaping (MomentsCard) -> Void, comment: @escaping (MomentsCard) -> Void, repost: @escaping (MomentsCard) -> Void, share: @escaping (MomentsCard) -> Void, save: @escaping (MomentsCard) -> Void, more: @escaping (MomentsCard, UIView) -> Void, follow: @escaping (MomentsCard) -> Void, undo: @escaping (String) -> Void, fullText: @escaping (MomentsCard) -> Void, topic: @escaping (String) -> Void, link: @escaping (String) -> Void, likers: @escaping (MomentsCard) -> Void = { _ in }, voters: @escaping (MomentsCard) -> Void = { _ in }) {
         self.open = open
         self.author = author
         self.like = like
@@ -35,6 +40,8 @@ public struct MomentsPostHandlers {
         self.fullText = fullText
         self.topic = topic
         self.link = link
+        self.likers = likers
+        self.voters = voters
     }
 }
 
@@ -48,10 +55,11 @@ final class MomentsPostItem: ListViewItem {
     let hidden: Bool
     let albumIndex: Int
     let playing: Bool
+    let context: AccountContext?
     let handlers: MomentsPostHandlers
     let neighborDescriptor: AnyEquatable = .noNeighborInfluence
 
-    init(card: MomentsCard, strings: PresentationStrings, theme: PresentationTheme, fontSize: CGFloat, showFollow: Bool, expanded: Bool, hidden: Bool, albumIndex: Int, playing: Bool, handlers: MomentsPostHandlers) {
+    init(card: MomentsCard, strings: PresentationStrings, theme: PresentationTheme, fontSize: CGFloat, showFollow: Bool, expanded: Bool, hidden: Bool, albumIndex: Int, playing: Bool, context: AccountContext? = nil, handlers: MomentsPostHandlers) {
         self.card = card
         self.strings = strings
         self.theme = theme
@@ -61,6 +69,7 @@ final class MomentsPostItem: ListViewItem {
         self.hidden = hidden
         self.albumIndex = albumIndex
         self.playing = playing
+        self.context = context
         self.handlers = handlers
     }
 
@@ -117,6 +126,9 @@ final class MomentsPostItemNode: ListViewItemNode {
     private let separator = UIView()
     private var item: MomentsPostItem?
     private var albumIndex = 0
+    private var videoNode: UniversalVideoNode?
+    private var videoURL: String?
+    private let pollHost = UIView()
 
     override init() {
         super.init(layerBacked: false)
@@ -142,6 +154,9 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.view.addSubview(self.body)
         self.view.addSubview(self.full)
         self.view.addSubview(self.album)
+        self.view.addSubview(self.pollHost)
+        let likers = UILongPressGestureRecognizer(target: self, action: #selector(self.likersPressed(_:)))
+        self.like.addGestureRecognizer(likers)
         self.view.addSubview(self.quote)
         self.view.addSubview(self.place)
         self.view.addSubview(self.actions)
@@ -213,6 +228,10 @@ final class MomentsPostItemNode: ListViewItemNode {
             self.body.text = "\(momentsText(strings, .hidden)) · \(momentsText(strings, .undo))"
             self.body.frame = CGRect(x: side + momentsInset, y: 20, width: width + momentsAvatar, height: 24)
             self.setChrome(hidden: true)
+            self.videoNode?.canAttachContent = false
+            self.videoNode?.removeFromSupernode()
+            self.videoNode = nil
+            self.videoURL = nil
             return
         }
         self.setChrome(hidden: false)
@@ -253,6 +272,10 @@ final class MomentsPostItemNode: ListViewItemNode {
         } else {
             self.album.isHidden = false
             cursor += 220
+        }
+        self.layoutPoll(item, x: x, y: cursor, width: width)
+        if item.card.poll != nil {
+            cursor += 28 + CGFloat(item.card.poll?.options.count ?? 0) * 28
         }
         if let quote = item.card.quote {
             self.quote.isHidden = false
@@ -306,6 +329,7 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.follow.isHidden = hidden
         self.full.isHidden = hidden
         self.album.isHidden = hidden
+        self.pollHost.isHidden = hidden
         self.quote.isHidden = hidden
         self.place.isHidden = hidden
         self.actions.isHidden = hidden
@@ -316,15 +340,29 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.album.frame = CGRect(x: x, y: y, width: width, height: slides.isEmpty ? 0 : 212)
         self.album.contentSize = CGSize(width: width * CGFloat(max(slides.count, 1)), height: 212)
         self.album.subviews.forEach { $0.removeFromSuperview() }
+        var playingURL: String?
         for (index, media) in slides.enumerated() {
-            let label = UILabel(frame: CGRect(x: width * CGFloat(index), y: 0, width: width, height: 212))
+            let frame = CGRect(x: width * CGFloat(index), y: 0, width: width, height: 212)
+            let label = UILabel(frame: frame)
             label.textAlignment = .center
             label.textColor = item.theme.list.itemSecondaryTextColor
             label.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
             if media.type == .video {
                 let seconds = media.durationMs / 1000
-                label.text = item.playing && index == item.albumIndex ? "▶ \(seconds)s" : "\(seconds)s"
+                label.text = "\(seconds)s"
                 label.accessibilityLabel = "\(seconds)s"
+                if item.playing && index == item.albumIndex {
+                    playingURL = media.remoteURL
+                }
+            } else if let remoteURL = media.remoteURL {
+                let imageView = UIImageView(frame: frame)
+                imageView.contentMode = .scaleAspectFill
+                imageView.clipsToBounds = true
+                imageView.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
+                imageView.accessibilityLabel = "\(index + 1)/\(slides.count)"
+                self.album.addSubview(imageView)
+                momentsLoadImage(remoteURL, into: imageView)
+                continue
             } else {
                 label.text = "\(index + 1)/\(slides.count)"
                 label.accessibilityLabel = "\(index + 1)/\(slides.count)"
@@ -334,9 +372,83 @@ final class MomentsPostItemNode: ListViewItemNode {
         let page = min(item.albumIndex, max(slides.count - 1, 0))
         self.albumIndex = page
         self.album.setContentOffset(CGPoint(x: width * CGFloat(page), y: 0), animated: false)
+        self.attachVideo(url: playingURL, item: item, frame: CGRect(x: x + width * CGFloat(page), y: y, width: width, height: 212))
+    }
+
+    private func layoutPoll(_ item: MomentsPostItem, x: CGFloat, y: CGFloat, width: CGFloat) {
+        self.pollHost.subviews.forEach { $0.removeFromSuperview() }
+        guard let poll = item.card.poll else {
+            self.pollHost.isHidden = true
+            return
+        }
+        self.pollHost.isHidden = false
+        self.pollHost.frame = CGRect(x: x, y: y, width: width, height: 28 + CGFloat(poll.options.count) * 28)
+        for (index, option) in poll.options.enumerated() {
+            let button = UIButton(type: .system)
+            button.frame = CGRect(x: 0, y: 28 + CGFloat(index) * 28, width: width, height: 28)
+            button.contentHorizontalAlignment = .left
+            button.setTitle("\(option.text)  \(option.count)", for: .normal)
+            button.tag = index
+            button.addTarget(self, action: #selector(self.pollPressed(_:)), for: .touchUpInside)
+            let voters = UILongPressGestureRecognizer(target: self, action: #selector(self.votersPressed(_:)))
+            button.addGestureRecognizer(voters)
+            self.pollHost.addSubview(button)
+        }
+    }
+
+    private func attachVideo(url: String?, item: MomentsPostItem, frame: CGRect) {
+        guard let url, let context = item.context, url.hasPrefix("https://") else {
+            self.videoNode?.canAttachContent = false
+            self.videoNode?.removeFromSupernode()
+            self.videoNode = nil
+            self.videoURL = nil
+            return
+        }
+        if self.videoURL == url, let videoNode = self.videoNode {
+            videoNode.frame = frame
+            videoNode.updateLayout(size: frame.size, transition: .immediate)
+            return
+        }
+        self.videoNode?.canAttachContent = false
+        self.videoNode?.removeFromSupernode()
+        let node = momentsVideoNode(context: context, url: url, size: frame.size)
+        node.frame = frame
+        self.addSubnode(node)
+        node.updateLayout(size: frame.size, transition: .immediate)
+        node.canAttachContent = true
+        self.videoNode = node
+        self.videoURL = url
+    }
+
+    func autoplayTarget(listView: UIView) -> (String, Int)? {
+        guard let item = self.item, !item.hidden, !self.album.isHidden else {
+            return nil
+        }
+        let frame = self.album.convert(self.album.bounds, to: listView)
+        let visible = listView.bounds.insetBy(dx: 0, dy: 80)
+        guard frame.intersects(visible) else {
+            return nil
+        }
+        let slides = item.card.images + item.card.videos
+        guard self.albumIndex < slides.count, slides[self.albumIndex].type == .video, slides[self.albumIndex].remoteURL != nil else {
+            return nil
+        }
+        return (item.card.id, self.albumIndex)
     }
 
     @objc private func likePressed() { if let item = self.item { item.handlers.like(item.card) } }
+    @objc private func likersPressed(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, let item = self.item else { return }
+        item.handlers.likers(item.card)
+    }
+    @objc private func pollPressed(_ button: UIButton) {
+        guard let item = self.item, let poll = item.card.poll, poll.options.indices.contains(button.tag) else { return }
+        let _ = item.context?.engine.moments.vote(postId: item.card.id, options: [poll.options[button.tag].id]).start()
+    }
+    @objc private func votersPressed(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, let item = self.item else { return }
+        item.handlers.voters(item.card)
+    }
     @objc private func commentPressed() { if let item = self.item { item.handlers.comment(item.card) } }
     @objc private func repostPressed() { if let item = self.item { item.handlers.repost(item.card) } }
     @objc private func sharePressed() { if let item = self.item { item.handlers.share(item.card) } }
@@ -349,6 +461,56 @@ final class MomentsPostItemNode: ListViewItemNode {
     func albumContains(_ point: CGPoint) -> Bool {
         return !self.album.isHidden && self.album.frame.contains(self.view.convert(point, from: nil))
     }
+}
+
+private func momentsLoadImage(_ urlString: String, into imageView: UIImageView) {
+    guard let url = URL(string: urlString) else { return }
+    let task = URLSession.shared.dataTask(with: url) { data, _, _ in
+        guard let data, let image = UIImage(data: data) else { return }
+        Queue.mainQueue().async {
+            imageView.image = image
+        }
+    }
+    task.resume()
+}
+
+private func momentsVideoNode(context: AccountContext, url: String, size: CGSize) -> UniversalVideoNode {
+    let width = Int32(max(size.width, 1))
+    let height = Int32(max(size.height, 1))
+    let file = TelegramMediaFile(
+        fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: Int64(url.hashValue)),
+        partialReference: nil,
+        resource: HttpReferenceMediaResource(url: url, size: nil),
+        previewRepresentations: [],
+        videoThumbnails: [],
+        immediateThumbnailData: nil,
+        mimeType: "video/mp4",
+        size: nil,
+        attributes: [.Video(duration: 0, size: PixelDimensions(width: width, height: height), flags: TelegramMediaVideoFlags(), preloadSize: nil, coverTime: nil, videoCodec: nil)],
+        alternativeRepresentations: []
+    )
+    let content = NativeVideoContent(
+        id: .contextResult(Int64(url.hashValue), url),
+        userLocation: .other,
+        fileReference: .standalone(media: file),
+        streamVideo: .conservative,
+        loopVideo: true,
+        enableSound: false,
+        soundMuted: true,
+        fetchAutomatically: true,
+        storeAfterDownload: nil
+    )
+    let decoration = ChatBubbleVideoDecoration(corners: ImageCorners(radius: 12), nativeSize: size, contentMode: .aspectFill, backgroundColor: .clear)
+    return UniversalVideoNode(
+        context: context,
+        postbox: context.account.postbox,
+        audioSession: context.sharedContext.mediaManager.audioSession,
+        manager: context.sharedContext.mediaManager.universalVideoManager,
+        decoration: decoration,
+        content: content,
+        priority: .embedded,
+        autoplay: true
+    )
 }
 
 func momentsAudienceTitle(_ strings: PresentationStrings, _ kind: MomentsAudienceKind) -> String {
