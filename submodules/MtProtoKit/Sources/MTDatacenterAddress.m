@@ -7,6 +7,11 @@
 
 - (instancetype)initWithIp:(NSString *)ip port:(uint16_t)port preferForMedia:(bool)preferForMedia restrictToTcp:(bool)restrictToTcp cdn:(bool)cdn preferForProxy:(bool)preferForProxy secret:(NSData *)secret
 {
+    return [self initWithIp:ip port:port preferForMedia:preferForMedia restrictToTcp:restrictToTcp cdn:cdn preferForProxy:preferForProxy secret:secret thisPortOnly:false];
+}
+
+- (instancetype)initWithIp:(NSString *)ip port:(uint16_t)port preferForMedia:(bool)preferForMedia restrictToTcp:(bool)restrictToTcp cdn:(bool)cdn preferForProxy:(bool)preferForProxy secret:(NSData *)secret thisPortOnly:(bool)thisPortOnly
+{
     self = [super init];
     if (self != nil)
     {
@@ -17,6 +22,7 @@
         _cdn = cdn;
         _preferForProxy = preferForProxy;
         _secret = secret;
+        _thisPortOnly = thisPortOnly;
     }
     return self;
 }
@@ -33,6 +39,9 @@
         _restrictToTcp = [aDecoder decodeBoolForKey:@"restrictToTcp"];
         _cdn = [aDecoder decodeBoolForKey:@"cdn"];
         _preferForProxy = [aDecoder decodeBoolForKey:@"preferForProxy"];
+        // Absent on addresses saved before the flag existed, so those keep the
+        // 80/5222 fallback. decodeBoolForKey: returns false when the key is missing.
+        _thisPortOnly = [aDecoder decodeBoolForKey:@"thisPortOnly"];
         _secret = [aDecoder decodeObjectForKey:@"secret"];
     }
     return self;
@@ -47,6 +56,7 @@
     [aCoder encodeBool:_restrictToTcp forKey:@"restrictToTcp"];
     [aCoder encodeBool:_cdn forKey:@"cdn"];
     [aCoder encodeBool:_preferForProxy forKey:@"preferForProxy"];
+    [aCoder encodeBool:_thisPortOnly forKey:@"thisPortOnly"];
     [aCoder encodeObject:_secret forKey:@"secret"];
 }
 
@@ -63,7 +73,7 @@
 }
 
 - (NSUInteger)hash {
-    return [_ip hash] * 31 + ((NSUInteger)_port);
+    return [_ip hash] * 31 + ((NSUInteger)_port) + (_thisPortOnly ? 1 : 0);
 }
 
 - (BOOL)isEqualToAddress:(MTDatacenterAddress *)other
@@ -89,6 +99,10 @@
     }
     
     if (_preferForProxy != other.preferForProxy) {
+        return false;
+    }
+
+    if (_thisPortOnly != other.thisPortOnly) {
         return false;
     }
     

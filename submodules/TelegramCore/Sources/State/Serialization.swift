@@ -311,7 +311,9 @@ public class Serialization: NSObject, MTSerialization {
                                     let restrictToTcp = (flags & (1 << 2)) != 0
                                     let isCdn = (flags & (1 << 3)) != 0
                                     let preferForProxy = (flags & (1 << 4)) != 0
-                                    addressDict[id as NSNumber]!.append(MTDatacenterAddress(ip: ipAddress, port: UInt16(port), preferForMedia: preferForMedia, restrictToTcp: restrictToTcp, cdn: isCdn, preferForProxy: preferForProxy, secret: secret?.makeData()))
+                                    // swift_scheme.tl dcOption flags bit 5 is this_port_only.
+                                    let thisPortOnly = (flags & (1 << 5)) != 0
+                                    addressDict[id as NSNumber]!.append(MTDatacenterAddress(ip: ipAddress, port: UInt16(port), preferForMedia: preferForMedia, restrictToTcp: restrictToTcp, cdn: isCdn, preferForProxy: preferForProxy, secret: secret?.makeData(), thisPortOnly: thisPortOnly))
                                     break
                             }
                         }

@@ -611,9 +611,11 @@ func initializedNetwork(accountId: AccountRecordId, arguments: NetworkInitializa
             
             // Hosts, port and the RSA key live in Tellomi/tellomi-server.json.
             // Production Telegram addresses are not installed.
+            // The seed is the one declared port. thisPortOnly keeps discovery from
+            // adding 80 and 5222 beside it. Media addresses come from dc options.
             let seedPort = TellomiSeedPort()
             for (id, ips) in TellomiSeedAddresses(testingEnvironment) {
-                context.setSeedAddressSetForDatacenterWithId(id.intValue, seedAddressSet: MTDatacenterAddressSet(addressList: ips.map { MTDatacenterAddress(ip: $0, port: seedPort, preferForMedia: false, restrictToTcp: false, cdn: false, preferForProxy: false, secret: nil) }))
+                context.setSeedAddressSetForDatacenterWithId(id.intValue, seedAddressSet: MTDatacenterAddressSet(addressList: ips.map { MTDatacenterAddress(ip: $0, port: seedPort, preferForMedia: false, restrictToTcp: false, cdn: false, preferForProxy: false, secret: nil, thisPortOnly: true) }))
             }
             
             context.keychain = keychain

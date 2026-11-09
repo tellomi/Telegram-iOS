@@ -119,25 +119,30 @@ def check_released_identity() -> None:
         fail("the database is not opened with the device key")
 
 
-def check_known_gap() -> None:
+def check_declared_port() -> None:
     serialization = read("submodules/TelegramCore/Sources/State/Serialization.swift")
+    updates = read("submodules/TelegramCore/Sources/State/ManagedConfigurationUpdates.swift")
     discover = read("submodules/MtProtoKit/Sources/MTDiscoverConnectionSignals.m")
-    if "this_port_only" in serialization or "thisPortOnly" in serialization:
-        fail("this_port_only is now parsed; remove the known-gap note")
+    network = read("submodules/TelegramCore/Sources/Network/Network.swift")
+    for source, name in ((serialization, "Serialization.swift"), (updates, "ManagedConfigurationUpdates.swift")):
+        if "(flags & (1 << 5)) != 0" not in source or "thisPortOnly:" not in source:
+            fail(f"{name} does not apply dcOption.this_port_only")
+        if "preferForMedia:" not in source:
+            fail(f"{name} dropped the media address flag")
+    if "thisPortOnly: true" not in network:
+        fail("the Tellomi seed is not limited to its declared port")
     if "return @[@80, @5222];" not in discover:
-        fail("discovery no longer probes ports 80 and 5222")
-    print(
-        "KNOWN GAP: dcOption this_port_only is not applied. "
-        "Discovery still probes 80 and 5222 after the declared port. "
-        "This is not a login, send, or upgrade pass."
-    )
+        fail("an ordinary address no longer probes ports 80 and 5222")
+    if "if (address.thisPortOnly)" not in discover or "other.thisPortOnly" not in discover:
+        fail("discovery does not skip alternate ports for a locked address")
+    print("dcOption.this_port_only skips ports 80 and 5222; other addresses still probe them")
 
 
 def main() -> None:
     check_server()
     check_login_errors()
     check_released_identity()
-    check_known_gap()
+    check_declared_port()
     print("restore contract passed")
     print("not claimed: device login, media send, or a 14.0.4 database opened by this build")
 
