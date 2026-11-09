@@ -874,6 +874,7 @@ public enum ChatListSearchFilter: Equatable {
     case music
     case voice
     case instantVideo
+    case moments
     case peer(EnginePeer.Id, Bool, String, String)
     case date(Int32?, Int32, String)
     case publicPosts
@@ -904,6 +905,8 @@ public enum ChatListSearchFilter: Equatable {
             return 10
         case .instantVideo:
             return 11
+        case .moments:
+            return 13
         case .publicPosts:
             return 12
         case let .peer(peerId, _, _, _):

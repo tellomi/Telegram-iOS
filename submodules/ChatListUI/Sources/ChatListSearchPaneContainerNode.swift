@@ -95,6 +95,8 @@ extension ChatListSearchPaneKey {
             return .voice
         case .instantVideo:
             return .instantVideo
+        case .moments:
+            return .moments
         }
     }
 }
@@ -111,6 +113,7 @@ func defaultAvailableSearchPanes(isForum: Bool, hasDownloads: Bool, hasPublicPos
     }
     result.append(.channels)
     result.append(.apps)
+    result.append(.moments)
     if !isForum {
         result.append(.globalPosts)
     }
@@ -156,7 +159,13 @@ private final class ChatListSearchPendingPane {
         key: ChatListSearchPaneKey,
         hasBecomeReady: @escaping (ChatListSearchPaneKey) -> Void
     ) {
-        let paneNode = ChatListSearchListPaneNode(context: context, animationCache: animationCache, animationRenderer: animationRenderer, updatedPresentationData: updatedPresentationData, interaction: interaction, key: key, peersFilter: (key == .chats || key == .topics) ? peersFilter : [], requestPeerType: requestPeerType, excludedPeerIds: excludedPeerIds, location: location, communityId: communityId, searchQuery: searchQuery, searchOptions: searchOptions, navigationController: navigationController, parentController: parentController, globalPeerSearchContext: globalPeerSearchContext)
+        let paneNode: ChatListSearchPaneNode
+        if key == .moments {
+            let presentationData = updatedPresentationData?.initial ?? context.sharedContext.currentPresentationData.with { $0 }
+            paneNode = MomentsSearchPaneNode(context: context, presentationData: presentationData, searchQuery: searchQuery, interaction: interaction)
+        } else {
+            paneNode = ChatListSearchListPaneNode(context: context, animationCache: animationCache, animationRenderer: animationRenderer, updatedPresentationData: updatedPresentationData, interaction: interaction, key: key, peersFilter: (key == .chats || key == .topics) ? peersFilter : [], requestPeerType: requestPeerType, excludedPeerIds: excludedPeerIds, location: location, communityId: communityId, searchQuery: searchQuery, searchOptions: searchOptions, navigationController: navigationController, parentController: parentController, globalPeerSearchContext: globalPeerSearchContext)
+        }
         
         self.pane = ChatListSearchPaneWrapper(key: key, node: paneNode)
         self.disposable = (paneNode.isReady

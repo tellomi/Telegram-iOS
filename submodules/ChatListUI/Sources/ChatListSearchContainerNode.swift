@@ -405,6 +405,8 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
                 key = .voice
             case .instantVideo:
                 key = .instantVideo
+            case .moments:
+                key = .moments
             case .publicPosts:
                 key = .publicPosts
             case let .date(minDate, maxDate, title):
@@ -752,6 +754,8 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
             filterKey = .instantVideo
         case .publicPosts:
             filterKey = .publicPosts
+        case .moments:
+            filterKey = .moments
         }
         self.selectedFilter = .filter(filterKey)
         self.selectedFilterPromise.set(.single(self.selectedFilter))
@@ -783,6 +787,8 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
             key = .instantVideo
         case .downloads:
             key = .downloads
+        case .moments:
+            key = .moments
         default:
             key = .chats
         }

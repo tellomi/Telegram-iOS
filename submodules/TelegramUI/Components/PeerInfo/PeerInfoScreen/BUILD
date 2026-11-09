@@ -185,6 +185,7 @@ swift_library(
         "//submodules/TelegramUI/Components/AvatarComponent",
         "//submodules/TelegramUI/Components/AlertComponent/AlertTransferHeaderComponent",
         "//submodules/TelegramUI/Components/HorizontalTabsComponent",
+        "//submodules/TelegramUI/Components/Moments:MomentsUI",
         "//submodules/TelegramUI/Components/PeerInfo/AccountPeerContextItem",
     ],
     visibility = [

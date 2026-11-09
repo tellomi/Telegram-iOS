@@ -1819,6 +1819,8 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
             tagMask = .voiceOrInstantVideo
         case .instantVideo:
             tagMask = .roundVideo
+        case .moments:
+            tagMask = nil
         }
         self.tagMask = tagMask
 

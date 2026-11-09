@@ -1650,6 +1650,10 @@ func peerInfoScreenData(
                     availablePanes = nil
                 }
                 
+                if peerView.peers[peerView.peerId] is TelegramUser || isMyProfile {
+                    availablePanes?.insert(.moments, at: 0)
+                }
+
                 if var currentAvailablePanes = availablePanes, let cachedData = peerView.cachedData as? CachedUserData, let mainProfileTab = cachedData.mainProfileTab {
                     let mainTabKey = PeerInfoPaneKey(tab: mainProfileTab)
                     if currentAvailablePanes.contains(mainTabKey) && currentAvailablePanes.first != mainTabKey {

@@ -1,0 +1,297 @@
+import Foundation
+import UIKit
+import Display
+import AsyncDisplayKit
+import SwiftSignalKit
+import TelegramCore
+import TelegramPresentationData
+import AccountContext
+import Postbox
+
+public final class MomentsDetailScreen: ViewController {
+    private let context: AccountContext
+    private var card: MomentsCard
+    private var comments: [MomentsComment] = []
+    private var sort = "hot"
+    public var openPeer: ((EnginePeer.Id) -> Void)?
+    private var presentationData: PresentationData
+    private let list = ListView()
+    private let field = UITextField()
+    private var rendered = 0
+
+    public init(context: AccountContext, card: MomentsCard) {
+        self.context = context
+        self.card = card
+        self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
+        self.title = momentsText(self.presentationData.strings, .comment)
+    }
+
+    required init(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override public func loadDisplayNode() {
+        self.displayNode = ASDisplayNode()
+        self.displayNode.addSubnode(self.list)
+        self.displayNode.view.addSubview(self.field)
+        self.field.borderStyle = .roundedRect
+        self.field.placeholder = momentsText(self.presentationData.strings, .commentPlaceholder)
+        self.field.returnKeyType = .send
+        self.field.delegate = self
+        let sortButton = UIButton(type: .system)
+        sortButton.tag = 7
+        sortButton.setTitle(momentsText(self.presentationData.strings, .sortHot), for: .normal)
+        sortButton.addTarget(self, action: #selector(self.toggleSort), for: .touchUpInside)
+        self.displayNode.view.addSubview(sortButton)
+        self.reload()
+        self.displayNodeDidLoad()
+    }
+
+    override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
+        super.containerLayoutUpdated(layout, transition: transition)
+        let top = self.navigationLayout(layout: layout).navigationFrame.maxY
+        let bottom = layout.intrinsicInsets.bottom + 44
+        if let sortButton = self.displayNode.view.viewWithTag(7) {
+            sortButton.frame = CGRect(x: layout.size.width - 100, y: top, width: 88, height: 32)
+        }
+        self.list.frame = CGRect(x: 0, y: top + 32, width: layout.size.width, height: layout.size.height - top - 32 - bottom)
+        self.field.frame = CGRect(x: 12, y: layout.size.height - bottom + 6, width: layout.size.width - 24, height: 34)
+        self.render()
+    }
+
+    private func reload() {
+        let _ = (self.context.engine.moments.comments(postId: self.card.id, sort: self.sort, cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] comments in
+            self?.comments = comments
+            self?.render()
+        })
+    }
+
+    private func render() {
+        guard self.list.bounds.width > 0 else { return }
+        let strings = self.presentationData.strings
+        let theme = self.presentationData.theme
+        var items: [ListViewItem] = [MomentsPostItem(card: self.card, strings: strings, theme: theme, fontSize: self.presentationData.listsFontSize.baseDisplaySize, showFollow: false, expanded: true, hidden: false, albumIndex: 0, playing: false, handlers: self.handlers())]
+        if !self.card.viewer.canComment {
+            items.append(MomentsStatusItem(text: self.card.viewer.commentDeniedReason ?? momentsText(strings, .commentClosed), theme: theme, action: {}))
+        }
+        for comment in self.comments {
+            items.append(MomentsStatusItem(text: self.commentLine(comment), theme: theme, action: { [weak self] in self?.replyTo(comment) }))
+            for reply in comment.replies.prefix(2) {
+                let name = reply.author?.displayName ?? ""
+                let target = reply.replyToName.map { "@\($0) " } ?? ""
+                items.append(MomentsStatusItem(text: "\(name) \(target)\(reply.text)", theme: theme, action: {}))
+            }
+            if comment.replyCount > 2 {
+                items.append(MomentsStatusItem(text: "\(momentsText(strings, .viewReplies)) \(comment.replyCount)", theme: theme, action: { [weak self] in self?.expand(comment) }))
+            }
+        }
+        let previous = self.rendered
+        self.rendered = items.count
+        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: items.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { _ in })
+        self.field.isEnabled = self.card.viewer.canComment && self.card.commentPolicy != .closed
+        if self.card.commentPolicy == .closed {
+            self.field.placeholder = momentsText(strings, .commentClosed)
+        }
+    }
+
+    private func commentLine(_ comment: MomentsComment) -> String {
+        return "\(comment.author?.displayName ?? "")  \(comment.text)"
+    }
+
+    private func handlers() -> MomentsPostHandlers {
+        return MomentsPostHandlers(open: { _ in }, author: { [weak self] card in
+            guard let id = card.author?.telegramUserId, id != 0 else { return }
+            self?.openPeer?(PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(id)))
+        }, like: { [weak self] card in
+            guard let self else { return }
+            self.card.viewer.liked.toggle()
+            self.card.counts.likes += self.card.viewer.liked ? 1 : -1
+            let _ = self.context.engine.moments.setLiked(card.id, liked: self.card.viewer.liked).start()
+            self.render()
+        }, comment: { _ in }, repost: { _ in }, share: { [weak self] card in
+            guard let self else { return }
+            UIPasteboard.general.string = momentsPostLink(id: card.id)
+        }, save: { [weak self] card in
+            guard let self else { return }
+            self.card.viewer.saved.toggle()
+            let _ = self.context.engine.moments.setSaved(card.id, saved: self.card.viewer.saved).start()
+            self.render()
+        }, more: { _, _ in }, follow: { _ in }, undo: { _ in }, fullText: { _ in }, topic: { _ in }, link: { [weak self] url in
+            guard let self else { return }
+            self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: false, presentationData: self.presentationData, navigationController: self.navigationController as? NavigationController, dismissInput: {})
+        })
+    }
+
+    private func replyTo(_ comment: MomentsComment) {
+        self.field.text = ""
+        self.field.accessibilityHint = comment.id
+        self.field.becomeFirstResponder()
+    }
+
+    private func expand(_ comment: MomentsComment) {
+        let _ = (self.context.engine.moments.replies(rootId: comment.id, cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] replies in
+            guard let self else { return }
+            self.comments = self.comments.map { item in
+                guard item.id == comment.id else { return item }
+                var copy = item
+                copy.replies = replies
+                copy.replyCount = replies.count
+                return copy
+            }
+            self.render()
+        })
+    }
+
+    @objc private func toggleSort() {
+        self.sort = self.sort == "hot" ? "latest" : "hot"
+        (self.displayNode.view.viewWithTag(7) as? UIButton)?.setTitle(momentsText(self.presentationData.strings, self.sort == "hot" ? .sortHot : .sortLatest), for: .normal)
+        self.reload()
+    }
+}
+
+extension MomentsDetailScreen: UITextFieldDelegate {
+    public func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        let text = textField.text ?? ""
+        guard !text.isEmpty, text.count <= MomentsLimits.standard.commentTextLimit else { return false }
+        let parent = textField.accessibilityHint
+        let _ = self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: parent).start()
+        textField.text = ""
+        textField.accessibilityHint = nil
+        textField.resignFirstResponder()
+        self.reload()
+        return false
+    }
+}
+
+public final class MomentsNotificationsScreen: ViewController {
+    private let context: AccountContext
+    public var openPeer: ((EnginePeer.Id) -> Void)?
+    private var presentationData: PresentationData
+    private let list = ListView()
+    private var items: [MomentsNotification] = []
+    private var kind = "all"
+    private var rendered = 0
+
+    public init(context: AccountContext) {
+        self.context = context
+        self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
+        self.title = momentsText(self.presentationData.strings, .notifications)
+    }
+
+    required init(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override public func loadDisplayNode() {
+        self.displayNode = ASDisplayNode()
+        self.displayNode.addSubnode(self.list)
+        self.reload()
+        self.displayNodeDidLoad()
+    }
+
+    override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
+        super.containerLayoutUpdated(layout, transition: transition)
+        let top = self.navigationLayout(layout: layout).navigationFrame.maxY
+        self.list.frame = CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)
+        self.render()
+    }
+
+    private func reload() {
+        let _ = (self.context.engine.moments.notifications(kind: self.kind) |> deliverOnMainQueue).start(next: { [weak self] items in
+            self?.items = items
+            self?.render()
+        }, error: { [weak self] error in
+            guard let self else { return }
+            let text = error == .notFound ? momentsText(self.presentationData.strings, .unavailable) : momentsText(self.presentationData.strings, .loadFailed)
+            self.items = []
+            self.render(empty: text)
+        })
+    }
+
+    private func render(empty: String? = nil) {
+        guard self.list.bounds.width > 0 else { return }
+        let theme = self.presentationData.theme
+        let strings = self.presentationData.strings
+        var rows: [ListViewItem] = []
+        if let empty {
+            rows = [MomentsStatusItem(text: empty, theme: theme, action: { [weak self] in self?.reload() })]
+        } else if self.items.isEmpty {
+            rows = [MomentsStatusItem(text: momentsText(strings, .notifications), theme: theme, action: {})]
+        } else {
+            for item in self.items {
+                let names = item.actors.map(\.displayName).joined(separator: ", ")
+                let extra = item.extraActorCount > 0 ? " +\(item.extraActorCount)" : ""
+                let line = item.unavailable ? momentsText(strings, .unavailable) : "\(names)\(extra) \(item.kind.rawValue) \(item.text ?? "")"
+                rows.append(MomentsStatusItem(text: line, theme: theme, action: { [weak self] in
+                    guard let self else { return }
+                    if item.unavailable {
+                        self.present(textAlertController(context: self.context, title: nil, text: momentsText(strings, .unavailable), actions: [TextAlertAction(type: .defaultAction, title: momentsText(strings, .cancel), action: {})]), in: .window(.root))
+                    } else if item.kind == .follow || item.kind == .mutual, let id = item.actors.first?.telegramUserId, id != 0 {
+                        self.openPeer?(PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(id)))
+                    }
+                }))
+            }
+        }
+        let previous = self.rendered
+        self.rendered = rows.count
+        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: rows.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { _ in })
+    }
+}
+
+public final class MomentsCityScreen: ViewController {
+    private let context: AccountContext
+    private let picked: (MomentsCity) -> Void
+    private var cities: [MomentsCity] = []
+    private let list = ListView()
+    private var rendered = 0
+    private var presentationData: PresentationData
+
+    public init(context: AccountContext, picked: @escaping (MomentsCity) -> Void) {
+        self.context = context
+        self.picked = picked
+        self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
+        self.title = momentsText(self.presentationData.strings, .switchCity)
+    }
+
+    required init(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override public func loadDisplayNode() {
+        self.displayNode = ASDisplayNode()
+        self.displayNode.addSubnode(self.list)
+        let field = UITextField()
+        field.tag = 3
+        field.placeholder = momentsText(self.presentationData.strings, .search)
+        field.borderStyle = .roundedRect
+        field.addTarget(self, action: #selector(self.queryChanged), for: .editingChanged)
+        self.displayNode.view.addSubview(field)
+        self.displayNodeDidLoad()
+    }
+
+    override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
+        super.containerLayoutUpdated(layout, transition: transition)
+        let top = self.navigationLayout(layout: layout).navigationFrame.maxY
+        self.displayNode.view.viewWithTag(3)?.frame = CGRect(x: 12, y: top + 8, width: layout.size.width - 24, height: 36)
+        self.list.frame = CGRect(x: 0, y: top + 52, width: layout.size.width, height: layout.size.height - top - 52)
+        self.render()
+    }
+
+    @objc private func queryChanged(_ field: UITextField) {
+        let _ = (self.context.engine.moments.cities(query: field.text ?? "") |> deliverOnMainQueue).start(next: { [weak self] cities in
+            self?.cities = cities
+            self?.render()
+        })
+    }
+
+    private func render() {
+        guard self.list.bounds.width > 0 else { return }
+        let theme = self.presentationData.theme
+        let rows: [ListViewItem] = self.cities.map { city in
+            MomentsStatusItem(text: city.name, theme: theme, action: { [weak self] in
+                self?.picked(city)
+                self?.navigationController?.popViewController(animated: true)
+            })
+        }
+        let previous = self.rendered
+        self.rendered = rows.count
+        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: rows.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { _ in })
+    }
+}

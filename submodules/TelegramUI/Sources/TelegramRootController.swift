@@ -31,6 +31,7 @@ import PeerInfoStoryGridScreen
 import ShareWithPeersScreen
 import ChatEmptyNode
 import NewsScreen
+import MomentsUI
 
 private class DetailsChatPlaceholderNode: ASDisplayNode, NavigationDetailsPlaceholderNode {
     private var presentationData: PresentationData
@@ -81,6 +82,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     public var chatListController: ChatListController?
     public var accountSettingsController: PeerInfoScreen?
     public var newsController: NewsScreen?
+    public var momentsController: MomentsScreen?
     
     private var permissionsDisposable: Disposable?
     private var presentationDataDisposable: Disposable?
@@ -206,6 +208,13 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         let callListController = CallListController(context: self.context, mode: .tab)
         // Created even when hidden, like the calls tab: `updateRootControllers` shows and hides it.
         let newsController = NewsScreen(context: self.context)
+        let momentsController = MomentsScreen(context: self.context)
+        momentsController.openPeer = { [weak self] peerId in
+            guard let self else {
+                return
+            }
+            self.pushViewController(PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil, peerId: peerId, avatarInitiallyExpanded: false, isOpenedFromChat: false, reactionSourceMessageId: nil, callMessages: []))
+        }
         
         var controllers: [ViewController] = []
         
@@ -217,6 +226,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         
         if showCallsTab {
             controllers.append(callListController)
+        }
+        if MomentsLimits.standard.tabEnabled {
+            controllers.append(momentsController)
         }
         controllers.append(chatListController)
         if showNewsTab {
@@ -248,6 +260,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.contactsController = contactsController
         self.callListController = callListController
         self.newsController = newsController
+        self.momentsController = momentsController
         self.chatListController = chatListController
         self.accountSettingsController = accountSettingsController
         self.rootTabController = tabBarController
@@ -262,6 +275,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         controllers.append(self.contactsController!)
         if showCallsTab {
             controllers.append(self.callListController!)
+        }
+        if MomentsLimits.standard.tabEnabled, let momentsController = self.momentsController {
+            controllers.append(momentsController)
         }
         controllers.append(self.chatListController!)
         if showNewsTab, let newsController = self.newsController {

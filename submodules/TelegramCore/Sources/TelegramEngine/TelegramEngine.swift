@@ -100,6 +100,10 @@ public final class TelegramEngine {
     public lazy var feed: Feed = {
         return Feed(account: self.account)
     }()
+
+    public lazy var moments: Moments = {
+        return Moments(account: self.account)
+    }()
 }
 
 public final class TelegramEngineUnauthorized {
