@@ -87,6 +87,36 @@ static MTSocksProxySettings *makeWebProxy(void) {
     XCTAssertEqual([MTDiscoverConnectionSignals alternatePortsForAddress:probes.firstObject inAddressList:@[media] proxySettings:nil].count, 0u);
 }
 
+@interface LegacyDatacenterAddressCoder : NSCoder
+@property (nonatomic, strong) NSDictionary<NSString *, id> *values;
+@end
+
+@implementation LegacyDatacenterAddressCoder
+- (BOOL)allowsKeyedCoding { return YES; }
+- (BOOL)containsValueForKey:(NSString *)key { return self.values[key] != nil; }
+- (id)decodeObjectForKey:(NSString *)key { return self.values[key]; }
+- (int)decodeIntForKey:(NSString *)key { return [self.values[key] intValue]; }
+- (BOOL)decodeBoolForKey:(NSString *)key { return [self.values[key] boolValue]; }
+@end
+
+- (void)testArchiveWithoutThisPortOnlyKeyStaysUnlocked {
+    // The keys an address saved before thisPortOnly existed. decodeBoolForKey:
+    // is false when the key is absent, so the old datacenter list still loads
+    // and still probes 80 and 5222.
+    LegacyDatacenterAddressCoder *coder = [[LegacyDatacenterAddressCoder alloc] init];
+    coder.values = @{
+        @"ip": @"203.0.113.10",
+        @"port": @10443,
+        @"preferForMedia": @YES,
+    };
+    MTDatacenterAddress *decoded = [[MTDatacenterAddress alloc] initWithCoder:coder];
+    XCTAssertEqualObjects(decoded.ip, @"203.0.113.10");
+    XCTAssertEqual(decoded.port, 10443);
+    XCTAssertTrue(decoded.preferForMedia);
+    XCTAssertFalse(decoded.thisPortOnly);
+    XCTAssertEqual([MTDiscoverConnectionSignals alternatePortsForAddress:decoded inAddressList:@[decoded] proxySettings:nil].count, 2u);
+}
+
 - (void)testThisPortOnlyRoundTripKeepsMediaAndTheLock {
     MTDatacenterAddress *locked = [self addressWithPortOnly:@"203.0.113.10" port:10443 media:true];
     NSData *data = [NSKeyedArchiver archivedDataWithRootObject:locked];
