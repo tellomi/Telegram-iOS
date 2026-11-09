@@ -64,6 +64,7 @@ public enum ChatListSearchPaneKey {
     case music
     case voice
     case instantVideo
+    case moments
 }
 
 extension ChatListSearchPaneKey {
