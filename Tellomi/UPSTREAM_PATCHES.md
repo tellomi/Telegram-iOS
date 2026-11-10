@@ -1,5 +1,22 @@
 # Upstream patches
 
+## Login language, sign-up handoff, upstream crash logs — 2026-11-10
+
+Build 80 on a Chinese phone showed the English tour plus "Continue in 简体中文", and `initConnection` sent `system_lang_code=zh-Hans-US` with `lang_code=en`. `AppleLanguages` is the system list. `zh-Hans-US`, `zh-Hans-CN`, `zh-CN` and `zh` resolve to bundled `zh-Hans`. `zh-Hant-TW`, `zh-Hant-HK`, `zh-TW` and `zh-HK` resolve to `zh-Hant`. Anything else is English. A language stored with `tellomiRememberExplicitLanguage` wins. The welcome pages are the bundled `Tour.*` strings, so they do not wait for a langpack, and the suggested-language button is not shown.
+
+`auth.signUp` returned `auth.authorization` (`auth.authorization#2ea2c0d4`, layer 232). About 49ms later the client closed the connection and opened a new unauthorized session (new temp keys, no `updates.getState`). `signUp` used to write the authorized state and switch the account record as two later signals. The record could leave the auth slot while the postbox still looked unauthorized, `SharedAccountContext` deleted that record, and `beginNewAuth` showed the welcome screen. `signUp` now writes `AuthorizedAccountState` and switches the record in the same order as `auth.signIn`. A following nil state does not rebuild the welcome on that controller. If the open still races, a postbox that already holds `AuthorizedAccountState` is opened again instead of being deleted.
+
+Crash logs are the upstream Telegram-iOS screen again (MetricKit store, debug Settings list, prompt that resolves `@iOSCrashReportsBot` and gives up after 15 seconds). The Tellomi prompt that waited on `networkState` and never called `contacts.resolveUsername`, the `tellomi_crash_report_bot` upload, the Saved Messages fallback, and the pre-login signal handler are gone. `CrashReport.*` strings were removed from every `Localizable.strings`.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TellomiBuiltinLanguage.swift` | Resolves `zh-Hans-US` and the other variants. Sets `lang_code`. |
+| `submodules/AuthorizationUI/Sources/TellomiBundledWelcome.swift` | Welcome and pre-login strings from the bundled lproj. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | No second language button. |
+| `submodules/TelegramCore/Sources/Authorization.swift` | `signUp` persists the account the same way `signIn` does. |
+| `submodules/DebugSettingsUI/Sources/CrashReportsController.swift` | Restored from upstream Telegram-iOS. |
+| `submodules/CrashReporting/Sources/*` | Restored from upstream. The signal handler is deleted. |
+
 ## MTProto port 443 fallback — 2026-11-10
 
 Overseas networks drop TCP 10443 and pass 443. The seed for datacenter 1 is `api.tellomi.cn` on 10443, then 443. 10443 is last in the address list, so a client that never sees 10443 fail still dials 10443 first. An endpoint that has never received a response uses a 5 second TCP handshake timeout; after it has answered once, the handshake timeout stays 12 seconds. The failure is recorded before the reconnect is queued, including before login, and the first reconnect is immediate, so the next dial is 443. A saved datacenter list and a `help.getConfig` `dc_options` list that omit 443 get it added back. The server does not have to return 443 for this client to keep the fallback.
@@ -17,7 +34,7 @@ Overseas networks drop TCP 10443 and pass 443. The seed for datacenter 1 is `api
 
 ## Moments feed contract, list and comments — 2026-11-10
 
-Branch `cursor/moments-feed-f01-f04-7ea6`, based on `release/ios` (`66d4d96431`).
+Branch `cursor/moments-feed-f01-f04-7ea6`, based on `release/ios` (`043a05bd55`).
 
 - `POST /v1/feed/posts` is built by `momentsEncodePost`. The body is `kind=post`, `visibility`, `media_keys`, root `city` / `allow_nearby` / `place_id`, `quote_of` and a UUID `client_nonce`. It does not send `media`, `location`, `comment_policy` or `link_preview`. Include and exclude send `audience.audience_token` from `discover.getAudienceToken` (`#dc5213c2` / `#da177181`). A token failure leaves the picked audience in place. The nonce is fixed for retries of that draft.
 - Tapping the post body opens `MomentsDetailScreen`. The comment button presents `MomentsCommentSheet` over the list. Closing the sheet does not push or pop, so the tab and scroll position stay. A photo or video opens the gallery. Tab taps and pager swipes share `commitSelection`. Profile, search and a post deep link keep the detail screen.
