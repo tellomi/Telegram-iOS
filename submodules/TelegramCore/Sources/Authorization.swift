@@ -1588,7 +1588,7 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                     // accountWithId still see the unauthorized state, delete the record, and
                     // beginNewAuth — the connection closed and a new temp key was created, with no
                     // updates.getState.
-                    let activated = account.postbox.transaction { transaction -> Signal<Void, NoError> in
+                    let activated = account.postbox.transaction { transaction -> Signal<Void, SignUpError> in
                         let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
                         storeAuthorizedUser(transaction: transaction, user: user)
                         if let hole = account.postbox.seedConfiguration.initializeChatListWithHole.topLevel {
@@ -1602,8 +1602,9 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                         return accountManager.transaction { transaction -> Void in
                             switchToAuthorizedAccount(transaction: transaction, account: account, isSupportUser: isSupportUser)
                         }
+                        |> castError(SignUpError.self)
                     }
-                    |> mapError { _ -> SignUpError in }
+                    |> castError(SignUpError.self)
                     |> switchToLatest
 
                     if avatarData == nil && avatarVideo == nil {
