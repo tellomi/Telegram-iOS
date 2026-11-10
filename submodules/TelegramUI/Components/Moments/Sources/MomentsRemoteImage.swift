@@ -58,15 +58,20 @@ final class MomentsRemoteImageSlot {
     private var image: UIImage?
     private weak var imageView: UIImageView?
     private var disposable: Disposable?
+    private var generation = 0
 
     func bind(url: String?, imageView: UIImageView, context: AccountContext, maxSide: CGFloat) {
+        self.generation += 1
+        let generation = self.generation
         self.imageView = imageView
-        if url == self.url {
-            imageView.image = self.image
+        if url == self.url, let image = self.image {
+            imageView.image = image
             return
         }
-        self.cancel()
+        self.disposable?.dispose()
+        self.disposable = nil
         self.url = url
+        self.image = nil
         self.imageView = imageView
         imageView.image = nil
         guard let url, url.hasPrefix("https://") else {
@@ -75,7 +80,6 @@ final class MomentsRemoteImageSlot {
         let resource = momentsRemoteResource(url: url)
         let scale = UIScreen.main.scale
         let maxPixel = max(maxSide, 1) * (scale > 0 ? scale : 1)
-        let expected = url
         let fetch = context.engine.resources.fetch(reference: .standalone(resource: resource._asResource()), userLocation: .other, userContentType: .image, statsCategory: .image)
         |> map { _ -> Void in }
         |> `catch` { _ -> Signal<Void, NoError> in
@@ -93,7 +97,7 @@ final class MomentsRemoteImageSlot {
         let bag = DisposableSet()
         bag.add(fetch.start())
         bag.add(data.start(next: { [weak self] image in
-            guard let self, self.url == expected, let image else {
+            guard let self, self.generation == generation, self.url == url, let image else {
                 return
             }
             self.image = image
@@ -103,8 +107,10 @@ final class MomentsRemoteImageSlot {
     }
 
     func cancel() {
+        self.generation += 1
         self.url = nil
         self.image = nil
+        self.imageView?.image = nil
         self.imageView = nil
         self.disposable?.dispose()
         self.disposable = nil

@@ -342,18 +342,35 @@ public extension TelegramEngine {
             }
         }
 
-        public func addComment(postId: String, text: String, parentId: String?, attachment: [String: Any]? = nil) -> Signal<Never, MomentsAPIError> {
-            var body: [String: Any] = ["text": text]
-            if let parentId {
-                body["parent_id"] = parentId
+        /// `clientNonce` is a UUID. Pass the same value when retrying one comment so the engine returns the first row.
+        public func addComment(postId: String, text: String, parentId: String?, attachment: [String: Any]? = nil, clientNonce: String? = nil) -> Signal<Never, MomentsAPIError> {
+            let mediaKey = attachment.flatMap { momentsString($0, "key") }
+            let sticker = attachment.map { momentsString($0, "type") == "sticker" || momentsBool($0, "sticker") } ?? false
+            let state = MomentsCommentComposerState(text: text, parentId: parentId, mediaKey: mediaKey, sticker: sticker, clientNonce: clientNonce ?? "")
+            switch momentsEncodeComment(state) {
+            case let .failure(error):
+                let code = error == .invalidClientNonce ? "invalid_client_nonce" : "comment"
+                return .fail(.invalid(code))
+            case let .success(body):
+                return self.call(method: "POST", path: "/v1/feed/posts/\(postId)/comments", body: body) |> ignoreValues
             }
-            if let attachment, let key = momentsString(attachment, "key"), !key.isEmpty {
-                body["media_keys"] = [key]
-                if momentsString(attachment, "type") == "sticker" || momentsBool(attachment, "sticker") {
-                    body["sticker"] = true
+        }
+
+        /// Signed include/exclude list from `discover.getAudienceToken`. A failure is returned to the caller; it is not turned into a public post.
+        public func audienceToken(kind: String, userIds: [Int64]) -> Signal<MomentsAudienceGrant, MomentsAPIError> {
+            guard (kind == "include" || kind == "exclude"), !userIds.isEmpty else {
+                return .fail(.invalid("audience"))
+            }
+            return self.account.network.request(Api.functions.discover.getAudienceToken(kind: kind, userIds: userIds))
+            |> mapError { _ -> MomentsAPIError in
+                return .invalid("audience_token")
+            }
+            |> map { result in
+                switch result {
+                case let .audienceToken(value):
+                    return MomentsAudienceGrant(token: value.token, expiresAt: Int64(value.expires))
                 }
             }
-            return self.call(method: "POST", path: "/v1/feed/posts/\(postId)/comments", body: body) |> ignoreValues
         }
 
         public func setCommentLiked(id: String, liked: Bool) -> Signal<Never, MomentsAPIError> {
@@ -733,7 +750,8 @@ func momentsComment(_ json: [String: Any], mediaBaseURL: String? = nil) -> Momen
         replyCount: max(momentsInt(json, "reply_count"), replies.count),
         isAuthor: momentsBool(json, "is_author"),
         ipRegionLabel: momentsString(card, "ip_region_label") ?? momentsString(json, "ip_region_label"),
-        disliked: momentsBool(me, "disliked")
+        disliked: momentsBool(me, "disliked"),
+        viewerAuthored: momentsBool(me, "author")
     )
 }
 
@@ -760,7 +778,8 @@ func momentsReply(_ json: [String: Any], rootId: String, mediaBaseURL: String? =
         liked: momentsBool(me, "liked") || momentsBool(json, "liked"),
         isAuthor: momentsBool(json, "is_author"),
         ipRegionLabel: momentsString(card, "ip_region_label"),
-        disliked: momentsBool(me, "disliked")
+        disliked: momentsBool(me, "disliked"),
+        viewerAuthored: momentsBool(me, "author")
     )
 }
 

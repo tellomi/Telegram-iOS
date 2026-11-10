@@ -2378,6 +2378,7 @@ wallet.card#8ed043b1 flags:# stickers:flags.0?Vector<wallet.CardSticker> bg_nft_
 payments.starGiftDepositPayload#725bb4eb nft_address:string payload:bytes amount:long = payments.StarGiftDepositPayload;
 
 discover.engineCredential#0578ccaa token:string expires:int region:string = discover.EngineCredential;
+discover.audienceToken#da177181 token:string expires:int = discover.AudienceToken;
 
 ---functions---
 
@@ -3269,3 +3270,4 @@ wallet.tonConnectGetSessions#a7ffb56e = wallet.TonConnectSessions;
 wallet.setCardStickers#68509ac flags:# stickers:Vector<InputWalletCardSticker> bg_nft_address:flags.0?string = wallet.Card;
 
 discover.getEngineCredential#a80a7f76 = discover.EngineCredential;
+discover.getAudienceToken#dc5213c2 kind:string user_ids:Vector<long> = discover.AudienceToken;

@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   app:
-    if: github.head_ref == 'cursor/moments-comment-api-b405' || github.head_ref == 'cursor/moments-feed-parity-f601' || github.head_ref == 'cursor/ios-batch-tf' || github.head_ref == 'cursor/ios-login-locale-crash-48dd' || github.head_ref == 'cursor/mtproto-port-443-fallback-e2a4' || github.head_ref == 'cursor/menu-settings-tabs-b921'
+    if: github.head_ref == 'cursor/moments-comment-api-b405' || github.head_ref == 'cursor/moments-feed-parity-f601' || github.head_ref == 'cursor/ios-batch-tf' || github.head_ref == 'cursor/ios-login-locale-crash-48dd' || github.head_ref == 'cursor/mtproto-port-443-fallback-e2a4' || github.head_ref == 'cursor/moments-feed-f01-f04-7ea6' || github.head_ref == 'cursor/menu-settings-tabs-b921'
     runs-on: xcode-27
     timeout-minutes: 360
     env:
@@ -84,6 +84,9 @@ jobs:
       - name: Build release IPA (no upload)
         run: |
           set -euo pipefail
+          # The full Bazel log stays in the artifact. Streaming it into the
+          # job log filled the runner disk and the following test step died
+          # with "No space left on device".
           python3 -u build-system/Make/Make.py \
             --overrideXcodeVersion \
             --cacheDir /Users/runner/telegram-bazel-cache \
@@ -91,7 +94,8 @@ jobs:
             --configurationPath "${RUNNER_TEMP}/tellomi-configuration.json" \
             --codesigningInformationPath "${RUNNER_TEMP}/tellomi-signing" \
             --configuration release_arm64 \
-            --buildNumber "${BUILD_NUMBER}" 2>&1 | tee "${RUNNER_TEMP}/build.log"
+            --buildNumber "${BUILD_NUMBER}" > "${RUNNER_TEMP}/build.log" 2>&1
+          tail -n 40 "${RUNNER_TEMP}/build.log"
           test -f bazel-bin/Telegram/Telegram.ipa
           echo "Built bazel-bin/Telegram/Telegram.ipa. Not uploaded."
 
@@ -113,6 +117,16 @@ jobs:
       - name: Run MomentsRulesTests
         run: |
           set -euo pipefail
+          df -h /
+          # The IPA is already checked. Its bazel outputs stay on the same disk as the
+          # simulator test, and the last run died here with "No space left on device".
+          # Bazel marks some outputs immutable, so clear that before deleting them.
+          if [ -e bazel-out ]; then
+            chflags -R nouchg bazel-out || true
+            chmod -R u+w bazel-out || true
+          fi
+          rm -rf bazel-bin bazel-out bazel-testlogs || true
+          df -h /
           # xctestrunner builds a runtime id itself and hides the simctl error
           # behind exit 15. Create the simulator here, from the runtime id
           # simctl actually lists, and hand that device to the test runner.
@@ -170,6 +184,7 @@ jobs:
           )"
           xcrun simctl boot "${SIM_UDID}" || true
           xcrun simctl bootstatus "${SIM_UDID}" -b
+          set +e
           python3 -u build-system/Make/Make.py \
             --overrideXcodeVersion \
             --cacheDir /Users/runner/telegram-bazel-cache \
@@ -178,18 +193,24 @@ jobs:
             --codesigningInformationPath "${RUNNER_TEMP}/tellomi-signing" \
             --target //submodules/TelegramCore:MomentsRulesTests \
             --testFilter 'MomentsRulesTests|TellomiBuiltinLanguageTests' \
-            --testOutput all \
-            --testArg=--destination=platform=ios_simulator,id=${SIM_UDID}
+            --testOutput errors \
+            --testArg=--destination=platform=ios_simulator,id=${SIM_UDID} > "${RUNNER_TEMP}/test.log" 2>&1
+          status=$?
+          set -e
+          tail -n 80 "${RUNNER_TEMP}/test.log"
+          exit "${status}"
 
       - name: Summarize compiler errors
         if: failure()
         run: |
-          grep -E "error:|ERROR:" "${RUNNER_TEMP}/build.log" | sort -u | head -200 || true
+          grep -E "error:|ERROR:|failed|Fatal" "${RUNNER_TEMP}/build.log" "${RUNNER_TEMP}/test.log" 2>/dev/null | sort -u | head -200 || true
 
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: moments-build-log
-          path: ${{ runner.temp }}/build.log
+          path: |
+            ${{ runner.temp }}/build.log
+            ${{ runner.temp }}/test.log
           if-no-files-found: ignore

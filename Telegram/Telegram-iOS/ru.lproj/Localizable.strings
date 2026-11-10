@@ -1,0 +1,3 @@
+/* Moments feed. Same wording as the Android values pack for this language. */
+"Moments_Comment_SendFailed" = "Не удалось отправить комментарий. Текст на месте.";
+"Moments_Audience_Kept" = "Не удалось обновить, кто может видеть. Ваш выбор сохранён.";

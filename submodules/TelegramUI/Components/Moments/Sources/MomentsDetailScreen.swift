@@ -24,6 +24,7 @@ public final class MomentsDetailScreen: ViewController {
     private var rendered = 0
     private var rendering = false
     private var renderAgain = false
+    private var commentComposer = MomentsCommentComposerState()
 
     public init(context: AccountContext, card: MomentsCard) {
         self.context = context
@@ -64,7 +65,7 @@ public final class MomentsDetailScreen: ViewController {
         if self.displayNode.view.viewWithTag(11) == nil {
             let stickers = UIButton(type: .system)
             stickers.tag = 11
-            stickers.setTitle("GIF", for: .normal)
+            stickers.setTitle(self.presentationData.strings.Message_Animation, for: .normal)
             stickers.addTarget(self, action: #selector(self.stickerPressed), for: .touchUpInside)
             self.displayNode.view.addSubview(stickers)
         }
@@ -121,9 +122,10 @@ public final class MomentsDetailScreen: ViewController {
     }
 
     private func commentLine(_ comment: MomentsComment) -> String {
+        let strings = self.presentationData.strings
         let name = comment.author?.displayName ?? ""
         if comment.text.isEmpty, let attachment = comment.attachment {
-            return "\(name)  \(attachment.type.rawValue)"
+            return "\(name)  \(momentsAttachmentTitle(strings, attachment.type))"
         }
         return "\(name)  \(comment.text)"
     }
@@ -309,12 +311,30 @@ extension MomentsDetailScreen: UITextFieldDelegate {
     public func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         let text = textField.text ?? ""
         guard !text.isEmpty, text.count <= MomentsLimits.standard.commentTextLimit else { return false }
+        guard self.card.viewer.canComment, self.card.commentPolicy != .closed else { return false }
         let parent = textField.accessibilityHint
-        let _ = self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: parent).start()
-        textField.text = ""
-        textField.accessibilityHint = nil
-        textField.resignFirstResponder()
-        self.reload()
+        let draft = momentsCommentComposerForSend(previous: self.commentComposer, text: text, parentId: parent, mediaKey: nil, sticker: false)
+        guard case .success = momentsEncodeComment(draft) else {
+            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .commentSendFailed))
+            return false
+        }
+        self.commentComposer = draft
+        let _ = self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: parent, clientNonce: draft.clientNonce).start(error: { [weak self] _ in
+            guard let self else { return }
+            self.commentComposer = momentsCommentComposerAfterFailure(draft)
+            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .commentSendFailed))
+        }, completed: { [weak self] in
+            guard let self else { return }
+            if textField.text == text {
+                textField.text = ""
+            }
+            if textField.accessibilityHint == parent {
+                textField.accessibilityHint = nil
+            }
+            self.commentComposer = momentsCommentComposerAfterSuccess()
+            textField.resignFirstResponder()
+            self.reload()
+        })
         return false
     }
 }
@@ -378,7 +398,7 @@ public final class MomentsNotificationsScreen: ViewController {
             for item in self.items {
                 let names = item.actors.map(\.displayName).joined(separator: ", ")
                 let extra = item.extraActorCount > 0 ? " +\(item.extraActorCount)" : ""
-                let line = item.unavailable ? momentsText(strings, .unavailable) : "\(names)\(extra) \(item.kind.rawValue) \(item.text ?? "")"
+                let line = item.unavailable ? momentsText(strings, .unavailable) : "\(names)\(extra) \(momentsNotificationTitle(strings, item.kind)) \(item.text ?? "")"
                 rows.append(MomentsStatusItem(text: line, theme: theme, action: { [weak self] in
                     guard let self else { return }
                     if item.unavailable {
@@ -406,5 +426,45 @@ public final class MomentsNotificationsScreen: ViewController {
                 self.render()
             }
         })
+    }
+}
+
+private func momentsAttachmentTitle(_ strings: PresentationStrings, _ type: MomentsMediaType) -> String {
+    switch type {
+    case .image:
+        return strings.Message_Photo
+    case .video:
+        return strings.Message_Video
+    case .audio:
+        return strings.Message_Audio
+    case .sticker:
+        return strings.Message_Sticker
+    case .gif:
+        return strings.Message_Animation
+    }
+}
+
+private func momentsNotificationTitle(_ strings: PresentationStrings, _ kind: MomentsNotificationKind) -> String {
+    switch kind {
+    case .like:
+        return momentsText(strings, .like)
+    case .comment:
+        return momentsText(strings, .comment)
+    case .reply:
+        return momentsText(strings, .reply)
+    case .mention:
+        return momentsText(strings, .pushMentions)
+    case .follow:
+        return momentsText(strings, .pushFollows)
+    case .mutual:
+        return momentsText(strings, .audienceMutual)
+    case .repost:
+        return momentsText(strings, .repost)
+    case .quote:
+        return momentsText(strings, .quote)
+    case .newPost:
+        return momentsText(strings, .pushNewPosts)
+    case .system, .all:
+        return momentsText(strings, .notifications)
     }
 }
