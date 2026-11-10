@@ -51,7 +51,7 @@ The profile QR is `QrStudioScreen`. Its center used to play `PlaneLogoPlain.tgs`
 
 ## Public links and help pages
 
-New links are generated with `TellomiLinks.host` (`tell.cc`). Parsing still accepts `t.me`, `telegram.me`, and `telegram.dog` via `TellomiLinks.legacyHosts`. Help, FAQ, privacy, and terms pages use `TellomiLinks.siteHost` (`tellomi.cn`). `localizedSiteURL` keeps a langpack URL's path and fragment and swaps a `telegram.org` host for `siteHost`.
+New links are generated with `TellomiLinks.host` (`tell.cc`). Parsing still accepts `t.me`, `telegram.me`, and `telegram.dog` via `TellomiLinks.legacyHosts`. Help, FAQ, privacy, and terms pages use `TellomiLinks.siteHost` (`tellomi.cn`). `localizedSiteURL` keeps a langpack URL's path and fragment and swaps a `telegram.org` host for `siteHost`. `tellomiRewriteBrand` sends short-link hosts to `tell.cc` and `telegram.org` website links to pages that exist on `tellomi.cn` (`/help`, `/help/install/update/`, `/help/start/link-desktop/`, `/download/`, `/legal/terms/`, `/legal/privacy/`, `/legal/community/`, `/support/`). The published support address is `support@tellomi.app`. Associated domains name `tell.cc` only; `t.me` is not claimed.
 
 | File | Change |
 | --- | --- |
@@ -59,11 +59,12 @@ New links are generated with `TellomiLinks.host` (`tell.cc`). Parsing still acce
 | `submodules/UrlHandling/Sources/UrlHandling.swift` | Public-link and short-link host lists read `TellomiLinks`. |
 | `submodules/TelegramUI/Sources/OpenUrl.swift` | Same host list. |
 | `submodules/UrlWhitelist/Sources/UrlWhitelist.swift` | Same host list. `telegram.org/blog` and `/tour` stay. |
-| `submodules/TextFormat/Sources/GenerateTextEntities.swift` | Same host list, plus `telegram.org` so remaining site links still highlight. |
-| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Bundled `t.me` display links are `tell.cc`. Bundled FAQ, terms, privacy, and `/terms` URLs are `tellomi.cn`. |
+| `submodules/TextFormat/Sources/GenerateTextEntities.swift` | Same host list, plus `telegram.org` and `tellomi.cn` so those site links still highlight. |
+| `submodules/TelegramPresentationData/Sources/TellomiBrandRewrite.swift` | Short-link hosts rewrite to `tell.cc`. `telegram.org` website links rewrite to existing `tellomi.cn` pages. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Bundled `t.me` display links are `tell.cc`. Remaining `telegram.org` website links are existing `tellomi.cn` pages. |
 | Settings, passport, stars, wallet, and mini-app screens that open those URL keys | Call `TellomiLinks.localizedSiteURL`. |
 | `submodules/TelegramUI/Components/Wallet/WalletInfoScreen/BUILD` | Depends on `TellomiLinks` so the wallet terms URL can use that helper. |
-| `submodules/PeerInfoUI/Sources/SecretChatKeyControllerNode.swift` | The "learn more" link goes to `tellomi.cn/faq#secret-chats`. The visible host in the bundled string is `tellomi.cn`. |
+| `submodules/PeerInfoUI/Sources/SecretChatKeyControllerNode.swift` | The "learn more" link goes to `tellomi.cn/help`. The visible host in the bundled string is `tellomi.cn`. |
 
 ## Home-screen icon
 

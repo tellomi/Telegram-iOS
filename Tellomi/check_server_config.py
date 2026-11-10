@@ -275,8 +275,11 @@ def check_public_links() -> None:
     for stale in ("https://t.me", "https://telegram.org/faq", "https://telegram.org/tos", "https://telegram.org/privacy", "https://telegram.org/terms"):
         if stale in strings:
             fail(f"bundled strings still contain {stale}")
-    if "https://tell.cc/" not in strings or "https://tellomi.cn/faq" not in strings or "https://tellomi.cn/privacy" not in strings:
+    if "https://tell.cc/" not in strings or "https://tellomi.cn/help" not in strings or "https://tellomi.cn/legal/privacy/" not in strings or "https://tellomi.cn/legal/terms/" not in strings:
         fail("bundled strings are missing tell.cc or tellomi.cn links")
+    for missing_page in ("https://tellomi.cn/faq", "https://tellomi.cn/tos", "https://tellomi.cn/terms", "https://tellomi.cn/apps", "https://tellomi.cn/privacy-tpa"):
+        if missing_page in strings:
+            fail(f"bundled strings still use a page that 404s: {missing_page}")
     build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
     if "applinks:tell.cc" not in build or "webcredentials:tell.cc" not in build:
         fail("associated domains do not name tell.cc")
@@ -298,7 +301,13 @@ def check_public_links() -> None:
     leftover = []
     for path in (ROOT / "submodules").rglob("*.swift"):
         rel = str(path.relative_to(ROOT))
-        if "/Tests/" in rel or rel.endswith("TellomiLinks.swift"):
+        # These name t.me / telegram.me / telegram.dog so old links still parse
+        # or so langpack text still rewrites. They do not generate those hosts.
+        if "/Tests/" in rel or rel.endswith((
+            "TellomiLinks.swift",
+            "TellomiBrandRewrite.swift",
+            "TellomiChatLinkPreview.swift",
+        )):
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         if "https://t.me" in text or "://t.me/" in text or '"t.me/' in text or '"t.me"' in text or "telegram.me" in text or "telegram.dog" in text:

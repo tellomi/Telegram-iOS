@@ -507,7 +507,7 @@ extension PeerInfoScreenNode {
                             } else if botInfo.commands.contains(where: { $0.text == "privacy" }) {
                                 
                             } else {
-                                privacyPolicyUrl = TellomiLinks.localizedSiteURL(presentationData.strings.WebApp_PrivacyPolicy_URL, fallback: "privacy-tpa")
+                                privacyPolicyUrl = TellomiLinks.localizedSiteURL(presentationData.strings.WebApp_PrivacyPolicy_URL, fallback: "legal/privacy/")
                             }
                         }
                         if let privacyPolicyUrl {

@@ -3,9 +3,12 @@ import XCTest
 final class TellomiChatLinkPreviewTests: XCTestCase {
     func testInternalHostsStayOnTheServer() {
         XCTAssertEqual(tellomiChatLinkRoute("https://tell.cc/addstickers/erelpack"), .server)
+        XCTAssertEqual(tellomiChatLinkRoute("https://www.tell.cc/username"), .server)
         XCTAssertEqual(tellomiChatLinkRoute("https://t.me/somechannel/3"), .server)
+        XCTAssertEqual(tellomiChatLinkRoute("https://telegram.me/+invite"), .server)
         XCTAssertEqual(tellomiChatLinkRoute("https://www.telegram.me/name"), .server)
         XCTAssertEqual(tellomiChatLinkRoute("https://telegram.dog/+abc"), .server)
+        XCTAssertEqual(tellomiChatLinkRoute("https://tellomi.cn/help"), .client)
     }
 
     func testExternalLinksAreFetchedOnThePhone() {

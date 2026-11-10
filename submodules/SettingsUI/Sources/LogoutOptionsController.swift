@@ -202,7 +202,7 @@ public func logoutOptionsController(context: AccountContext, navigationControlle
         supportPeer.set(context.engine.peers.supportPeerId())
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         
-        let faqUrl = TellomiLinks.localizedSiteURL(presentationData.strings.Settings_FAQ_URL, fallback: "faq#general")
+        let faqUrl = TellomiLinks.localizedSiteURL(presentationData.strings.Settings_FAQ_URL, fallback: "help")
         let resolvedUrl = resolveInstantViewUrl(account: context.account, url: faqUrl)
         |> mapToSignal { result -> Signal<ResolvedUrl, NoError> in
             guard case let .result(result) = result else {

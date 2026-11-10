@@ -906,7 +906,7 @@ public func recentSessionsController(context: AccountContext, activeSessionsCont
             pushControllerImpl?(QrCodeScanScreen(context: context, subject: .authTransfer(activeSessionsContext: activeSessionsContext)))
         })
     }, openOtherAppsUrl: {
-        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.siteURL("apps"), forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
+        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.siteURL("download/"), forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     }, setupAuthorizationTTL: {
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         let ttlAction: (Int32) -> Void = { ttl in
@@ -945,9 +945,9 @@ public func recentSessionsController(context: AccountContext, activeSessionsCont
         }
         presentInGlobalOverlayImpl?(contextController)
     }, openDesktopLink: {
-        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://getdesktop.telegram.org", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
+        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.siteURL("help/start/link-desktop/"), forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     }, openWebLink: {
-        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://web.telegram.org", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
+        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.siteURL(""), forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     })
     
     let previousMode = Atomic<RecentSessionsMode>(value: .sessions)

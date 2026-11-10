@@ -25,12 +25,12 @@ public func extractAnchor(string: String) -> (String, String?) {
 private let refreshTimeout: Int32 = 60 * 60 * 12
 
 public func cachedFaqInstantPage(context: AccountContext) -> Signal<ResolvedUrl, NoError> {
-    let faqUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_FAQ_URL, fallback: "faq#general-questions")
+    let faqUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_FAQ_URL, fallback: "help")
     return cachedInternalInstantPage(context: context, url: faqUrl)
 }
 
 public func cachedTermsPage(context: AccountContext) -> Signal<ResolvedUrl, NoError> {
-    let termsUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_Terms_URL, fallback: "tos")
+    let termsUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_Terms_URL, fallback: "legal/terms/")
     return cachedInternalInstantPage(context: context, url: termsUrl)
 }
 
@@ -40,7 +40,7 @@ public func cachedPrivacyPage(context: AccountContext) -> Signal<ResolvedUrl, No
 }
 
 public func cachedWebAppTermsPage(context: AccountContext) -> Signal<ResolvedUrl, NoError> {
-    let privacyUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.WebApp_TermsOfUse_URL, fallback: "tos/mini-apps")
+    let privacyUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.WebApp_TermsOfUse_URL, fallback: "legal/terms/")
     return cachedInternalInstantPage(context: context, url: privacyUrl)
 }
 

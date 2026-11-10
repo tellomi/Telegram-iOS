@@ -528,7 +528,7 @@ private final class WalletInfoSheetContent: CombinedComponent {
             if case .wallet = component.mode {
                 contentSize.height += 24.0
 
-                let url = TellomiLinks.localizedSiteURL(environment.strings.Wallet_TermsText_URL, fallback: "tos")
+                let url = TellomiLinks.localizedSiteURL(environment.strings.Wallet_TermsText_URL, fallback: "legal/terms/")
                 let terms = terms.update(
                     component: MultilineTextComponent(
                         text: .markdown(text: environment.strings.Wallet_TermsText, attributes: MarkdownAttributes(
