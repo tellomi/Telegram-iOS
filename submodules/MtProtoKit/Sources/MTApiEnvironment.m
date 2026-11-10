@@ -365,6 +365,24 @@ static NSData *base64_decode(NSString *str) {
 
 @end
 
+/// `NSLocale.preferredLanguages` is filtered to localizations the bundle ships.
+/// An English-only bundle reports `en` on a Chinese phone. The global list is the system language.
+static NSString *MTTellomiSystemLanguageCode(void) {
+    id global = [[NSUserDefaults standardUserDefaults] persistentDomainForName:NSGlobalDomain][@"AppleLanguages"];
+    if ([global isKindOfClass:[NSArray class]]) {
+        for (id entry in (NSArray *)global) {
+            if ([entry isKindOfClass:[NSString class]] && [(NSString *)entry length] > 0) {
+                return entry;
+            }
+        }
+    }
+    NSArray<NSString *> *preferred = [NSLocale preferredLanguages];
+    if (preferred.count > 0) {
+        return preferred[0];
+    }
+    return @"en";
+}
+
 @implementation MTApiEnvironment
 
 -(instancetype)init {
@@ -405,7 +423,7 @@ NSString *suffix = @"";
         NSString *versionString = [[NSString alloc] initWithFormat:@"%@ (%@) %@", [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"], [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleVersion"], suffix];
         _appVersion = versionString;
         
-        _systemLangCode = [[NSLocale preferredLanguages] objectAtIndex:0];
+        _systemLangCode = MTTellomiSystemLanguageCode();
     #if TARGET_OS_OSX
         _langPack = @"macos";
     #else

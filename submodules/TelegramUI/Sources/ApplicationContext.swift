@@ -155,6 +155,7 @@ final class AuthorizedApplicationContext {
     private var showCallsTabDisposable: Disposable?
     private var showNewsTab: Bool
     private var showNewsTabDisposable: Disposable?
+    private var tellomiLanguageDisposable: Disposable?
     private var showMomentsTab: Bool
     private var enablePostboxTransactionsDiposable: Disposable?
     
@@ -837,6 +838,15 @@ final class AuthorizedApplicationContext {
             self.rootController.updateRootControllers(showCallsTab: self.showCallsTab, showNewsTab: value, showMomentsTab: self.showMomentsTab)
         })
 
+        if let code = tellomiLangPackCodePendingApplication(currentLanguageCode: presentationData.strings.primaryComponent.languageCode) {
+            self.tellomiLanguageDisposable = context.engine.localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: code).start(error: { _ in
+            }, completed: {
+                Queue.mainQueue().async {
+                    tellomiMarkSystemLangPackApplied()
+                }
+            })
+        }
+
         self.rootController.setForceInCallStatusBar((self.context.sharedContext as! SharedAccountContextImpl).currentCallStatusBarNode)
         if let groupCallController = self.context.sharedContext.currentGroupCallController as? VoiceChatController {
             if let overlayController = groupCallController.currentOverlayController {
@@ -849,6 +859,7 @@ final class AuthorizedApplicationContext {
     deinit {
         self.context.account.postbox.clearCaches()
         self.showNewsTabDisposable?.dispose()
+        self.tellomiLanguageDisposable?.dispose()
         self.context.account.shouldKeepOnlinePresence.set(.single(false))
         self.context.account.shouldBeServiceTaskMaster.set(.single(.never))
         self.loggedOutDisposable.dispose()

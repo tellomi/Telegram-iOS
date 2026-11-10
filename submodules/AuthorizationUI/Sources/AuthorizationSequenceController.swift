@@ -48,6 +48,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     private var stateDisposable: Disposable?
     private let actionDisposable = MetaDisposable()
     private var applicationStateDisposable: Disposable?
+    private var tellomiDidAuthorize = false
     
     private var didPlayPresentationAnimation = false
     
@@ -69,7 +70,13 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         self.otherAccountPhoneNumbers = otherAccountPhoneNumbers
         self.apiId = apiId
         self.apiHash = apiHash
-        self.presentationData = presentationData
+        let resolvedLanguage = tellomiNetworkLanguageCode(savedLanguageCode: presentationData.strings.primaryComponent.languageCode)
+        let bundled = tellomiBundledPresentationStrings(languageCode: resolvedLanguage)
+        if bundled.primaryComponent.languageCode != presentationData.strings.primaryComponent.languageCode {
+            self.presentationData = presentationData.withStrings(bundled)
+        } else {
+            self.presentationData = presentationData
+        }
         self.openUrl = openUrl
         self.authorizationCompleted = authorizationCompleted
         
@@ -231,7 +238,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 var actions: [TextAlertAction] = []
                                 switch error {
                                     case .limitExceeded:
-                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                        text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .invalidPhoneNumber:
                                         text = strongSelf.presentationData.strings.Login_InvalidPhoneError
@@ -347,7 +354,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             let text: String
                             switch error {
                             case .limitExceeded:
-                                text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
                             case .generic, .invalidEmailAddress, .codeExpired, .invalidEmailToken, .invalidCode:
                                 text = strongSelf.presentationData.strings.Login_UnknownError
                             }
@@ -442,7 +449,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                              let text: String
                                              switch error {
                                              case .limitExceeded:
-                                                 text = self.presentationData.strings.Login_CodeFloodError
+                                                 text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: self.presentationData.strings)
                                              case .generic, .alreadyInProgress:
                                                  text = self.presentationData.strings.Login_UnknownError
                                              case .codeExpired:
@@ -488,7 +495,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         switch error {
                                             case .limitExceeded:
                                                 resetCode = true
-                                                text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                                text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
                                             case .invalidCode:
                                                 resetCode = true
                                                 text = strongSelf.presentationData.strings.Login_InvalidCodeError
@@ -603,7 +610,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         switch error {
                                             case .limitExceeded:
                                                 resetCode = true
-                                                text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                                text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
                                             case .invalidCode:
                                                 resetCode = true
                                                 text = strongSelf.presentationData.strings.Login_InvalidCodeError
@@ -661,7 +668,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             let text: String
                             switch error {
                                 case .limitExceeded:
-                                    text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                    text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
                                 case .invalidPhoneNumber:
                                     text = strongSelf.presentationData.strings.Login_InvalidPhoneError
                                 case .phoneLimitExceeded:
@@ -769,7 +776,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     let text: String
                     switch error {
                         case .limitExceeded:
-                            text = strongSelf.presentationData.strings.Login_CodeFloodError
+                            text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
                         case .generic, .codeExpired:
                             text = strongSelf.presentationData.strings.Login_UnknownError
                         case .timeout:
@@ -838,7 +845,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         let text: String
                         switch error {
                             case .limitExceeded:
-                                text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
                             case .generic, .codeExpired:
                                 text = strongSelf.presentationData.strings.Login_UnknownError
                             case .invalidCode:
@@ -876,7 +883,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 let text: String
                                 switch error {
                                     case .limitExceeded:
-                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                        text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
                                     case .invalidCode:
                                         text = strongSelf.presentationData.strings.Login_InvalidCodeError
                                     case .generic:
@@ -1168,7 +1175,12 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             }
                             
                             let tempFile = EngineTempBox.shared.tempFile(fileName: "video.mp4")
-                            let signal = TGMediaVideoConverter.convert(avatarAsset, adjustments: avatarAdjustments, path: tempFile.path, watcher: nil, entityRenderer: entityRenderer)!
+                            guard let signal = TGMediaVideoConverter.convert(avatarAsset, adjustments: avatarAdjustments, path: tempFile.path, watcher: nil, entityRenderer: entityRenderer) else {
+                                EngineTempBox.shared.dispose(tempFile)
+                                subscriber.putNext(nil)
+                                subscriber.putCompletion()
+                                return EmptyDisposable
+                            }
                             
                             let signalDisposable = signal.start(next: { next in
                                 if let result = next as? TGMediaVideoConversionResult {
@@ -1220,7 +1232,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 let text: String
                                 switch error {
                                     case .limitExceeded:
-                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                        text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
                                     case .codeExpired:
                                         text = strongSelf.presentationData.strings.Login_CodeExpiredError
                                     case .invalidFirstName:
@@ -1243,6 +1255,17 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     }
     
     private func updateState(state: InnerState) {
+        if self.tellomiDidAuthorize {
+            return
+        }
+        if case .authorized = state {
+            // auth.signUp writes AuthorizedAccountState, then the postbox state view can emit nil
+            // while the account record is switched. Treating that nil as .empty rebuilt the welcome
+            // carousel on this same controller.
+            self.tellomiDidAuthorize = true
+            self.authorizationCompleted()
+            return
+        }
         switch state {
         case .authorized:
             self.authorizationCompleted()
