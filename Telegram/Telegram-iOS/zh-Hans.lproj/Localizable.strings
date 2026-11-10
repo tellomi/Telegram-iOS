@@ -238,6 +238,3 @@
 "Tellomi.MenuSettings.Title" = "选单设定";
 "Tellomi.MenuSettings.HideButtonTitles" = "隐藏按钮文字";
 "Tellomi.MenuSettings.NavigationButtons" = "导航栏按钮";
-/* Moments feed. Same wording as the Android values pack for this language. */
-"Moments_Comment_SendFailed" = "评论没有发出去，内容还在。";
-"Moments_Audience_Kept" = "没能更新谁可以看。你的选择还在。";

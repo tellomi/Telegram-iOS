@@ -145,11 +145,11 @@ public final class MomentsSearchContentNode: ASDisplayNode {
             rows.append(MomentsStatusItem(text: "#\(topic.name)  \(topic.visibleCount)", theme: theme, action: {}))
         }
         for post in self.result.posts {
-            let title = post.isUnavailable ? momentsText(strings, .unavailable) : post.text
+            let title = post.isUnavailable ? strings.Moments_Unavailable : post.text
             rows.append(MomentsStatusItem(text: title, theme: theme, action: { [weak self] in self?.openPost?(post) }))
         }
         if rows.isEmpty {
-            rows = [MomentsStatusItem(text: momentsText(strings, .search), theme: theme, action: {})]
+            rows = [MomentsStatusItem(text: strings.Moments_Search, theme: theme, action: {})]
         }
         let previous = self.rendered
         let count = rows.count

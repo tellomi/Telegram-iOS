@@ -44,9 +44,9 @@ public final class MomentsComposerScreen: ViewController {
         self.quoteId = quoteId
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
-        self.title = momentsText(self.presentationData.strings, .composerTitle)
-        self.navigationItem.setLeftBarButton(UIBarButtonItem(title: momentsText(self.presentationData.strings, .cancel), style: .plain, target: self, action: #selector(self.cancelPressed)), animated: false)
-        self.navigationItem.setRightBarButton(UIBarButtonItem(title: momentsText(self.presentationData.strings, .publish), style: .done, target: self, action: #selector(self.publishPressed)), animated: false)
+        self.title = self.presentationData.strings.Moments_Composer_Title
+        self.navigationItem.setLeftBarButton(UIBarButtonItem(title: self.presentationData.strings.Common_Cancel, style: .plain, target: self, action: #selector(self.cancelPressed)), animated: false)
+        self.navigationItem.setRightBarButton(UIBarButtonItem(title: self.presentationData.strings.Moments_Publish, style: .done, target: self, action: #selector(self.publishPressed)), animated: false)
     }
 
     required init(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -70,16 +70,16 @@ public final class MomentsComposerScreen: ViewController {
         self.audienceButton.addTarget(self, action: #selector(self.chooseAudience), for: .touchUpInside)
         self.publishButton.addTarget(self, action: #selector(self.publishPressed), for: .touchUpInside)
         let photos = UIButton(type: .system)
-        photos.setTitle(momentsText(self.presentationData.strings, .publish), for: .normal)
+        photos.setTitle(self.presentationData.strings.Moments_Publish, for: .normal)
         photos.addTarget(self, action: #selector(self.pickImages), for: .touchUpInside)
-        photos.accessibilityLabel = momentsText(self.presentationData.strings, .publish)
+        photos.accessibilityLabel = self.presentationData.strings.Moments_Publish
         self.displayNode.view.addSubview(photos)
         photos.tag = 41
         let voice = UIButton(type: .system)
         voice.tag = 42
-        voice.setTitle(momentsText(self.presentationData.strings, .voice), for: .normal)
+        voice.setTitle(self.presentationData.strings.Moments_Voice, for: .normal)
         voice.addTarget(self, action: #selector(self.voicePressed), for: .touchUpInside)
-        voice.accessibilityLabel = momentsText(self.presentationData.strings, .voice)
+        voice.accessibilityLabel = self.presentationData.strings.Moments_Voice
         self.displayNode.view.addSubview(voice)
         self.refresh()
         let _ = (self.context.engine.moments.remoteConfig() |> deliverOnMainQueue).start(next: { [weak self] config in
@@ -123,7 +123,7 @@ public final class MomentsComposerScreen: ViewController {
         if self.audienceChosen {
             self.audienceButton.setTitle(momentsAudienceTitle(strings, audience.kind), for: .normal)
         } else {
-            self.audienceButton.setTitle(momentsText(strings, .audienceChoose), for: .normal)
+            self.audienceButton.setTitle(strings.Moments_Audience_Choose, for: .normal)
         }
         let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll, hasLinkPreview: !self.linkRemoved && momentsScanText(self.textView.text ?? "").firstURL != nil)
         let hasBody = !(self.textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.isEmpty || !self.media.isEmpty
@@ -308,7 +308,7 @@ public final class MomentsComposerScreen: ViewController {
             self.audioRecorder = recorder
             self.isRecordingVoice = true
             self.refresh()
-            (self.displayNode.view.viewWithTag(42) as? UIButton)?.setTitle(momentsText(self.presentationData.strings, .voiceStop), for: .normal)
+            (self.displayNode.view.viewWithTag(42) as? UIButton)?.setTitle(self.presentationData.strings.Moments_VoiceStop, for: .normal)
             recorder.start()
             self.voiceStateDisposable?.dispose()
             self.voiceStateDisposable = (recorder.recordingState |> deliverOnMainQueue).start(next: { [weak self, weak recorder] state in
@@ -326,7 +326,7 @@ public final class MomentsComposerScreen: ViewController {
         self.isRecordingVoice = false
         self.audioRecorder = nil
         recorder.stop()
-        (self.displayNode.view.viewWithTag(42) as? UIButton)?.setTitle(momentsText(self.presentationData.strings, .voice), for: .normal)
+        (self.displayNode.view.viewWithTag(42) as? UIButton)?.setTitle(self.presentationData.strings.Moments_Voice, for: .normal)
         self.refresh()
         self.voiceStateDisposable?.dispose()
         self.voiceStateDisposable = (recorder.takenRecordedData() |> deliverOnMainQueue).start(next: { [weak self] data in
@@ -379,20 +379,20 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     private func presentVoiceFailure() {
-        momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .voiceFailed))
+        momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: self.presentationData.strings.Moments_VoiceFailed)
     }
 
     private func presentRejection(_ rejection: MomentsAttachmentRejection) {
         let text: String
         switch rejection {
         case .imageLimit, .videoLimit:
-            text = momentsText(self.presentationData.strings, .loadFailed)
+            text = self.presentationData.strings.Moments_LoadFailed
         case .videoTooLong, .voiceTooLong:
-            text = momentsText(self.presentationData.strings, .loadFailed)
+            text = self.presentationData.strings.Moments_LoadFailed
         default:
-            text = momentsText(self.presentationData.strings, .loadFailed)
+            text = self.presentationData.strings.Moments_LoadFailed
         }
-        self.present(textAlertController(context: self.context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .cancel), action: {})]), in: .window(.root))
+        self.present(textAlertController(context: self.context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_Cancel, action: {})]), in: .window(.root))
     }
 
     private func saveDraft() {
@@ -414,16 +414,16 @@ public final class MomentsComposerScreen: ViewController {
             return
         }
         let strings = self.presentationData.strings
-        self.present(textAlertController(context: self.context, title: momentsText(strings, .draftTitle), text: momentsText(strings, .friendsHint), actions: [
-            TextAlertAction(type: .defaultAction, title: momentsText(strings, .draftSave), action: { [weak self] in
+        self.present(textAlertController(context: self.context, title: strings.Moments_Draft_Title, text: strings.Moments_FriendsHint, actions: [
+            TextAlertAction(type: .defaultAction, title: strings.Moments_Draft_Save, action: { [weak self] in
                 self?.saveDraft()
                 self?.navigationController?.popViewController(animated: true)
             }),
-            TextAlertAction(type: .destructiveAction, title: momentsText(strings, .draftDiscard), action: { [weak self] in
+            TextAlertAction(type: .destructiveAction, title: strings.Moments_Draft_Discard, action: { [weak self] in
                 self?.context.engine.moments.storeDraft(nil)
                 self?.navigationController?.popViewController(animated: true)
             }),
-            TextAlertAction(type: .genericAction, title: momentsText(strings, .draftContinue), action: {})
+            TextAlertAction(type: .genericAction, title: strings.Moments_Draft_Continue, action: {})
         ], actionLayout: .vertical), in: .window(.root))
     }
 
@@ -440,9 +440,9 @@ public final class MomentsComposerScreen: ViewController {
             self?.submitPost()
         }
         if !scan.mentions.isEmpty && audience.kind != .everyone {
-            self.present(textAlertController(context: self.context, title: nil, text: momentsText(self.presentationData.strings, .mentionWarning) + "\n" + scan.mentions.joined(separator: ", "), actions: [
-                TextAlertAction(type: .genericAction, title: momentsText(self.presentationData.strings, .cancel), action: {}),
-                TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .publish), action: submit)
+            self.present(textAlertController(context: self.context, title: nil, text: self.presentationData.strings.Moments_MentionWarning + "\n" + scan.mentions.joined(separator: ", "), actions: [
+                TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_Cancel, action: {}),
+                TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Moments_Publish, action: submit)
             ]), in: .window(.root))
         } else {
             submit()
@@ -535,15 +535,15 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     private func presentPublishError() {
-        self.presentFailure(momentsText(self.presentationData.strings, .failedRetry))
+        self.presentFailure(self.presentationData.strings.Moments_FailedRetry)
     }
 
     private func presentAudienceKept() {
-        self.presentFailure(momentsText(self.presentationData.strings, .audienceKept))
+        self.presentFailure(self.presentationData.strings.Moments_Audience_Kept)
     }
 
     private func presentFailure(_ text: String) {
-        self.present(textAlertController(context: self.context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .retry), action: { [weak self] in
+        self.present(textAlertController(context: self.context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Moments_Retry, action: { [weak self] in
             self?.submitPost()
         })]), in: .window(.root))
     }

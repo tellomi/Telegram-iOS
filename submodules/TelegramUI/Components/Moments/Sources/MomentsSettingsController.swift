@@ -151,21 +151,21 @@ public func momentsPrivacyController(context: AccountContext) -> ViewController 
     |> map { presentationData, values -> (ItemListControllerState, (ItemListNodeState, MomentsSettingsArguments)) in
         let (push, visibility) = values
         let strings = presentationData.strings
-        let who = visibility.followingList == .everyone ? momentsText(strings, .settingsPublic) : momentsText(strings, .settingsOnlyMe)
+        let who = visibility.followingList == .everyone ? strings.Moments_Settings_Public : strings.Moments_Settings_OnlyMe
         let entries: [MomentsSettingsEntry] = [
-            .header(momentsText(strings, .settingsTitle)),
-            .following(momentsText(strings, .settingsFollowing), who),
-            .followers(momentsText(strings, .settingsFollowers), who),
-            .comments(momentsText(strings, .pushComments), push.comments),
-            .replies(momentsText(strings, .pushReplies), push.replies),
-            .mentions(momentsText(strings, .pushMentions), push.mentions),
-            .follows(momentsText(strings, .pushFollows), push.follows),
-            .likes(momentsText(strings, .pushLikes), push.likes),
-            .reposts(momentsText(strings, .pushReposts), push.reposts),
-            .newPosts(momentsText(strings, .pushNewPosts), push.newPosts),
-            .footer(momentsText(strings, .friendsHint))
+            .header(strings.Moments_Settings_Title),
+            .following(strings.Moments_Settings_FollowingList, who),
+            .followers(strings.Moments_Settings_FollowersList, who),
+            .comments(strings.Moments_Push_Comments, push.comments),
+            .replies(strings.Moments_Push_Replies, push.replies),
+            .mentions(strings.Moments_Push_Mentions, push.mentions),
+            .follows(strings.Moments_Push_Follows, push.follows),
+            .likes(strings.Moments_Push_Likes, push.likes),
+            .reposts(strings.Moments_Push_Reposts, push.reposts),
+            .newPosts(strings.Moments_Push_NewPosts, push.newPosts),
+            .footer(strings.Moments_FriendsHint)
         ]
-        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(momentsText(strings, .settingsTitle)), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(strings.Moments_Settings_Title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks)
         return (controllerState, (listState, arguments))
     }

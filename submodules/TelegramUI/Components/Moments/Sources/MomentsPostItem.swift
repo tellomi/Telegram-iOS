@@ -243,7 +243,7 @@ final class MomentsPostItemNode: ListViewItemNode {
             let side = floor((width - contentWidth) / 2.0)
             let textWidth = contentWidth - momentsInset * 2.0 - momentsColumn
             let font = Font.regular(item.fontSize)
-            let text = item.card.isUnavailable ? momentsText(item.strings, .unavailable) : item.card.text
+            let text = item.card.isUnavailable ? item.strings.Moments_Unavailable : item.card.text
             let fullHeight = (text as NSString).boundingRect(with: CGSize(width: textWidth, height: 10000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font], context: nil).height
             let collapsed = !item.expanded && momentsTextExceedsLineLimit(fullHeight: fullHeight, lineHeight: font.lineHeight, limit: MomentsLimits.standard.collapsedLineCount)
             let bodyHeight = collapsed ? font.lineHeight * CGFloat(MomentsLimits.standard.collapsedLineCount) : fullHeight
@@ -286,7 +286,7 @@ final class MomentsPostItemNode: ListViewItemNode {
         let x = side + momentsInset + momentsColumn
         let width = textWidth
         if item.hidden {
-            self.body.text = "\(momentsText(strings, .hidden)) · \(momentsText(strings, .undo))"
+            self.body.text = "\(strings.Moments_Hidden) · \(strings.Moments_Undo)"
             self.body.frame = CGRect(x: side + momentsInset, y: 20, width: width + momentsAvatar, height: 24)
             self.setChrome(hidden: true)
             self.videoNode?.canAttachContent = false
@@ -311,12 +311,12 @@ final class MomentsPostItemNode: ListViewItemNode {
             button.setTitleColor(secondary, for: .normal)
             button.tintColor = secondary
         }
-        self.follow.setTitleColor(.white, for: .normal)
+        self.follow.setTitleColor(theme.list.itemCheckColors.foregroundColor, for: .normal)
         self.follow.backgroundColor = theme.list.itemAccentColor
         if item.card.isUnavailable {
             self.setChrome(hidden: true)
             self.body.isHidden = false
-            self.body.text = momentsText(strings, .unavailable)
+            self.body.text = strings.Moments_Unavailable
             self.body.frame = CGRect(x: side + momentsInset, y: 16, width: width + momentsColumn, height: 24)
             self.separator.frame = CGRect(x: side + momentsInset, y: self.bounds.height - UIScreenPixel, width: width + momentsAvatar + 10, height: UIScreenPixel)
             self.videoNode?.canAttachContent = false
@@ -328,20 +328,20 @@ final class MomentsPostItemNode: ListViewItemNode {
             self.name.text = item.card.author?.displayName ?? ""
             var meta = momentsRelativeTime(item.strings, item.card.createdAt)
             if item.card.showsEditedMark {
-                meta += " · \(momentsText(strings, .edited))"
+                meta += " · \(strings.Moments_Edited)"
             }
             if let audience = item.card.audience, audience.kind != .everyone {
                 meta += " · \(momentsAudienceTitle(strings, audience.kind))"
             }
             if let reposted = item.card.repostedBy?.displayName {
-                meta = "\(reposted) \(momentsText(strings, .repostHeader)) · " + meta
+                meta = "\(reposted) \(strings.Moments_RepostHeader) · " + meta
             }
             self.meta.text = meta
             self.body.text = item.card.text
             let showBadge = item.showFollow && item.card.author?.followed != true
             self.follow.isHidden = !showBadge
             self.follow.setTitle("+", for: .normal)
-            self.follow.accessibilityLabel = momentsText(strings, .follow)
+            self.follow.accessibilityLabel = strings.Moments_Follow
         }
         let nameWidth = min((self.name.text as NSString?)?.size(withAttributes: [.font: self.name.font as Any]).width ?? 80, width * 0.55)
         self.name.frame = CGRect(x: x, y: 12, width: nameWidth, height: 20)
@@ -350,7 +350,7 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.follow.frame = CGRect(x: self.avatar.frame.maxX - 16, y: self.avatar.frame.maxY - 16, width: 16, height: 16)
         self.body.frame = CGRect(x: x, y: 36, width: width, height: bodyHeight)
         self.full.isHidden = !collapsed
-        self.full.setTitle(momentsText(strings, .fullText), for: .normal)
+        self.full.setTitle(strings.Moments_FullText, for: .normal)
         self.full.frame = CGRect(x: x, y: self.body.frame.maxY, width: 80, height: 20)
         var cursor = (collapsed ? self.full.frame.maxY : self.body.frame.maxY) + 8
         let slides = item.card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
@@ -381,7 +381,7 @@ final class MomentsPostItemNode: ListViewItemNode {
         if let quote = item.card.quote {
             self.quote.isHidden = false
             if quote.unavailable {
-                self.quote.text = momentsText(strings, .unavailable)
+                self.quote.text = strings.Moments_Unavailable
             } else {
                 self.quote.text = [quote.authorName, quote.text].compactMap { $0 }.joined(separator: "\n")
             }
@@ -417,12 +417,12 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.save.isHidden = true
         self.more.setImage(generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/More"), color: secondary), for: .normal)
         self.more.setTitle(nil, for: .normal)
-        self.like.accessibilityLabel = "\(momentsText(strings, .like)), \(item.card.counts.likes)"
-        self.comment.accessibilityLabel = "\(momentsText(strings, .comment)), \(item.card.counts.comments)"
-        self.repost.accessibilityLabel = momentsText(strings, .repost)
-        self.share.accessibilityLabel = momentsText(strings, .share)
-        self.save.accessibilityLabel = item.card.viewer.saved ? momentsText(strings, .saved) : momentsText(strings, .save)
-        self.more.accessibilityLabel = momentsText(strings, .more)
+        self.like.accessibilityLabel = "\(strings.Moments_Like), \(item.card.counts.likes)"
+        self.comment.accessibilityLabel = "\(strings.Moments_Comment), \(item.card.counts.comments)"
+        self.repost.accessibilityLabel = strings.Moments_Repost
+        self.share.accessibilityLabel = strings.Moments_Share
+        self.save.accessibilityLabel = item.card.viewer.saved ? strings.Moments_Saved : strings.Moments_Save
+        self.more.accessibilityLabel = strings.Moments_More
         let slideCount = item.card.images.count + item.card.videos.count
         if slideCount > 0 {
             self.album.accessibilityLabel = "\(min(self.albumIndex + 1, slideCount))/\(slideCount)"
@@ -731,15 +731,15 @@ private func momentsVideoNode(context: AccountContext, url: String, type: Moment
 func momentsAudienceTitle(_ strings: PresentationStrings, _ kind: MomentsAudienceKind) -> String {
     switch kind {
     case .everyone:
-        return momentsText(strings, .audienceEveryone)
+        return strings.Moments_Audience_Everyone
     case .contacts:
-        return momentsText(strings, .audienceContacts)
+        return strings.Moments_Audience_Contacts
     case .closeFriends:
-        return momentsText(strings, .audienceCloseFriends)
+        return strings.Moments_Audience_CloseFriends
     case .selected:
-        return momentsText(strings, .audienceSelected)
+        return strings.Moments_Audience_Selected
     case .mutualFollowers:
-        return momentsText(strings, .audienceMutual)
+        return strings.Moments_Audience_Mutual
     }
 }
 
@@ -749,32 +749,7 @@ func momentsRelativeTime(_ strings: PresentationStrings, _ timestamp: Int64) -> 
     }
     let delta = max(0, Int(Date().timeIntervalSince1970) - Int(timestamp))
     let value = Int32(min(delta, Int(Int32.max)))
-    let resolved = timeIntervalString(strings: strings, value: value, usage: .generic, preferLowerValue: false)
-    let codes = [strings.primaryComponent.languageCode, strings.baseLanguageCode].map { $0.lowercased() }
-    guard codes.contains(where: { $0.hasPrefix("zh") }) else {
-        return resolved
-    }
-    let (count, unit, chineseUnit): (Int32, String, String)
-    if value < 60 {
-        (count, unit, chineseUnit) = (max(1, value), value <= 1 ? "second" : "seconds", "秒")
-    } else if value < 60 * 60 {
-        (count, unit, chineseUnit) = (max(1, value / 60), value < 120 ? "minute" : "minutes", "分钟")
-    } else if value < 60 * 60 * 24 {
-        (count, unit, chineseUnit) = (max(1, value / (60 * 60)), value < 60 * 60 * 2 ? "hour" : "hours", "小时")
-    } else if value < 60 * 60 * 24 * 7 {
-        (count, unit, chineseUnit) = (max(1, value / (60 * 60 * 24)), value < 60 * 60 * 24 * 2 ? "day" : "days", "天")
-    } else if value < 60 * 60 * 24 * 30 {
-        (count, unit, chineseUnit) = (max(1, value / (60 * 60 * 24 * 7)), value < 60 * 60 * 24 * 14 ? "week" : "weeks", "周")
-    } else if value < 60 * 60 * 24 * 365 {
-        (count, unit, chineseUnit) = (max(1, value / (60 * 60 * 24 * 30)), value < 60 * 60 * 24 * 60 ? "month" : "months", "个月")
-    } else {
-        (count, unit, chineseUnit) = (max(1, value / (60 * 60 * 24 * 365)), value < 60 * 60 * 24 * 365 * 2 ? "year" : "years", "年")
-    }
-    let english = "\(count) \(unit)"
-    if resolved == english || resolved.isEmpty {
-        return "\(count)\(chineseUnit)"
-    }
-    return resolved
+    return timeIntervalString(strings: strings, value: value, usage: .generic, preferLowerValue: false)
 }
 
 final class MomentsStatusItem: ListViewItem {

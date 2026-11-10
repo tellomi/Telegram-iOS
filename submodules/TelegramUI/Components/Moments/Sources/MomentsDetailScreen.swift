@@ -31,7 +31,7 @@ public final class MomentsDetailScreen: ViewController {
         self.card = card
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
-        self.title = momentsText(self.presentationData.strings, .comment)
+        self.title = self.presentationData.strings.Moments_Comment
     }
 
     required init(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -41,12 +41,12 @@ public final class MomentsDetailScreen: ViewController {
         self.displayNode.addSubnode(self.list)
         self.displayNode.view.addSubview(self.field)
         self.field.borderStyle = .roundedRect
-        self.field.placeholder = momentsText(self.presentationData.strings, .commentPlaceholder)
+        self.field.placeholder = self.presentationData.strings.Moments_Comment_Placeholder
         self.field.returnKeyType = .send
         self.field.delegate = self
         let sortButton = UIButton(type: .system)
         sortButton.tag = 7
-        sortButton.setTitle(momentsText(self.presentationData.strings, .sortHot), for: .normal)
+        sortButton.setTitle(self.presentationData.strings.Moments_Sort_Hot, for: .normal)
         sortButton.addTarget(self, action: #selector(self.toggleSort), for: .touchUpInside)
         self.displayNode.view.addSubview(sortButton)
         self.reload()
@@ -90,7 +90,7 @@ public final class MomentsDetailScreen: ViewController {
         let theme = self.presentationData.theme
         var items: [ListViewItem] = [MomentsPostItem(card: self.card, strings: strings, theme: theme, fontSize: self.presentationData.listsFontSize.baseDisplaySize, showFollow: false, expanded: true, hidden: false, albumIndex: 0, playing: false, context: self.context, handlers: self.handlers())]
         if !self.card.viewer.canComment {
-            items.append(MomentsStatusItem(text: self.card.viewer.commentDeniedReason ?? momentsText(strings, .commentClosed), theme: theme, action: {}))
+            items.append(MomentsStatusItem(text: self.card.viewer.commentDeniedReason ?? strings.Moments_Comment_Closed, theme: theme, action: {}))
         }
         for comment in self.comments where !comment.disliked {
             items.append(MomentsStatusItem(text: self.commentLine(comment), theme: theme, action: { [weak self] in self?.replyTo(comment) }))
@@ -100,7 +100,7 @@ public final class MomentsDetailScreen: ViewController {
                 items.append(MomentsStatusItem(text: "\(name) \(target)\(reply.text)", theme: theme, action: {}))
             }
             if comment.replyCount > 2 {
-                items.append(MomentsStatusItem(text: "\(momentsText(strings, .viewReplies)) \(comment.replyCount)", theme: theme, action: { [weak self] in self?.expand(comment) }))
+                items.append(MomentsStatusItem(text: "\(strings.Moments_ViewReplies) \(comment.replyCount)", theme: theme, action: { [weak self] in self?.expand(comment) }))
             }
         }
         let previous = self.rendered
@@ -117,7 +117,7 @@ public final class MomentsDetailScreen: ViewController {
         })
         self.field.isEnabled = self.card.viewer.canComment && self.card.commentPolicy != .closed
         if self.card.commentPolicy == .closed {
-            self.field.placeholder = momentsText(strings, .commentClosed)
+            self.field.placeholder = strings.Moments_Comment_Closed
         }
     }
 
@@ -152,12 +152,12 @@ public final class MomentsDetailScreen: ViewController {
             self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: false, presentationData: self.presentationData, navigationController: self.navigationController as? NavigationController, dismissInput: {})
         }, likers: { [weak self] card in
             guard let self else { return }
-            self.openPeople(title: momentsText(self.presentationData.strings, .like), load: self.context.engine.moments.likers(postId: card.id) |> map { authors in
+            self.openPeople(title: self.presentationData.strings.Moments_Like, load: self.context.engine.moments.likers(postId: card.id) |> map { authors in
                 [MomentsPeopleSection(title: nil, people: authors)]
             })
         }, voters: { [weak self] card in
             guard let self else { return }
-            self.openPeople(title: momentsText(self.presentationData.strings, .endPoll), load: self.context.engine.moments.pollVoters(postId: card.id) |> map { options in
+            self.openPeople(title: self.presentationData.strings.Moments_EndPoll, load: self.context.engine.moments.pollVoters(postId: card.id) |> map { options in
                 options.map { MomentsPeopleSection(title: $0.text, people: $0.voters) }
             })
         })
@@ -257,7 +257,7 @@ public final class MomentsDetailScreen: ViewController {
             self.reload()
         }, error: { [weak self] _ in
             guard let self else { return }
-            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .loadFailed))
+            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: self.presentationData.strings.Moments_LoadFailed)
         })
     }
 
@@ -298,7 +298,7 @@ public final class MomentsDetailScreen: ViewController {
 
     @objc private func toggleSort() {
         self.sort = self.sort == "hot" ? "latest" : "hot"
-        (self.displayNode.view.viewWithTag(7) as? UIButton)?.setTitle(momentsText(self.presentationData.strings, self.sort == "hot" ? .sortHot : .sortLatest), for: .normal)
+        (self.displayNode.view.viewWithTag(7) as? UIButton)?.setTitle((self.sort == "hot" ? self.presentationData.strings.Moments_Sort_Hot : self.presentationData.strings.Moments_Sort_Latest), for: .normal)
         self.reload()
     }
 }
@@ -315,14 +315,14 @@ extension MomentsDetailScreen: UITextFieldDelegate {
         let parent = textField.accessibilityHint
         let draft = momentsCommentComposerForSend(previous: self.commentComposer, text: text, parentId: parent, mediaKey: nil, sticker: false)
         guard case .success = momentsEncodeComment(draft) else {
-            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .commentSendFailed))
+            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: self.presentationData.strings.Moments_Comment_SendFailed)
             return false
         }
         self.commentComposer = draft
         let _ = self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: parent, clientNonce: draft.clientNonce).start(error: { [weak self] _ in
             guard let self else { return }
             self.commentComposer = momentsCommentComposerAfterFailure(draft)
-            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .commentSendFailed))
+            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: self.presentationData.strings.Moments_Comment_SendFailed)
         }, completed: { [weak self] in
             guard let self else { return }
             if textField.text == text {
@@ -354,7 +354,7 @@ public final class MomentsNotificationsScreen: ViewController {
         self.context = context
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
-        self.title = momentsText(self.presentationData.strings, .notifications)
+        self.title = self.presentationData.strings.Moments_Notifications
     }
 
     required init(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -379,7 +379,7 @@ public final class MomentsNotificationsScreen: ViewController {
             self?.render()
         }, error: { [weak self] error in
             guard let self else { return }
-            let text = error == .notFound ? momentsText(self.presentationData.strings, .unavailable) : momentsText(self.presentationData.strings, .loadFailed)
+            let text = error == .notFound ? self.presentationData.strings.Moments_Unavailable : self.presentationData.strings.Moments_LoadFailed
             self.items = []
             self.render(empty: text)
         })
@@ -393,16 +393,16 @@ public final class MomentsNotificationsScreen: ViewController {
         if let empty {
             rows = [MomentsStatusItem(text: empty, theme: theme, action: { [weak self] in self?.reload() })]
         } else if self.items.isEmpty {
-            rows = [MomentsStatusItem(text: momentsText(strings, .notifications), theme: theme, action: {})]
+            rows = [MomentsStatusItem(text: strings.Moments_Notifications, theme: theme, action: {})]
         } else {
             for item in self.items {
                 let names = item.actors.map(\.displayName).joined(separator: ", ")
                 let extra = item.extraActorCount > 0 ? " +\(item.extraActorCount)" : ""
-                let line = item.unavailable ? momentsText(strings, .unavailable) : "\(names)\(extra) \(momentsNotificationTitle(strings, item.kind)) \(item.text ?? "")"
+                let line = item.unavailable ? strings.Moments_Unavailable : "\(names)\(extra) \(momentsNotificationTitle(strings, item.kind)) \(item.text ?? "")"
                 rows.append(MomentsStatusItem(text: line, theme: theme, action: { [weak self] in
                     guard let self else { return }
                     if item.unavailable {
-                        self.present(textAlertController(context: self.context, title: nil, text: momentsText(strings, .unavailable), actions: [TextAlertAction(type: .defaultAction, title: momentsText(strings, .cancel), action: {})]), in: .window(.root))
+                        self.present(textAlertController(context: self.context, title: nil, text: strings.Moments_Unavailable, actions: [TextAlertAction(type: .defaultAction, title: strings.Common_Cancel, action: {})]), in: .window(.root))
                     } else if item.kind == .follow || item.kind == .mutual, let id = item.actors.first?.telegramUserId, id != 0 {
                         self.openPeer?(EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(id)))
                     }
@@ -447,24 +447,24 @@ private func momentsAttachmentTitle(_ strings: PresentationStrings, _ type: Mome
 private func momentsNotificationTitle(_ strings: PresentationStrings, _ kind: MomentsNotificationKind) -> String {
     switch kind {
     case .like:
-        return momentsText(strings, .like)
+        return strings.Moments_Like
     case .comment:
-        return momentsText(strings, .comment)
+        return strings.Moments_Comment
     case .reply:
-        return momentsText(strings, .reply)
+        return strings.Moments_Reply
     case .mention:
-        return momentsText(strings, .pushMentions)
+        return strings.Moments_Push_Mentions
     case .follow:
-        return momentsText(strings, .pushFollows)
+        return strings.Moments_Push_Follows
     case .mutual:
-        return momentsText(strings, .audienceMutual)
+        return strings.Moments_Audience_Mutual
     case .repost:
-        return momentsText(strings, .repost)
+        return strings.Moments_Repost
     case .quote:
-        return momentsText(strings, .quote)
+        return strings.Moments_Quote
     case .newPost:
-        return momentsText(strings, .pushNewPosts)
+        return strings.Moments_Push_NewPosts
     case .system, .all:
-        return momentsText(strings, .notifications)
+        return strings.Moments_Notifications
     }
 }
