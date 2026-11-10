@@ -35,8 +35,9 @@ public final class AuthorizationSequenceSplashController: ViewController {
         self.account = account
         self.theme = theme
         
-        self.suggestedLocalization.set(.single(nil)
-        |> then(TelegramEngineUnauthorized(account: self.account).localization.currentlySuggestedLocalization(extractKeys: ["Login.ContinueWithLocalization"])))
+        // One button. The suggested-language row is "Continue with English", which kept a
+        // Chinese phone on the English tour. The system language is applied from AppleLanguages.
+        self.suggestedLocalization.set(.single(nil))
         let suggestedLocalization = self.suggestedLocalization
         
         let localizationSignal = SSignal(generator: { subscriber in
@@ -71,8 +72,11 @@ public final class AuthorizationSequenceSplashController: ViewController {
         })
         
         self.controller = RMIntroViewController(backgroundColor: theme.list.plainBackgroundColor, primaryColor: theme.list.itemPrimaryTextColor, buttonColor: theme.intro.startButtonColor, accentColor: theme.list.itemAccentColor, regularDotColor: theme.intro.dotColor, highlightedDotColor: theme.list.itemAccentColor, suggestedLocalizationSignal: localizationSignal)
+        let welcomeLanguage = tellomiNetworkLanguageCode(savedLanguageCode: nil)
+        let intro = tellomiWelcomeCopy(languageCode: welcomeLanguage)
+        self.controller.setIntroHeadlines(intro.headlines, descriptions: intro.descriptions)
         
-        self.startButton = SolidRoundedButtonNode(title: "Start Messaging", theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
+        self.startButton = SolidRoundedButtonNode(title: intro.startButton, theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
         self.startButton.accessibilityIdentifier = "Auth.Welcome.StartButton"
 
         super.init(navigationBarPresentationData: nil)
@@ -84,7 +88,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
         self.statusBar.statusBarStyle = theme.intro.statusBarStyle.style
         
         self.controller.startMessaging = { [weak self] in
-            self?.activateLocalization("en")
+            self?.activateLocalization(welcomeLanguage)
         }
         self.controller.startMessagingInAlternativeLanguage = { [weak self] code in
             if let code = code {
@@ -93,7 +97,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
         }
         
         self.startButton.pressed = { [weak self] in
-            self?.activateLocalization("en")
+            self?.activateLocalization(welcomeLanguage)
         }
         
         self.controller.createStartButton = { [weak self] width in
@@ -232,8 +236,22 @@ public final class AuthorizationSequenceSplashController: ViewController {
             if let suggestedCode = suggestedCode {
                 _ = TelegramEngineUnauthorized(account: strongSelf.account).localization.markSuggestedLocalizationAsSeenInteractively(languageCode: suggestedCode).start()
             }
+
+            // The stock button always requested "en". zh-Hans-US is zh-Hans. A language
+            // picked in Settings wins over both the button and the system language.
+            let resolvedCode: String
+            if UserDefaults.standard.string(forKey: tellomiPreferredInterfaceLanguageKey) != nil {
+                resolvedCode = tellomiNetworkLanguageCode(savedLanguageCode: currentCode)
+            } else if code.caseInsensitiveCompare("en") != .orderedSame {
+                resolvedCode = tellomiCanonicalBuiltinLanguage(code)
+            } else {
+                resolvedCode = tellomiNetworkLanguageCode(savedLanguageCode: currentCode)
+            }
             
-            if currentCode == code {
+            if currentCode == resolvedCode {
+                if tellomiSystemLangPackCode() == resolvedCode {
+                    tellomiMarkSystemLangPackApplied()
+                }
                 strongSelf.pressNext(strings: nil)
                 return
             }
@@ -242,7 +260,19 @@ public final class AuthorizationSequenceSplashController: ViewController {
             strongSelf.startButton.alpha = 0.6
             let accountManager = strongSelf.accountManager
             
-            strongSelf.activateLocalizationDisposable.set(TelegramEngineUnauthorized(account: strongSelf.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: code).start(completed: {
+            strongSelf.activateLocalizationDisposable.set(TelegramEngineUnauthorized(account: strongSelf.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: resolvedCode).start(error: { [weak self] _ in
+                Queue.mainQueue().async {
+                    guard let self else {
+                        return
+                    }
+                    self.controller.isEnabled = true
+                    self.startButton.alpha = 1.0
+                    self.pressNext(strings: nil)
+                }
+            }, completed: {
+                if tellomiSystemLangPackCode() == resolvedCode {
+                    tellomiMarkSystemLangPackApplied()
+                }
                 let _ = (accountManager.transaction { transaction -> PresentationStrings? in
                     let localizationSettings: LocalizationSettings?
                     if let current = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self) {

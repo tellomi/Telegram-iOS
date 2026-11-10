@@ -1476,17 +1476,34 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 authContextValue.account.shouldBeServiceTaskMaster.set(.single(.never))
                 if authContextValue.authorizationCompleted {
                     let accountId = authContextValue.account.id
+                    let didDismiss = Atomic<Bool>(value: false)
+                    let dismissAuth = {
+                        if didDismiss.swap(true) {
+                            return
+                        }
+                        authContextValue.rootController.view.endEditing(true)
+                        authContextValue.rootController.dismiss()
+                    }
+                    // Wait until the signed-in root is actually ready, then put it in the window
+                    // before dismissing the code screen. Dismissing first left a blank window and
+                    // crashed a new account while the root was still being installed.
                     let _ = (self.context.get()
-                    |> filter { context in
-                        return context?.context.account.id == accountId
+                    |> mapToSignal { applicationContext -> Signal<AuthorizedApplicationContext, NoError> in
+                        guard let applicationContext, applicationContext.context.account.id == accountId else {
+                            return .complete()
+                        }
+                        return applicationContext.isReady.get()
+                        |> filter { $0 }
+                        |> take(1)
+                        |> map { _ in applicationContext }
                     }
                     |> take(1)
-                    |> timeout(4.0, queue: .mainQueue(), alternate: .complete())
-                    |> deliverOnMainQueue).start(completed: {
-                        Queue.mainQueue().after(0.75) {
-                            authContextValue.rootController.view.endEditing(true)
-                            authContextValue.rootController.dismiss()
-                        }
+                    |> timeout(8.0, queue: .mainQueue(), alternate: .complete())
+                    |> deliverOnMainQueue).start(next: { [weak self] applicationContext in
+                        self?.mainWindow.viewController = applicationContext.rootController
+                        dismissAuth()
+                    }, completed: {
+                        dismissAuth()
                     })
                 } else {
                     authContextValue.rootController.view.endEditing(true)

@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   app:
-    if: github.head_ref == 'cursor/moments-comment-api-b405' || github.head_ref == 'cursor/moments-feed-parity-f601' || github.head_ref == 'cursor/ios-batch-tf' || github.head_ref == 'cursor/mtproto-port-443-fallback-e2a4' || github.head_ref == 'cursor/menu-settings-tabs-b921'
+    if: github.head_ref == 'cursor/moments-comment-api-b405' || github.head_ref == 'cursor/moments-feed-parity-f601' || github.head_ref == 'cursor/ios-batch-tf' || github.head_ref == 'cursor/ios-login-locale-crash-48dd' || github.head_ref == 'cursor/mtproto-port-443-fallback-e2a4' || github.head_ref == 'cursor/menu-settings-tabs-b921'
     runs-on: xcode-27
     timeout-minutes: 360
     env:
@@ -95,6 +95,21 @@ jobs:
           test -f bazel-bin/Telegram/Telegram.ipa
           echo "Built bazel-bin/Telegram/Telegram.ipa. Not uploaded."
 
+      - name: Free disk before simulator tests
+        run: |
+          set -euo pipefail
+          df -h
+          # The release products and the simulator test are different configurations.
+          # Keeping both filled the runner while the test bundle was zipped.
+          # Bazel marks some of those outputs immutable, so a plain rm is denied.
+          if [ -e bazel-out ]; then
+            chflags -R nouchg bazel-out || true
+            chmod -R u+w bazel-out || true
+          fi
+          rm -rf bazel-out bazel-bin bazel-testlogs || true
+          rm -rf "${HOME}/Library/Caches/bazel" || true
+          df -h
+
       - name: Run MomentsRulesTests
         run: |
           set -euo pipefail
@@ -162,7 +177,7 @@ jobs:
             --configurationPath "${RUNNER_TEMP}/tellomi-configuration.json" \
             --codesigningInformationPath "${RUNNER_TEMP}/tellomi-signing" \
             --target //submodules/TelegramCore:MomentsRulesTests \
-            --testFilter MomentsRulesTests \
+            --testFilter 'MomentsRulesTests|TellomiBuiltinLanguageTests' \
             --testOutput all \
             --testArg=--destination=platform=ios_simulator,id=${SIM_UDID}
 
