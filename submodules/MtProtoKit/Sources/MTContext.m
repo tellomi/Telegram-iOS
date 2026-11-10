@@ -1500,6 +1500,20 @@ static void copyKeychainDictionaryKey(NSString * _Nonnull group, NSString * _Non
     }];
 }
 
+- (bool)transportSchemeHasReceivedResponseForDatacenterId:(NSInteger)datacenterId transportScheme:(MTTransportScheme *)transportScheme {
+    __block bool result = false;
+    [[MTContext contextQueue] dispatchOnQueue:^{
+        if (transportScheme == nil) {
+            return;
+        }
+        [self _withTransportSchemeStatsForDatacenterId:datacenterId transportScheme:transportScheme process:^MTTransportSchemeStats *(MTTransportSchemeStats *current) {
+            result = current.lastResponseTimestamp > 0;
+            return current;
+        }];
+    } synchronous:true];
+    return result;
+}
+
 - (void)invalidateTransportSchemesForDatacenterIds:(NSArray<NSNumber *> * _Nonnull)datacenterIds {
     [[MTContext contextQueue] dispatchOnQueue:^{
         for (NSNumber *datacenterId in datacenterIds) {

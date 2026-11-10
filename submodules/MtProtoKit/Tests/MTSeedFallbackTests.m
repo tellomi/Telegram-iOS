@@ -6,6 +6,8 @@
 #import <MtProtoKit/MTTransportScheme.h>
 #import <MtProtoKit/TellomiServerConfig.h>
 
+#import "MTTcpConnection.h"
+
 #import "MTTestSupport.h"
 
 // Overseas paths drop TCP 10443 and pass 443. The seed keeps both. A saved
@@ -144,6 +146,27 @@ static NSArray<NSNumber *> *MTSeedPorts(MTDatacenterAddressSet *set) {
     [context reportTransportSchemeFailureForDatacenterId:1 transportScheme:first];
     MTTransportScheme *second = [context chooseTransportSchemeForConnectionToDatacenterId:1 schemes:schemes];
     XCTAssertEqual(second.address.port, 443);
+}
+
+- (void)testSuccessOn10443DoesNotMoveTheNextDialTo443 {
+    // A client that never sees 10443 fail keeps dialing it. Recording a
+    // response only marks that endpoint as proven; it does not change the tie.
+    MTContext *context = MTTestMakeContext(false);
+    [context setSeedAddressSetForDatacenterWithId:1 seedAddressSet:TellomiSeedAddressSets(false)[@1]];
+    NSArray<MTTransportScheme *> *schemes = [context transportSchemesForDatacenterWithId:1 media:false enforceMedia:false isProxy:false];
+    MTTransportScheme *first = [context chooseTransportSchemeForConnectionToDatacenterId:1 schemes:schemes];
+    XCTAssertEqual(first.address.port, 10443);
+    XCTAssertFalse([context transportSchemeHasReceivedResponseForDatacenterId:1 transportScheme:first]);
+
+    [context reportTransportSchemeSuccessForDatacenterId:1 transportScheme:first];
+    XCTAssertTrue([context transportSchemeHasReceivedResponseForDatacenterId:1 transportScheme:first]);
+    MTTransportScheme *again = [context chooseTransportSchemeForConnectionToDatacenterId:1 schemes:schemes];
+    XCTAssertEqual(again.address.port, 10443);
+}
+
+- (void)testConnectTimeoutStaysLongAfterTheEndpointHasAnswered {
+    XCTAssertEqualWithAccuracy(MTTcpConnectTimeoutInterval(false), 5.0, 0.001);
+    XCTAssertEqualWithAccuracy(MTTcpConnectTimeoutInterval(true), 12.0, 0.001);
 }
 
 - (void)testExistingKeychainGainsTheFallbackPort {

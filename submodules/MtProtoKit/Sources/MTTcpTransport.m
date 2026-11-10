@@ -433,7 +433,8 @@ static const NSTimeInterval MTTcpTransportSleepWatchdogTimeout = 60.0;
         // the next attempt's watchdog and then fire for the address that already failed.
         [self stopConnectionWatchdogTimer];
 
-        // The socket gives up after 12s. Record that before the reconnect is
+        // The socket gives up after 5s on an endpoint that has never answered,
+        // or 12s once it has. Record that before the reconnect is
         // queued: chooseTransportScheme reads these stats on the context queue,
         // and this block has to be ahead of that read or the retry dials the
         // same address. The first failure reconnects immediately.
