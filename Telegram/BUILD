@@ -563,7 +563,11 @@ official_communication_notifications_fragment = """
 <key>com.apple.developer.usernotifications.communication</key>
 <true/>
 """
-communication_notifications_fragment = official_communication_notifications_fragment if telegram_bundle_id in official_bundle_ids else ""
+# Official Telegram ids, plus Tellomi. iOS shows the sender avatar from the
+# notification service's INSendMessageIntent only when the main app is signed
+# with this key. The NotificationService extension does not get it; upstream
+# puts it on the app only, and the extension profile does not include it.
+communication_notifications_fragment = official_communication_notifications_fragment if (telegram_bundle_id in official_bundle_ids or telegram_bundle_id == "app.tellomi.chat") else ""
 
 official_notification_filtering_fragment = """
 <key>com.apple.developer.usernotifications.filtering</key>
