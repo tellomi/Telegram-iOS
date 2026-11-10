@@ -752,9 +752,8 @@ static const NSUInteger MTMaxUnacknowledgedMessageCount = 64;
         if (transport != _transport) {
             return;
         }
-        if (_useUnauthorizedMode) {
-            return;
-        }
+        // A TCP failure before authorization still counts. Otherwise the next
+        // retry keeps the same endpoint, and a dropped port never rotates.
         [_context reportTransportSchemeFailureForDatacenterId:_datacenterId transportScheme:scheme];
     }];
 }

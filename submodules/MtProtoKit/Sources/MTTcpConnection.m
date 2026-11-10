@@ -857,6 +857,8 @@ struct ctr_state {
     NSData *_currentHelloResponse;
     
     MTMetaDisposable *_resolveDisposable;
+    __weak MTContext *_context;
+    NSInteger _datacenterId;
     
     bool _readyToSendData;
     NSMutableArray<MTTcpSendData *> *_pendingDataQueue;
@@ -872,6 +874,10 @@ struct ctr_state {
 @end
 
 @implementation MTTcpConnection
+
+NSTimeInterval MTTcpConnectTimeoutInterval(bool endpointHasReceivedResponse) {
+    return endpointHasReceivedResponse ? 12.0 : 5.0;
+}
 
 + (MTQueue *)tcpQueue
 {
@@ -898,6 +904,8 @@ struct ctr_state {
         _getLogPrefix = [getLogPrefix copy];
         
         _encryptionProvider = context.encryptionProvider;
+        _context = context;
+        _datacenterId = datacenterId;
         
         _scheme = scheme;
         
@@ -1124,7 +1132,13 @@ struct ctr_state {
                     }
                     
                     __autoreleasing NSError *error = nil;
-                    if (![strongSelf->_socket connectToHost:connectionData.ip onPort:connectionData.port viaInterface:strongSelf->_interface withTimeout:12 error:&error] || error != nil) {
+                    bool endpointHasReceivedResponse = false;
+                    MTContext *context = strongSelf->_context;
+                    if (context != nil && strongSelf->_scheme != nil) {
+                        endpointHasReceivedResponse = [context transportSchemeHasReceivedResponseForDatacenterId:strongSelf->_datacenterId transportScheme:strongSelf->_scheme];
+                    }
+                    NSTimeInterval connectTimeout = MTTcpConnectTimeoutInterval(endpointHasReceivedResponse);
+                    if (![strongSelf->_socket connectToHost:connectionData.ip onPort:connectionData.port viaInterface:strongSelf->_interface withTimeout:connectTimeout error:&error] || error != nil) {
                         [strongSelf closeAndNotifyWithError:true];
                     } else if (strongSelf->_socksIp == nil) {
                         if (strongSelf->_mtpIp != nil && [strongSelf->_mtpSecret isKindOfClass:[MTProxySecretType2 class]]) {

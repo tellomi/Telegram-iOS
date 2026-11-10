@@ -43,6 +43,8 @@ def check_server() -> None:
     config = json.loads(read("Tellomi/tellomi-server.json"))
     if config["default_datacenter_id"] != 1 or config["seed_port"] != 10443:
         fail("seed is not datacenter 1 port 10443")
+    if config.get("seed_fallback_ports") != [443]:
+        fail("443 is not a seed fallback port")
     if config["disable_telegram_backup_discovery"] is not True:
         fail("Telegram backup discovery is not disabled")
     for environment in ("production", "testing"):
@@ -55,8 +57,10 @@ def check_server() -> None:
     if "api.tellomi.cn" not in header or "149.154." in header:
         fail("generated handshake header does not carry only the Tellomi seed")
     network = read("submodules/TelegramCore/Sources/Network/Network.swift")
-    if "TellomiSeedAddresses" not in network or "149.154.175.50" in network:
+    if "TellomiSeedAddressSets" not in network or "149.154.175.50" in network:
         fail("Network.swift is not installing the Tellomi seed")
+    if "TellomiSeedPort()" in network:
+        fail("Network.swift still installs a single seed port")
     if "TellomiDisablesTelegramBackupDiscovery" not in network:
         fail("backup discovery is not gated")
     account = read("submodules/TelegramCore/Sources/Account/Account.swift")
@@ -123,14 +127,14 @@ def check_declared_port() -> None:
     serialization = read("submodules/TelegramCore/Sources/State/Serialization.swift")
     updates = read("submodules/TelegramCore/Sources/State/ManagedConfigurationUpdates.swift")
     discover = read("submodules/MtProtoKit/Sources/MTDiscoverConnectionSignals.m")
-    network = read("submodules/TelegramCore/Sources/Network/Network.swift")
+    seeds = read("submodules/MtProtoKit/Sources/TellomiServerConfig.m")
     for source, name in ((serialization, "Serialization.swift"), (updates, "ManagedConfigurationUpdates.swift")):
         if "(flags & (1 << 5)) != 0" not in source or "thisPortOnly:" not in source:
             fail(f"{name} does not apply dcOption.this_port_only")
         if "preferForMedia:" not in source:
             fail(f"{name} dropped the media address flag")
-    if "thisPortOnly: true" not in network:
-        fail("the Tellomi seed is not limited to its declared port")
+    if "thisPortOnly:true" not in seeds:
+        fail("the Tellomi seed is not limited to its declared ports")
     if "return @[@80, @5222];" not in discover:
         fail("an ordinary address no longer probes ports 80 and 5222")
     if "if (address.thisPortOnly)" not in discover or "other.thisPortOnly" not in discover:

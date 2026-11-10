@@ -217,6 +217,8 @@ def check_keys(config: dict) -> None:
         fail("default datacenter is not 1")
     if config["seed_port"] != 10443:
         fail("seed port is not Teamgram's published 10443")
+    if config.get("seed_fallback_ports") != [443]:
+        fail("seed fallback ports must be [443] so a blocked 10443 still connects")
     if config["disable_telegram_backup_discovery"] is not True:
         fail("Telegram backup discovery must stay disabled for the Teamgram default")
     if config.get("local_docker_seed") != "127.0.0.1":
@@ -371,8 +373,10 @@ def check_extension_suffixes(build: str, variables: str) -> None:
 
 def check_wiring() -> None:
     network = (ROOT / "submodules/TelegramCore/Sources/Network/Network.swift").read_text(encoding="utf-8")
-    if "149.154.175.50" in network or "TellomiSeedAddresses" not in network:
+    if "149.154.175.50" in network or "TellomiSeedAddressSets" not in network:
         fail("Network.swift is not using Tellomi seed addresses")
+    if "TellomiSeedPort()" in network:
+        fail("Network.swift still installs a single seed port")
     if "TellomiDisablesTelegramBackupDiscovery" not in network:
         fail("backup discovery is not gated")
     account = (ROOT / "submodules/TelegramCore/Sources/Account/Account.swift").read_text(encoding="utf-8")
