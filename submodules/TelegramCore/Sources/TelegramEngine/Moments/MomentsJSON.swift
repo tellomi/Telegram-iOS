@@ -493,3 +493,61 @@ func momentsError(data: Data, status: Int) -> MomentsAPIError {
 func momentsJSONData(_ object: [String: Any]) -> Data? {
     return try? JSONSerialization.data(withJSONObject: object, options: [])
 }
+
+func momentsPeopleListError(data: Data) -> MomentsAPIError? {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let code = momentsString(root, "error"), !code.isEmpty else {
+        return nil
+    }
+    if code == "list_private" {
+        return .listPrivate
+    }
+    if code == "not_found" {
+        return .notFound
+    }
+    return .invalid(code)
+}
+
+func momentsPeopleAuthor(_ json: [String: Any]) -> MomentsAuthor? {
+    let body = momentsObject(json["author"]) ?? json
+    if let author = momentsAuthor(body) {
+        return author
+    }
+    let userId = momentsInt64(body, "telegram_user_id", "user_id")
+    guard userId != 0 else {
+        return nil
+    }
+    return MomentsAuthor(id: String(userId), telegramUserId: userId, displayName: momentsString(body, "display_name", "name") ?? "")
+}
+
+public func momentsPeoplePage(data: Data) -> MomentsPeoplePage {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return MomentsPeoplePage()
+    }
+    let people = momentsArray(root["items"] ?? root["users"]).compactMap { momentsPeopleAuthor($0) }
+    let cursor = momentsString(root, "next_cursor", "cursor").flatMap { $0.isEmpty ? nil : $0 }
+    let total: Int?
+    if root["total"] != nil {
+        total = momentsInt(root, "total")
+    } else if root["count"] != nil {
+        total = momentsInt(root, "count")
+    } else if cursor == nil {
+        total = people.count
+    } else {
+        total = nil
+    }
+    return MomentsPeoplePage(people: people, nextCursor: cursor, total: total)
+}
+
+public func momentsLoadedPost(data: Data, fallbackId: String, mediaBaseURL: String? = nil) -> MomentsCard {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return MomentsCard(id: fallbackId, state: "unavailable")
+    }
+    var body = root
+    if let wrapped = momentsObject(root["data"]), momentsString(root, "id") == nil {
+        body = wrapped
+    }
+    if let card = momentsCard(json: body, mediaBaseURL: mediaBaseURL) {
+        return card
+    }
+    return MomentsCard(id: fallbackId, state: "unavailable")
+}

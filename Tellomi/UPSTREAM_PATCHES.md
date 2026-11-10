@@ -82,6 +82,14 @@ The feed is new client code. It does not revive the cancelled Discover/Feed work
 - Comment stickers and GIFs are uploaded with tus and sent as `{type,key,...}`. They are not Telegram document ids.
 - Relative media keys use `media_base_url`, or `https://media.tellomi.app/feed` when that is missing. Absolute https URLs (signed R2) are left as returned. Image versus video follows the card `type`, not the HTTP content-type.
 
+## Moments profile peer open — 2026-11-10
+
+The profile Moments pane opens an author with the same peer navigation the rest of the profile uses. The pane is created in the shared pane container, so that one assignment lives next to the other panes.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift` | Sets `MomentsProfilePaneNode.openPeer` from `ChatControllerInteraction.openPeer`. |
+
 ## On-device MapKit venues
 
 Nearby places and the location search box call `nearbyVenues`. That asks `help.getConfig`'s `venue_search_username` (otherwise `foursquare`), resolves the bot, then calls `messages.getInlineBotResults`. This server's venue bot returns an empty list, and a mainland Apple developer account cannot get a MapKit JS key, so the list stays empty unless the device asks MapKit itself.
