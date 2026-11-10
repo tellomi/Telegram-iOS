@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
 
 swift_library(
     name = "LocationUI",
@@ -65,5 +65,18 @@ swift_library(
     ],
     visibility = [
         "//visibility:public",
+    ],
+)
+
+# Host test of the venue-list rules. MapKit and the account stay out of this target.
+# Run with `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/LocationUI:AppleMapVenueMappingTests`.
+swift_test(
+    name = "AppleMapVenueMappingTests",
+    srcs = [
+        "Sources/AppleMapVenueMapping.swift",
+        "Tests/AppleMapVenueMappingTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
     ],
 )
