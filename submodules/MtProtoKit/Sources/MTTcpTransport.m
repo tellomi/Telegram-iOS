@@ -429,6 +429,18 @@ static const NSTimeInterval MTTcpTransportSleepWatchdogTimeout = 60.0;
         transportContext.connectionIsValid = false;
         transportContext.connection.delegate = nil;
         transportContext.connection = nil;
+        // The timer belongs to this attempt. Leaving it running would suppress
+        // the next attempt's watchdog and then fire for the address that already failed.
+        [self stopConnectionWatchdogTimer];
+
+        // The socket gives up after 5s on an endpoint that has never answered,
+        // or 12s once it has. Record that before the reconnect is
+        // queued: chooseTransportScheme reads these stats on the context queue,
+        // and this block has to be ahead of that read or the retry dials the
+        // same address. The first failure reconnects immediately.
+        if (error && connection.scheme != nil) {
+            [self.context reportTransportSchemeFailureForDatacenterId:self.datacenterId transportScheme:connection.scheme];
+        }
         
         [transportContext.connectionBehaviour connectionClosed];
         
