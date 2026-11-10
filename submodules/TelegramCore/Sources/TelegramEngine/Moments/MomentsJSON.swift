@@ -17,6 +17,30 @@ func momentsString(_ json: [String: Any], _ keys: String...) -> String? {
     return nil
 }
 
+/// A JSON string or number. Booleans are not cursors. `JSONSerialization` boxes numbers as `NSNumber`.
+func momentsJSONText(_ value: Any?) -> String? {
+    if let text = value as? String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+    if let number = value as? NSNumber {
+        if CFGetTypeID(number) == CFBooleanGetTypeID() {
+            return nil
+        }
+        return number.stringValue
+    }
+    return nil
+}
+
+func momentsFeedCursor(_ json: [String: Any]) -> String? {
+    for key in ["cursor", "next_cursor"] {
+        if let text = momentsJSONText(json[key]) {
+            return text
+        }
+    }
+    return nil
+}
+
 func momentsInt64(_ json: [String: Any], _ keys: String...) -> Int64 {
     for key in keys {
         if let value = json[key] as? Int64 {
@@ -308,7 +332,7 @@ public func momentsFeedRefPage(data: Data, kind: MomentsFeedKind? = nil) -> Mome
             return id
         }
     }
-    return MomentsFeedRefPage(ids: ids, cursor: momentsString(root, "cursor", "next_cursor"))
+    return MomentsFeedRefPage(ids: ids, cursor: momentsFeedCursor(root))
 }
 
 func momentsStringList(_ value: Any?) -> [String] {

@@ -37,14 +37,7 @@ private final class MomentsHTTP {
 
     func send(credential: MomentsCredential, method: String, path: String, query: [String: String] = [:], body: Data? = nil, contentType: String = "application/json") -> Signal<Data, MomentsAPIError> {
         return Signal { [session] subscriber in
-            guard var components = URLComponents(string: credential.baseURL + path) else {
-                subscriber.putError(.invalid("bad url"))
-                return EmptyDisposable
-            }
-            if !query.isEmpty {
-                components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
-            }
-            guard let url = components.url else {
+            guard let url = URL(string: momentsRequestURL(base: credential.baseURL, path: path, query: query)) else {
                 subscriber.putError(.invalid("bad url"))
                 return EmptyDisposable
             }
@@ -223,16 +216,7 @@ public extension TelegramEngine {
         }
 
         public func loadFeed(_ kind: MomentsFeedKind, cursor: String?, city: String?, sort: String?) -> Signal<MomentsPage, MomentsAPIError> {
-            var query: [String: String] = ["limit": "\(MomentsLimits.standard.pageSize)"]
-            if let cursor, !cursor.isEmpty {
-                query["cursor"] = cursor
-            }
-            if kind == .nearby {
-                if let city {
-                    query["city"] = city
-                }
-                query["sort"] = sort ?? "latest"
-            }
+            let query = momentsFeedListQuery(kind: kind, cursor: cursor, city: city, sort: sort, pageSize: MomentsLimits.standard.pageSize)
             return self.prepareMediaBase()
             |> mapToSignal { _ in
                 return self.call(method: "GET", path: "/v1/feed/\(kind.rawValue)", query: query)
@@ -381,8 +365,8 @@ public extension TelegramEngine {
             return self.call(method: disliked ? "PUT" : "DELETE", path: "/v1/feed/comments/\(id)/dislike") |> ignoreValues
         }
 
-        public func deleteComment(id: String) -> Signal<Never, MomentsAPIError> {
-            return self.call(method: "DELETE", path: "/v1/feed/posts/\(id)") |> ignoreValues
+        public func deleteComment(postId: String, commentId: String) -> Signal<Never, MomentsAPIError> {
+            return self.call(method: "DELETE", path: momentsDeleteCommentPath(postId: postId, commentId: commentId)) |> ignoreValues
         }
 
         public func storedAudience() -> Signal<EngineStoryPrivacy?, NoError> {
@@ -841,7 +825,9 @@ public func momentsReplyPage(data: Data, rootId: String, mediaBaseURL: String? =
 }
 
 func momentsPathSegment(_ raw: String) -> String {
-    return raw.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? raw
+    var allowed = CharacterSet.alphanumerics
+    allowed.insert(charactersIn: "-._~")
+    return raw.addingPercentEncoding(withAllowedCharacters: allowed) ?? raw
 }
 
 func momentsNotificationPage(data: Data) -> MomentsNotificationPage {

@@ -568,6 +568,33 @@ final class MomentsRulesTests: XCTestCase {
         let missing = #"{"id":"p","state":"deleted"}"#.data(using: .utf8)!
         XCTAssertTrue(momentsLoadedPost(data: missing, fallbackId: "p").isUnavailable)
     }
+
+    func testDeleteCommentPathIsTheCommentRoute() {
+        XCTAssertEqual(momentsDeleteCommentPath(postId: "p1", commentId: "c1"), "/v1/feed/posts/p1/comments/c1")
+        XCTAssertNotEqual(momentsDeleteCommentPath(postId: "p1", commentId: "c1"), "/v1/feed/posts/c1")
+        XCTAssertEqual(momentsDeleteCommentPath(postId: "p/1", commentId: "c 2"), "/v1/feed/posts/p%2F1/comments/c%202")
+    }
+
+    func testRecommendPageTwoPutsTheCursorInTheURL() {
+        let first = momentsFeedListQuery(kind: .recommend, cursor: nil, city: nil, sort: nil, pageSize: 20)
+        XCTAssertNil(first["cursor"])
+        XCTAssertEqual(first["limit"], "20")
+        XCTAssertEqual(momentsRequestURL(base: "https://feed.example", path: "/v1/feed/recommend", query: first), "https://feed.example/v1/feed/recommend?limit=20")
+
+        let raw = #"{"items":[{"id":"p1","reason":"recommend"}],"cursor":"c 1+"}"#.data(using: .utf8)!
+        let refs = momentsFeedRefPage(data: raw, kind: .recommend)
+        XCTAssertEqual(refs?.cursor, "c 1+")
+        let merged = momentsMergeFeed(existing: [], pageItems: [MomentsCard(id: "p1")], cursor: refs?.cursor, refreshing: true)
+        XCTAssertEqual(merged.cursor, "c 1+")
+        let second = momentsFeedListQuery(kind: .recommend, cursor: merged.cursor, city: nil, sort: nil, pageSize: 20)
+        XCTAssertEqual(second["cursor"], "c 1+")
+        XCTAssertEqual(momentsRequestURL(base: "https://feed.example/", path: "/v1/feed/recommend", query: second), "https://feed.example/v1/feed/recommend?cursor=c%201%2B&limit=20")
+
+        let numeric = #"{"items":[{"id":"p1","reason":"recommend"}],"cursor":42}"#.data(using: .utf8)!
+        XCTAssertEqual(momentsFeedRefPage(data: numeric, kind: .recommend)?.cursor, "42")
+        let numericQuery = momentsFeedListQuery(kind: .recommend, cursor: momentsFeedRefPage(data: numeric, kind: .recommend)?.cursor, city: nil, sort: nil, pageSize: 20)
+        XCTAssertEqual(momentsRequestURL(base: "https://feed.example", path: "/v1/feed/recommend", query: numericQuery), "https://feed.example/v1/feed/recommend?cursor=42&limit=20")
+    }
 }
 
 private func momentsTestPost(text: String, audience: MomentsAudience = MomentsAudience(kind: .everyone), mediaKeys: [String] = [], allowNearby: Bool = false, city: String? = nil, placeId: String? = nil, quoteOf: String? = nil, nonce: String) -> MomentsPostDraft {
