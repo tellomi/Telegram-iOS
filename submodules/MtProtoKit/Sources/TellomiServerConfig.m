@@ -1,5 +1,7 @@
 #import <MtProtoKit/TellomiServerConfig.h>
 
+#import <MtProtoKit/MTDatacenterAddress.h>
+#import <MtProtoKit/MTDatacenterAddressSet.h>
 #import <MtProtoKit/MTLogging.h>
 
 #import "TellomiServerConfigJSON.h"
@@ -61,15 +63,61 @@ NSDictionary<NSNumber *, NSArray<NSString *> *> *TellomiSeedAddresses(bool testi
     return result;
 }
 
-uint16_t TellomiSeedPort(void) {
-    id port = TellomiParsedConfig()[@"seed_port"];
-    if ([port isKindOfClass:[NSNumber class]]) {
-        NSInteger value = [(NSNumber *)port integerValue];
-        if (value > 0 && value <= 65535) {
-            return (uint16_t)value;
+static void TellomiAppendPort(NSMutableArray<NSNumber *> *ports, NSMutableSet<NSNumber *> *seen, id port) {
+    if (![port isKindOfClass:[NSNumber class]]) {
+        return;
+    }
+    NSInteger value = [(NSNumber *)port integerValue];
+    if (value <= 0 || value > 65535) {
+        return;
+    }
+    NSNumber *number = [NSNumber numberWithUnsignedShort:(uint16_t)value];
+    if ([seen containsObject:number]) {
+        return;
+    }
+    [seen addObject:number];
+    [ports addObject:number];
+}
+
+NSArray<NSNumber *> *TellomiSeedPorts(void) {
+    NSMutableArray<NSNumber *> *ports = [[NSMutableArray alloc] init];
+    NSMutableSet<NSNumber *> *seen = [[NSMutableSet alloc] init];
+    // Preferred port first. Fallbacks follow, so a reverse walk dials the
+    // preferred port before them.
+    TellomiAppendPort(ports, seen, TellomiParsedConfig()[@"seed_port"]);
+    id fallbacks = TellomiParsedConfig()[@"seed_fallback_ports"];
+    if ([fallbacks isKindOfClass:[NSArray class]]) {
+        for (id port in (NSArray *)fallbacks) {
+            TellomiAppendPort(ports, seen, port);
         }
     }
-    return 10443;
+    if (ports.count == 0) {
+        return @[@10443];
+    }
+    return [ports copy];
+}
+
+uint16_t TellomiSeedPort(void) {
+    return TellomiSeedPorts().firstObject.unsignedShortValue;
+}
+
+NSDictionary<NSNumber *, MTDatacenterAddressSet *> *TellomiSeedAddressSets(bool testingEnvironment) {
+    NSArray<NSNumber *> *ports = TellomiSeedPorts();
+    NSMutableDictionary<NSNumber *, MTDatacenterAddressSet *> *result = [[NSMutableDictionary alloc] init];
+    [TellomiSeedAddresses(testingEnvironment) enumerateKeysAndObjectsUsingBlock:^(NSNumber *datacenterId, NSArray<NSString *> *hosts, __unused BOOL *stop) {
+        NSMutableArray<MTDatacenterAddress *> *addresses = [[NSMutableArray alloc] init];
+        for (NSString *host in hosts) {
+            // Last address is the preferred port. chooseTransportScheme keeps
+            // the last scheme when no port has failed yet.
+            for (NSNumber *port in ports.reverseObjectEnumerator) {
+                [addresses addObject:[[MTDatacenterAddress alloc] initWithIp:host port:port.unsignedShortValue preferForMedia:false restrictToTcp:false cdn:false preferForProxy:false secret:nil thisPortOnly:true]];
+            }
+        }
+        if (addresses.count != 0) {
+            result[datacenterId] = [[MTDatacenterAddressSet alloc] initWithAddressList:addresses];
+        }
+    }];
+    return result;
 }
 
 NSInteger TellomiDefaultDatacenterId(void) {

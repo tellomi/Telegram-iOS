@@ -1,5 +1,19 @@
 # Upstream patches
 
+## MTProto port 443 fallback — 2026-11-10
+
+Overseas networks drop TCP 10443 and pass 443. The seed for datacenter 1 is `api.tellomi.cn` on 10443, then 443. 10443 is last in the address list, so the first dial is still 10443. The TCP connect timeout is 12 seconds and that failure is recorded before the reconnect is queued, including before login, so the next dial is 443 and starts immediately. A saved datacenter list and a `help.getConfig` `dc_options` list that omit 443 get it added back. The server does not have to return 443 for this client to keep the fallback.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/tellomi-server.json` | `seed_fallback_ports` is `[443]`. `seed_port` stays 10443. |
+| `submodules/MtProtoKit/Sources/TellomiServerConfig.m` | Builds one `thisPortOnly` address per port, preferred port last. |
+| `submodules/MtProtoKit/Sources/MTContext.m` | Merges those seed addresses into a saved or server-supplied list. |
+| `submodules/MtProtoKit/Sources/MTTcpTransport.m` | Records the failed scheme before asking for the next connection. |
+| `submodules/MtProtoKit/Sources/MTProto.m` | A pre-login TCP failure counts toward that rotation. |
+| `submodules/TelegramCore/Sources/Network/Network.swift` | Installs the seed address sets. |
+| `submodules/MtProtoKit/Tests/MTSeedFallbackTests.m` | Seed order, saved-list merge, dc_options merge, and the 10443-then-443 choice. |
+
 ## Moments feed (动态) — 2026-11-09
 
 Branch `cursor/moments-feed-v1-b405`, based on `de22e3ff` (official restore, PR #138). This is not part of the 14.0.5 release candidate.
