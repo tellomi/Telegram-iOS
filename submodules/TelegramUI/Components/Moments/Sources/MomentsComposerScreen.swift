@@ -20,7 +20,7 @@ public final class MomentsComposerScreen: ViewController {
     private let publishButton = UIButton(type: .system)
     private let nearbySwitch = UISwitch()
     private var privacy = EngineStoryPrivacy(base: .everyone, additionallyIncludePeers: [])
-    private var didLoadPrivacy = false
+    private var audienceChosen = false
     private var media: [MomentsMedia] = []
     private var allowNearby = false
     private var linkRemoved = false
@@ -91,17 +91,9 @@ public final class MomentsComposerScreen: ViewController {
             if let base = EngineStoryPrivacy.Base(rawValue: draft.privacyBase) {
                 let peers = draft.peerIds.map { EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value($0)) }
                 self.privacy = EngineStoryPrivacy(base: base, additionallyIncludePeers: peers)
-                self.didLoadPrivacy = true
+                self.audienceChosen = true
             }
             self.refresh()
-        })
-        let _ = (self.context.engine.moments.storedAudience() |> deliverOnMainQueue).start(next: { [weak self] stored in
-            guard let self, !self.didLoadPrivacy else { return }
-            self.didLoadPrivacy = true
-            if let stored {
-                self.privacy = stored
-                self.refresh()
-            }
         })
         self.displayNodeDidLoad()
     }
@@ -123,22 +115,27 @@ public final class MomentsComposerScreen: ViewController {
     private func refresh() {
         let strings = self.presentationData.strings
         let audience = momentsAudience(from: self.privacy)
-        self.audienceButton.setTitle(momentsAudienceTitle(strings, audience.kind), for: .normal)
+        if self.audienceChosen {
+            self.audienceButton.setTitle(momentsAudienceTitle(strings, audience.kind), for: .normal)
+        } else {
+            self.audienceButton.setTitle(momentsText(strings, .audienceChoose), for: .normal)
+        }
         let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll, hasLinkPreview: !self.linkRemoved && momentsScanText(self.textView.text ?? "").firstURL != nil)
         let hasBody = !(self.textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.isEmpty || !self.media.isEmpty
-        self.navigationItem.rightBarButtonItem?.isEnabled = hasBody && !self.isRecordingVoice
-        self.publishButton.isEnabled = hasBody && !self.isRecordingVoice
-        self.nearbySwitch.isHidden = audience.kind != .everyone
+        let canPublish = hasBody && !self.isRecordingVoice && self.audienceChosen
+        self.navigationItem.rightBarButtonItem?.isEnabled = canPublish
+        self.publishButton.isEnabled = canPublish
+        self.nearbySwitch.isHidden = !self.audienceChosen || audience.kind != .everyone
         self.nearbySwitch.isOn = self.allowNearby
     }
 
     @objc private func chooseAudience() {
-        let privacy = self.privacy
+        let privacy = self.audienceChosen ? self.privacy : EngineStoryPrivacy(base: .nobody, additionallyIncludePeers: [])
         let stateContext = ShareWithPeersScreen.StateContext(
             context: self.context,
             subject: .stories(editing: false, count: 1),
             momentsAudience: true,
-            initialSelectedPeers: [privacy.base: privacy.additionallyIncludePeers],
+            initialSelectedPeers: self.audienceChosen ? [self.privacy.base: self.privacy.additionallyIncludePeers] : [:],
             closeFriends: self.context.engine.data.get(TelegramEngine.EngineData.Item.Contacts.CloseFriends())
         )
         let _ = (stateContext.ready |> filter { $0 } |> take(1) |> deliverOnMainQueue).start(next: { [weak self] _ in
@@ -150,10 +147,10 @@ public final class MomentsComposerScreen: ViewController {
                 completion: { [weak self] _, result, _, _, _, _, completed in
                     guard let self, completed else { return }
                     self.privacy = result
+                    self.audienceChosen = true
                     if result.base != .everyone {
                         self.allowNearby = false
                     }
-                    self.context.engine.moments.storeAudience(result)
                     self.refresh()
                 }
             )
@@ -406,7 +403,7 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     @objc private func cancelPressed() {
-        let dirty = !(self.textView.text ?? "").isEmpty || !self.media.isEmpty || self.privacy.base != .everyone || !self.privacy.additionallyIncludePeers.isEmpty
+        let dirty = !(self.textView.text ?? "").isEmpty || !self.media.isEmpty || self.audienceChosen
         guard dirty else {
             self.navigationController?.popViewController(animated: true)
             return
@@ -426,6 +423,7 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     @objc private func publishPressed() {
+        guard self.audienceChosen else { return }
         let audience = momentsAudience(from: self.privacy)
         let text = self.textView.text ?? ""
         let scan = momentsScanText(text)

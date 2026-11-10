@@ -225,7 +225,7 @@ private func makeInternalUrlHandler(
 }
 
 private let internetSchemes: [String] = ["http", "https"]
-private let telegramMeHosts: [String] = ["t.me", "telegram.me", "telegram.dog"]
+private let telegramMeHosts: [String] = ["tell.cc", "t.me", "telegram.me", "telegram.dog"]
 
 private func handleInternetUrl(
     parsedUrl: URL,
@@ -353,7 +353,7 @@ private func appendQueryItems(to base: String, items: [URLQueryItem]) -> String 
 }
 
 private func makeTelegramUrl(_ path: String, queryItems: [URLQueryItem] = []) -> String {
-    return appendQueryItems(to: "https://t.me\(path)", items: queryItems)
+    return appendQueryItems(to: "https://tell.cc\(path)", items: queryItems)
 }
 
 func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, url: String, forceExternal: Bool, presentationData: PresentationData, navigationController: NavigationController?, dismissInput: @escaping () -> Void) {
@@ -462,7 +462,7 @@ private func openCheckedExternalUrl(context: AccountContext, urlContext: OpenURL
                       let components = URLComponents(url: parsedUrl, resolvingAgainstBaseURL: false) else {
                     return
                 }
-                handleInternalUrl("https://t.me/sendgrams" + (components.percentEncodedQuery.map { "?" + $0 } ?? ""))
+                handleInternalUrl("https://tell.cc/sendgrams" + (components.percentEncodedQuery.map { "?" + $0 } ?? ""))
                 return
             }
             if let query = parsedUrl.query, let params = QueryParameters(query) {

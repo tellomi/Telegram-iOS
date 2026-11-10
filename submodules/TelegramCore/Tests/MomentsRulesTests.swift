@@ -122,22 +122,24 @@ final class MomentsRulesTests: XCTestCase {
     }
 
     func testFeedOriginComesOnlyFromAppConfig() {
-        XCTAssertNil(momentsFeedEndpoint(appConfiguration: .defaultValue))
-        XCTAssertFalse(isMomentsFeedEnabled(appConfiguration: .defaultValue))
+        XCTAssertEqual(momentsFeedEndpoint(appConfiguration: .defaultValue)?.baseURL, momentsProductionFeedBaseURL)
+        XCTAssertTrue(isMomentsFeedEnabled(appConfiguration: .defaultValue))
 
         let disabled = AppConfiguration(data: JSON(dictionary: [
             "tellomi_discover_feed_enabled": false,
             "tellomi_discover_feed_base_url": "https://feed.example"
         ]), hash: 0)
-        XCTAssertNil(momentsFeedEndpoint(appConfiguration: disabled))
+        XCTAssertEqual(momentsFeedEndpoint(appConfiguration: disabled)?.baseURL, "https://feed.example")
+        XCTAssertTrue(isMomentsFeedEnabled(appConfiguration: disabled))
 
         let missingHost = AppConfiguration(data: JSON(dictionary: [
             "tellomi_discover_feed_enabled": true
         ]), hash: 0)
-        XCTAssertNil(momentsFeedEndpoint(appConfiguration: missingHost))
+        XCTAssertEqual(momentsFeedEndpoint(appConfiguration: missingHost)?.baseURL, momentsProductionFeedBaseURL)
+        XCTAssertTrue(isMomentsFeedEnabled(appConfiguration: missingHost))
 
         let enabled = AppConfiguration(data: JSON(dictionary: [
-            "tellomi_discover_feed_enabled": true,
+            "tellomi_discover_feed_enabled": false,
             "tellomi_discover_feed_base_url": "https://feed.example:8443/"
         ]), hash: 0)
         XCTAssertEqual(momentsFeedEndpoint(appConfiguration: enabled)?.baseURL, "https://feed.example:8443")
@@ -219,7 +221,48 @@ final class MomentsRulesTests: XCTestCase {
         let page = momentsFeedRefPage(data: raw)
         XCTAssertEqual(page?.ids, ["a", "b"])
         XCTAssertEqual(page?.cursor, "n")
-        XCTAssertEqual(momentsCapabilityTabs(#"{"tabs":["recommend","friends","following"]}"#.data(using: .utf8)!), ["recommend", "following"])
+        XCTAssertEqual(momentsCapabilityTabs(#"{"tabs":["recommend","friends","following"]}"#.data(using: .utf8)!), ["recommend", "friends", "following"])
+        let following = #"{"items":[{"id":"a","reason":"following"},{"id":"b","reason":"friend"},{"id":"c","reason":"repost"},{"id":"d","reason":"self"}],"cursor":"n"}"#.data(using: .utf8)!
+        XCTAssertEqual(momentsFeedRefPage(data: following, kind: .following)?.ids, ["a", "c", "d"])
+        let friends = #"{"items":[{"id":"a","reason":"following"},{"id":"b","reason":"friend"}],"cursor":"f"}"#.data(using: .utf8)!
+        XCTAssertEqual(momentsFeedRefPage(data: friends, kind: .friends)?.ids, ["b"])
+        XCTAssertEqual(momentsVisibleFeedTabs(configTabs: ["recommend", "following"]), ["recommend", "following", "friends", "nearby"])
+        XCTAssertEqual(momentsVisibleFeedTabs(configTabs: ["recommend", "following", "friends", "nearby"]), ["recommend", "following", "friends", "nearby"])
+    }
+
+    func testDisplayRenditions() {
+        let base = "https://media.tellomi.app/feed"
+        let imageJSON = #"{"type":"image","key":"orig.jpg","url":"https://cdn.example/orig.jpg","w":3000,"h":2000,"renditions":[{"key":"r1080.jpg","w":1080,"h":720},{"key":"r360.jpg","url":"https://cdn.example/r360.jpg","w":360,"h":240}]}"#
+        let image = momentsMedia(try! JSONSerialization.jsonObject(with: imageJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertEqual(image.remoteURL, "https://cdn.example/orig.jpg")
+        XCTAssertEqual(momentsFeedImageURL(image, targetPixels: momentsSingleImagePixels), "\(base)/r1080.jpg")
+        XCTAssertEqual(momentsFeedImageURL(image, targetPixels: momentsCarouselImagePixels), "https://cdn.example/r360.jpg")
+        XCTAssertEqual(momentsFeedImageTargetPixels(slideCount: 1), 1080)
+        XCTAssertEqual(momentsFeedImageTargetPixels(slideCount: 3), 360)
+
+        let onlySmallJSON = #"{"type":"image","key":"orig.jpg","w":2000,"h":2000,"renditions":[{"key":"r360.jpg","w":360,"h":360}]}"#
+        let onlySmall = momentsMedia(try! JSONSerialization.jsonObject(with: onlySmallJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertEqual(momentsFeedImageURL(onlySmall, targetPixels: 1080), "\(base)/orig.jpg")
+        XCTAssertEqual(momentsFeedImageURL(onlySmall, targetPixels: 360), "\(base)/r360.jpg")
+
+        let plainJSON = #"{"type":"image","key":"orig.jpg","url":"https://cdn.example/orig.jpg"}"#
+        let plain = momentsMedia(try! JSONSerialization.jsonObject(with: plainJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertEqual(momentsFeedImageURL(plain, targetPixels: 1080), "https://cdn.example/orig.jpg")
+
+        let posterJSON = #"{"type":"video","key":"v.mp4","url":"https://cdn.example/v.mp4","cover_key":"cover.jpg","poster":{"key":"poster.jpg","w":1080,"h":720}}"#
+        let video = momentsMedia(try! JSONSerialization.jsonObject(with: posterJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertEqual(video.remoteURL, "https://cdn.example/v.mp4")
+        XCTAssertEqual(momentsVideoPosterURL(video), "\(base)/poster.jpg")
+        XCTAssertNil(momentsFeedImageURL(video, targetPixels: 1080))
+
+        let coverJSON = #"{"type":"video","key":"v.mp4","cover_key":"cover.jpg"}"#
+        let cover = momentsMedia(try! JSONSerialization.jsonObject(with: coverJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertEqual(momentsVideoPosterURL(cover), "\(base)/cover.jpg")
+        XCTAssertEqual(cover.remoteURL, "\(base)/v.mp4")
+
+        let bareJSON = #"{"type":"video","key":"v.mp4","url":"https://cdn.example/v.mp4"}"#
+        let bare = momentsMedia(try! JSONSerialization.jsonObject(with: bareJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertNil(momentsVideoPosterURL(bare))
     }
 
     func testProdCardsUnwrapAndLastPageDoesNotDuplicate() {
@@ -257,6 +300,48 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(replaced.deletes, [0])
         XCTAssertEqual(replaced.inserts, [0, 1])
         XCTAssertTrue(replaced.deletes.allSatisfy { $0 < 1 })
+        let appended = momentsListEdit(previousIds: ["p1", "p2"], nextIds: ["p1", "p2", "p3"])
+        XCTAssertTrue(appended.deletes.isEmpty)
+        XCTAssertEqual(appended.inserts, [2])
+        let firstPage = momentsListEdit(previousIds: [], nextIds: ["p1", "p2", "p3"])
+        XCTAssertTrue(firstPage.deletes.isEmpty)
+        XCTAssertEqual(firstPage.inserts, [0, 1, 2])
+        var count = 0
+        for index in firstPage.inserts {
+            XCTAssertLessThanOrEqual(index, count)
+            count += 1
+        }
+        let switched = momentsListEdit(previousIds: ["a", "b", "c"], nextIds: ["a", "d", "c"])
+        XCTAssertEqual(switched.deletes, [1])
+        XCTAssertEqual(switched.inserts, [1])
+        XCTAssertEqual(momentsChangedRowIndexes(previous: ["a:0", "b:0", "c:0"], next: ["a:0", "b:1", "c:0"]), [1])
+        XCTAssertTrue(momentsChangedRowIndexes(previous: ["a:0", "b:0"], next: ["a:0", "b:0"]).isEmpty)
+    }
+
+    func testDouyinCommentThreadContract() {
+        let raw = #"{"comments":[{"id":"c1","state":"published","is_author":true,"reply_count":2,"card":{"kind":"comment","text":"hello","root_id":"p1","author":{"id":"a1","display_name":"Ada","handle":"ada","avatar_key":"av"},"ip_region_label":"陕西","media":[{"type":"image","key":"pic","w":64,"h":64}]},"stats":{"likes":3,"comments":2,"reposts":0},"me":{"liked":true,"disliked":false,"author":false}}],"total":12}"#.data(using: .utf8)!
+        let page = momentsCommentPage(data: raw, mediaBaseURL: "https://media.tellomi.app/feed")
+        XCTAssertEqual(page.total, 12)
+        XCTAssertEqual(page.comments.count, 1)
+        let comment = page.comments[0]
+        XCTAssertEqual(comment.text, "hello")
+        XCTAssertTrue(comment.isAuthor)
+        XCTAssertEqual(comment.ipRegionLabel, "陕西")
+        XCTAssertEqual(comment.likeCount, 3)
+        XCTAssertTrue(comment.liked)
+        XCTAssertFalse(comment.disliked)
+        XCTAssertEqual(comment.replyCount, 2)
+        XCTAssertEqual(comment.author?.displayName, "Ada")
+        XCTAssertEqual(comment.author?.avatarKey, "https://media.tellomi.app/feed/av")
+        XCTAssertEqual(comment.attachment?.type, .image)
+        XCTAssertEqual(comment.attachment?.remoteURL, "https://media.tellomi.app/feed/pic")
+
+        let replies = #"{"replies":[{"id":"r1","reply_count":0,"card":{"text":"back","parent_id":"c1","reply_to":{"id":"a1","display_name":"Ada","handle":"ada"},"author":{"id":"a2","display_name":"Bo"}}}],"total":2,"cursor":"n1"}"#.data(using: .utf8)!
+        let replyPage = momentsReplyPage(data: replies, rootId: "c1", mediaBaseURL: nil)
+        XCTAssertEqual(replyPage.total, 2)
+        XCTAssertEqual(replyPage.cursor, "n1")
+        XCTAssertEqual(replyPage.replies.first?.text, "back")
+        XCTAssertEqual(replyPage.replies.first?.replyToName, "Ada")
     }
 
     func testDraftCapKeepsNewest() {

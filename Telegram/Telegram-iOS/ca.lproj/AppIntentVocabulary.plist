@@ -9,7 +9,7 @@
 			<string>INSendMessageIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Send a Telegram message to Alex saying I&apos;ll be there in 10 minutes</string>
+				<string>Envia un missatge de Tellomi a l&apos;Alex dient que arribaré d&apos;aquí a 10 minuts</string>
 			</array>
 		</dict>
 		<dict>
@@ -17,7 +17,7 @@
 			<string>INStartAudioCallIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Truca a l&apos;Alícia per Telegram</string>
+				<string>Truca a l&apos;Alícia per Tellomi</string>
 			</array>
 		</dict>
 		<dict>
@@ -25,7 +25,7 @@
 			<string>INSearchForMessagesIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Llegeix els meus missatges no llegits a Telegram</string>
+				<string>Llegeix els meus missatges no llegits a Tellomi</string>
 			</array>
 		</dict>
 		<dict>
@@ -33,7 +33,7 @@
 			<string>INSetMessageAttributeIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Marca els meus missatges de Telegram com a llegits</string>
+				<string>Marca els meus missatges de Tellomi com a llegits</string>
 			</array>
 		</dict>
 		<dict>
@@ -41,7 +41,7 @@
 			<string>INSearchCallHistoryIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Mostra les meves trucades perdudes a Telegram</string>
+				<string>Mostra les meves trucades perdudes a Tellomi</string>
 			</array>
 		</dict>
 	</array>

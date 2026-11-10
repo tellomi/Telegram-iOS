@@ -1,6 +1,6 @@
 /* Localized versions of Info.plist keys */
 
-"NSContactsUsageDescription" = "Telegram subirá continuamente tus contactos a sus servidores fuertemente cifrados, para permitirte interactuar con tus amigos en todos tus dispositivos.";
+"NSContactsUsageDescription" = "Tellomi subirá continuamente tus contactos a sus servidores fuertemente cifrados, para permitirte interactuar con tus amigos en todos tus dispositivos.";
 "NSLocationWhenInUseUsageDescription" = "Cuando envías tu ubicación a tus amigos, Tellomi necesita acceso para mostrarles un mapa.";
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "Cuando eliges compartir tu ubicación en tiempo real con amigos en un chat, Tellomi necesita acceso en segundo plano a tu ubicación para mantenerla actualizada mientras la función esté en uso.";
 "NSLocationAlwaysUsageDescription" = "Cuando envías tu ubicación a tus amigos, Tellomi necesita acceso para mostrarles un mapa. También es requerido para enviar ubicaciones desde un Apple Watch.";

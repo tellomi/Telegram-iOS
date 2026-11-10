@@ -138,7 +138,7 @@ func momentsCapabilityTabs(_ data: Data) -> [String] {
     if raw.isEmpty, let config = momentsObject(json["config"]) {
         raw = momentsStringList(config["tabs"])
     }
-    return raw.filter { $0 != "friends" && !$0.isEmpty }
+    return raw.filter { !$0.isEmpty }
 }
 
 public struct MomentsFeedEndpoint: Equatable {
@@ -149,28 +149,21 @@ public struct MomentsFeedEndpoint: Equatable {
     }
 }
 
-/// The feed is on only when app config has both keys. Anything else stays off. No default host.
+/// Production content-engine. A valid `tellomi_discover_feed_base_url` overrides it.
+/// `tellomi_discover_feed_enabled` is ignored: the tab is always built in.
+public let momentsProductionFeedBaseURL = "https://feed.tellomi.cn"
+
+/// The host is the app-config URL when that value is an https origin, otherwise production.
+/// The tab is not gated on this. An unreachable engine is an in-feed error.
 public func momentsFeedEndpoint(appConfiguration: AppConfiguration) -> MomentsFeedEndpoint? {
-    guard let data = appConfiguration.data else {
-        return nil
+    if let data = appConfiguration.data, let raw = data["tellomi_discover_feed_base_url"] as? String, let baseURL = momentsFeedBaseURL(raw) {
+        return MomentsFeedEndpoint(baseURL: baseURL)
     }
-    guard data["tellomi_discover_feed_enabled"] as? Bool == true else {
-        return nil
-    }
-    guard let raw = data["tellomi_discover_feed_base_url"] as? String else {
-        return nil
-    }
-    guard let baseURL = momentsFeedBaseURL(raw) else {
-        return nil
-    }
-    return MomentsFeedEndpoint(baseURL: baseURL)
+    return MomentsFeedEndpoint(baseURL: momentsProductionFeedBaseURL)
 }
 
-public func isMomentsFeedEnabled(appConfiguration: AppConfiguration) -> Bool {
-    guard MomentsLimits.standard.tabEnabled else {
-        return false
-    }
-    return momentsFeedEndpoint(appConfiguration: appConfiguration) != nil
+public func isMomentsFeedEnabled(appConfiguration _: AppConfiguration) -> Bool {
+    return MomentsLimits.standard.tabEnabled
 }
 
 /// `https://host` or `https://host:port`. No user, path, query, or fragment. `region` is not accepted.
@@ -225,6 +218,32 @@ public func momentsMediaURL(base: String?, key: String?) -> String? {
     let root = chosen.hasSuffix("/") ? String(chosen.dropLast()) : chosen
     let suffix = key.hasPrefix("/") ? String(key.dropFirst()) : key
     return root + "/" + suffix
+}
+
+/// `url` wins when it is already https. Otherwise `key` (or a relative `url`) is joined onto `media_base_url`.
+public func momentsResolvedMediaURL(base: String?, key: String?, url: String?) -> String? {
+    if let url, url.hasPrefix("https://") {
+        return url
+    }
+    if let url, !url.isEmpty, !url.hasPrefix("http://") {
+        return momentsMediaURL(base: base, key: url)
+    }
+    return momentsMediaURL(base: base, key: key)
+}
+
+public let momentsCarouselImagePixels = 360
+public let momentsSingleImagePixels = 1080
+
+public func momentsFeedImageTargetPixels(slideCount: Int) -> Int {
+    return slideCount > 1 ? momentsCarouselImagePixels : momentsSingleImagePixels
+}
+
+public let momentsStandardFeedTabs = ["recommend", "following", "friends", "nearby"]
+
+/// The four home tabs stay, in this order, even when config or capabilities omit `friends`.
+public func momentsVisibleFeedTabs(configTabs: [String]) -> [String] {
+    let extras = configTabs.filter { !momentsStandardFeedTabs.contains($0) && !$0.isEmpty }
+    return momentsStandardFeedTabs + extras
 }
 
 /// Image versus video comes from the card's `type`, never from the HTTP content-type.

@@ -6,6 +6,7 @@ import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
 import AccountContext
+import AvatarNode
 import TelegramUniversalVideoContent
 
 public struct MomentsPostHandlers {
@@ -24,8 +25,9 @@ public struct MomentsPostHandlers {
     public var link: (String) -> Void
     public var likers: (MomentsCard) -> Void
     public var voters: (MomentsCard) -> Void
+    public var openMedia: (MomentsCard, Int) -> Void
 
-    public init(open: @escaping (MomentsCard) -> Void, author: @escaping (MomentsCard) -> Void, like: @escaping (MomentsCard) -> Void, comment: @escaping (MomentsCard) -> Void, repost: @escaping (MomentsCard) -> Void, share: @escaping (MomentsCard) -> Void, save: @escaping (MomentsCard) -> Void, more: @escaping (MomentsCard, UIView) -> Void, follow: @escaping (MomentsCard) -> Void, undo: @escaping (String) -> Void, fullText: @escaping (MomentsCard) -> Void, topic: @escaping (String) -> Void, link: @escaping (String) -> Void, likers: @escaping (MomentsCard) -> Void = { _ in }, voters: @escaping (MomentsCard) -> Void = { _ in }) {
+    public init(open: @escaping (MomentsCard) -> Void, author: @escaping (MomentsCard) -> Void, like: @escaping (MomentsCard) -> Void, comment: @escaping (MomentsCard) -> Void, repost: @escaping (MomentsCard) -> Void, share: @escaping (MomentsCard) -> Void, save: @escaping (MomentsCard) -> Void, more: @escaping (MomentsCard, UIView) -> Void, follow: @escaping (MomentsCard) -> Void, undo: @escaping (String) -> Void, fullText: @escaping (MomentsCard) -> Void, topic: @escaping (String) -> Void, link: @escaping (String) -> Void, likers: @escaping (MomentsCard) -> Void = { _ in }, voters: @escaping (MomentsCard) -> Void = { _ in }, openMedia: @escaping (MomentsCard, Int) -> Void = { _, _ in }) {
         self.open = open
         self.author = author
         self.like = like
@@ -41,6 +43,7 @@ public struct MomentsPostHandlers {
         self.link = link
         self.likers = likers
         self.voters = voters
+        self.openMedia = openMedia
     }
 }
 
@@ -104,7 +107,29 @@ final class MomentsPostItem: ListViewItem {
 }
 
 private let momentsAvatar: CGFloat = 40.0
+private let momentsColumn: CGFloat = 48.0
 private let momentsInset: CGFloat = 12.0
+private let momentsLikeColor = UIColor(rgb: 0xFF2E38)
+
+private func momentsSlideHeight(card: MomentsCard, columnWidth: CGFloat) -> CGFloat {
+    let slides = card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
+    guard let first = slides.first else {
+        return 0
+    }
+    if slides.count > 1 {
+        return floor(columnWidth * 0.78)
+    }
+    if momentsPresentsAsVideo(first.type) {
+        return max(180, columnWidth * 9 / 16)
+    }
+    let ratio: CGFloat
+    if first.width > 0, first.height > 0 {
+        ratio = CGFloat(first.height) / CGFloat(first.width)
+    } else {
+        return 180
+    }
+    return min(360, max(120, columnWidth * ratio))
+}
 
 final class MomentsPostItemNode: ListViewItemNode {
     private let avatar = UIImageView()
@@ -130,6 +155,12 @@ final class MomentsPostItemNode: ListViewItemNode {
     private var videoNode: UniversalVideoNode?
     private var videoURL: String?
     private let pollHost = UIView()
+    private let avatarSlot = MomentsRemoteImageSlot()
+    private let avatarNode = AvatarNode(font: avatarPlaceholderFont(size: 15))
+    private var avatarPeerId: EnginePeer.Id?
+    private var avatarPeerDisposable: Disposable?
+    private var mediaSlots: [MomentsRemoteImageSlot] = []
+    private var albumKey = ""
 
     init() {
         super.init(layerBacked: false)
@@ -150,16 +181,27 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.quote.clipsToBounds = true
         self.place.font = Font.regular(13)
         self.actions.axis = .horizontal
-        self.actions.distribution = .fillEqually
+        self.actions.alignment = .center
+        self.actions.distribution = .fill
+        self.actions.spacing = 14
         for button in [self.like, self.comment, self.repost, self.share, self.save] {
             button.titleLabel?.font = Font.regular(13)
+            button.setContentHuggingPriority(.required, for: .horizontal)
+            button.setContentCompressionResistancePriority(.required, for: .horizontal)
             self.actions.addArrangedSubview(button)
         }
+        let spacer = UIView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        self.actions.addArrangedSubview(spacer)
         self.album.isPagingEnabled = true
         self.album.showsHorizontalScrollIndicator = false
         self.album.layer.cornerRadius = 12
         self.album.clipsToBounds = true
         self.view.addSubview(self.avatar)
+        self.addSubnode(self.avatarNode)
+        let bodyTap = UITapGestureRecognizer(target: self, action: #selector(self.bodyPressed))
+        self.body.addGestureRecognizer(bodyTap)
+        self.body.isUserInteractionEnabled = true
         self.view.addSubview(self.name)
         self.view.addSubview(self.meta)
         self.view.addSubview(self.follow)
@@ -187,7 +229,10 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.name.isUserInteractionEnabled = true
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(self.likePressed))
         doubleTap.numberOfTapsRequired = 2
+        let mediaTap = UITapGestureRecognizer(target: self, action: #selector(self.mediaPressed))
+        mediaTap.require(toFail: doubleTap)
         self.album.addGestureRecognizer(doubleTap)
+        self.album.addGestureRecognizer(mediaTap)
     }
 
     func asyncLayout() -> (MomentsPostItem, ListViewItemLayoutParams) -> (ListViewItemNodeLayout, () -> Void) {
@@ -195,7 +240,7 @@ final class MomentsPostItemNode: ListViewItemNode {
             let width = params.width
             let contentWidth = min(width, MomentsLimits.standard.maxContentWidth)
             let side = floor((width - contentWidth) / 2.0)
-            let textWidth = contentWidth - momentsInset * 2.0 - momentsAvatar - 10.0
+            let textWidth = contentWidth - momentsInset * 2.0 - momentsColumn
             let font = Font.regular(item.fontSize)
             let text = item.card.isUnavailable ? momentsText(item.strings, .unavailable) : item.card.text
             let fullHeight = (text as NSString).boundingRect(with: CGSize(width: textWidth, height: 10000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font], context: nil).height
@@ -204,11 +249,13 @@ final class MomentsPostItemNode: ListViewItemNode {
             var height: CGFloat = 12 + 22 + 8
             if item.hidden {
                 height = 64
+            } else if item.card.isUnavailable {
+                height = 56
             } else {
                 height += bodyHeight + 8
                 if collapsed { height += 22 }
-                let slides = item.card.images.count + item.card.videos.count
-                if slides > 0 { height += slides > 1 ? 200 : 220 }
+                let slideHeight = momentsSlideHeight(card: item.card, columnWidth: textWidth)
+                if slideHeight > 0 { height += slideHeight + 8 }
                 if item.card.voice != nil { height += 36 }
                 if item.card.poll != nil { height += 28 + CGFloat(item.card.poll?.options.count ?? 0) * 28 }
                 if item.card.quote != nil { height += 64 }
@@ -235,7 +282,7 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.place.textColor = theme.list.itemSecondaryTextColor
         self.separator.backgroundColor = theme.list.itemPlainSeparatorColor
         self.body.font = Font.regular(item.fontSize)
-        let x = side + momentsInset + momentsAvatar + 10
+        let x = side + momentsInset + momentsColumn
         let width = textWidth
         if item.hidden {
             self.body.text = "\(momentsText(strings, .hidden)) · \(momentsText(strings, .undo))"
@@ -249,20 +296,15 @@ final class MomentsPostItemNode: ListViewItemNode {
         }
         self.setChrome(hidden: false)
         self.avatar.frame = CGRect(x: side + momentsInset, y: 10, width: momentsAvatar, height: momentsAvatar)
+        self.avatarNode.frame = self.avatar.frame
         self.avatarLetter.frame = self.avatar.bounds
         self.avatar.backgroundColor = theme.list.itemHighlightedBackgroundColor
         self.avatarLetter.textColor = theme.list.itemPrimaryTextColor
         let displayName = item.card.author?.displayName ?? ""
         self.avatarLetter.text = displayName.isEmpty ? "" : String(displayName.prefix(1))
-        if let avatarURL = item.card.author?.avatarKey, avatarURL.hasPrefix("https://") {
-            self.avatarLetter.isHidden = true
-            momentsLoadImage(avatarURL, into: self.avatar)
-        } else {
-            self.avatar.image = nil
-            self.avatarLetter.isHidden = displayName.isEmpty
-        }
+        self.bindAvatar(item, displayName: displayName, theme: theme)
         let secondary = theme.list.itemSecondaryTextColor
-        let likedColor = UIColor(rgb: 0xFF3B30)
+        let likedColor = momentsLikeColor
         for button in [self.like, self.comment, self.repost, self.share, self.save, self.more] {
             button.setTitleColor(secondary, for: .normal)
             button.tintColor = secondary
@@ -270,10 +312,16 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.follow.setTitleColor(.white, for: .normal)
         self.follow.backgroundColor = theme.list.itemAccentColor
         if item.card.isUnavailable {
-            self.name.text = momentsText(strings, .unavailable)
-            self.meta.text = ""
-            self.body.text = ""
-            self.follow.isHidden = true
+            self.setChrome(hidden: true)
+            self.body.isHidden = false
+            self.body.text = momentsText(strings, .unavailable)
+            self.body.frame = CGRect(x: side + momentsInset, y: 16, width: width + momentsColumn, height: 24)
+            self.separator.frame = CGRect(x: side + momentsInset, y: self.bounds.height - UIScreenPixel, width: width + momentsAvatar + 10, height: UIScreenPixel)
+            self.videoNode?.canAttachContent = false
+            self.videoNode?.removeFromSupernode()
+            self.videoNode = nil
+            self.videoURL = nil
+            return
         } else {
             self.name.text = item.card.author?.displayName ?? ""
             var meta = momentsRelativeTime(item.card.createdAt)
@@ -295,7 +343,7 @@ final class MomentsPostItemNode: ListViewItemNode {
         }
         let nameWidth = min((self.name.text as NSString?)?.size(withAttributes: [.font: self.name.font as Any]).width ?? 80, width * 0.55)
         self.name.frame = CGRect(x: x, y: 12, width: nameWidth, height: 20)
-        self.meta.frame = CGRect(x: x + nameWidth + 6, y: 14, width: width - nameWidth - 46, height: 18)
+        self.meta.frame = CGRect(x: x + nameWidth + 8, y: 14, width: max(0, width - nameWidth - 48), height: 18)
         self.more.frame = CGRect(x: x + width - 32, y: 6, width: 32, height: 32)
         self.follow.frame = CGRect(x: self.avatar.frame.maxX - 16, y: self.avatar.frame.maxY - 16, width: 16, height: 16)
         self.body.frame = CGRect(x: x, y: 36, width: width, height: bodyHeight)
@@ -303,12 +351,25 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.full.setTitle(momentsText(strings, .fullText), for: .normal)
         self.full.frame = CGRect(x: x, y: self.body.frame.maxY, width: 80, height: 20)
         var cursor = (collapsed ? self.full.frame.maxY : self.body.frame.maxY) + 8
-        self.layoutAlbum(item, x: x, y: cursor, width: width)
-        if item.card.images.isEmpty && item.card.videos.isEmpty {
+        let slides = item.card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
+        let imageTarget = momentsFeedImageTargetPixels(slideCount: slides.count)
+        let albumKey = slides.map { media -> String in
+            let display = momentsPresentsAsVideo(media.type) ? (momentsVideoPosterURL(media) ?? "") : (momentsFeedImageURL(media, targetPixels: imageTarget) ?? "")
+            return "\(display)|\(media.type.rawValue)"
+        }.joined(separator: ";") + ":\(Int(width))"
+        let slideHeight: CGFloat
+        if albumKey == self.albumKey, abs(self.album.frame.width - width) < 1 {
+            slideHeight = self.album.frame.height
+            self.album.frame.origin = CGPoint(x: x, y: cursor)
+        } else {
+            self.albumKey = albumKey
+            slideHeight = self.layoutAlbum(item, x: x, y: cursor, width: width)
+        }
+        if slideHeight <= 0 {
             self.album.isHidden = true
         } else {
             self.album.isHidden = false
-            cursor += 220
+            cursor += slideHeight + 8
         }
         self.layoutPoll(item, x: x, y: cursor, width: width)
         if item.card.poll != nil {
@@ -359,9 +420,9 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.share.accessibilityLabel = momentsText(strings, .share)
         self.save.accessibilityLabel = item.card.viewer.saved ? momentsText(strings, .saved) : momentsText(strings, .save)
         self.more.accessibilityLabel = momentsText(strings, .more)
-        let slides = item.card.images.count + item.card.videos.count
-        if slides > 0 {
-            self.album.accessibilityLabel = "\(min(self.albumIndex + 1, slides))/\(slides)"
+        let slideCount = item.card.images.count + item.card.videos.count
+        if slideCount > 0 {
+            self.album.accessibilityLabel = "\(min(self.albumIndex + 1, slideCount))/\(slideCount)"
         }
         self.separator.frame = CGRect(x: side + momentsInset, y: self.bounds.height - UIScreenPixel, width: width + momentsAvatar + 10, height: UIScreenPixel)
         let _ = item.playing
@@ -369,6 +430,7 @@ final class MomentsPostItemNode: ListViewItemNode {
 
     private func setChrome(hidden: Bool) {
         self.avatar.isHidden = hidden
+        self.avatarNode.isHidden = hidden
         self.name.isHidden = hidden
         self.meta.isHidden = hidden
         self.more.isHidden = hidden
@@ -381,16 +443,23 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.actions.isHidden = hidden
     }
 
-    private func layoutAlbum(_ item: MomentsPostItem, x: CGFloat, y: CGFloat, width: CGFloat) {
+    @discardableResult
+    private func layoutAlbum(_ item: MomentsPostItem, x: CGFloat, y: CGFloat, width: CGFloat) -> CGFloat {
         let slides = item.card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
-        let slideWidth = slides.count > 1 ? floor(width * 0.78) : width
-        self.album.frame = CGRect(x: x, y: y, width: width, height: slides.isEmpty ? 0 : (slides.count > 1 ? 188 : 212))
-        self.album.contentSize = CGSize(width: slideWidth * CGFloat(max(slides.count, 1)) + (slides.count > 1 ? 8 : 0), height: self.album.frame.height)
+        let albumHeight = momentsSlideHeight(card: item.card, columnWidth: width)
+        let gap: CGFloat = slides.count > 1 ? 8 : 0
+        let cellWidth = slides.count > 1 ? floor(width * 0.78) : width
+        self.album.frame = CGRect(x: x, y: y, width: width, height: albumHeight)
+        let contentWidth = cellWidth * CGFloat(max(slides.count, 1)) + gap * CGFloat(max(slides.count - 1, 0))
+        self.album.contentSize = CGSize(width: contentWidth, height: albumHeight)
         self.album.subviews.forEach { $0.removeFromSuperview() }
+        for slot in self.mediaSlots {
+            slot.cancel()
+        }
+        self.mediaSlots.removeAll()
         var playingURL: String?
-        let albumHeight = self.album.frame.height
         for (index, media) in slides.enumerated() {
-            let frame = CGRect(x: slideWidth * CGFloat(index), y: 0, width: slideWidth - (slides.count > 1 ? 8 : 0), height: albumHeight)
+            let frame = CGRect(x: (cellWidth + gap) * CGFloat(index), y: 0, width: cellWidth, height: albumHeight)
             let label = UILabel(frame: frame)
             label.layer.cornerRadius = 12
             label.clipsToBounds = true
@@ -399,13 +468,27 @@ final class MomentsPostItemNode: ListViewItemNode {
             label.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
             if momentsPresentsAsVideo(media.type) {
                 let seconds = media.durationMs / 1000
+                if let cover = momentsVideoPosterURL(media), let context = item.context {
+                    let imageView = UIImageView(frame: frame)
+                    imageView.layer.cornerRadius = 12
+                    imageView.contentMode = .scaleAspectFill
+                    imageView.clipsToBounds = true
+                    imageView.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
+                    self.album.addSubview(imageView)
+                    let slot = MomentsRemoteImageSlot()
+                    slot.bind(url: cover, imageView: imageView, context: context, maxSide: max(cellWidth, albumHeight))
+                    self.mediaSlots.append(slot)
+                }
+                label.frame = CGRect(x: frame.minX + 8, y: frame.maxY - 28, width: 48, height: 20)
+                label.layer.cornerRadius = 8
                 label.text = "\(seconds)s"
                 label.accessibilityLabel = "\(seconds)s"
+                label.backgroundColor = UIColor.black.withAlphaComponent(0.45)
                 if item.playing && index == item.albumIndex {
                     playingURL = media.remoteURL
                 }
                 label.accessibilityIdentifier = media.type.rawValue
-            } else if let remoteURL = media.remoteURL {
+            } else if let remoteURL = momentsFeedImageURL(media, targetPixels: momentsFeedImageTargetPixels(slideCount: slides.count)) {
                 let imageView = UIImageView(frame: frame)
                 imageView.layer.cornerRadius = 12
                 imageView.contentMode = .scaleAspectFill
@@ -413,7 +496,11 @@ final class MomentsPostItemNode: ListViewItemNode {
                 imageView.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
                 imageView.accessibilityLabel = "\(index + 1)/\(slides.count)"
                 self.album.addSubview(imageView)
-                momentsLoadImage(remoteURL, into: imageView)
+                if let context = item.context {
+                    let slot = MomentsRemoteImageSlot()
+                    slot.bind(url: remoteURL, imageView: imageView, context: context, maxSide: max(cellWidth, albumHeight))
+                    self.mediaSlots.append(slot)
+                }
                 continue
             } else {
                 label.text = "\(index + 1)/\(slides.count)"
@@ -423,9 +510,10 @@ final class MomentsPostItemNode: ListViewItemNode {
         }
         let page = min(item.albumIndex, max(slides.count - 1, 0))
         self.albumIndex = page
-        self.album.setContentOffset(CGPoint(x: slideWidth * CGFloat(page), y: 0), animated: false)
+        self.album.setContentOffset(CGPoint(x: (cellWidth + gap) * CGFloat(page), y: 0), animated: false)
         let playingType = slides.indices.contains(page) ? slides[page].type : .video
-        self.attachVideo(url: playingURL, type: playingType, item: item, frame: CGRect(x: x + slideWidth * CGFloat(page), y: y, width: slideWidth - (slides.count > 1 ? 8 : 0), height: albumHeight))
+        self.attachVideo(url: playingURL, type: playingType, item: item, frame: CGRect(x: x + (cellWidth + gap) * CGFloat(page), y: y, width: cellWidth, height: albumHeight))
+        return albumHeight
     }
 
     private func layoutPoll(_ item: MomentsPostItem, x: CGFloat, y: CGFloat, width: CGFloat) {
@@ -489,6 +577,50 @@ final class MomentsPostItemNode: ListViewItemNode {
         return (item.card.id, self.albumIndex)
     }
 
+    private func bindAvatar(_ item: MomentsPostItem, displayName: String, theme: PresentationTheme) {
+        let peerId: EnginePeer.Id?
+        if let userId = item.card.author?.telegramUserId, userId != 0 {
+            peerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(userId))
+        } else {
+            peerId = nil
+        }
+        if peerId != self.avatarPeerId {
+            self.avatarPeerId = peerId
+            self.avatarPeerDisposable?.dispose()
+            self.avatarPeerDisposable = nil
+            if let peerId, let context = item.context {
+                self.avatarNode.isHidden = false
+                self.avatarLetter.isHidden = true
+                self.avatarPeerDisposable = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+                |> deliverOnMainQueue).start(next: { [weak self] peer in
+                    guard let self, self.avatarPeerId == peerId else { return }
+                    self.avatarNode.setPeer(context: context, theme: theme, peer: peer, displayDimensions: CGSize(width: momentsAvatar, height: momentsAvatar))
+                    if peer == nil {
+                        self.loadAvatarURL(item, displayName: displayName)
+                    }
+                })
+                return
+            }
+        }
+        if self.avatarPeerId == nil {
+            self.avatarNode.isHidden = true
+            self.loadAvatarURL(item, displayName: displayName)
+        }
+    }
+
+    private func loadAvatarURL(_ item: MomentsPostItem, displayName: String) {
+        if let context = item.context, let avatarURL = item.card.author?.avatarKey, avatarURL.hasPrefix("https://") {
+            self.avatarLetter.isHidden = true
+            self.avatarSlot.bind(url: avatarURL, imageView: self.avatar, context: context, maxSide: momentsAvatar)
+        } else {
+            self.avatarSlot.cancel()
+            self.avatar.image = nil
+            self.avatarLetter.isHidden = displayName.isEmpty
+        }
+    }
+
+    @objc private func bodyPressed() { if let item = self.item { item.handlers.open(item.card) } }
+    @objc private func mediaPressed() { if let item = self.item { item.handlers.openMedia(item.card, self.albumIndex) } }
     @objc private func likePressed() { if let item = self.item { item.handlers.like(item.card) } }
     @objc private func likersPressed(_ gesture: UILongPressGestureRecognizer) {
         guard gesture.state == .began, let item = self.item else { return }
@@ -514,17 +646,6 @@ final class MomentsPostItemNode: ListViewItemNode {
     func albumContains(_ point: CGPoint) -> Bool {
         return !self.album.isHidden && self.album.frame.contains(self.view.convert(point, from: nil))
     }
-}
-
-private func momentsLoadImage(_ urlString: String, into imageView: UIImageView) {
-    guard let url = URL(string: urlString) else { return }
-    let task = URLSession.shared.dataTask(with: url) { data, _, _ in
-        guard let data, let image = UIImage(data: data) else { return }
-        Queue.mainQueue().async {
-            imageView.image = image
-        }
-    }
-    task.resume()
 }
 
 private func momentsVideoNode(context: AccountContext, url: String, type: MomentsMediaType, size: CGSize) -> UniversalVideoNode {

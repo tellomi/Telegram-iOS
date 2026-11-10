@@ -156,7 +156,6 @@ final class AuthorizedApplicationContext {
     private var showNewsTab: Bool
     private var showNewsTabDisposable: Disposable?
     private var showMomentsTab: Bool
-    private var showMomentsTabDisposable: Disposable?
     private var enablePostboxTransactionsDiposable: Disposable?
     
     init(sharedApplicationContext: SharedApplicationContext, mainWindow: Window1, context: AccountContextImpl, accountManager: AccountManager<TelegramAccountManagerTypes>, showCallsTab: Bool, reinitializedNotificationSettings: @escaping () -> Void) {
@@ -172,7 +171,7 @@ final class AuthorizedApplicationContext {
         
         self.showCallsTab = showCallsTab
         self.showNewsTab = isNewsFeedEnabled(appConfiguration: context.currentAppConfiguration.with { $0 })
-        self.showMomentsTab = isMomentsFeedEnabled(appConfiguration: context.currentAppConfiguration.with { $0 })
+        self.showMomentsTab = true
         
         self.notificationController = NotificationContainerController(context: context)
         
@@ -838,32 +837,6 @@ final class AuthorizedApplicationContext {
             self.rootController.updateRootControllers(showCallsTab: self.showCallsTab, showNewsTab: value, showMomentsTab: self.showMomentsTab)
         })
 
-        self.showMomentsTabDisposable = (context.appConfiguration
-        |> map { appConfiguration -> Bool in
-            return isMomentsFeedEnabled(appConfiguration: appConfiguration)
-        }
-        |> distinctUntilChanged
-        |> mapToSignal { enabled -> Signal<Bool, NoError> in
-            if !enabled {
-                return .single(false)
-            }
-            return context.engine.moments.feedStatus()
-            |> map { status -> Bool in
-                return status.visible
-            }
-            |> `catch` { _ -> Signal<Bool, NoError> in
-                return .single(true)
-            }
-        }
-        |> distinctUntilChanged
-        |> deliverOnMainQueue).start(next: { [weak self] value in
-            guard let self, self.showMomentsTab != value else {
-                return
-            }
-            self.showMomentsTab = value
-            self.rootController.updateRootControllers(showCallsTab: self.showCallsTab, showNewsTab: self.showNewsTab, showMomentsTab: value)
-        })
-        
         self.rootController.setForceInCallStatusBar((self.context.sharedContext as! SharedAccountContextImpl).currentCallStatusBarNode)
         if let groupCallController = self.context.sharedContext.currentGroupCallController as? VoiceChatController {
             if let overlayController = groupCallController.currentOverlayController {
@@ -876,7 +849,6 @@ final class AuthorizedApplicationContext {
     deinit {
         self.context.account.postbox.clearCaches()
         self.showNewsTabDisposable?.dispose()
-        self.showMomentsTabDisposable?.dispose()
         self.context.account.shouldKeepOnlinePresence.set(.single(false))
         self.context.account.shouldBeServiceTaskMaster.set(.single(.never))
         self.loggedOutDisposable.dispose()

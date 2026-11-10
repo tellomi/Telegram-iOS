@@ -34,6 +34,7 @@ swift_library(
         "//submodules/TelegramUI/Components/MediaEditor",
         "//submodules/TelegramUI/Components/PeerReportScreen",
         "//submodules/DeviceLocationManager",
+        "//submodules/AvatarNode",
         "//submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode",
     ],
     visibility = ["//visibility:public"],

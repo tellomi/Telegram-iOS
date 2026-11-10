@@ -77,6 +77,20 @@ public func momentsStoryPrivacy(_ audience: MomentsAudience) -> EngineStoryPriva
     return EngineStoryPrivacy(base: base, additionallyIncludePeers: peers)
 }
 
+public struct MomentsRendition: Codable, Equatable {
+    public var key: String
+    public var url: String?
+    public var width: Int
+    public var height: Int
+
+    public init(key: String, url: String? = nil, width: Int = 0, height: Int = 0) {
+        self.key = key
+        self.url = url
+        self.width = width
+        self.height = height
+    }
+}
+
 public struct MomentsMedia: Codable, Equatable {
     public var type: MomentsMediaType
     public var key: String
@@ -87,8 +101,10 @@ public struct MomentsMedia: Codable, Equatable {
     public var isOriginal: Bool
     public var order: Int
     public var remoteURL: String?
+    public var renditions: [MomentsRendition]
+    public var poster: MomentsRendition?
 
-    public init(type: MomentsMediaType, key: String, width: Int = 0, height: Int = 0, durationMs: Int = 0, coverKey: String? = nil, isOriginal: Bool = false, order: Int = 0, remoteURL: String? = nil) {
+    public init(type: MomentsMediaType, key: String, width: Int = 0, height: Int = 0, durationMs: Int = 0, coverKey: String? = nil, isOriginal: Bool = false, order: Int = 0, remoteURL: String? = nil, renditions: [MomentsRendition] = [], poster: MomentsRendition? = nil) {
         self.type = type
         self.key = key
         self.width = width
@@ -98,6 +114,54 @@ public struct MomentsMedia: Codable, Equatable {
         self.isOriginal = isOriginal
         self.order = order
         self.remoteURL = remoteURL
+        self.renditions = renditions
+        self.poster = poster
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case key
+        case width
+        case height
+        case durationMs
+        case coverKey
+        case isOriginal
+        case order
+        case remoteURL
+        case renditions
+        case poster
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.type = try container.decode(MomentsMediaType.self, forKey: .type)
+        self.key = try container.decode(String.self, forKey: .key)
+        self.width = try container.decodeIfPresent(Int.self, forKey: .width) ?? 0
+        self.height = try container.decodeIfPresent(Int.self, forKey: .height) ?? 0
+        self.durationMs = try container.decodeIfPresent(Int.self, forKey: .durationMs) ?? 0
+        self.coverKey = try container.decodeIfPresent(String.self, forKey: .coverKey)
+        self.isOriginal = try container.decodeIfPresent(Bool.self, forKey: .isOriginal) ?? false
+        self.order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0
+        self.remoteURL = try container.decodeIfPresent(String.self, forKey: .remoteURL)
+        self.renditions = try container.decodeIfPresent([MomentsRendition].self, forKey: .renditions) ?? []
+        self.poster = try container.decodeIfPresent(MomentsRendition.self, forKey: .poster)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.type, forKey: .type)
+        try container.encode(self.key, forKey: .key)
+        try container.encode(self.width, forKey: .width)
+        try container.encode(self.height, forKey: .height)
+        try container.encode(self.durationMs, forKey: .durationMs)
+        try container.encodeIfPresent(self.coverKey, forKey: .coverKey)
+        try container.encode(self.isOriginal, forKey: .isOriginal)
+        try container.encode(self.order, forKey: .order)
+        try container.encodeIfPresent(self.remoteURL, forKey: .remoteURL)
+        if !self.renditions.isEmpty {
+            try container.encode(self.renditions, forKey: .renditions)
+        }
+        try container.encodeIfPresent(self.poster, forKey: .poster)
     }
 }
 
@@ -429,7 +493,11 @@ public struct MomentsReply: Codable, Equatable {
     public var likeCount: Int
     public var liked: Bool
 
-    public init(id: String, postId: String, rootId: String, replyToName: String? = nil, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false) {
+    public var isAuthor: Bool
+    public var ipRegionLabel: String?
+    public var disliked: Bool
+
+    public init(id: String, postId: String, rootId: String, replyToName: String? = nil, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false, isAuthor: Bool = false, ipRegionLabel: String? = nil, disliked: Bool = false) {
         self.id = id
         self.postId = postId
         self.rootId = rootId
@@ -440,6 +508,9 @@ public struct MomentsReply: Codable, Equatable {
         self.createdAt = createdAt
         self.likeCount = likeCount
         self.liked = liked
+        self.isAuthor = isAuthor
+        self.ipRegionLabel = ipRegionLabel
+        self.disliked = disliked
     }
 }
 
@@ -454,8 +525,11 @@ public struct MomentsComment: Codable, Equatable {
     public var liked: Bool
     public var replies: [MomentsReply]
     public var replyCount: Int
+    public var isAuthor: Bool
+    public var ipRegionLabel: String?
+    public var disliked: Bool
 
-    public init(id: String, postId: String, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false, replies: [MomentsReply] = [], replyCount: Int = 0) {
+    public init(id: String, postId: String, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false, replies: [MomentsReply] = [], replyCount: Int = 0, isAuthor: Bool = false, ipRegionLabel: String? = nil, disliked: Bool = false) {
         self.id = id
         self.postId = postId
         self.author = author
@@ -466,6 +540,33 @@ public struct MomentsComment: Codable, Equatable {
         self.liked = liked
         self.replies = replies
         self.replyCount = replyCount
+        self.isAuthor = isAuthor
+        self.ipRegionLabel = ipRegionLabel
+        self.disliked = disliked
+    }
+}
+
+public struct MomentsCommentPage: Equatable {
+    public var comments: [MomentsComment]
+    public var total: Int
+    public var cursor: String?
+
+    public init(comments: [MomentsComment], total: Int, cursor: String?) {
+        self.comments = comments
+        self.total = total
+        self.cursor = cursor
+    }
+}
+
+public struct MomentsReplyPage: Equatable {
+    public var replies: [MomentsReply]
+    public var total: Int
+    public var cursor: String?
+
+    public init(replies: [MomentsReply], total: Int, cursor: String?) {
+        self.replies = replies
+        self.total = total
+        self.cursor = cursor
     }
 }
 

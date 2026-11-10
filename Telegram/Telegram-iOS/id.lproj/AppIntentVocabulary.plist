@@ -9,7 +9,7 @@
 			<string>INSendMessageIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Send a Telegram message to Alex saying I&apos;ll be there in 10 minutes</string>
+				<string>Kirim pesan Tellomi ke Alex bahwa saya akan tiba dalam 10 menit</string>
 			</array>
 		</dict>
 		<dict>
@@ -17,7 +17,7 @@
 			<string>INStartAudioCallIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Telepon Alice lewat Telegram</string>
+				<string>Telepon Alice lewat Tellomi</string>
 			</array>
 		</dict>
 		<dict>
@@ -25,7 +25,7 @@
 			<string>INSearchForMessagesIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Bacakan pesan saya yang belum dibaca di Telegram</string>
+				<string>Bacakan pesan saya yang belum dibaca di Tellomi</string>
 			</array>
 		</dict>
 		<dict>
@@ -33,7 +33,7 @@
 			<string>INSetMessageAttributeIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Tandai pesan saya di Telegram sebagai sudah dibaca</string>
+				<string>Tandai pesan saya di Tellomi sebagai sudah dibaca</string>
 			</array>
 		</dict>
 		<dict>
@@ -41,7 +41,7 @@
 			<string>INSearchCallHistoryIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Tampilkan panggilan tak terjawab saya di Telegram</string>
+				<string>Tampilkan panggilan tak terjawab saya di Tellomi</string>
 			</array>
 		</dict>
 	</array>

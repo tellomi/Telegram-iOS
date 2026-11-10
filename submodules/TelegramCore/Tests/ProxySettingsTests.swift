@@ -75,7 +75,7 @@ final class ProxySettingsTests: XCTestCase {
         let settings = try XCTUnwrap(parseWebProxySettingsLink("tg://webproxy?server=PROXY.EXAMPLE.COM&secret=\(secret)"))
         XCTAssertEqual(settings.host, "proxy.example.com")
         XCTAssertEqual(settings.port, 443)
-        XCTAssertEqual(webProxySettingsLink(settings), "https://t.me/webproxy?server=proxy.example.com&secret=\(secret)")
+        XCTAssertEqual(webProxySettingsLink(settings), "https://tell.cc/webproxy?server=proxy.example.com&secret=\(secret)")
         XCTAssertEqual(parseWebProxySettingsLink(try XCTUnwrap(webProxySettingsLink(settings))), settings)
 
         XCTAssertNil(parseWebProxySettingsLink("https://t.me/webproxy?server=proxy.example.com&server=other.example.com&secret=\(secret)"))
@@ -126,7 +126,7 @@ final class ProxySettingsTests: XCTestCase {
         XCTAssertEqual(parseWebProxySettingsLink("tg://webproxy?host=tproxy.remindbot.ai&secret=\(secret)"), viaHost)
 
         // Emitted links still use `server`, never `host`.
-        XCTAssertEqual(webProxySettingsLink(viaHost), "https://t.me/webproxy?server=tproxy.remindbot.ai&secret=\(secret)")
+        XCTAssertEqual(webProxySettingsLink(viaHost), "https://tell.cc/webproxy?server=tproxy.remindbot.ai&secret=\(secret)")
 
         // The alias must not loosen the one-address rule the other tests pin.
         XCTAssertNil(parseWebProxySettingsLink("https://t.me/webproxy?host=a.example.com&server=b.example.com&secret=\(secret)"))

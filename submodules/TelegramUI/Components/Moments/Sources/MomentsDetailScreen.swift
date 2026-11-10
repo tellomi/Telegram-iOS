@@ -73,8 +73,8 @@ public final class MomentsDetailScreen: ViewController {
     }
 
     private func reload() {
-        let _ = (self.context.engine.moments.comments(postId: self.card.id, sort: self.sort, cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] comments in
-            self?.comments = comments
+        let _ = (self.context.engine.moments.comments(postId: self.card.id, sort: self.sort, cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] page in
+            self?.comments = page.comments
             self?.render()
         })
     }
@@ -87,13 +87,13 @@ public final class MomentsDetailScreen: ViewController {
         }
         let strings = self.presentationData.strings
         let theme = self.presentationData.theme
-        var items: [ListViewItem] = [MomentsPostItem(card: self.card, strings: strings, theme: theme, fontSize: self.presentationData.listsFontSize.baseDisplaySize, showFollow: false, expanded: true, hidden: false, albumIndex: 0, playing: false, handlers: self.handlers())]
+        var items: [ListViewItem] = [MomentsPostItem(card: self.card, strings: strings, theme: theme, fontSize: self.presentationData.listsFontSize.baseDisplaySize, showFollow: false, expanded: true, hidden: false, albumIndex: 0, playing: false, context: self.context, handlers: self.handlers())]
         if !self.card.viewer.canComment {
             items.append(MomentsStatusItem(text: self.card.viewer.commentDeniedReason ?? momentsText(strings, .commentClosed), theme: theme, action: {}))
         }
-        for comment in self.comments {
+        for comment in self.comments where !comment.disliked {
             items.append(MomentsStatusItem(text: self.commentLine(comment), theme: theme, action: { [weak self] in self?.replyTo(comment) }))
-            for reply in comment.replies.prefix(2) {
+            for reply in comment.replies.prefix(2) where !reply.disliked {
                 let name = reply.author?.displayName ?? ""
                 let target = reply.replyToName.map { "@\($0) " } ?? ""
                 items.append(MomentsStatusItem(text: "\(name) \(target)\(reply.text)", theme: theme, action: {}))
@@ -168,13 +168,13 @@ public final class MomentsDetailScreen: ViewController {
     }
 
     private func expand(_ comment: MomentsComment) {
-        let _ = (self.context.engine.moments.replies(rootId: comment.id, cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] replies in
+        let _ = (self.context.engine.moments.replies(rootId: comment.id, cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] page in
             guard let self else { return }
             self.comments = self.comments.map { item in
                 guard item.id == comment.id else { return item }
                 var copy = item
-                copy.replies = replies
-                copy.replyCount = replies.count
+                copy.replies = page.replies.filter { !$0.disliked }
+                copy.replyCount = page.total > 0 ? page.total : copy.replies.count
                 return copy
             }
             self.render()

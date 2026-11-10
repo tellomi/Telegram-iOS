@@ -90,16 +90,20 @@ func momentsBool(_ json: [String: Any], _ keys: String...) -> Bool {
     return false
 }
 
-func momentsAuthor(_ json: [String: Any]?) -> MomentsAuthor? {
+func momentsAuthor(_ json: [String: Any]?, mediaBaseURL: String? = nil) -> MomentsAuthor? {
     guard let json, let id = momentsString(json, "id", "profile_id") else {
         return nil
     }
+    let avatarURL = momentsString(json, "avatar_url")
+    let avatarKey = momentsString(json, "avatar_key", "avatar")
+    let avatar = avatarURL ?? momentsMediaURL(base: mediaBaseURL, key: avatarKey) ?? avatarKey
+    let native = momentsObject(json["native"])
     return MomentsAuthor(
         id: id,
-        telegramUserId: momentsInt64(json, "telegram_user_id", "user_id"),
+        telegramUserId: momentsInt64(json, "telegram_user_id", "user_id") != 0 ? momentsInt64(json, "telegram_user_id", "user_id") : momentsInt64(native ?? [:], "user_id", "telegram_user_id"),
         displayName: momentsString(json, "display_name", "name") ?? "",
         username: momentsString(json, "username", "handle"),
-        avatarKey: momentsString(json, "avatar_key", "avatar"),
+        avatarKey: avatar,
         followed: momentsBool(json, "followed", "following"),
         followsViewer: momentsBool(json, "follows_viewer", "follows_me")
     )
@@ -114,6 +118,8 @@ func momentsMedia(_ json: [String: Any], mediaBaseURL: String? = nil) -> Moments
         return nil
     }
     let cover = momentsString(json, "cover_key", "cover")
+    let renditions = momentsArray(json["renditions"]).compactMap { momentsRendition($0, mediaBaseURL: mediaBaseURL) }
+    let poster = momentsObject(json["poster"]).flatMap { momentsRendition($0, mediaBaseURL: mediaBaseURL) }
     return MomentsMedia(
         type: type,
         key: key,
@@ -123,7 +129,23 @@ func momentsMedia(_ json: [String: Any], mediaBaseURL: String? = nil) -> Moments
         coverKey: momentsMediaURL(base: mediaBaseURL, key: cover) ?? cover,
         isOriginal: momentsBool(json, "is_original", "original"),
         order: momentsInt(json, "order"),
-        remoteURL: momentsMediaURL(base: mediaBaseURL, key: momentsString(json, "url") ?? key)
+        remoteURL: momentsResolvedMediaURL(base: mediaBaseURL, key: key, url: momentsString(json, "url")),
+        renditions: renditions,
+        poster: poster
+    )
+}
+
+func momentsRendition(_ json: [String: Any], mediaBaseURL: String?) -> MomentsRendition? {
+    let key = momentsString(json, "key") ?? ""
+    let rawURL = momentsString(json, "url")
+    guard !key.isEmpty || !(rawURL ?? "").isEmpty else {
+        return nil
+    }
+    return MomentsRendition(
+        key: key,
+        url: momentsResolvedMediaURL(base: mediaBaseURL, key: key.isEmpty ? nil : key, url: rawURL),
+        width: momentsInt(json, "w", "width"),
+        height: momentsInt(json, "h", "height")
     )
 }
 
@@ -250,12 +272,41 @@ public struct MomentsFeedRefPage: Equatable {
 }
 
 /// Feed lists are `{items:[{id,reason}],cursor}`. Full cards come from `POST /v1/feed/cards`.
-public func momentsFeedRefPage(data: Data) -> MomentsFeedRefPage? {
+public func momentsFollowingListReason(_ reason: String?) -> Bool {
+    switch reason {
+    case nil, "", "self", "following", "repost":
+        return true
+    default:
+        return false
+    }
+}
+
+public func momentsFriendsListReason(_ reason: String?) -> Bool {
+    switch reason {
+    case nil, "", "friend":
+        return true
+    default:
+        return false
+    }
+}
+
+public func momentsFeedRefPage(data: Data, kind: MomentsFeedKind? = nil) -> MomentsFeedRefPage? {
     guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         return nil
     }
     let ids = momentsArray(root["items"]).compactMap { item -> String? in
-        return momentsString(item, "id")
+        guard let id = momentsString(item, "id") else {
+            return nil
+        }
+        let reason = momentsString(item, "reason")
+        switch kind {
+        case .following:
+            return momentsFollowingListReason(reason) ? id : nil
+        case .friends:
+            return momentsFriendsListReason(reason) ? id : nil
+        default:
+            return id
+        }
     }
     return MomentsFeedRefPage(ids: ids, cursor: momentsString(root, "cursor", "next_cursor"))
 }
@@ -325,12 +376,36 @@ public func momentsMergeFeed(existing: [MomentsCard], pageItems: [MomentsCard], 
     return (items, nextCursor)
 }
 
-/// List rows the feed has already applied. Same ids update in place. A different list replaces every row.
+/// Indexes whose fingerprint changed while the row id stayed put. Other rows are not included.
+public func momentsChangedRowIndexes(previous: [String], next: [String]) -> [Int] {
+    var updates: [Int] = []
+    let count = min(previous.count, next.count)
+    for index in 0..<count where previous[index] != next[index] {
+        updates.append(index)
+    }
+    return updates
+}
+
+/// Rows already on the list. Unchanged ids stay put. Only the differing span is deleted and inserted,
+/// and the insert indexes are valid after those deletes (an empty list only inserts at 0, then 1, …).
 public func momentsListEdit(previousIds: [String], nextIds: [String]) -> (deletes: [Int], inserts: [Int], updates: [Int]) {
     if previousIds == nextIds {
         return ([], [], Array(nextIds.indices))
     }
-    return (Array(previousIds.indices), Array(nextIds.indices), [])
+    var start = 0
+    let prefixLimit = min(previousIds.count, nextIds.count)
+    while start < prefixLimit && previousIds[start] == nextIds[start] {
+        start += 1
+    }
+    var previousEnd = previousIds.count
+    var nextEnd = nextIds.count
+    while previousEnd > start && nextEnd > start && previousIds[previousEnd - 1] == nextIds[nextEnd - 1] {
+        previousEnd -= 1
+        nextEnd -= 1
+    }
+    let deletes = Array(start..<previousEnd)
+    let inserts = Array(start..<nextEnd)
+    return (deletes, inserts, [])
 }
 
 func momentsPage(data: Data, mediaBaseURL: String? = nil) -> MomentsPage? {

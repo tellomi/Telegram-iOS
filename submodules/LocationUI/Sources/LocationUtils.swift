@@ -41,47 +41,7 @@ extension CLLocationCoordinate2D {
 }
 
 public func nearbyVenues(context: AccountContext, story: Bool = false, latitude: Double, longitude: Double, query: String? = nil) -> Signal<ChatContextResultCollection?, NoError> {
-    let botUsername: Signal<String, NoError>
-    if story {
-        botUsername = context.engine.data.get(TelegramEngine.EngineData.Item.Configuration.App())
-        |> map { appConfiguration in
-            let storiesConfiguration = StoriesConfiguration.with(appConfiguration: appConfiguration)
-            return storiesConfiguration.venueSearchBot
-        }
-    } else {
-        botUsername = context.engine.data.get(TelegramEngine.EngineData.Item.Configuration.SearchBots())
-        |> map { searchBotsConfiguration -> String in
-            return searchBotsConfiguration.venueBotUsername ?? "foursquare"
-        }
-    }
-    return botUsername
-    |> mapToSignal { botUsername in
-        return context.engine.peers.resolvePeerByName(name: botUsername, referrer: nil)
-        |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
-            guard case let .result(result) = result else {
-                return .complete()
-            }
-            return .single(result)
-        }
-        |> mapToSignal { peer -> Signal<ChatContextResultCollection?, NoError> in
-            guard let peer = peer else {
-                return .single(nil)
-            }
-            return context.engine.messages.requestChatContextResults(botId: peer.id, peerId: context.account.peerId, query: query ?? "", location: .single((latitude, longitude)), offset: "")
-            |> map { results -> ChatContextResultCollection? in
-                return results?.results
-            }
-            |> `catch` { error -> Signal<ChatContextResultCollection?, NoError> in
-                return .single(nil)
-            }
-        }
-        |> map { contextResult -> ChatContextResultCollection? in
-            guard let contextResult else {
-                return nil
-            }
-            return contextResult
-        }
-    }
+    return appleMapNearbyVenueSignal(context: context, story: story, latitude: latitude, longitude: longitude, query: query)
 }
 
 func stringForEstimatedDuration(strings: PresentationStrings, time: Double, format: (String) -> String) -> String? {

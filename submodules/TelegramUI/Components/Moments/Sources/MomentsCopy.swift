@@ -28,6 +28,7 @@ public enum MomentsTextKey {
     case like
     case comment
     case repost
+    case repostPublicOnly
     case quote
     case share
     case save
@@ -160,6 +161,8 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
         (resolved, english, chinese) = (strings.Moments_Comment, "Comment", "评论")
     case .repost:
         (resolved, english, chinese) = (strings.Moments_Repost, "Repost", "转发")
+    case .repostPublicOnly:
+        (resolved, english, chinese) = (strings.Moments_RepostPublicOnly, "Only public posts can be reposted or quoted.", "只有公开的动态可以转发或引用。")
     case .quote:
         (resolved, english, chinese) = (strings.Moments_Quote, "Quote", "引用")
     case .share:
@@ -305,17 +308,31 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
     case .commentCount:
         (resolved, english, chinese) = (strings.Moments_CommentCount, "comments", "条评论")
     case .commentPrompt:
-        (resolved, english, chinese) = (strings.Moments_CommentPrompt, "Say something", "发条评论，说说你的感受")
+        (resolved, english, chinese) = (strings.Moments_CommentHint, "Say something", "发条评论，说说你的感受")
     case .authorTag:
-        (resolved, english, chinese) = (strings.Moments_AuthorTag, "Author", "作者")
+        (resolved, english, chinese) = (strings.Moments_Author, "Author", "作者")
     case .expandReplies:
         (resolved, english, chinese) = (strings.Moments_ExpandReplies, "replies", "条回复")
     }
+    return momentsChoose(strings, resolved, english, chinese)
+}
+
+private func momentsChoose(_ strings: PresentationStrings, _ resolved: String, _ english: String, _ chinese: String) -> String {
     let codes = [strings.primaryComponent.languageCode, strings.baseLanguageCode].map { $0.lowercased() }
     if codes.contains(where: { $0.hasPrefix("zh") }), resolved == english || resolved.isEmpty {
         return chinese
     }
     return resolved
+}
+
+public func momentsShowReplies(_ strings: PresentationStrings, _ count: Int) -> String {
+    let resolved = strings.Moments_ShowReplies(count).string
+    return momentsChoose(strings, resolved, String(format: "Show %d replies", count), String(format: "展开%d条回复", count))
+}
+
+public func momentsReplyTo(_ strings: PresentationStrings, _ name: String) -> String {
+    let resolved = strings.Moments_ReplyTo(name).string
+    return momentsChoose(strings, resolved, String(format: "Reply @%@", name), String(format: "回复 @%@", name))
 }
 
 public func momentsReportReasonCode(_ reason: ReportReason) -> String {

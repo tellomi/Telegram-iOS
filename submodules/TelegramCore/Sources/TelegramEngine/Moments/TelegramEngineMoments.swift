@@ -238,7 +238,7 @@ public extension TelegramEngine {
                 return self.call(method: "GET", path: "/v1/feed/\(kind.rawValue)", query: query)
             }
             |> mapToSignal { data in
-                return self.hydrateFeedPage(data)
+                return self.hydrateFeedPage(data, kind: kind)
             }
         }
 
@@ -255,24 +255,14 @@ public extension TelegramEngine {
             }
         }
 
-        /// Tab ids from `GET /v1/capabilities`, then `GET /v1/feed/config`. `friends` is not an endpoint.
+        /// Home tabs. `GET /v1/capabilities` is not consulted; `friends_feed` cannot hide 好友.
         public func feedTabs() -> Signal<[String], MomentsAPIError> {
-            let fromConfig = self.remoteConfig()
+            return self.remoteConfig()
             |> map { config -> [String] in
-                return config.tabs.filter { $0 != "friends" && !$0.isEmpty }
-            }
-            return self.call(method: "GET", path: "/v1/capabilities")
-            |> map { data -> [String] in
-                return momentsCapabilityTabs(data)
-            }
-            |> mapToSignal { tabs -> Signal<[String], MomentsAPIError> in
-                if tabs.isEmpty {
-                    return fromConfig
-                }
-                return .single(tabs)
+                return momentsVisibleFeedTabs(configTabs: config.tabs)
             }
             |> `catch` { _ -> Signal<[String], MomentsAPIError> in
-                return fromConfig
+                return .single(momentsStandardFeedTabs)
             }
         }
 
@@ -321,8 +311,11 @@ public extension TelegramEngine {
             return self.call(method: "POST", path: "/v1/feed/reports", body: body) |> ignoreValues
         }
 
-        public func comments(postId: String, sort: String, cursor: String?) -> Signal<[MomentsComment], MomentsAPIError> {
+        public func comments(postId: String, sort: String, cursor: String?, thread: Bool = true) -> Signal<MomentsCommentPage, MomentsAPIError> {
             var query = ["sort": sort]
+            if thread {
+                query["thread"] = "1"
+            }
             if let cursor {
                 query["cursor"] = cursor
             }
@@ -331,15 +324,11 @@ public extension TelegramEngine {
                 return self.call(method: "GET", path: "/v1/feed/posts/\(postId)/comments", query: query)
             }
             |> map { data in
-                guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    return []
-                }
-                let mediaBaseURL = self.mediaBaseURL.with { $0 }
-                return momentsArray(root["items"] ?? root["comments"]).compactMap { momentsComment($0, mediaBaseURL: mediaBaseURL) }
+                return momentsCommentPage(data: data, mediaBaseURL: self.mediaBaseURL.with { $0 })
             }
         }
 
-        public func replies(rootId: String, cursor: String?) -> Signal<[MomentsReply], MomentsAPIError> {
+        public func replies(rootId: String, cursor: String?) -> Signal<MomentsReplyPage, MomentsAPIError> {
             var query: [String: String] = [:]
             if let cursor {
                 query["cursor"] = cursor
@@ -349,11 +338,7 @@ public extension TelegramEngine {
                 return self.call(method: "GET", path: "/v1/feed/comments/\(rootId)/replies", query: query)
             }
             |> map { data in
-                guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    return []
-                }
-                let mediaBaseURL = self.mediaBaseURL.with { $0 }
-                return momentsArray(root["items"] ?? root["replies"]).compactMap { momentsReply($0, rootId: rootId, mediaBaseURL: mediaBaseURL) }
+                return momentsReplyPage(data: data, rootId: rootId, mediaBaseURL: self.mediaBaseURL.with { $0 })
             }
         }
 
@@ -362,10 +347,21 @@ public extension TelegramEngine {
             if let parentId {
                 body["parent_id"] = parentId
             }
-            if let attachment {
-                body["attachment"] = attachment
+            if let attachment, let key = momentsString(attachment, "key"), !key.isEmpty {
+                body["media_keys"] = [key]
+                if momentsString(attachment, "type") == "sticker" || momentsBool(attachment, "sticker") {
+                    body["sticker"] = true
+                }
             }
             return self.call(method: "POST", path: "/v1/feed/posts/\(postId)/comments", body: body) |> ignoreValues
+        }
+
+        public func setCommentLiked(id: String, liked: Bool) -> Signal<Never, MomentsAPIError> {
+            return self.call(method: liked ? "PUT" : "DELETE", path: "/v1/feed/comments/\(id)/like") |> ignoreValues
+        }
+
+        public func setCommentDisliked(id: String, disliked: Bool) -> Signal<Never, MomentsAPIError> {
+            return self.call(method: disliked ? "PUT" : "DELETE", path: "/v1/feed/comments/\(id)/dislike") |> ignoreValues
         }
 
         public func deleteComment(id: String) -> Signal<Never, MomentsAPIError> {
@@ -658,8 +654,8 @@ public extension TelegramEngine {
             }
         }
 
-        private func hydrateFeedPage(_ data: Data) -> Signal<MomentsPage, MomentsAPIError> {
-            let refs = momentsFeedRefPage(data: data) ?? MomentsFeedRefPage(ids: [], cursor: nil)
+        private func hydrateFeedPage(_ data: Data, kind: MomentsFeedKind? = nil) -> Signal<MomentsPage, MomentsAPIError> {
+            let refs = momentsFeedRefPage(data: data, kind: kind) ?? MomentsFeedRefPage(ids: [], cursor: nil)
             if refs.ids.isEmpty {
                 return .single(MomentsPage(items: [], nextCursor: refs.cursor))
             }
@@ -710,22 +706,34 @@ public struct MomentsTopicPage: Equatable {
     }
 }
 
+func momentsCommentCardBody(_ json: [String: Any]) -> [String: Any] {
+    return momentsObject(json["card"]) ?? json
+}
+
 func momentsComment(_ json: [String: Any], mediaBaseURL: String? = nil) -> MomentsComment? {
     guard let id = momentsString(json, "id") else {
         return nil
     }
+    let card = momentsCommentCardBody(json)
+    let stats = momentsObject(json["stats"]) ?? momentsObject(card["stats"]) ?? json
+    let me = momentsObject(json["me"]) ?? [:]
     let replies = momentsArray(json["replies"]).compactMap { momentsReply($0, rootId: id, mediaBaseURL: mediaBaseURL) }
+    let media = momentsArray(card["media"]).first ?? momentsObject(json["attachment"])
+    let created = momentsInt64(card, "created_at") != 0 ? momentsInt64(card, "created_at") : momentsInt64(json, "created_at")
     return MomentsComment(
         id: id,
-        postId: momentsString(json, "post_id") ?? "",
-        author: momentsAuthor(momentsObject(json["author"])),
-        text: momentsString(json, "text") ?? "",
-        attachment: momentsObject(json["attachment"]).flatMap { momentsMedia($0, mediaBaseURL: mediaBaseURL) },
-        createdAt: momentsInt64(json, "created_at"),
-        likeCount: momentsInt(json, "like_count"),
-        liked: momentsBool(json, "liked"),
+        postId: momentsString(card, "root_id", "post_id") ?? momentsString(json, "post_id") ?? "",
+        author: momentsAuthor(momentsObject(card["author"]) ?? momentsObject(json["author"]), mediaBaseURL: mediaBaseURL),
+        text: momentsString(card, "text") ?? momentsString(json, "text") ?? "",
+        attachment: media.flatMap { momentsMedia($0, mediaBaseURL: mediaBaseURL) },
+        createdAt: created,
+        likeCount: momentsInt(stats, "likes", "like_count"),
+        liked: momentsBool(me, "liked") || momentsBool(json, "liked"),
         replies: replies,
-        replyCount: max(momentsInt(json, "reply_count"), replies.count)
+        replyCount: max(momentsInt(json, "reply_count"), replies.count),
+        isAuthor: momentsBool(json, "is_author"),
+        ipRegionLabel: momentsString(card, "ip_region_label") ?? momentsString(json, "ip_region_label"),
+        disliked: momentsBool(me, "disliked")
     )
 }
 
@@ -733,18 +741,45 @@ func momentsReply(_ json: [String: Any], rootId: String, mediaBaseURL: String? =
     guard let id = momentsString(json, "id") else {
         return nil
     }
+    let card = momentsCommentCardBody(json)
+    let stats = momentsObject(json["stats"]) ?? json
+    let me = momentsObject(json["me"]) ?? [:]
+    let replyTo = momentsObject(card["reply_to"]) ?? momentsObject(json["reply_to"])
+    let media = momentsArray(card["media"]).first ?? momentsObject(json["attachment"])
+    let created = momentsInt64(card, "created_at") != 0 ? momentsInt64(card, "created_at") : momentsInt64(json, "created_at")
     return MomentsReply(
         id: id,
-        postId: momentsString(json, "post_id") ?? "",
-        rootId: momentsString(json, "root_id") ?? rootId,
-        replyToName: momentsString(json, "reply_to_name", "reply_to_user"),
-        author: momentsAuthor(momentsObject(json["author"])),
-        text: momentsString(json, "text") ?? "",
-        attachment: momentsObject(json["attachment"]).flatMap { momentsMedia($0, mediaBaseURL: mediaBaseURL) },
-        createdAt: momentsInt64(json, "created_at"),
-        likeCount: momentsInt(json, "like_count"),
-        liked: momentsBool(json, "liked")
+        postId: momentsString(card, "root_id", "post_id") ?? "",
+        rootId: momentsString(card, "root_id") ?? rootId,
+        replyToName: momentsString(replyTo ?? [:], "display_name", "handle") ?? momentsString(json, "reply_to_name", "reply_to_user"),
+        author: momentsAuthor(momentsObject(card["author"]) ?? momentsObject(json["author"]), mediaBaseURL: mediaBaseURL),
+        text: momentsString(card, "text") ?? momentsString(json, "text") ?? "",
+        attachment: media.flatMap { momentsMedia($0, mediaBaseURL: mediaBaseURL) },
+        createdAt: created,
+        likeCount: momentsInt(stats, "likes", "like_count"),
+        liked: momentsBool(me, "liked") || momentsBool(json, "liked"),
+        isAuthor: momentsBool(json, "is_author"),
+        ipRegionLabel: momentsString(card, "ip_region_label"),
+        disliked: momentsBool(me, "disliked")
     )
+}
+
+public func momentsCommentPage(data: Data, mediaBaseURL: String? = nil) -> MomentsCommentPage {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return MomentsCommentPage(comments: [], total: 0, cursor: nil)
+    }
+    let comments = momentsArray(root["comments"] ?? root["items"]).compactMap { momentsComment($0, mediaBaseURL: mediaBaseURL) }
+    let total = root["total"] == nil ? comments.count : momentsInt(root, "total")
+    return MomentsCommentPage(comments: comments, total: total, cursor: momentsString(root, "cursor", "next_cursor"))
+}
+
+public func momentsReplyPage(data: Data, rootId: String, mediaBaseURL: String? = nil) -> MomentsReplyPage {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return MomentsReplyPage(replies: [], total: 0, cursor: nil)
+    }
+    let replies = momentsArray(root["replies"] ?? root["items"]).compactMap { momentsReply($0, rootId: rootId, mediaBaseURL: mediaBaseURL) }
+    let total = root["total"] == nil ? replies.count : momentsInt(root, "total")
+    return MomentsReplyPage(replies: replies, total: total, cursor: momentsString(root, "cursor", "next_cursor"))
 }
 
 func momentsNotification(_ json: [String: Any]) -> MomentsNotification? {
