@@ -259,6 +259,20 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(replaced.deletes, [0])
         XCTAssertEqual(replaced.inserts, [0, 1])
         XCTAssertTrue(replaced.deletes.allSatisfy { $0 < 1 })
+        let appended = momentsListEdit(previousIds: ["p1", "p2"], nextIds: ["p1", "p2", "p3"])
+        XCTAssertTrue(appended.deletes.isEmpty)
+        XCTAssertEqual(appended.inserts, [2])
+        let firstPage = momentsListEdit(previousIds: [], nextIds: ["p1", "p2", "p3"])
+        XCTAssertTrue(firstPage.deletes.isEmpty)
+        XCTAssertEqual(firstPage.inserts, [0, 1, 2])
+        var count = 0
+        for index in firstPage.inserts {
+            XCTAssertLessThanOrEqual(index, count)
+            count += 1
+        }
+        let switched = momentsListEdit(previousIds: ["a", "b", "c"], nextIds: ["a", "d", "c"])
+        XCTAssertEqual(switched.deletes, [1])
+        XCTAssertEqual(switched.inserts, [1])
     }
 
     func testDouyinCommentThreadContract() {

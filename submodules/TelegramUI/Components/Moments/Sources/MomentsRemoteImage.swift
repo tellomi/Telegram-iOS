@@ -55,14 +55,19 @@ func momentsPrefetchRemoteImage(context: AccountContext, url: String) -> Signal<
 
 final class MomentsRemoteImageSlot {
     private var url: String?
+    private var image: UIImage?
+    private weak var imageView: UIImageView?
     private var disposable: Disposable?
 
     func bind(url: String?, imageView: UIImageView, context: AccountContext, maxSide: CGFloat) {
-        guard url != self.url else {
+        self.imageView = imageView
+        if url == self.url {
+            imageView.image = self.image
             return
         }
         self.cancel()
         self.url = url
+        self.imageView = imageView
         imageView.image = nil
         guard let url, url.hasPrefix("https://") else {
             return
@@ -86,17 +91,20 @@ final class MomentsRemoteImageSlot {
         |> deliverOnMainQueue
         let bag = DisposableSet()
         bag.add(fetch.start())
-        bag.add(data.start(next: { [weak self, weak imageView] image in
+        bag.add(data.start(next: { [weak self] image in
             guard let self, self.url == expected, let image else {
                 return
             }
-            imageView?.image = image
+            self.image = image
+            self.imageView?.image = image
         }))
         self.disposable = bag
     }
 
     func cancel() {
         self.url = nil
+        self.image = nil
+        self.imageView = nil
         self.disposable?.dispose()
         self.disposable = nil
     }

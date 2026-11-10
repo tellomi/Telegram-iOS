@@ -166,7 +166,11 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     /// Ids the list has already applied. A second layout pass must not update rows the list does not have yet.
     private var appliedIds: [MomentsFeedKind: [String]] = [:]
     private var listBusy: [MomentsFeedKind: Bool] = [:]
-    private var renderQueued: Set<MomentsFeedKind> = []
+    private var renderQueued: Set<MomentsFeedKind> = [:]
+    private var renderEpoch: [MomentsFeedKind: Int] = [:]
+    private var renderedListSize: [MomentsFeedKind: CGSize] = [:]
+    private var loadEpoch: [MomentsFeedKind: Int] = [:]
+    private var loadDisposables: [MomentsFeedKind: Disposable] = [:]
     private let prefetch: MomentsPrefetchManager
 
     init(context: AccountContext, controller: MomentsScreen) {
@@ -257,6 +261,9 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 
     func scrollToTop() {
+        guard self.listBusy[self.selected] != true, (self.appliedIds[self.selected]?.isEmpty == false) else {
+            return
+        }
         self.lists[self.selected]?.transaction(deleteIndices: [], insertIndicesAndItems: [], updateIndicesAndItems: [], options: [.Synchronous], scrollToItem: ListViewScrollToItem(index: 0, position: .top(0), animated: true, curve: .Default(duration: 0.25), directionHint: .Up), updateSizeAndInsets: nil, stationaryItemRange: nil, updateOpaqueState: nil, completion: { _ in })
     }
 
@@ -311,9 +318,13 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         let listHeight = layout.size.height - listTop - layout.intrinsicInsets.bottom
         self.pager.frame = CGRect(x: 0, y: listTop, width: width, height: listHeight)
         self.pager.contentSize = CGSize(width: width * CGFloat(self.visibleTabs.count), height: listHeight)
+        let listSize = CGSize(width: width, height: listHeight)
         for (index, kind) in self.visibleTabs.enumerated() {
             self.lists[kind]?.frame = CGRect(x: width * CGFloat(index), y: 0, width: width, height: listHeight)
-            self.render(kind, resetScroll: false)
+            if self.renderedListSize[kind] != listSize {
+                self.renderedListSize[kind] = listSize
+                self.render(kind, resetScroll: false)
+            }
         }
         if self.models[.recommend]?.loaded == false {
             self.load(.recommend, refresh: false)
@@ -356,6 +367,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             self.scrollToTop()
             return
         }
+        self.cancelLoads(except: kind)
         self.sessionHidden.removeAll()
         self.selected = kind
         let index = self.visibleTabs.firstIndex(of: kind) ?? 0
@@ -374,6 +386,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         let index = Int(round(scrollView.contentOffset.x / width))
         let kind = self.visibleTabs[max(0, min(index, self.visibleTabs.count - 1))]
         if kind != self.selected {
+            self.cancelLoads(except: kind)
             self.sessionHidden.removeAll()
             self.selected = kind
             if self.models[kind]?.loaded != true {
@@ -382,22 +395,35 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         }
     }
 
+    private func cancelLoads(except kept: MomentsFeedKind?) {
+        for kind in Array(self.loadDisposables.keys) where kind != kept {
+            self.loadDisposables[kind]?.dispose()
+            self.loadDisposables[kind] = nil
+            self.loadEpoch[kind] = (self.loadEpoch[kind] ?? 0) + 1
+            self.models[kind]?.loading = false
+        }
+    }
+
     private func load(_ kind: MomentsFeedKind, refresh: Bool) {
         guard let model = self.models[kind], !model.loading else { return }
         if !refresh && model.loaded && model.cursor == nil && !model.items.isEmpty { return }
+        self.loadDisposables[kind]?.dispose()
+        let epoch = (self.loadEpoch[kind] ?? 0) + 1
+        self.loadEpoch[kind] = epoch
         model.loading = true
         model.failed = false
         self.models[kind] = model
         let cursor = refresh ? nil : model.cursor
+        let bag = DisposableSet()
         if !model.loaded {
-            self.disposable.add(self.context.engine.moments.cachedPage(kind).start(next: { [weak self] page in
-                guard let self, let page, self.models[kind]?.items.isEmpty == true else { return }
+            bag.add(self.context.engine.moments.cachedPage(kind).start(next: { [weak self] page in
+                guard let self, self.loadEpoch[kind] == epoch, let page, self.models[kind]?.items.isEmpty == true else { return }
                 self.models[kind]?.items = page.items
                 self.render(kind, resetScroll: false)
             }))
         }
-        self.disposable.add((self.context.engine.moments.loadFeed(kind, cursor: cursor, city: nil, sort: self.nearbySort) |> deliverOnMainQueue).start(next: { [weak self] page in
-            guard let self else { return }
+        bag.add((self.context.engine.moments.loadFeed(kind, cursor: cursor, city: nil, sort: self.nearbySort) |> deliverOnMainQueue).start(next: { [weak self] page in
+            guard let self, self.loadEpoch[kind] == epoch else { return }
             let model = self.models[kind] ?? MomentsFeedModel()
             model.loading = false
             model.loaded = true
@@ -411,7 +437,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             self.render(kind, resetScroll: refresh)
             self.pill.isHidden = self.models[self.selected]?.newCount ?? 0 == 0
         }, error: { [weak self] _ in
-            guard let self else { return }
+            guard let self, self.loadEpoch[kind] == epoch else { return }
             let model = self.models[kind] ?? MomentsFeedModel()
             model.loading = false
             model.failed = true
@@ -419,6 +445,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             self.models[kind] = model
             self.render(kind, resetScroll: false)
         }))
+        self.loadDisposables[kind] = bag
     }
 
     private func render(_ kind: MomentsFeedKind, resetScroll: Bool) {
@@ -458,7 +485,19 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             }
         }
         let ids = entries.map { item -> String in
-            if let post = item as? MomentsPostItem { return post.hidden ? "h:\(post.card.id)" : post.card.id + ":\(post.card.version)" }
+            if let post = item as? MomentsPostItem {
+                let card = post.card
+                return [
+                    post.hidden ? "h" : "v",
+                    card.id,
+                    String(card.version),
+                    card.viewer.liked ? "1" : "0",
+                    String(card.counts.likes),
+                    String(post.albumIndex),
+                    post.playing ? "p" : "s",
+                    post.expanded ? "e" : "c"
+                ].joined(separator: ":")
+            }
             return "status"
         }
         if self.listBusy[kind] == true {
@@ -468,10 +507,12 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         let previous = self.appliedIds[kind] ?? []
         let edit = momentsListEdit(previousIds: previous, nextIds: ids)
         let insets = UIEdgeInsets(top: 0, left: 0, bottom: 72, right: 0)
+        let epoch = (self.renderEpoch[kind] ?? 0) + 1
+        self.renderEpoch[kind] = epoch
         self.listBusy[kind] = true
         let scroll = resetScroll && !entries.isEmpty ? ListViewScrollToItem(index: 0, position: .top(0), animated: false, curve: .Default(duration: nil), directionHint: .Up) : nil
         list.transaction(deleteIndices: edit.deletes.map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: edit.inserts.map { ListViewInsertItem(index: $0, previousIndex: nil, item: entries[$0], directionHint: nil) }, updateIndicesAndItems: edit.updates.map { ListViewUpdateItem(index: $0, previousIndex: $0, item: entries[$0], directionHint: nil) }, options: [.Synchronous, .LowLatency], scrollToItem: scroll, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), stationaryItemRange: nil, updateOpaqueState: nil, completion: { [weak self] _ in
-            guard let self else { return }
+            guard let self, self.renderEpoch[kind] == epoch else { return }
             self.appliedIds[kind] = ids
             self.listBusy[kind] = false
             if kind == self.selected {
@@ -489,14 +530,22 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 
     private func handlers() -> MomentsPostHandlers {
-        return MomentsPostHandlers(open: { [weak self] card in self?.open(card) }, author: { [weak self] card in self?.openAuthor(card) }, like: { [weak self] card in self?.toggleLike(card) }, comment: { [weak self] card in self?.open(card) }, repost: { [weak self] card in self?.repost(card) }, share: { [weak self] card in self?.share(card) }, save: { [weak self] card in self?.toggleSave(card) }, more: { [weak self] card, view in self?.more(card, view) }, follow: { [weak self] card in self?.follow(card) }, undo: { [weak self] id in self?.undo(id) }, fullText: { [weak self] card in self?.expanded.insert(card.id); self?.render(self?.selected ?? .recommend, resetScroll: false) }, topic: { _ in }, link: { [weak self] url in self?.openURL(url) }, likers: { [weak self] card in self?.openLikers(card) }, voters: { [weak self] card in self?.openVoters(card) })
+        return MomentsPostHandlers(open: { [weak self] card in self?.open(card) }, author: { [weak self] card in self?.openAuthor(card) }, like: { [weak self] card in self?.toggleLike(card) }, comment: { [weak self] card in self?.open(card) }, repost: { [weak self] card in self?.repost(card) }, share: { [weak self] card in self?.share(card) }, save: { [weak self] card in self?.toggleSave(card) }, more: { [weak self] card, view in self?.more(card, view) }, follow: { [weak self] card in self?.follow(card) }, undo: { [weak self] id in self?.undo(id) }, fullText: { [weak self] card in self?.expanded.insert(card.id); self?.render(self?.selected ?? .recommend, resetScroll: false) }, topic: { _ in }, link: { [weak self] url in self?.openURL(url) }, likers: { [weak self] card in self?.openLikers(card) }, voters: { [weak self] card in self?.openVoters(card) }, openMedia: { [weak self] card, index in self?.openMedia(card, index: index) })
     }
 
     private func open(_ card: MomentsCard) {
-        guard let controller = self.controller else { return }
+        guard let controller = self.controller, !card.isUnavailable else { return }
+        let detail = MomentsDetailScreen(context: self.context, card: card)
+        detail.openPeer = controller.openPeer
+        (controller.navigationController as? NavigationController)?.pushViewController(detail)
         let sheet = MomentsCommentSheet(context: self.context, card: card)
-        sheet.openPeer = self.controller?.openPeer
+        sheet.openPeer = controller.openPeer
         controller.present(sheet, in: .window(.root))
+    }
+
+    private func openMedia(_ card: MomentsCard, index: Int) {
+        guard let controller = self.controller else { return }
+        momentsPresentGallery(context: self.context, card: card, index: index, controller: controller)
     }
 
     private func openAuthor(_ card: MomentsCard) {

@@ -329,12 +329,26 @@ public func momentsMergeFeed(existing: [MomentsCard], pageItems: [MomentsCard], 
     return (items, nextCursor)
 }
 
-/// List rows the feed has already applied. Same ids update in place. A different list replaces every row.
+/// Rows already on the list. Unchanged ids stay put. Only the differing span is deleted and inserted,
+/// and the insert indexes are valid after those deletes (an empty list only inserts at 0, then 1, …).
 public func momentsListEdit(previousIds: [String], nextIds: [String]) -> (deletes: [Int], inserts: [Int], updates: [Int]) {
     if previousIds == nextIds {
         return ([], [], Array(nextIds.indices))
     }
-    return (Array(previousIds.indices), Array(nextIds.indices), [])
+    var start = 0
+    let prefixLimit = min(previousIds.count, nextIds.count)
+    while start < prefixLimit && previousIds[start] == nextIds[start] {
+        start += 1
+    }
+    var previousEnd = previousIds.count
+    var nextEnd = nextIds.count
+    while previousEnd > start && nextEnd > start && previousIds[previousEnd - 1] == nextIds[nextEnd - 1] {
+        previousEnd -= 1
+        nextEnd -= 1
+    }
+    let deletes = Array(start..<previousEnd)
+    let inserts = Array(start..<nextEnd)
+    return (deletes, inserts, [])
 }
 
 func momentsPage(data: Data, mediaBaseURL: String? = nil) -> MomentsPage? {
