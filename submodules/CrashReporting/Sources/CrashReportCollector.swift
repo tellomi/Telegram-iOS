@@ -1,6 +1,7 @@
 import Foundation
 
 #if os(iOS)
+import CrashSignalHandler
 import MetricKit
 
 public final class CrashReportCollector: NSObject, MXMetricManagerSubscriber {
@@ -13,6 +14,17 @@ public final class CrashReportCollector: NSObject, MXMetricManagerSubscriber {
             return
         }
         self.started = true
+        let bundle = Bundle.main
+        let version = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
+        let build = (bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? ""
+        if let incoming = try? CrashReportStore.shared.prepareIncomingDirectory() {
+            TellomiInstallCrashHandlers(incoming.path, version, build)
+        }
+        do {
+            try CrashReportStore.shared.importIncomingReports()
+        } catch {
+            NSLog("CrashReporting: could not import a crash written before login (%@)", String(describing: type(of: error)))
+        }
         let manager = MXMetricManager.shared
         manager.add(self)
         let pastPayloads = manager.pastDiagnosticPayloads

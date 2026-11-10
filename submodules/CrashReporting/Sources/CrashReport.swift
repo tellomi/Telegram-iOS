@@ -42,8 +42,20 @@ public struct CrashReport: Codable, Equatable {
 
     public var text: String {
         let formatter = ISO8601DateFormatter()
+        let object = (try? JSONSerialization.jsonObject(with: self.diagnosticJSON)) as? [String: Any]
+        let source = object?["source"] as? String
+        let heading: String
+        if self.isTestReport {
+            heading = "TEST Crash Report (synthetic)"
+        } else if source == "signal" {
+            heading = "Signal Crash Report"
+        } else if source == "exception" {
+            heading = "Exception Crash Report"
+        } else {
+            heading = "MetricKit Crash Report"
+        }
         var lines = [
-            self.isTestReport ? "TEST Crash Report (synthetic)" : "MetricKit Crash Report",
+            heading,
             "Report ID: \(self.id)",
             "App: \(self.metadata.applicationVersion) (\(self.metadata.buildVersion))",
             "OS: \(self.metadata.osVersion)",
@@ -54,8 +66,13 @@ public struct CrashReport: Codable, Equatable {
             "The diagnostic interval is not the exact time of the crash.",
             ""
         ]
-        guard let object = try? JSONSerialization.jsonObject(with: self.diagnosticJSON) as? [String: Any] else {
+        guard let object else {
             return (lines + ["The diagnostic could not be decoded."]).joined(separator: "\n")
+        }
+        if let stack = object["capturedStack"] as? String, !stack.isEmpty {
+            lines.append("Stack captured at the crash:")
+            lines.append(stack)
+            lines.append("")
         }
         if self.isTestReport {
             lines.append("Generated locally by Debug Settings before an intentional crash, not delivered by MetricKit.")
@@ -115,4 +132,72 @@ private struct ExportMetadata: Encodable {
 
 public func crashReportAlertsEnabled(override: Bool?, isInternalBuild: Bool) -> Bool {
     return override ?? isInternalBuild
+}
+
+public struct ImmediateCrashImport {
+    public let input: CrashReportInput
+    public let date: Date
+}
+
+/// Text written by the signal and exception handlers. `stack:` is the last field.
+public func crashReportImport(fromImmediateText text: String) -> ImmediateCrashImport? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+        return nil
+    }
+    let marker = "\nstack:\n"
+    let header: String
+    let stack: String
+    if let range = trimmed.range(of: marker) {
+        header = String(trimmed[..<range.lowerBound])
+        stack = String(trimmed[range.upperBound...])
+    } else if trimmed.hasPrefix("stack:\n") {
+        header = ""
+        stack = String(trimmed.dropFirst("stack:\n".count))
+    } else {
+        header = trimmed
+        stack = ""
+    }
+    var fields: [String: String] = [:]
+    for line in header.split(separator: "\n", omittingEmptySubsequences: true) {
+        let row = String(line)
+        guard let separator = row.firstIndex(of: "=") else {
+            continue
+        }
+        fields[String(row[..<separator])] = String(row[row.index(after: separator)...])
+    }
+    let source = fields["source"] ?? "signal"
+    let signalName = fields["signal"] ?? ""
+    var details: [String: Any] = [:]
+    if source == "exception" {
+        details["exceptionType"] = fields["name"].flatMap { $0.isEmpty ? nil : $0 } ?? "NSException"
+        details["exceptionReason"] = fields["reason"] ?? ""
+        details["terminationReason"] = "Uncaught exception before the next launch."
+    } else {
+        details["exceptionType"] = "EXC_CRASH (\(signalName.isEmpty ? "SIGABRT" : signalName))"
+        details["signal"] = signalName
+        details["terminationReason"] = "Process crashed before MetricKit delivered a diagnostic."
+    }
+    let object: [String: Any] = [
+        "source": source,
+        "diagnosticMetaData": details,
+        "capturedStack": stack
+    ]
+    guard let diagnosticJSON = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else {
+        return nil
+    }
+    let metadata = CrashReportMetadata(
+        applicationVersion: fields["app"] ?? "",
+        buildVersion: fields["build"] ?? "",
+        osVersion: fields["os"] ?? "",
+        deviceType: fields["device"] ?? "",
+        architecture: fields["arch"] ?? ""
+    )
+    let date: Date
+    if let time = fields["time"].flatMap({ TimeInterval($0) }) {
+        date = Date(timeIntervalSince1970: time)
+    } else {
+        date = Date()
+    }
+    return ImmediateCrashImport(input: CrashReportInput(diagnosticJSON: diagnosticJSON, metadata: metadata), date: date)
 }

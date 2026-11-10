@@ -141,6 +141,34 @@ public final class CrashReportStore {
         crash()
     }
 
+    public func prepareIncomingDirectory() throws -> URL {
+        let url = self.directory.appendingPathComponent("incoming", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true, attributes: nil)
+        var directory = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try directory.setResourceValues(values)
+        return url
+    }
+
+    /// Imports text files written by the signal and exception handlers, then deletes each file that was stored.
+    public func importIncomingReports() throws {
+        let directory = self.directory.appendingPathComponent("incoming", isDirectory: true)
+        let files: [URL]
+        do {
+            files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return
+        }
+        for file in files where file.pathExtension == "txt" {
+            guard let text = try? String(contentsOf: file, encoding: .utf8), let parsed = crashReportImport(fromImmediateText: text) else {
+                continue
+            }
+            try self.importDiagnostics([parsed.input], intervalStart: parsed.date, intervalEnd: parsed.date, receivedAt: Date())
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+
     public func remove(id: String) throws {
         try self.queue.sync {
             var state = try self.readState()

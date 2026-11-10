@@ -15,6 +15,37 @@ func storeAuthorizedUser(transaction: Transaction, user: TelegramUser) {
     })
 }
 
+/// Seconds from `FLOOD_WAIT_N`. Login alerts read this once, on the main queue, after the RPC fails.
+public enum TellomiAuthorizationFloodWait {
+    private static let lock = NSLock()
+    private static var seconds: Int32?
+
+    public static func record(_ description: String) {
+        guard description == "FLOOD_WAIT" || description.hasPrefix("FLOOD_WAIT_") else {
+            return
+        }
+        let parsed: Int32?
+        let prefix = "FLOOD_WAIT_"
+        if description.hasPrefix(prefix), let value = Int32(description.dropFirst(prefix.count)), value > 0 {
+            parsed = value
+        } else {
+            parsed = nil
+        }
+        self.lock.lock()
+        self.seconds = parsed
+        self.lock.unlock()
+    }
+
+    /// One read. A later alert does not reuse the previous wait.
+    public static func consume() -> Int32? {
+        self.lock.lock()
+        let value = self.seconds
+        self.seconds = nil
+        self.lock.unlock()
+        return value
+    }
+}
+
 public enum AuthorizationCodeRequestError {
     case invalidPhoneNumber
     case limitExceeded
@@ -239,6 +270,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
         }
         |> `catch` { error -> Signal<(SendCodeResult, UnauthorizedAccount), AuthorizationCodeRequestError> in
             if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(error.errorDescription)
                 return .fail(.limitExceeded)
             } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
                 return .fail(.invalidPhoneNumber)
@@ -252,6 +284,7 @@ public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccount
                 return account.network.request(Api.functions.account.getPassword(), automaticFloodWait: false)
                 |> mapError { error -> AuthorizationCodeRequestError in
                     if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(error.errorDescription)
                         return .limitExceeded
                     } else {
                         return .generic(info: (Int(error.errorCode), error.errorDescription))
@@ -428,6 +461,7 @@ private func internalResendAuthorizationCode(accountManager: AccountManager<Tele
     return account.network.request(Api.functions.auth.resendCode(flags: flags, phoneNumber: number, phoneCodeHash: hash, reason: mappedReason), automaticFloodWait: false)
     |> mapError { error -> AuthorizationCodeRequestError in
         if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(error.errorDescription)
             return .limitExceeded
         } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
             return .invalidPhoneNumber
@@ -559,6 +593,7 @@ public func resendAuthorizationCode(accountManager: AccountManager<TelegramAccou
                         return account.network.request(Api.functions.auth.resendCode(flags: 0, phoneNumber: number, phoneCodeHash: hash, reason: nil), automaticFloodWait: false)
                         |> mapError { error -> AuthorizationCodeRequestError in
                             if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(error.errorDescription)
                                 return .limitExceeded
                             } else if error.errorDescription == "PHONE_NUMBER_INVALID" {
                                 return .invalidPhoneNumber
@@ -786,6 +821,7 @@ public func sendLoginEmailChangeCode(account: Account, email: String) -> Signal<
     |> `catch` { error -> Signal<Api.account.SentEmailCode, AuthorizationSendEmailCodeError> in
         let errorDescription = error.errorDescription ?? ""
         if errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(errorDescription)
             return .fail(.limitExceeded)
         } else if errorDescription == "CODE_HASH_EXPIRED" || errorDescription == "PHONE_CODE_EXPIRED" {
             return .fail(.codeExpired)
@@ -815,6 +851,7 @@ public func sendLoginEmailCode(account: UnauthorizedAccount, email: String) -> S
                     |> `catch` { error -> Signal<Api.account.SentEmailCode, AuthorizationSendEmailCodeError> in
                         let errorDescription = error.errorDescription ?? ""
                         if errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(errorDescription)
                             return .fail(.limitExceeded)
                         } else if errorDescription == "CODE_HASH_EXPIRED" || errorDescription == "PHONE_CODE_EXPIRED" {
                             return .fail(.codeExpired)
@@ -868,6 +905,7 @@ public func verifyLoginEmailChange(account: Account, code: AuthorizationCode.Ema
     |> `catch` { error -> Signal<Api.account.EmailVerified, AuthorizationEmailVerificationError> in
         let errorDescription = error.errorDescription ?? ""
         if errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(errorDescription)
             return .fail(.limitExceeded)
         } else if errorDescription == "CODE_HASH_EXPIRED" || errorDescription == "PHONE_CODE_EXPIRED" || errorDescription == "EMAIL_VERIFY_EXPIRED" {
             return .fail(.codeExpired)
@@ -905,6 +943,7 @@ public func verifyLoginEmailSetup(account: UnauthorizedAccount, code: Authorizat
                     |> `catch` { error -> Signal<Api.account.EmailVerified, AuthorizationEmailVerificationError> in
                         let errorDescription = error.errorDescription ?? ""
                         if errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(errorDescription)
                             return .fail(.limitExceeded)
                         } else if errorDescription == "CODE_HASH_EXPIRED" || errorDescription == "PHONE_CODE_EXPIRED" || errorDescription == "EMAIL_VERIFY_EXPIRED" {
                             return .fail(.codeExpired)
@@ -977,6 +1016,7 @@ public func resetLoginEmail(account: UnauthorizedAccount, phoneNumber: String, p
                     |> `catch` { error -> Signal<Api.auth.SentCode, AuthorizationEmailResetError> in
                         let errorDescription = error.errorDescription ?? ""
                         if errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(errorDescription)
                             return .fail(.limitExceeded)
                         } else if errorDescription == "CODE_HASH_EXPIRED" || errorDescription == "PHONE_CODE_EXPIRED" {
                             return .fail(.codeExpired)
@@ -1060,6 +1100,7 @@ public func authorizeWithCode(accountManager: AccountManager<TelegramAccountMana
                                 return account.network.request(Api.functions.account.getPassword(), automaticFloodWait: false)
                                 |> mapError { error -> AuthorizationCodeVerificationError in
                                     if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(error.errorDescription)
                                         return .limitExceeded
                                     } else {
                                         return .generic
@@ -1074,6 +1115,7 @@ public func authorizeWithCode(accountManager: AccountManager<TelegramAccountMana
                                 }
                             case let (_, errorDescription):
                                 if errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(errorDescription)
                                     return .fail(.limitExceeded)
                                 } else if errorDescription == "PHONE_CODE_INVALID" || errorDescription == "EMAIL_CODE_INVALID" {
                                     return .fail(.invalidCode)
@@ -1161,6 +1203,7 @@ public func authorizeWithPassword(accountManager: AccountManager<TelegramAccount
     return verifyPassword(account, password: password)
     |> `catch` { error -> Signal<Api.auth.Authorization, AuthorizationPasswordVerificationError> in
         if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(error.errorDescription)
             return .fail(.limitExceeded)
         } else if error.errorDescription == "PASSWORD_HASH_INVALID" {
             return .fail(.invalidPassword)
@@ -1258,6 +1301,7 @@ public func authorizeWithPasskey(accountManager: AccountManager<TelegramAccountM
                 return account.network.request(Api.functions.account.getPassword(), automaticFloodWait: false)
                 |> mapError { error -> AuthorizationCodeVerificationError in
                     if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(error.errorDescription)
                         return .limitExceeded
                     } else {
                         return .generic
@@ -1272,6 +1316,7 @@ public func authorizeWithPasskey(accountManager: AccountManager<TelegramAccountM
                 }
             case let (_, errorDescription):
                 if errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(errorDescription)
                     return .fail(.limitExceeded)
                 } else if errorDescription == "PHONE_CODE_INVALID" || errorDescription == "EMAIL_CODE_INVALID" {
                     return .fail(.invalidCode)
@@ -1343,6 +1388,7 @@ func _internal_checkPasswordRecoveryCode(network: Network, code: String) -> Sign
     return network.request(Api.functions.auth.checkRecoveryPassword(code: code), automaticFloodWait: false)
     |> mapError { error -> PasswordRecoveryError in
         if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(error.errorDescription)
             return .limitExceeded
         } else if error.errorDescription.hasPrefix("PASSWORD_RECOVERY_EXPIRED") {
             return .expired
@@ -1423,6 +1469,7 @@ func _internal_performPasswordRecovery(network: Network, code: String, updatedPa
         return network.request(Api.functions.auth.recoverPassword(flags: flags, code: code, newSettings: newSettings), automaticFloodWait: false)
         |> mapError { error -> PasswordRecoveryError in
             if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(error.errorDescription)
                 return .limitExceeded
             } else if error.errorDescription.hasPrefix("PASSWORD_RECOVERY_EXPIRED") {
                 return .expired
@@ -1511,6 +1558,7 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
             return account.network.request(Api.functions.auth.signUp(flags: flags, phoneNumber: number, phoneCodeHash: codeHash, firstName: firstName, lastName: lastName))
             |> mapError { error -> SignUpError in
                 if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+                TellomiAuthorizationFloodWait.record(error.errorDescription)
                     return .limitExceeded
                 } else if error.errorDescription == "PHONE_CODE_EXPIRED" {
                     return .codeExpired

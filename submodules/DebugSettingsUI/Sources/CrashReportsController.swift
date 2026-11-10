@@ -47,9 +47,9 @@ private func crashReportMarkPresented(_ id: String) {
     }
 }
 
-private func crashReportCaption(_ report: CrashReport) -> String {
+private func crashReportCaption(_ context: AccountContext, _ report: CrashReport) -> String {
     return [
-        "Tellomi crash log",
+        crashReportText(context, "caption", english: "Tellomi crash log", chinese: "Tellomi 崩溃日志"),
         "Report: \(report.id)",
         "App: \(report.metadata.applicationVersion) (\(report.metadata.buildVersion))",
         "OS: \(report.metadata.osVersion)",
@@ -67,6 +67,28 @@ private func crashReportBotName(context: AccountContext) -> String {
         }
     }
     return "TellomiBot"
+}
+
+private let crashReportHant: [String: String] = [
+    "title": "有新的當機紀錄",
+    "text": "App 意外關閉了。\n\n要把當機紀錄送出去，幫我們修好這個問題嗎？",
+    "send": "傳送紀錄",
+    "botTitle": "找不到當機紀錄機器人",
+    "botText": "請檢查網路後再試。紀錄仍保存在這台裝置上。",
+    "saved": "當機紀錄機器人無法使用，紀錄已儲存到收藏訊息。",
+    "thanks": "謝謝你幫忙把 Tellomi 做得更好。",
+    "offline": "目前沒有網路。紀錄仍在這台裝置上，連上網路後再傳送。",
+    "failed": "當機紀錄沒有送出去。它仍保存在這台裝置上。",
+    "caption": "Tellomi 當機紀錄"
+]
+
+private func crashReportScriptIsHant(_ context: AccountContext) -> Bool {
+    let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
+    let codes = [strings.primaryComponent.languageCode, strings.baseLanguageCode]
+    return codes.contains { code in
+        let value = code.lowercased().replacingOccurrences(of: "_", with: "-")
+        return value == "zh-hant" || value.hasPrefix("zh-hant") || value == "zh-tw" || value.hasPrefix("zh-tw") || value == "zh-hk" || value.hasPrefix("zh-hk") || value == "zh-mo" || value.hasPrefix("zh-mo")
+    }
 }
 
 private func crashReportText(_ context: AccountContext, _ key: String, english: String, chinese: String) -> String {
@@ -91,12 +113,19 @@ private func crashReportText(_ context: AccountContext, _ key: String, english: 
         resolved = strings.CrashReport_Offline
     case "failed":
         resolved = strings.CrashReport_Failed
+    case "caption":
+        resolved = strings.CrashReport_Caption
     default:
         resolved = english
     }
     let codes = [strings.primaryComponent.languageCode, strings.baseLanguageCode].map { $0.lowercased() }
-    if codes.contains(where: { $0.hasPrefix("zh") }), resolved == english || resolved.isEmpty {
-        return chinese
+    if resolved == english || resolved.isEmpty {
+        if crashReportScriptIsHant(context), let traditional = crashReportHant[key] {
+            return traditional
+        }
+        if codes.contains(where: { $0.hasPrefix("zh") }) {
+            return chinese
+        }
     }
     return resolved
 }
@@ -201,7 +230,7 @@ private final class CrashReportActions {
                     let resource = LocalFileMediaResource(fileId: id, size: Int64(data.count), isSecretRelated: false)
                     context.engine.resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: data)
                     let file = TelegramMediaFile(fileId: EngineMedia.Id(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "application/zip", size: Int64(data.count), attributes: [.FileName(fileName: "CrashReport-\(report.id.prefix(12)).zip")], alternativeRepresentations: [])
-                    let message: EnqueueMessage = .message(text: crashReportCaption(report), attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+                    let message: EnqueueMessage = .message(text: crashReportCaption(context, report), attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
                     self.disposable.set((enqueueMessages(account: context.account, peerId: peerId, messages: [message])
                     |> deliverOnMainQueue).start(next: { [weak self] ids in
                         guard let self else { return }
@@ -421,7 +450,7 @@ private final class CrashReportActions {
                         let resource = LocalFileMediaResource(fileId: id, size: Int64(data.count), isSecretRelated: false)
                         context.engine.resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: data)
                         let file = TelegramMediaFile(fileId: EngineMedia.Id(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "application/zip", size: Int64(data.count), attributes: [.FileName(fileName: "CrashReport-\(report.id.prefix(12)).zip")], alternativeRepresentations: [])
-                        let message: EnqueueMessage = .message(text: crashReportCaption(report), attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+                        let message: EnqueueMessage = .message(text: crashReportCaption(context, report), attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
                         self.disposable.set((enqueueMessages(account: context.account, peerId: peerId, messages: [message])
                         |> deliverOnMainQueue).start(next: { [weak self] ids in
                             guard let self else { return }
