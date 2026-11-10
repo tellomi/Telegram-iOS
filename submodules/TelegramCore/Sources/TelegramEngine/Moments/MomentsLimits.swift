@@ -40,7 +40,7 @@ public struct MomentsLimits: Equatable {
         commentTextLimit: Int = 1000,
         mentionLimit: Int = 10,
         topicLimit: Int = 3,
-        topicNameLength: ClosedRange<Int> = 1...32,
+        topicNameLength: ClosedRange<Int> = 2...32,
         pollOptionCount: ClosedRange<Int> = 2...10,
         pinLimit: Int = 3,
         draftLimit: Int = 20,

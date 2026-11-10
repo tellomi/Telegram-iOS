@@ -114,7 +114,7 @@ public func momentsTextExceedsLineLimit(fullHeight: CGFloat, lineHeight: CGFloat
     guard lineHeight > 0, limit > 0, fullHeight > 0 else {
         return false
     }
-    return fullHeight > lineHeight * CGFloat(limit) + 1.0
+    return fullHeight > lineHeight * CGFloat(limit)
 }
 
 public func momentsRemainingCharacters(count: Int, limit: Int, counterFrom: Int) -> Int? {
