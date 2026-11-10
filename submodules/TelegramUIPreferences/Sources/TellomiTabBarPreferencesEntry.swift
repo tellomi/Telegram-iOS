@@ -2,7 +2,7 @@ import Foundation
 import TelegramCore
 import SwiftSignalKit
 
-public func resolvedTellomiTabBarPreferences(_ entry: PreferencesEntry?) -> TellomiTabBarPreferences {
+public func resolvedTellomiTabBarPreferences(_ entry: SharedPreferencesEntry?) -> TellomiTabBarPreferences {
     if let value = entry?.get(TellomiTabBarPreferences.self) {
         return value.normalized()
     }
