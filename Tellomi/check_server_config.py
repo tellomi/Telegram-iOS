@@ -298,7 +298,13 @@ def check_public_links() -> None:
     leftover = []
     for path in (ROOT / "submodules").rglob("*.swift"):
         rel = str(path.relative_to(ROOT))
-        if "/Tests/" in rel or rel.endswith("TellomiLinks.swift"):
+        # These name t.me / telegram.me / telegram.dog so old links still parse
+        # or so langpack text still rewrites. They do not generate those hosts.
+        if "/Tests/" in rel or rel.endswith((
+            "TellomiLinks.swift",
+            "TellomiBrandRewrite.swift",
+            "TellomiChatLinkPreview.swift",
+        )):
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         if "https://t.me" in text or "://t.me/" in text or '"t.me/' in text or '"t.me"' in text or "telegram.me" in text or "telegram.dog" in text:

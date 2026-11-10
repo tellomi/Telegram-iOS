@@ -101,6 +101,7 @@ jobs:
             //submodules/TelegramUIPreferences:TellomiChatPrivacyTests
             //submodules/Components/ReactionButtonListComponent:ReactionIconMetricsTests
             //submodules/TellomiDiscover:TellomiChatLinkPreviewTests
+            //submodules/TelegramPresentationData:TellomiBrandRewriteTests
             //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
             //submodules/TelegramCore:EphemeralMediaLifecycleTests
             //submodules/TelegramCore:TellomiNativeBatchTests

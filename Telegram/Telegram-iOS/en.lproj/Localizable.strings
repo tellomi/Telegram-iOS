@@ -533,7 +533,7 @@
 "Conversation.Contact" = "Contact";
 "Conversation.BlockUser" = "Block User";
 "Conversation.UnblockUser" = "Unblock User";
-"Conversation.UnsupportedMedia" = "This message is not supported on your version of Tellomi. Update the app to view:\nhttps://telegram.org/update";
+"Conversation.UnsupportedMedia" = "This message is not supported on your version of Tellomi. Update the app to view:\nhttps://tellomi.cn/help/install/update/";
 "Conversation.EncryptionWaiting" = "Waiting for %@ to get online...";
 "Conversation.EncryptionProcessing" = "Exchanging encryption keys...";
 "Conversation.EmptyPlaceholder" = "No messages here yet...";
@@ -2909,7 +2909,7 @@ Unused sets are archived when you add more.";
 "SocksProxySetup.UseForCalls" = "Use for calls";
 "SocksProxySetup.UseForCallsHelp" = "Proxy servers may degrade the quality of your calls.";
 
-"InviteText.URL" = "https://telegram.org/dl";
+"InviteText.URL" = "https://tellomi.cn/download/";
 "InviteText.SingleContact" = "Hey, I'm using Tellomi to chat. Join me! Download it here: %@";
 "InviteText.ContactsCountText_1" = "Hey, I'm using Tellomi to chat. Join me! Download it here: {url}";
 "InviteText.ContactsCountText_2" = "Hey, I'm using Tellomi to chat – and so are 2 of our other contacts. Join us! Download it here: {url}";
@@ -5135,7 +5135,7 @@ Sorry for the inconvenience.";
 "AuthSessions.AddDevice.ScanTitle" = "Scan QR Code";
 "AuthSessions.AddDevice.InvalidQRCode" = "Invalid QR Code";
 "AuthSessions.AddDeviceIntro.Title" = "Log in by QR Code";
-"AuthSessions.AddDeviceIntro.Text1" = "Download Tellomi on your computer from [desktop.telegram.org]()";
+"AuthSessions.AddDeviceIntro.Text1" = "Download Tellomi on your computer from [tellomi.cn/help/start/link-desktop/](https://tellomi.cn/help/start/link-desktop/)";
 "AuthSessions.AddDeviceIntro.Text2" = "Run Tellomi on your computer to get the QR code";
 "AuthSessions.AddDeviceIntro.Text3" = "Scan the QR code to connect your account";
 "AuthSessions.AddDeviceIntro.Action" = "Scan QR Code";
@@ -5463,11 +5463,11 @@ Sorry for the inconvenience.";
 "FeaturedStickers.OtherSection" = "OTHER STICKERS";
 
 "ChatList.GenericPsaAlert" = "This provides public service announcements in your chat list.";
-"ChatList.PsaAlert.covid" = "This message provides you with a public service announcement in relation to the undergoing pandemics. Learn more about this initiative at https://telegram.org/blog/coronavirus";
+"ChatList.PsaAlert.covid" = "This message provides you with a public service announcement in relation to the undergoing pandemics. Learn more about this initiative at https://tellomi.cn/help";
 "ChatList.GenericPsaLabel" = "PSA";
 "ChatList.PsaLabel.covid" = "Covid-19";
 "Chat.GenericPsaTooltip" = "This is a public service announcement";
-"Chat.PsaTooltip.covid" = "This message provides you with a public service announcement in relation to the undergoing pandemics. Learn more about this initiative at https://telegram.org/blog/coronavirus";
+"Chat.PsaTooltip.covid" = "This message provides you with a public service announcement in relation to the undergoing pandemics. Learn more about this initiative at https://tellomi.cn/help";
 
 "Message.GenericForwardedPsa" = "Public Service Announcement\nFrom: %@";
 "Message.ForwardedPsa.covid" = "Covid-19 Notification\nFrom: %@";
@@ -6963,7 +6963,7 @@ Sorry for the inconvenience.";
 "SponsoredMessageInfoScreen.Title" = "What are sponsored messages?";
 "SponsoredMessageInfoScreen.MarkdownText" = "Unlike other apps, Tellomi never uses your private data to target ads. [Learn more in the Privacy Policy](https://tellomi.cn/privacy#5-6-no-ads-based-on-user-data)\nYou are seeing this message only because someone chose this public one-to many channel as a space to promote their messages. This means that no user data is mined or analyzed to display ads, and every user viewing a channel on Tellomi sees the same sponsored message.\n\nUnline other apps, Tellomi doesn't track whether you tapped on a sponsored message and doesn't profile you based on your activity. We also prevent external links in sponsored messages to ensure that third parties can't spy on our users. We believe that everyone has the right to privacy, and technological platforms should respect that.\n\nTellomi offers free and unlimited service to hundreds of millions of users, which involves significant server and traffic costs. In order to remain independent and stay true to its values, Tellomi developed a paid tool to promote messages with user privacy in mind. We welcome responsible adverticers at:\n[url]\nAds should no longer be synonymous with abuse of user privacy. Let us redefine how a tech compony should operate — together.";
 "SponsoredMessageInfo.Action" = "Learn More";
-"SponsoredMessageInfo.Url" = "https://telegram.org/ads";
+"SponsoredMessageInfo.Url" = "https://tellomi.cn/legal/privacy/";
 
 "Chat.NavigationNoChannels" = "You have no unread channels";
 
@@ -7259,7 +7259,7 @@ Sorry for the inconvenience.";
 
 "AuthSessions.HeaderInfo" = "Link [Tellomi Desktop](desktop) or [Tellomi Web](web) by scanning a QR code.";
 "AuthSessions.LinkDesktopDevice" = "Link Desktop Device";
-"AuthSessions.AddDevice.ScanInstallInfo" = "Go to [getdesktop.telegram.org](desktop) or [web.telegram.org](web) to get the QR code";
+"AuthSessions.AddDevice.ScanInstallInfo" = "Go to [tellomi.cn/help/start/link-desktop/](desktop) or [tellomi.cn](web) to get the QR code";
 
 "Channel.AdminLog.MessageSent" = "%@ sent message:";
 
@@ -11664,7 +11664,7 @@ Sorry for the inconvenience.";
 
 "ChatbotSetup.TitleItem" = "Chatbots";
 "ChatbotSetup.Text" = "Add a bot to your account to help you automatically process and respond to the messages you receive. [Learn More >]()";
-"ChatbotSetup.TextLink" = "https://telegram.org";
+"ChatbotSetup.TextLink" = "https://tellomi.cn/";
 
 "ChatbotSetup.BotSearchPlaceholder" = "Bot Username";
 "ChatbotSetup.BotSectionFooter" = "Enter the username or URL of the Tellomi bot that you want to automatically process your chats.";
@@ -11767,7 +11767,7 @@ Sorry for the inconvenience.";
 "Monetization.Balance.AvailableInfo" = "You can collect your reward using Fragment, a third-party platform used by advertisers to pay for ads. [Learn More >]()";
 "Monetization.Balance.ComingLaterInfo" = "In the coming weeks, you will be able to collect rewards using Fragment, a third-party platform used by advertisers to pay for ads. [Learn More >]()";
 
-"Monetization.BalanceInfo_URL" = "https://telegram.org";
+"Monetization.BalanceInfo_URL" = "https://tellomi.cn/legal/terms/";
 "Monetization.BalanceWithdraw" = "Withdraw via Fragment";
 "Monetization.TransactionsTitle" = "TRANSACTION HISTORY";
 
@@ -11823,7 +11823,7 @@ Sorry for the inconvenience.";
 
 "ReportAd.Title" = "Report Ad";
 "ReportAd.Help" = "Learn more about [Tellomi Ad Policies and Guidelines]().";
-"ReportAd.Help_URL" = "https://ads.telegram.org/guidelines";
+"ReportAd.Help_URL" = "https://tellomi.cn/legal/community/";
 "ReportAd.Reported" = "We will review this ad to ensure it matches our [Ad Policies and Guidelines]().";
 "ReportAd.Hidden" = "You will no longer see ads from Tellomi.";
 
@@ -11843,7 +11843,7 @@ Sorry for the inconvenience.";
 "AdsInfo.Launch.Title" = "Can I Launch an Ad?";
 "AdsInfo.Launch.Text" = "Anyone can create ads to display in this channel – with minimal budgets. Check out the Tellomi Ad Platform for details. [Learn More >]()";
 "AdsInfo.Bot.Launch.Text" = "Anyone can create ads to display in this bot – with minimal budgets. Check out the Tellomi Ad Platform for details. [Learn More >]()";
-"AdsInfo.Launch.Text_URL" = "https://promote.telegram.org";
+"AdsInfo.Launch.Text_URL" = "https://tellomi.cn/support/";
 
 "AdsInfo.Understood" = "Understood";
 
@@ -11983,7 +11983,7 @@ Sorry for the inconvenience.";
 "Business.AdsTitle" = "ADS IN CHANNELS";
 "Business.DontHideAds" = "Do Not Hide Ads";
 "Business.AdsInfo" = "As a Premium subscriber, you don't see any ads on Tellomi, but you can turn them on, for example, to view your own ads that you launched on the [Tellomi Ad Platform >]()";
-"Business.AdsInfo_URL" = "https://promote.telegram.org";
+"Business.AdsInfo_URL" = "https://tellomi.cn/support/";
 
 "ChatList.PremiumGraceTitle" = "⚠️ Don't lose access to Tellomi Premium!";
 "ChatList.PremiumGraceText" = "Your exclusive benefits are about to expire.";
@@ -12535,7 +12535,7 @@ Sorry for the inconvenience.";
 "Monetization.BalanceStarsWithdrawShort" = "Withdraw";
 "Monetization.BalanceStarsBuyAds" = "Buy Ads";
 "Monetization.Balance.StarsInfo" = "You can collect rewards for Stars using Fragment, or use Stars to advertise your channel. [Learn More >]()";
-"Monetization.Balance.StarsInfo_URL" = "https://telegram.org";
+"Monetization.Balance.StarsInfo_URL" = "https://tellomi.cn/legal/terms/";
 
 "Monetization.StarsProceeds.Title" = "Rewards Overview";
 "Monetization.StarsProceeds.Available" = "Available Balance";
@@ -13204,7 +13204,7 @@ Sorry for the inconvenience.";
 "ChatList.Search.TopAppsInfo" = "Which apps are included here? [Learn >]()";
 
 "TopApps.Info.Title" = "Top Mini Apps";
-"TopApps.Info.Text" = "This catalogue ranks mini apps based on their daily revenue, measured in Stars. To be listed, developers must set their main mini app in [@botfather]() (as described [here](https://core.telegram.org/bots/webapps#launching-the-main-mini-app)), have over **1,000** daily users, and earn a daily revenue above **1,000** Stars, based on weekly average.";
+"TopApps.Info.Text" = "This catalogue ranks mini apps based on their daily revenue, measured in Stars. To be listed, developers must set their main mini app in [@botfather]() (as described [here](https://tellomi.cn/help)), have over **1,000** daily users, and earn a daily revenue above **1,000** Stars, based on weekly average.";
 "TopApps.Info.Done" = "Understood";
 
 "Stars.Intro.Transaction.TelegramBotApi.Title" = "Paid Broadcast";

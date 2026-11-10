@@ -945,9 +945,9 @@ public func recentSessionsController(context: AccountContext, activeSessionsCont
         }
         presentInGlobalOverlayImpl?(contextController)
     }, openDesktopLink: {
-        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://getdesktop.telegram.org", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
+        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.siteURL("help/start/link-desktop/"), forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     }, openWebLink: {
-        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://web.telegram.org", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
+        context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: TellomiLinks.siteURL(""), forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     })
     
     let previousMode = Atomic<RecentSessionsMode>(value: .sessions)

@@ -17,24 +17,47 @@ public func tellomiRewriteBrand(_ value: String) -> String {
             result = result.replacingOccurrences(of: token, with: "Tellomi")
         }
     }
+    // Longer site URLs first. Website hosts go to pages that exist on tellomi.cn.
+    // Short links (t.me, telegram.me, telegram.dog) stay on tell.cc below.
+    // support@tellomi.app is the address published on tellomi.cn/support/.
     let hosts = [
-        ("getdesktop.telegram.org", "tellomi.cn/download"),
-        ("desktop.telegram.org", "tellomi.cn/download"),
-        ("web.telegram.org", "tell.cc"),
-        ("ads.telegram.org", "tell.cc"),
-        ("promote.telegram.org", "tell.cc"),
+        ("https://core.telegram.org/bots/webapps#launching-the-main-mini-app", "https://tellomi.cn/help"),
+        ("https://ads.telegram.org/guidelines", "https://tellomi.cn/legal/community/"),
+        ("https://telegram.org/blog/coronavirus", "https://tellomi.cn/help"),
+        ("https://telegram.org/update", "https://tellomi.cn/help/install/update/"),
+        ("https://telegram.org/dl", "https://tellomi.cn/download/"),
+        ("https://telegram.org/faq", "https://tellomi.cn/help"),
+        ("https://telegram.org/privacy", "https://tellomi.cn/legal/privacy/"),
+        ("https://telegram.org/terms", "https://tellomi.cn/legal/terms/"),
+        ("https://telegram.org/tos", "https://tellomi.cn/legal/terms/"),
+        ("https://telegram.org/ads", "https://tellomi.cn/legal/privacy/"),
+        ("https://telegram.org/blog", "https://tellomi.cn/help"),
+        ("https://ads.telegram.org", "https://tellomi.cn/legal/community/"),
+        ("https://promote.telegram.org", "https://tellomi.cn/support/"),
+        ("https://getdesktop.telegram.org", "https://tellomi.cn/help/start/link-desktop/"),
+        ("https://desktop.telegram.org", "https://tellomi.cn/help/start/link-desktop/"),
+        ("https://web.telegram.org", "https://tellomi.cn"),
+        ("https://translations.telegram.org", "https://tellomi.cn/help"),
+        ("https://core.telegram.org", "https://tellomi.cn/help"),
+        ("https://www.telegram.org", "https://tellomi.cn"),
+        ("https://telegram.org", "https://tellomi.cn"),
+        ("getdesktop.telegram.org", "tellomi.cn/help/start/link-desktop/"),
+        ("desktop.telegram.org", "tellomi.cn/help/start/link-desktop/"),
+        ("web.telegram.org", "tellomi.cn"),
+        ("ads.telegram.org", "tellomi.cn"),
+        ("promote.telegram.org", "tellomi.cn"),
         ("translations.telegram.org", "tellomi.cn"),
         ("core.telegram.org", "tellomi.cn"),
-        ("sms@telegram.org", "support@tellomi.cn"),
-        ("recover@telegram.org", "support@tellomi.cn"),
-        ("www.telegram.org", "tell.cc"),
+        ("www.telegram.org", "tellomi.cn"),
+        ("sms@telegram.org", "support@tellomi.app"),
+        ("recover@telegram.org", "support@tellomi.app"),
     ]
     for (from, to) in hosts {
         if result.contains(from) {
             result = result.replacingOccurrences(of: from, with: to)
         }
     }
-    result = tellomiReplaceHostBoundary(result, from: "telegram.org", to: "tell.cc")
+    result = tellomiReplaceHostBoundary(result, from: "telegram.org", to: "tellomi.cn")
     if result.contains("telegram.me") {
         result = result.replacingOccurrences(of: "telegram.me", with: "tell.cc")
     }
