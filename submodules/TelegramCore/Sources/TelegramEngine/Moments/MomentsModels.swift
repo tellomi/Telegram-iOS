@@ -496,8 +496,10 @@ public struct MomentsReply: Codable, Equatable {
     public var isAuthor: Bool
     public var ipRegionLabel: String?
     public var disliked: Bool
+    /// `me.author` on the comment card: the signed-in viewer wrote this reply.
+    public var viewerAuthored: Bool
 
-    public init(id: String, postId: String, rootId: String, replyToName: String? = nil, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false, isAuthor: Bool = false, ipRegionLabel: String? = nil, disliked: Bool = false) {
+    public init(id: String, postId: String, rootId: String, replyToName: String? = nil, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false, isAuthor: Bool = false, ipRegionLabel: String? = nil, disliked: Bool = false, viewerAuthored: Bool = false) {
         self.id = id
         self.postId = postId
         self.rootId = rootId
@@ -511,6 +513,7 @@ public struct MomentsReply: Codable, Equatable {
         self.isAuthor = isAuthor
         self.ipRegionLabel = ipRegionLabel
         self.disliked = disliked
+        self.viewerAuthored = viewerAuthored
     }
 }
 
@@ -528,8 +531,10 @@ public struct MomentsComment: Codable, Equatable {
     public var isAuthor: Bool
     public var ipRegionLabel: String?
     public var disliked: Bool
+    /// `me.author` on the comment card: the signed-in viewer wrote this comment.
+    public var viewerAuthored: Bool
 
-    public init(id: String, postId: String, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false, replies: [MomentsReply] = [], replyCount: Int = 0, isAuthor: Bool = false, ipRegionLabel: String? = nil, disliked: Bool = false) {
+    public init(id: String, postId: String, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false, replies: [MomentsReply] = [], replyCount: Int = 0, isAuthor: Bool = false, ipRegionLabel: String? = nil, disliked: Bool = false, viewerAuthored: Bool = false) {
         self.id = id
         self.postId = postId
         self.author = author
@@ -543,6 +548,7 @@ public struct MomentsComment: Codable, Equatable {
         self.isAuthor = isAuthor
         self.ipRegionLabel = ipRegionLabel
         self.disliked = disliked
+        self.viewerAuthored = viewerAuthored
     }
 }
 

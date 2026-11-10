@@ -34,6 +34,10 @@ public final class MomentsComposerScreen: ViewController {
     private var voiceStateDisposable: Disposable?
     private var isRecordingVoice = false
     private var isFinishingVoice = false
+    /// One UUID for this draft. Retries send the same value; a new composer mints a new one.
+    private let clientNonce = UUID().uuidString
+    private var publishing = false
+    private var audienceGrant: (kind: String, userIds: [Int64], grant: MomentsAudienceGrant)?
 
     public init(context: AccountContext, quoteId: String?) {
         self.context = context
@@ -59,6 +63,7 @@ public final class MomentsComposerScreen: ViewController {
         self.displayNode.view.addSubview(self.audienceButton)
         self.displayNode.view.addSubview(self.publishButton)
         self.displayNode.view.addSubview(self.nearbySwitch)
+        self.nearbySwitch.addTarget(self, action: #selector(self.nearbyChanged), for: .valueChanged)
         self.textView.font = Font.regular(self.presentationData.listsFontSize.baseDisplaySize)
         self.textView.backgroundColor = .clear
         self.textView.delegate = self
@@ -122,7 +127,7 @@ public final class MomentsComposerScreen: ViewController {
         }
         let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll, hasLinkPreview: !self.linkRemoved && momentsScanText(self.textView.text ?? "").firstURL != nil)
         let hasBody = !(self.textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.isEmpty || !self.media.isEmpty
-        let canPublish = hasBody && !self.isRecordingVoice && self.audienceChosen
+        let canPublish = hasBody && !self.isRecordingVoice && self.audienceChosen && !self.publishing
         self.navigationItem.rightBarButtonItem?.isEnabled = canPublish
         self.publishButton.isEnabled = canPublish
         self.nearbySwitch.isHidden = !self.audienceChosen || audience.kind != .everyone
@@ -422,63 +427,125 @@ public final class MomentsComposerScreen: ViewController {
         ], actionLayout: .vertical), in: .window(.root))
     }
 
+    @objc private func nearbyChanged() {
+        self.allowNearby = self.nearbySwitch.isOn
+    }
+
     @objc private func publishPressed() {
-        guard self.audienceChosen else { return }
+        guard self.audienceChosen, !self.publishing else { return }
         let audience = momentsAudience(from: self.privacy)
         let text = self.textView.text ?? ""
         let scan = momentsScanText(text)
-        let send = { [weak self] in
-            guard let self else { return }
-            var audienceBody: [String: Any] = ["kind": audience.kind.rawValue]
-            if !audience.exclude.isEmpty {
-                audienceBody["exclude"] = audience.exclude
-            }
-            if !audience.include.isEmpty {
-                audienceBody["include"] = audience.include
-            }
-            var body: [String: Any] = [
-                "text": text,
-                "audience": audienceBody,
-                "comment_policy": MomentsCommentPolicy.everyoneWhoCanView.rawValue,
-                "client_nonce": UUID().uuidString
-            ]
-            if !self.media.isEmpty {
-                body["media"] = self.media.map { item in
-                    [
-                        "type": item.type.rawValue,
-                        "key": item.key,
-                        "w": item.width,
-                        "h": item.height,
-                        "duration_ms": item.durationMs,
-                        "order": item.order
-                    ]
-                }
-            }
-            if self.allowNearby && audience.kind == .everyone {
-                body["location"] = ["allow_nearby": true]
-            }
-            if let quoteId = self.quoteId {
-                body["quote_of"] = quoteId
-            }
-            if let url = scan.firstURL, !self.linkRemoved, momentsShowsLinkPreview(MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasPoll: self.hasPoll, hasLinkPreview: true)) {
-                body["link_preview"] = ["url": url]
-            }
-            let _ = (self.context.engine.moments.publish(body) |> deliverOnMainQueue).start(next: { [weak self] _ in
-                self?.context.engine.moments.storeDraft(nil)
-                self?.navigationController?.popViewController(animated: true)
-            }, error: { [weak self] _ in
-                guard let self else { return }
-                self.present(textAlertController(context: self.context, title: nil, text: momentsText(self.presentationData.strings, .failedRetry), actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .retry), action: { [weak self] in self?.publishPressed() })]), in: .window(.root))
-            })
+        let submit: () -> Void = { [weak self] in
+            self?.submitPost()
         }
         if !scan.mentions.isEmpty && audience.kind != .everyone {
             self.present(textAlertController(context: self.context, title: nil, text: momentsText(self.presentationData.strings, .mentionWarning) + "\n" + scan.mentions.joined(separator: ", "), actions: [
                 TextAlertAction(type: .genericAction, title: momentsText(self.presentationData.strings, .cancel), action: {}),
-                TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .publish), action: send)
+                TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .publish), action: submit)
             ]), in: .window(.root))
         } else {
-            send()
+            submit()
         }
+    }
+
+    private func currentDraft() -> MomentsPostDraft {
+        let audience = momentsAudience(from: self.privacy)
+        let nearby = self.allowNearby && audience.kind == .everyone && audience.exclude.isEmpty && audience.include.isEmpty
+        return MomentsPostDraft(
+            text: (self.textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+            audience: audience,
+            mediaKeys: self.media.sorted { $0.order < $1.order }.map(\.key).filter { !$0.isEmpty },
+            allowNearby: nearby,
+            quoteOf: self.quoteId,
+            clientNonce: self.clientNonce
+        )
+    }
+
+    private func reusableAudienceToken(kind: String, userIds: [Int64]) -> String? {
+        guard let stored = self.audienceGrant, stored.kind == kind, stored.userIds == userIds else {
+            return nil
+        }
+        let now = Int64(Date().timeIntervalSince1970)
+        if stored.grant.needsRefresh(now: now) || stored.grant.token.isEmpty {
+            return nil
+        }
+        return stored.grant.token
+    }
+
+    private func submitPost() {
+        guard self.audienceChosen, !self.publishing else { return }
+        let draft = self.currentDraft()
+        let tokenKind = momentsEncodePost(draft, audienceToken: nil)
+        let token: String?
+        if case let .success(.needsAudienceToken(kind, userIds)) = tokenKind {
+            token = self.reusableAudienceToken(kind: kind, userIds: userIds)
+        } else {
+            token = nil
+        }
+        switch momentsEncodePost(draft, audienceToken: token) {
+        case let .success(.needsAudienceToken(kind, userIds)):
+            self.fetchAudienceToken(kind: kind, userIds: userIds, draft: draft)
+        case .failure(.audienceTokenRequired), .failure(.audienceNotRepresentable):
+            self.presentAudienceKept()
+        case .failure(.invalidClientNonce):
+            self.presentPublishError()
+        case let .success(.ready(body)):
+            self.sendPost(body)
+        }
+    }
+
+    private func fetchAudienceToken(kind: String, userIds: [Int64], draft: MomentsPostDraft) {
+        self.publishing = true
+        self.refresh()
+        let _ = (self.context.engine.moments.audienceToken(kind: kind, userIds: userIds) |> deliverOnMainQueue).start(next: { [weak self] grant in
+            guard let self else { return }
+            self.publishing = false
+            self.refresh()
+            self.audienceGrant = (kind: kind, userIds: userIds, grant: grant)
+            switch momentsEncodePost(draft, audienceToken: grant.token) {
+            case let .success(.ready(body)):
+                self.sendPost(body)
+            case .success(.needsAudienceToken(_, _)), .failure(_):
+                self.presentAudienceKept()
+            }
+        }, error: { [weak self] _ in
+            guard let self else { return }
+            self.publishing = false
+            self.refresh()
+            self.presentAudienceKept()
+        })
+    }
+
+    private func sendPost(_ body: [String: Any]) {
+        guard !self.publishing else { return }
+        self.publishing = true
+        self.refresh()
+        let _ = (self.context.engine.moments.publish(body) |> deliverOnMainQueue).start(next: { [weak self] _ in
+            guard let self else { return }
+            self.publishing = false
+            self.context.engine.moments.storeDraft(nil)
+            self.navigationController?.popViewController(animated: true)
+        }, error: { [weak self] _ in
+            guard let self else { return }
+            self.publishing = false
+            self.refresh()
+            self.presentPublishError()
+        })
+    }
+
+    private func presentPublishError() {
+        self.presentFailure(momentsText(self.presentationData.strings, .failedRetry))
+    }
+
+    private func presentAudienceKept() {
+        self.presentFailure(momentsText(self.presentationData.strings, .audienceKept))
+    }
+
+    private func presentFailure(_ text: String) {
+        self.present(textAlertController(context: self.context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .retry), action: { [weak self] in
+            self?.submitPost()
+        })]), in: .window(.root))
     }
 }
 

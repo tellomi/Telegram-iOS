@@ -233,3 +233,7 @@
 "Tour.Title6" = "免費";
 "Tour.Text6" = "**Tellomi** 為聊天和媒體\n提供免費的無限雲端儲存。";
 "Tour.StartButton" = "開始使用";
+
+/* Moments feed. Same wording as the Android values pack for this language. */
+"Moments_Comment_SendFailed" = "留言沒有送出，內容還在。";
+"Moments_Audience_Kept" = "沒能更新誰可以看。你的選擇還在。";

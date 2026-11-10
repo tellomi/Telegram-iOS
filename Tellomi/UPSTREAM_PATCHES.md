@@ -32,6 +32,15 @@ Overseas networks drop TCP 10443 and pass 443. The seed for datacenter 1 is `api
 | `submodules/TelegramCore/Sources/Network/Network.swift` | Installs the seed address sets. |
 | `submodules/MtProtoKit/Tests/MTSeedFallbackTests.m` | Seed order, saved-list merge, dc_options merge, and the 10443-then-443 choice. |
 
+## Moments feed contract, list and comments — 2026-11-10
+
+Branch `cursor/moments-feed-f01-f04-7ea6`, based on `release/ios` (`043a05bd55`).
+
+- `POST /v1/feed/posts` is built by `momentsEncodePost`. The body is `kind=post`, `visibility`, `media_keys`, root `city` / `allow_nearby` / `place_id`, `quote_of` and a UUID `client_nonce`. It does not send `media`, `location`, `comment_policy` or `link_preview`. Include and exclude send `audience.audience_token` from `discover.getAudienceToken` (`#dc5213c2` / `#da177181`). A token failure leaves the picked audience in place. The nonce is fixed for retries of that draft.
+- Tapping the post body opens `MomentsDetailScreen`. The comment button presents `MomentsCommentSheet` over the list. Closing the sheet does not push or pop, so the tab and scroll position stay. A photo or video opens the gallery. Tab taps and pager swipes share `commitSelection`. Profile, search and a post deep link keep the detail screen.
+- The list loads the next page near the bottom and dedupes by id. Pulling down refreshes from a nil cursor and cancels the previous page request. A failed page can be retried. Following, friends and nearby probe the first page on an interval while the feed is on screen and only raise the new-posts pill. Recommend does not poll. The probe pauses while the feed is off screen or the comment sheet is covering it.
+- The comment sheet keeps separate hot and latest cursors, sends `parent_id` for a reply, opens an author from the avatar or name, and long-presses for reply, copy, report and delete where that action is allowed. `canComment` and `commentPolicy` disable the field. The text, reply target and attachment clear only after a successful send. A failed send shows `Moments_Comment_SendFailed`. A failed audience token shows `Moments_Audience_Kept` and leaves the selection in place. Both keys are in every built-in lproj: en, zh-Hans, zh-Hant, ar, be, ca, de, es, fa, fr, id, it, ko, ms, nl, pl, pt, ru, tr, uk and uz. Languages Android already translated use that wording. be, ca, fa, fr, id, ms, pl, tr and uz have their own native sentences, not English. `momentsText` uses that lproj when the langpack has no translation of its own. A repeated tab change cancels the previous page before its callback can render. A like updates only that row. Feed photos are bound to the cell that requested them. The post body opens the detail screen, and a photo or video opens the gallery. Relative times use the shared timer strings. A retry uses the same nonce. Comments that are turned off still use `Moments.Comment.Closed`.
+
 ## Moments feed (动态) — 2026-11-09
 
 Branch `cursor/moments-feed-v1-b405`, based on `de22e3ff` (official restore, PR #138). This is not part of the 14.0.5 release candidate.

@@ -1,0 +1,3 @@
+/* Moments feed. Native wording for this built-in language. */
+"Moments_Comment_SendFailed" = "Nie udało się wysłać komentarza. Twój tekst nadal tu jest.";
+"Moments_Audience_Kept" = "Nie udało się zmienić, kto może to zobaczyć. Twój wybór został zachowany.";
