@@ -329,6 +329,16 @@ public func momentsMergeFeed(existing: [MomentsCard], pageItems: [MomentsCard], 
     return (items, nextCursor)
 }
 
+/// Indexes whose fingerprint changed while the row id stayed put. Other rows are not included.
+public func momentsChangedRowIndexes(previous: [String], next: [String]) -> [Int] {
+    var updates: [Int] = []
+    let count = min(previous.count, next.count)
+    for index in 0..<count where previous[index] != next[index] {
+        updates.append(index)
+    }
+    return updates
+}
+
 /// Rows already on the list. Unchanged ids stay put. Only the differing span is deleted and inserted,
 /// and the insert indexes are valid after those deletes (an empty list only inserts at 0, then 1, …).
 public func momentsListEdit(previousIds: [String], nextIds: [String]) -> (deletes: [Int], inserts: [Int], updates: [Int]) {

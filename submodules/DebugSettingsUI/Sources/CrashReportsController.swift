@@ -19,6 +19,45 @@ import BuildConfig
 import AppBundle
 #endif
 
+private let crashReportPendingKey = "tellomi.crashReport.pendingSend"
+
+private func crashReportPendingIds() -> Set<String> {
+    return Set(UserDefaults.standard.stringArray(forKey: crashReportPendingKey) ?? [])
+}
+
+private func crashReportSetPending(_ ids: Set<String>) {
+    UserDefaults.standard.set(Array(ids), forKey: crashReportPendingKey)
+}
+
+private func crashReportMarkPending(_ id: String) {
+    var ids = crashReportPendingIds()
+    ids.insert(id)
+    crashReportSetPending(ids)
+}
+
+private func crashReportClearPending(_ id: String) {
+    var ids = crashReportPendingIds()
+    ids.remove(id)
+    crashReportSetPending(ids)
+}
+
+private func crashReportMarkPresented(_ id: String) {
+    crashReportWorkQueue.async {
+        try? CrashReportStore.shared.markPresented(ids: [id])
+    }
+}
+
+private func crashReportCaption(_ report: CrashReport) -> String {
+    return [
+        "Tellomi crash log",
+        "Report: \(report.id)",
+        "App: \(report.metadata.applicationVersion) (\(report.metadata.buildVersion))",
+        "OS: \(report.metadata.osVersion)",
+        "Device: \(report.metadata.deviceType)",
+        "Architecture: \(report.metadata.architecture)"
+    ].joined(separator: "\n")
+}
+
 private func crashReportBotName(context: AccountContext) -> String {
     let configuration = context.currentAppConfiguration.with { $0 }
     if let data = configuration.data, let name = data["tellomi_crash_report_bot"] as? String {
@@ -48,6 +87,10 @@ private func crashReportText(_ context: AccountContext, _ key: String, english: 
         resolved = strings.CrashReport_SavedInstead
     case "thanks":
         resolved = strings.CrashReport_Thanks
+    case "offline":
+        resolved = strings.CrashReport_Offline
+    case "failed":
+        resolved = strings.CrashReport_Failed
     default:
         resolved = english
     }
@@ -158,16 +201,18 @@ private final class CrashReportActions {
                     let resource = LocalFileMediaResource(fileId: id, size: Int64(data.count), isSecretRelated: false)
                     context.engine.resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: data)
                     let file = TelegramMediaFile(fileId: EngineMedia.Id(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "application/zip", size: Int64(data.count), attributes: [.FileName(fileName: "CrashReport-\(report.id.prefix(12)).zip")], alternativeRepresentations: [])
-                    let message: EnqueueMessage = .message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+                    let message: EnqueueMessage = .message(text: crashReportCaption(report), attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
                     self.disposable.set((enqueueMessages(account: context.account, peerId: peerId, messages: [message])
                     |> deliverOnMainQueue).start(next: { [weak self] ids in
                         guard let self else { return }
                         self.finishSending()
                         guard ids.contains(where: { $0 != nil }) else {
-                            self.alert(crashReportText(context, "botTitle", english: "Could Not Find Crash Log Bot", chinese: "找不到崩溃日志机器人"), crashReportText(context, "botText", english: "Check your connection and try again. The log remains saved on this device.", chinese: "请检查网络后再试。日志仍保存在这台设备上。"))
+                            self.toast(crashReportText(context, "failed", english: "Could not send the crash log. It remains saved on this device.", chinese: "崩溃日志没有发出去。它仍保存在这台设备上。"))
                             return
                         }
-                        self.alert(crashReportText(context, "botTitle", english: "Could Not Find Crash Log Bot", chinese: "找不到崩溃日志机器人"), crashReportText(context, "saved", english: "The crash bot is not available, so the log was saved to Saved Messages.", chinese: "崩溃日志机器人不可用，日志已保存到收藏夹。"))
+                        crashReportClearPending(report.id)
+                        crashReportMarkPresented(report.id)
+                        self.toast(crashReportText(context, "saved", english: "The crash bot is not available, so the log was saved to Saved Messages.", chinese: "崩溃日志机器人不可用，日志已保存到收藏夹。"))
                     }))
                 case .failure:
                     self.finishSending()
@@ -184,6 +229,12 @@ private final class CrashReportActions {
 
     deinit {
         self.disposable.dispose()
+    }
+
+    func toast(_ text: String) {
+        self.show(UndoOverlayController(presentationData: self.sharedContext.currentPresentationData.with { $0 }, content: .succeed(text: text, timeout: nil, customUndoText: nil), action: { _ in
+            return false
+        }))
     }
 
     func alert(_ title: String, _ text: String) {
@@ -313,6 +364,18 @@ private final class CrashReportActions {
 
     func send(_ report: CrashReport, context: AccountContext) {
         guard self.canPresent, !self.busy else { return }
+        crashReportMarkPending(report.id)
+        self.disposable.set((context.account.networkState |> take(1) |> deliverOnMainQueue).start(next: { [weak self] state in
+            guard let self, self.canPresent, !self.busy else { return }
+            guard state == .online else {
+                self.toast(crashReportText(context, "offline", english: "You're offline. The log stays on this device and will be sent when you reconnect.", chinese: "当前没有网络。日志仍在这台设备上，连上网络后会发送。"))
+                return
+            }
+            self.beginSend(report, context: context)
+        }))
+    }
+
+    private func beginSend(_ report: CrashReport, context: AccountContext) {
         self.busy = true
         let progress = OverlayStatusController(theme: self.sharedContext.currentPresentationData.with { $0 }.theme, type: .loading(cancelled: nil))
         self.progress = progress
@@ -358,15 +421,17 @@ private final class CrashReportActions {
                         let resource = LocalFileMediaResource(fileId: id, size: Int64(data.count), isSecretRelated: false)
                         context.engine.resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: data)
                         let file = TelegramMediaFile(fileId: EngineMedia.Id(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "application/zip", size: Int64(data.count), attributes: [.FileName(fileName: "CrashReport-\(report.id.prefix(12)).zip")], alternativeRepresentations: [])
-                        let message: EnqueueMessage = .message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+                        let message: EnqueueMessage = .message(text: crashReportCaption(report), attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
                         self.disposable.set((enqueueMessages(account: context.account, peerId: peerId, messages: [message])
                         |> deliverOnMainQueue).start(next: { [weak self] ids in
                             guard let self else { return }
                             self.finishSending()
                             guard ids.contains(where: { $0 != nil }) else {
-                                self.alert("Could Not Queue Log", "Please try again. The log remains saved on this device.")
+                                self.toast(crashReportText(context, "failed", english: "Could not send the crash log. It remains saved on this device.", chinese: "崩溃日志没有发出去。它仍保存在这台设备上。"))
                                 return
                             }
+                            crashReportClearPending(report.id)
+                            crashReportMarkPresented(report.id)
                             self.show(UndoOverlayController(presentationData: self.sharedContext.currentPresentationData.with { $0 }, content: .succeed(text: crashReportText(context, "thanks", english: "Thank you for helping make Tellomi better!", chinese: "感谢你帮助改进 Tellomi！"), timeout: nil, customUndoText: nil), action: { _ in
                                 return false
                             }))
@@ -519,17 +584,26 @@ public func setupCrashReportPrompt(context: AccountContext, isInternalBuild: Boo
     actions.present = present
     actions.push = { [weak navigationController] in navigationController?.pushViewController($0) }
     var didPresent = false
+    var didFlush = false
     weak var alert: ViewController?
     let disposable = (combineLatest(crashReportsSignal(), context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.experimentalUISettings]), context.sharedContext.applicationBindings.applicationIsActive, context.sharedContext.appLockContext.isPasscodeLocked)
     |> deliverOnMainQueue).start(next: { result, sharedData, active, locked in
         actions.canPresent = active && !locked
         guard active && !locked else {
+            didFlush = false
             if alert != nil {
                 alert?.dismiss()
                 alert = nil
                 didPresent = false
             }
             return
+        }
+        if !didFlush, case let .success(reports) = result {
+            didFlush = true
+            if let queued = reports.first(where: { crashReportPendingIds().contains($0.id) }) {
+                actions.send(queued, context: context)
+                return
+            }
         }
         let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.experimentalUISettings]?.get(ExperimentalUISettings.self) ?? .defaultSettings
         guard !didPresent, crashReportAlertsEnabled(override: settings.showCrashReportAlerts, isInternalBuild: isInternalBuild), case let .success(reports) = result else { return }
@@ -548,7 +622,6 @@ public func setupCrashReportPrompt(context: AccountContext, isInternalBuild: Boo
                 markPresented()
             }),
             TextAlertAction(type: .defaultAction, title: crashReportText(context, "send", english: "Send Log", chinese: "发送日志"), action: {
-                markPresented()
                 actions.send(pending[0], context: context)
             })
         ])

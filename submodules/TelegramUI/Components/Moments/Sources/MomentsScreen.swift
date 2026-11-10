@@ -165,6 +165,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var validLayout: ContainerViewLayout?
     /// Ids the list has already applied. A second layout pass must not update rows the list does not have yet.
     private var appliedIds: [MomentsFeedKind: [String]] = [:]
+    private var appliedPrints: [MomentsFeedKind: [String]] = [:]
     private var listBusy: [MomentsFeedKind: Bool] = [:]
     private var renderQueued: Set<MomentsFeedKind> = [:]
     private var renderEpoch: [MomentsFeedKind: Int] = [:]
@@ -484,28 +485,44 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
                 entries.append(MomentsStatusItem(text: momentsText(strings, .loadFailed), theme: theme, action: { [weak self] in self?.load(kind, refresh: false) }))
             }
         }
-        let ids = entries.map { item -> String in
+        let rows = entries.map { item -> (stable: String, print: String) in
             if let post = item as? MomentsPostItem {
                 let card = post.card
-                return [
-                    post.hidden ? "h" : "v",
-                    card.id,
+                let stable = (post.hidden ? "h:" : "") + card.id
+                let print = [
                     String(card.version),
                     card.viewer.liked ? "1" : "0",
                     String(card.counts.likes),
+                    String(card.counts.comments),
                     String(post.albumIndex),
                     post.playing ? "p" : "s",
                     post.expanded ? "e" : "c"
                 ].joined(separator: ":")
+                return (stable, print)
             }
-            return "status"
+            if let status = item as? MomentsStatusItem {
+                return ("status", status.text)
+            }
+            return ("status", "")
         }
+        let ids = rows.map(\.stable)
+        let prints = rows.map(\.print)
         if self.listBusy[kind] == true {
             self.renderQueued.insert(kind)
             return
         }
         let previous = self.appliedIds[kind] ?? []
-        let edit = momentsListEdit(previousIds: previous, nextIds: ids)
+        let previousPrints = self.appliedPrints[kind] ?? []
+        let edit: (deletes: [Int], inserts: [Int], updates: [Int])
+        if previous == ids {
+            edit = ([], [], momentsChangedRowIndexes(previous: previousPrints, next: prints))
+            if edit.updates.isEmpty && !resetScroll {
+                self.appliedPrints[kind] = prints
+                return
+            }
+        } else {
+            edit = momentsListEdit(previousIds: previous, nextIds: ids)
+        }
         let insets = UIEdgeInsets(top: 0, left: 0, bottom: 72, right: 0)
         let epoch = (self.renderEpoch[kind] ?? 0) + 1
         self.renderEpoch[kind] = epoch
@@ -514,6 +531,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         list.transaction(deleteIndices: edit.deletes.map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: edit.inserts.map { ListViewInsertItem(index: $0, previousIndex: nil, item: entries[$0], directionHint: nil) }, updateIndicesAndItems: edit.updates.map { ListViewUpdateItem(index: $0, previousIndex: $0, item: entries[$0], directionHint: nil) }, options: [.Synchronous, .LowLatency], scrollToItem: scroll, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), stationaryItemRange: nil, updateOpaqueState: nil, completion: { [weak self] _ in
             guard let self, self.renderEpoch[kind] == epoch else { return }
             self.appliedIds[kind] = ids
+            self.appliedPrints[kind] = prints
             self.listBusy[kind] = false
             if kind == self.selected {
                 self.updateVisiblePlayback()
@@ -694,8 +712,8 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             guard let model = self.models[kind] else { continue }
             model.items = model.items.map { $0.id == id ? transform($0) : $0 }
             self.models[kind] = model
+            self.render(kind, resetScroll: false)
         }
-        self.render(self.selected, resetScroll: false)
     }
 
     @objc private func composePressed() { self.presentComposer(quoteId: nil) }

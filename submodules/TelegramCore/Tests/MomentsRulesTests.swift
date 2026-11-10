@@ -273,6 +273,8 @@ final class MomentsRulesTests: XCTestCase {
         let switched = momentsListEdit(previousIds: ["a", "b", "c"], nextIds: ["a", "d", "c"])
         XCTAssertEqual(switched.deletes, [1])
         XCTAssertEqual(switched.inserts, [1])
+        XCTAssertEqual(momentsChangedRowIndexes(previous: ["a:0", "b:0", "c:0"], next: ["a:0", "b:1", "c:0"]), [1])
+        XCTAssertTrue(momentsChangedRowIndexes(previous: ["a:0", "b:0"], next: ["a:0", "b:0"]).isEmpty)
     }
 
     func testDouyinCommentThreadContract() {
