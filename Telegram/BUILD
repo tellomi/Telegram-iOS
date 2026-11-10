@@ -191,12 +191,35 @@ empty_languages = [
     "uz",
 ]
 
+# These packs ship the two Moments failure strings. The other languages stay empty so a missing
+# key still falls through to English, and we do not copy the English sentence into them.
+moments_string_languages = [
+    "ar",
+    "de",
+    "es",
+    "it",
+    "ko",
+    "nl",
+    "pt",
+    "ru",
+    "uk",
+    "zh-Hans",
+    "zh-Hant",
+]
+
 [
+    genrule(
+        name = "Localizable_{}.strings".format(language),
+        srcs = ["Telegram-iOS/{}.lproj/Localizable.strings".format(language)],
+        outs = ["{}.lproj/Localizable.strings".format(language)],
+        cmd = "cp $(location Telegram-iOS/{}.lproj/Localizable.strings) $(OUTS)".format(language),
+    ) for language in moments_string_languages
+] + [
     genrule(
         name = "Localizable_{}.strings".format(language),
         outs = ["{}.lproj/Localizable.strings".format(language)],
         cmd = "touch $(OUTS)",
-    ) for language in empty_languages
+    ) for language in empty_languages if language not in moments_string_languages
 ]
 
 objc_library(
@@ -277,6 +300,8 @@ filegroup(
         "Telegram-iOS/en.lproj/Localizable.strings",
     ] + [
         "{}.lproj/Localizable.strings".format(language) for language in empty_languages
+    ] + [
+        "{}.lproj/Localizable.strings".format(language) for language in moments_string_languages if language not in empty_languages
     ],
     # //Tests/ComposerHarness bundles these. `defaultPresentationStrings` FORCE-UNWRAPS
     # `getAppBundle().path(forResource: "Localizable" …)`, so any standalone app that builds a

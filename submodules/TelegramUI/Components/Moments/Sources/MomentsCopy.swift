@@ -1,4 +1,5 @@
 import Foundation
+import AppBundle
 import TelegramCore
 import TelegramPresentationData
 
@@ -280,9 +281,9 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
     case .failedRetry:
         (resolved, english, chinese) = (strings.Moments_FailedRetry, "Could not post. Retry", "发布失败 · 重试")
     case .commentSendFailed:
-        return strings.Moments_Comment_SendFailed
+        return momentsBundledFeedString(strings, "Moments_Comment_SendFailed", strings.Moments_Comment_SendFailed)
     case .audienceKept:
-        return strings.Moments_Audience_Kept
+        return momentsBundledFeedString(strings, "Moments_Audience_Kept", strings.Moments_Audience_Kept)
     case .uploading:
         (resolved, english, chinese) = (strings.Moments_Uploading, "Posting", "发布中")
     case .mentionWarning:
@@ -321,6 +322,74 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
         (resolved, english, chinese) = (strings.Moments_ExpandReplies, "replies", "条回复")
     }
     return momentsChoose(strings, resolved, english, chinese)
+}
+
+/// Langpack value when it is a real translation. Otherwise the built-in lproj for that language, so German, Arabic, both Chinese scripts and the rest do not show the English sentence.
+private func momentsBundledFeedString(_ strings: PresentationStrings, _ key: String, _ resolved: String) -> String {
+    let english = momentsLprojString(key, "en")
+    for code in [strings.primaryComponent.languageCode, strings.baseLanguageCode] {
+        guard let folder = momentsLprojName(code), folder != "en" else {
+            continue
+        }
+        guard let bundled = momentsLprojString(key, folder), !bundled.isEmpty else {
+            continue
+        }
+        if let english, resolved != english, resolved != key {
+            return resolved
+        }
+        return bundled
+    }
+    return resolved
+}
+
+private func momentsLprojName(_ code: String) -> String? {
+    let normalized = code.lowercased().replacingOccurrences(of: "_", with: "-")
+    if normalized == "en" || normalized.hasPrefix("en-") {
+        return "en"
+    }
+    if normalized.hasPrefix("zh-hant") || normalized.hasPrefix("zh-tw") || normalized.hasPrefix("zh-hk") || normalized.hasPrefix("zh-mo") {
+        return "zh-Hant"
+    }
+    if normalized.hasPrefix("zh") {
+        return "zh-Hans"
+    }
+    if normalized.hasPrefix("pt") {
+        return "pt"
+    }
+    let base = normalized.split(separator: "-").first.map(String.init) ?? normalized
+    switch base {
+    case "ar", "de", "es", "it", "ko", "nl", "ru", "uk":
+        return base
+    default:
+        return nil
+    }
+}
+
+private var momentsLprojCache: [String: [String: String]] = [:]
+private let momentsLprojLock = NSLock()
+
+private func momentsLprojString(_ key: String, _ folder: String) -> String? {
+    momentsLprojLock.lock()
+    let cached = momentsLprojCache[folder]
+    momentsLprojLock.unlock()
+    let table: [String: String]
+    if let cached {
+        table = cached
+    } else {
+        guard let path = getAppBundle().path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: folder),
+              let loaded = NSDictionary(contentsOfFile: path) as? [String: String] else {
+            return nil
+        }
+        momentsLprojLock.lock()
+        momentsLprojCache[folder] = loaded
+        momentsLprojLock.unlock()
+        table = loaded
+    }
+    let value = table[key]
+    if value?.isEmpty == true {
+        return nil
+    }
+    return value
 }
 
 private func momentsChoose(_ strings: PresentationStrings, _ resolved: String, _ english: String, _ chinese: String) -> String {
