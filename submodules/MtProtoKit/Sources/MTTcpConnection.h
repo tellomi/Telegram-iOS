@@ -37,6 +37,12 @@
 
 + (MTQueue *)tcpQueue;
 
+/// TCP handshake timeout. An endpoint that has never received a response uses
+/// 5 seconds, so a dropped port rotates about as fast as Android's 5s connect
+/// timeout. An endpoint that has already answered keeps 12 seconds: the extra
+/// SYN retransmits stay available on a slow path that does connect.
+NSTimeInterval MTTcpConnectTimeoutInterval(bool endpointHasReceivedResponse);
+
 - (instancetype)initWithContext:(MTContext *)context datacenterId:(NSInteger)datacenterId scheme:(MTTransportScheme *)scheme interface:(NSString *)interface usageCalculationInfo:(MTNetworkUsageCalculationInfo *)usageCalculationInfo getLogPrefix:(NSString *(^)())getLogPrefix;
 
 - (void)setUsageCalculationInfo:(MTNetworkUsageCalculationInfo *)usageCalculationInfo;

@@ -150,6 +150,7 @@
 - (MTDatacenterAddressSet * _Nonnull)addressSetForDatacenterWithId:(NSInteger)datacenterId;
 - (void)reportTransportSchemeFailureForDatacenterId:(NSInteger)datacenterId transportScheme:(MTTransportScheme * _Nonnull)transportScheme;
 - (void)reportTransportSchemeSuccessForDatacenterId:(NSInteger)datacenterId transportScheme:(MTTransportScheme * _Nonnull)transportScheme;
+- (bool)transportSchemeHasReceivedResponseForDatacenterId:(NSInteger)datacenterId transportScheme:(MTTransportScheme * _Nonnull)transportScheme;
 - (void)invalidateTransportSchemesForDatacenterIds:(NSArray<NSNumber *> * _Nonnull)datacenterIds;
 - (void)invalidateTransportSchemesForKnownDatacenterIds;
 - (MTTransportScheme * _Nullable)chooseTransportSchemeForConnectionToDatacenterId:(NSInteger)datacenterId schemes:(NSArray<MTTransportScheme *> * _Nonnull)schemes;

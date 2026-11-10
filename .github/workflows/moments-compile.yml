@@ -1,8 +1,9 @@
 # Compile check for the Moments feed PR (#139).
 #
 # Same release_arm64 build as testflight.yml, without the upload: it builds
-# bazel-bin/Telegram/Telegram.ipa and stops. It runs only for the Moments
-# branch, never on a push to release/ios, and never calls altool.
+# bazel-bin/Telegram/Telegram.ipa and stops. It never runs on a push to
+# release/ios and never calls altool. The port-443 fallback branch is
+# included so that pull request can compile this configuration.
 
 name: Moments compile
 
@@ -22,7 +23,7 @@ concurrency:
 
 jobs:
   app:
-    if: github.head_ref == 'cursor/moments-comment-api-b405' || github.head_ref == 'cursor/moments-feed-parity-f601' || github.head_ref == 'cursor/ios-batch-tf' || github.head_ref == 'cursor/ios-login-locale-crash-48dd'
+    if: github.head_ref == 'cursor/moments-comment-api-b405' || github.head_ref == 'cursor/moments-feed-parity-f601' || github.head_ref == 'cursor/ios-batch-tf' || github.head_ref == 'cursor/ios-login-locale-crash-48dd' || github.head_ref == 'cursor/mtproto-port-443-fallback-e2a4'
     runs-on: xcode-27
     timeout-minutes: 360
     env:
