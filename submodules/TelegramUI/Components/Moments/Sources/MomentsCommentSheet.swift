@@ -230,7 +230,7 @@ public final class MomentsCommentSheet: ViewController {
         body.frame.size.height = bodyHeight
         self.list.addSubview(body)
         var cursor = body.frame.maxY
-        if let attachment, let remoteURL = attachment.remoteURL, remoteURL.hasPrefix("https://"), momentsPresentsAsImage(attachment.type) {
+        if let attachment, let remoteURL = momentsFeedImageURL(attachment, targetPixels: momentsCarouselImagePixels), remoteURL.hasPrefix("https://") {
             let image = UIImageView(frame: CGRect(x: x + 40, y: cursor + 8, width: 120, height: 120))
             image.layer.cornerRadius = 8
             image.clipsToBounds = true

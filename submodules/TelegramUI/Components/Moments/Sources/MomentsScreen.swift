@@ -11,6 +11,7 @@ import ContextUI
 import ComponentFlow
 import HorizontalTabsComponent
 import PeerReportScreen
+import PresentationDataUtils
 
 public final class MomentsScreen: ViewController {
     private let context: AccountContext
@@ -149,8 +150,8 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var lists: [MomentsFeedKind: ListView] = [:]
     private var models: [MomentsFeedKind: MomentsFeedModel] = [:]
     private var selected: MomentsFeedKind = .recommend
-    /// Server `tabs`, minus `friends` (that path does not exist). Until config arrives, recommend / following / nearby.
-    private var visibleTabs: [MomentsFeedKind] = [.recommend, .following, .nearby]
+    /// FR-010. Always these four, including when capabilities omits `friends`.
+    private var visibleTabs: [MomentsFeedKind] = [.recommend, .following, .friends, .nearby]
     private var expanded: Set<String> = []
     private var albumIndex: [String: Int] = [:]
     private var sessionHidden: Set<String> = []
@@ -199,18 +200,6 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             self.lists[kind] = list
             self.pager.addSubview(list.view)
         }
-        let _ = (self.context.engine.moments.feedTabs() |> deliverOnMainQueue).start(next: { [weak self] tabs in
-            guard let self else { return }
-            let matched = tabs.compactMap { MomentsFeedKind(rawValue: $0) }.filter { $0 != .friends }
-            guard !matched.isEmpty, matched != self.visibleTabs else { return }
-            self.visibleTabs = matched
-            if !matched.contains(self.selected) {
-                self.selected = matched[0]
-            }
-            if let layout = self.validLayout {
-                self.containerLayoutUpdated(layout, transition: .immediate)
-            }
-        })
         self.view.addSubview(self.titleLabel)
         self.view.addSubview(self.heart)
         self.view.addSubview(self.pill)
@@ -460,9 +449,10 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             if self.sessionHidden.contains(card.id) { return true }
             return self.hides.allows(card, surface: kind.surface)
         }
-        if visible.isEmpty {
+            if visible.isEmpty {
             let text: String
-            if model.failed && model.items.isEmpty {
+            let failed = model.failed && model.items.isEmpty
+            if failed {
                 text = model.loaded ? momentsText(strings, .loadFailed) : momentsText(strings, .credentialMissing)
             } else {
                 switch kind {
@@ -473,7 +463,12 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
                 }
             }
             entries = [MomentsStatusItem(text: text, theme: theme, action: { [weak self] in
-                self?.load(kind, refresh: true)
+                guard let self else { return }
+                if kind == .friends && !failed {
+                    self.select(.recommend, animated: true)
+                } else {
+                    self.load(kind, refresh: true)
+                }
             })]
         } else {
             for card in visible {
@@ -606,7 +601,11 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 
     private func repost(_ card: MomentsCard) {
-        guard momentsCanRepostOrQuote(audience: card.audience?.kind), let controller = self.controller else { return }
+        guard let controller = self.controller else { return }
+        guard momentsCanRepostOrQuote(audience: card.audience?.kind) else {
+            controller.present(textAlertController(context: self.context, title: nil, text: momentsText(self.presentationData.strings, .repostPublicOnly), actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .cancel), action: {})]), in: .window(.root))
+            return
+        }
         let sheet = ActionSheetController(theme: ActionSheetControllerTheme(presentationData: self.presentationData))
         sheet.setItemGroups([
             ActionSheetItemGroup(items: [

@@ -139,8 +139,11 @@ public final class MomentsPrefetchManager {
             if let avatar = card.author?.avatarKey, avatar.hasPrefix("https://") {
                 urls.append(avatar)
             }
-            for media in card.media where momentsPresentsAsImage(media.type) {
-                if let remote = media.remoteURL, remote.hasPrefix("https://") {
+            let slides = card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
+            let target = momentsFeedImageTargetPixels(slideCount: slides.count)
+            for media in slides {
+                let remote = momentsPresentsAsVideo(media.type) ? momentsVideoPosterURL(media) : momentsFeedImageURL(media, targetPixels: target)
+                if let remote, remote.hasPrefix("https://") {
                     urls.append(remote)
                 }
             }

@@ -2282,6 +2282,9 @@ final class ShareWithPeersScreenComponent: Component {
             guard let component = self.component, let environment = self.environment, let controller = environment.controller() as? ShareWithPeersScreen else {
                 return
             }
+            if component.stateContext.momentsAudience && self.selectedCategories.isEmpty {
+                return
+            }
             let base: EngineStoryPrivacy.Base
             if self.selectedCategories.contains(.everyone) {
                 base = .everyone
@@ -2395,17 +2398,20 @@ final class ShareWithPeersScreenComponent: Component {
                     self.isCustomTarget = true
                 }
                 
-                switch component.initialPrivacy.base {
-                case .everyone:
-                    self.selectedCategories.insert(.everyone)
-                case .closeFriends:
-                    self.selectedCategories.insert(.closeFriends)
-                case .contacts:
-                    self.selectedCategories.insert(.contacts)
-                case .nobody:
-                    self.selectedCategories.insert(.selectedContacts)
-                case .mutualFollowers:
-                    self.selectedCategories.insert(.mutualFollowers)
+                let momentsUnset = component.stateContext.momentsAudience && component.initialPrivacy.base == .nobody && component.initialPrivacy.additionallyIncludePeers.isEmpty
+                if !momentsUnset {
+                    switch component.initialPrivacy.base {
+                    case .everyone:
+                        self.selectedCategories.insert(.everyone)
+                    case .closeFriends:
+                        self.selectedCategories.insert(.closeFriends)
+                    case .contacts:
+                        self.selectedCategories.insert(.contacts)
+                    case .nobody:
+                        self.selectedCategories.insert(.selectedContacts)
+                    case .mutualFollowers:
+                        self.selectedCategories.insert(.mutualFollowers)
+                    }
                 }
                 
                 if component.screenshot {
@@ -2539,7 +2545,7 @@ final class ShareWithPeersScreenComponent: Component {
                                 self.selectedPeers.removeAll(where: { $0 == peerId })
                                 self.updateSelectedGroupPeers()
                             }
-                            if self.selectedCategories.isEmpty {
+                            if self.selectedCategories.isEmpty && self.component?.stateContext.momentsAudience != true {
                                 self.selectedCategories.insert(.everyone)
                             }
                             self.state?.updated(transition: ComponentTransition(animation: .curve(duration: 0.35, curve: .spring)))
@@ -3049,10 +3055,13 @@ final class ShareWithPeersScreenComponent: Component {
                                 combinedAlignment: true
                             ))
                         ),
-                        isEnabled: true,
+                        isEnabled: !(component.stateContext.momentsAudience && self.selectedCategories.isEmpty),
                         displaysProgress: self.isCompleting,
                         action: { [weak self] in
                             guard let self, !self.isCompleting, let component = self.component, let environment = self.environment, let controller = self.environment?.controller() as? ShareWithPeersScreen else {
+                                return
+                            }
+                            if component.stateContext.momentsAudience && self.selectedCategories.isEmpty {
                                 return
                             }
                             
@@ -3517,9 +3526,10 @@ public class ShareWithPeersScreen: ViewControllerComponentContainer {
                 actionTitle: selectedContactsSubtitle
             ))
             if stateContext.momentsAudience {
+                let mutualTitle = presentationData.strings.primaryComponent.languageCode.lowercased().hasPrefix("zh") || presentationData.strings.baseLanguageCode.lowercased().hasPrefix("zh") ? "互关好友" : presentationData.strings.Story_Privacy_CategoryMutualFollowers
                 categoryItems.append(ShareWithPeersScreenComponent.CategoryItem(
                     id: .mutualFollowers,
-                    title: presentationData.strings.Story_Privacy_CategoryMutualFollowers,
+                    title: mutualTitle,
                     icon: "Media Editor/Privacy/Contacts",
                     iconColor: .purple,
                     actionTitle: nil

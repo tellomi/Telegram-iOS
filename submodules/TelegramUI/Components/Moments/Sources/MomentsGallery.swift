@@ -11,6 +11,7 @@ func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: In
     let peerId = context.account.peerId
     var messages: [EngineRawMessage] = []
     for (offset, media) in slides.enumerated() {
+        // Gallery plays the original. Feed cells use renditions and posters.
         guard let url = media.remoteURL, url.hasPrefix("https://") else {
             continue
         }

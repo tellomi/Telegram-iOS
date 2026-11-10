@@ -249,6 +249,8 @@ final class MomentsPostItemNode: ListViewItemNode {
             var height: CGFloat = 12 + 22 + 8
             if item.hidden {
                 height = 64
+            } else if item.card.isUnavailable {
+                height = 56
             } else {
                 height += bodyHeight + 8
                 if collapsed { height += 22 }
@@ -310,10 +312,16 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.follow.setTitleColor(.white, for: .normal)
         self.follow.backgroundColor = theme.list.itemAccentColor
         if item.card.isUnavailable {
-            self.name.text = momentsText(strings, .unavailable)
-            self.meta.text = ""
-            self.body.text = ""
-            self.follow.isHidden = true
+            self.setChrome(hidden: true)
+            self.body.isHidden = false
+            self.body.text = momentsText(strings, .unavailable)
+            self.body.frame = CGRect(x: side + momentsInset, y: 16, width: width + momentsColumn, height: 24)
+            self.separator.frame = CGRect(x: side + momentsInset, y: self.bounds.height - UIScreenPixel, width: width + momentsAvatar + 10, height: UIScreenPixel)
+            self.videoNode?.canAttachContent = false
+            self.videoNode?.removeFromSupernode()
+            self.videoNode = nil
+            self.videoURL = nil
+            return
         } else {
             self.name.text = item.card.author?.displayName ?? ""
             var meta = momentsRelativeTime(item.card.createdAt)
@@ -344,7 +352,11 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.full.frame = CGRect(x: x, y: self.body.frame.maxY, width: 80, height: 20)
         var cursor = (collapsed ? self.full.frame.maxY : self.body.frame.maxY) + 8
         let slides = item.card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
-        let albumKey = slides.map { "\($0.remoteURL ?? "")|\($0.coverKey ?? "")|\($0.type.rawValue)" }.joined(separator: ";") + ":\(Int(width))"
+        let imageTarget = momentsFeedImageTargetPixels(slideCount: slides.count)
+        let albumKey = slides.map { media -> String in
+            let display = momentsPresentsAsVideo(media.type) ? (momentsVideoPosterURL(media) ?? "") : (momentsFeedImageURL(media, targetPixels: imageTarget) ?? "")
+            return "\(display)|\(media.type.rawValue)"
+        }.joined(separator: ";") + ":\(Int(width))"
         let slideHeight: CGFloat
         if albumKey == self.albumKey, abs(self.album.frame.width - width) < 1 {
             slideHeight = self.album.frame.height
@@ -456,7 +468,7 @@ final class MomentsPostItemNode: ListViewItemNode {
             label.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
             if momentsPresentsAsVideo(media.type) {
                 let seconds = media.durationMs / 1000
-                if let cover = media.coverKey, cover.hasPrefix("https://"), let context = item.context {
+                if let cover = momentsVideoPosterURL(media), let context = item.context {
                     let imageView = UIImageView(frame: frame)
                     imageView.layer.cornerRadius = 12
                     imageView.contentMode = .scaleAspectFill
@@ -476,7 +488,7 @@ final class MomentsPostItemNode: ListViewItemNode {
                     playingURL = media.remoteURL
                 }
                 label.accessibilityIdentifier = media.type.rawValue
-            } else if let remoteURL = media.remoteURL {
+            } else if let remoteURL = momentsFeedImageURL(media, targetPixels: momentsFeedImageTargetPixels(slideCount: slides.count)) {
                 let imageView = UIImageView(frame: frame)
                 imageView.layer.cornerRadius = 12
                 imageView.contentMode = .scaleAspectFill

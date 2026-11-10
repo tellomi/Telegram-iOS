@@ -118,6 +118,8 @@ func momentsMedia(_ json: [String: Any], mediaBaseURL: String? = nil) -> Moments
         return nil
     }
     let cover = momentsString(json, "cover_key", "cover")
+    let renditions = momentsArray(json["renditions"]).compactMap { momentsRendition($0, mediaBaseURL: mediaBaseURL) }
+    let poster = momentsObject(json["poster"]).flatMap { momentsRendition($0, mediaBaseURL: mediaBaseURL) }
     return MomentsMedia(
         type: type,
         key: key,
@@ -127,7 +129,23 @@ func momentsMedia(_ json: [String: Any], mediaBaseURL: String? = nil) -> Moments
         coverKey: momentsMediaURL(base: mediaBaseURL, key: cover) ?? cover,
         isOriginal: momentsBool(json, "is_original", "original"),
         order: momentsInt(json, "order"),
-        remoteURL: momentsMediaURL(base: mediaBaseURL, key: momentsString(json, "url") ?? key)
+        remoteURL: momentsResolvedMediaURL(base: mediaBaseURL, key: key, url: momentsString(json, "url")),
+        renditions: renditions,
+        poster: poster
+    )
+}
+
+func momentsRendition(_ json: [String: Any], mediaBaseURL: String?) -> MomentsRendition? {
+    let key = momentsString(json, "key") ?? ""
+    let rawURL = momentsString(json, "url")
+    guard !key.isEmpty || !(rawURL ?? "").isEmpty else {
+        return nil
+    }
+    return MomentsRendition(
+        key: key,
+        url: momentsResolvedMediaURL(base: mediaBaseURL, key: key.isEmpty ? nil : key, url: rawURL),
+        width: momentsInt(json, "w", "width"),
+        height: momentsInt(json, "h", "height")
     )
 }
 
@@ -254,12 +272,41 @@ public struct MomentsFeedRefPage: Equatable {
 }
 
 /// Feed lists are `{items:[{id,reason}],cursor}`. Full cards come from `POST /v1/feed/cards`.
-public func momentsFeedRefPage(data: Data) -> MomentsFeedRefPage? {
+public func momentsFollowingListReason(_ reason: String?) -> Bool {
+    switch reason {
+    case nil, "", "self", "following", "repost":
+        return true
+    default:
+        return false
+    }
+}
+
+public func momentsFriendsListReason(_ reason: String?) -> Bool {
+    switch reason {
+    case nil, "", "friend":
+        return true
+    default:
+        return false
+    }
+}
+
+public func momentsFeedRefPage(data: Data, kind: MomentsFeedKind? = nil) -> MomentsFeedRefPage? {
     guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         return nil
     }
     let ids = momentsArray(root["items"]).compactMap { item -> String? in
-        return momentsString(item, "id")
+        guard let id = momentsString(item, "id") else {
+            return nil
+        }
+        let reason = momentsString(item, "reason")
+        switch kind {
+        case .following:
+            return momentsFollowingListReason(reason) ? id : nil
+        case .friends:
+            return momentsFriendsListReason(reason) ? id : nil
+        default:
+            return id
+        }
     }
     return MomentsFeedRefPage(ids: ids, cursor: momentsString(root, "cursor", "next_cursor"))
 }

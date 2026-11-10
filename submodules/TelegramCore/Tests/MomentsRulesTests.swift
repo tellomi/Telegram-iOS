@@ -221,7 +221,48 @@ final class MomentsRulesTests: XCTestCase {
         let page = momentsFeedRefPage(data: raw)
         XCTAssertEqual(page?.ids, ["a", "b"])
         XCTAssertEqual(page?.cursor, "n")
-        XCTAssertEqual(momentsCapabilityTabs(#"{"tabs":["recommend","friends","following"]}"#.data(using: .utf8)!), ["recommend", "following"])
+        XCTAssertEqual(momentsCapabilityTabs(#"{"tabs":["recommend","friends","following"]}"#.data(using: .utf8)!), ["recommend", "friends", "following"])
+        let following = #"{"items":[{"id":"a","reason":"following"},{"id":"b","reason":"friend"},{"id":"c","reason":"repost"},{"id":"d","reason":"self"}],"cursor":"n"}"#.data(using: .utf8)!
+        XCTAssertEqual(momentsFeedRefPage(data: following, kind: .following)?.ids, ["a", "c", "d"])
+        let friends = #"{"items":[{"id":"a","reason":"following"},{"id":"b","reason":"friend"}],"cursor":"f"}"#.data(using: .utf8)!
+        XCTAssertEqual(momentsFeedRefPage(data: friends, kind: .friends)?.ids, ["b"])
+        XCTAssertEqual(momentsVisibleFeedTabs(configTabs: ["recommend", "following"]), ["recommend", "following", "friends", "nearby"])
+        XCTAssertEqual(momentsVisibleFeedTabs(configTabs: ["recommend", "following", "friends", "nearby"]), ["recommend", "following", "friends", "nearby"])
+    }
+
+    func testDisplayRenditions() {
+        let base = "https://media.tellomi.app/feed"
+        let imageJSON = #"{"type":"image","key":"orig.jpg","url":"https://cdn.example/orig.jpg","w":3000,"h":2000,"renditions":[{"key":"r1080.jpg","w":1080,"h":720},{"key":"r360.jpg","url":"https://cdn.example/r360.jpg","w":360,"h":240}]}"#
+        let image = momentsMedia(try! JSONSerialization.jsonObject(with: imageJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertEqual(image.remoteURL, "https://cdn.example/orig.jpg")
+        XCTAssertEqual(momentsFeedImageURL(image, targetPixels: momentsSingleImagePixels), "\(base)/r1080.jpg")
+        XCTAssertEqual(momentsFeedImageURL(image, targetPixels: momentsCarouselImagePixels), "https://cdn.example/r360.jpg")
+        XCTAssertEqual(momentsFeedImageTargetPixels(slideCount: 1), 1080)
+        XCTAssertEqual(momentsFeedImageTargetPixels(slideCount: 3), 360)
+
+        let onlySmallJSON = #"{"type":"image","key":"orig.jpg","w":2000,"h":2000,"renditions":[{"key":"r360.jpg","w":360,"h":360}]}"#
+        let onlySmall = momentsMedia(try! JSONSerialization.jsonObject(with: onlySmallJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertEqual(momentsFeedImageURL(onlySmall, targetPixels: 1080), "\(base)/orig.jpg")
+        XCTAssertEqual(momentsFeedImageURL(onlySmall, targetPixels: 360), "\(base)/r360.jpg")
+
+        let plainJSON = #"{"type":"image","key":"orig.jpg","url":"https://cdn.example/orig.jpg"}"#
+        let plain = momentsMedia(try! JSONSerialization.jsonObject(with: plainJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertEqual(momentsFeedImageURL(plain, targetPixels: 1080), "https://cdn.example/orig.jpg")
+
+        let posterJSON = #"{"type":"video","key":"v.mp4","url":"https://cdn.example/v.mp4","cover_key":"cover.jpg","poster":{"key":"poster.jpg","w":1080,"h":720}}"#
+        let video = momentsMedia(try! JSONSerialization.jsonObject(with: posterJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertEqual(video.remoteURL, "https://cdn.example/v.mp4")
+        XCTAssertEqual(momentsVideoPosterURL(video), "\(base)/poster.jpg")
+        XCTAssertNil(momentsFeedImageURL(video, targetPixels: 1080))
+
+        let coverJSON = #"{"type":"video","key":"v.mp4","cover_key":"cover.jpg"}"#
+        let cover = momentsMedia(try! JSONSerialization.jsonObject(with: coverJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertEqual(momentsVideoPosterURL(cover), "\(base)/cover.jpg")
+        XCTAssertEqual(cover.remoteURL, "\(base)/v.mp4")
+
+        let bareJSON = #"{"type":"video","key":"v.mp4","url":"https://cdn.example/v.mp4"}"#
+        let bare = momentsMedia(try! JSONSerialization.jsonObject(with: bareJSON.data(using: .utf8)!) as! [String: Any], mediaBaseURL: base)!
+        XCTAssertNil(momentsVideoPosterURL(bare))
     }
 
     func testProdCardsUnwrapAndLastPageDoesNotDuplicate() {

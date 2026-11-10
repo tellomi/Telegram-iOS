@@ -138,7 +138,7 @@ func momentsCapabilityTabs(_ data: Data) -> [String] {
     if raw.isEmpty, let config = momentsObject(json["config"]) {
         raw = momentsStringList(config["tabs"])
     }
-    return raw.filter { $0 != "friends" && !$0.isEmpty }
+    return raw.filter { !$0.isEmpty }
 }
 
 public struct MomentsFeedEndpoint: Equatable {
@@ -218,6 +218,32 @@ public func momentsMediaURL(base: String?, key: String?) -> String? {
     let root = chosen.hasSuffix("/") ? String(chosen.dropLast()) : chosen
     let suffix = key.hasPrefix("/") ? String(key.dropFirst()) : key
     return root + "/" + suffix
+}
+
+/// `url` wins when it is already https. Otherwise `key` (or a relative `url`) is joined onto `media_base_url`.
+public func momentsResolvedMediaURL(base: String?, key: String?, url: String?) -> String? {
+    if let url, url.hasPrefix("https://") {
+        return url
+    }
+    if let url, !url.isEmpty, !url.hasPrefix("http://") {
+        return momentsMediaURL(base: base, key: url)
+    }
+    return momentsMediaURL(base: base, key: key)
+}
+
+public let momentsCarouselImagePixels = 360
+public let momentsSingleImagePixels = 1080
+
+public func momentsFeedImageTargetPixels(slideCount: Int) -> Int {
+    return slideCount > 1 ? momentsCarouselImagePixels : momentsSingleImagePixels
+}
+
+public let momentsStandardFeedTabs = ["recommend", "following", "friends", "nearby"]
+
+/// The four home tabs stay, in this order, even when config or capabilities omit `friends`.
+public func momentsVisibleFeedTabs(configTabs: [String]) -> [String] {
+    let extras = configTabs.filter { !momentsStandardFeedTabs.contains($0) && !$0.isEmpty }
+    return momentsStandardFeedTabs + extras
 }
 
 /// Image versus video comes from the card's `type`, never from the HTTP content-type.

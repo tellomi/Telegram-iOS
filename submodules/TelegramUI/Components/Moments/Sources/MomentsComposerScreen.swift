@@ -130,12 +130,12 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     @objc private func chooseAudience() {
-        let privacy = self.privacy
+        let privacy = self.audienceChosen ? self.privacy : EngineStoryPrivacy(base: .nobody, additionallyIncludePeers: [])
         let stateContext = ShareWithPeersScreen.StateContext(
             context: self.context,
             subject: .stories(editing: false, count: 1),
             momentsAudience: true,
-            initialSelectedPeers: [privacy.base: privacy.additionallyIncludePeers],
+            initialSelectedPeers: self.audienceChosen ? [self.privacy.base: self.privacy.additionallyIncludePeers] : [:],
             closeFriends: self.context.engine.data.get(TelegramEngine.EngineData.Item.Contacts.CloseFriends())
         )
         let _ = (stateContext.ready |> filter { $0 } |> take(1) |> deliverOnMainQueue).start(next: { [weak self] _ in

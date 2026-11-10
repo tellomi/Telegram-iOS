@@ -28,6 +28,7 @@ public enum MomentsTextKey {
     case like
     case comment
     case repost
+    case repostPublicOnly
     case quote
     case share
     case save
@@ -160,6 +161,8 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
         (resolved, english, chinese) = (strings.Moments_Comment, "Comment", "评论")
     case .repost:
         (resolved, english, chinese) = (strings.Moments_Repost, "Repost", "转发")
+    case .repostPublicOnly:
+        (resolved, english, chinese) = (strings.Moments_RepostPublicOnly, "Only public posts can be reposted or quoted.", "只有公开的动态可以转发或引用。")
     case .quote:
         (resolved, english, chinese) = (strings.Moments_Quote, "Quote", "引用")
     case .share:

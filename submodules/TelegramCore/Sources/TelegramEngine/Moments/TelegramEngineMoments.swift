@@ -238,7 +238,7 @@ public extension TelegramEngine {
                 return self.call(method: "GET", path: "/v1/feed/\(kind.rawValue)", query: query)
             }
             |> mapToSignal { data in
-                return self.hydrateFeedPage(data)
+                return self.hydrateFeedPage(data, kind: kind)
             }
         }
 
@@ -255,24 +255,14 @@ public extension TelegramEngine {
             }
         }
 
-        /// Tab ids from `GET /v1/capabilities`, then `GET /v1/feed/config`. `friends` is not an endpoint.
+        /// Home tabs. `GET /v1/capabilities` is not consulted; `friends_feed` cannot hide 好友.
         public func feedTabs() -> Signal<[String], MomentsAPIError> {
-            let fromConfig = self.remoteConfig()
+            return self.remoteConfig()
             |> map { config -> [String] in
-                return config.tabs.filter { $0 != "friends" && !$0.isEmpty }
-            }
-            return self.call(method: "GET", path: "/v1/capabilities")
-            |> map { data -> [String] in
-                return momentsCapabilityTabs(data)
-            }
-            |> mapToSignal { tabs -> Signal<[String], MomentsAPIError> in
-                if tabs.isEmpty {
-                    return fromConfig
-                }
-                return .single(tabs)
+                return momentsVisibleFeedTabs(configTabs: config.tabs)
             }
             |> `catch` { _ -> Signal<[String], MomentsAPIError> in
-                return fromConfig
+                return .single(momentsStandardFeedTabs)
             }
         }
 
@@ -664,8 +654,8 @@ public extension TelegramEngine {
             }
         }
 
-        private func hydrateFeedPage(_ data: Data) -> Signal<MomentsPage, MomentsAPIError> {
-            let refs = momentsFeedRefPage(data: data) ?? MomentsFeedRefPage(ids: [], cursor: nil)
+        private func hydrateFeedPage(_ data: Data, kind: MomentsFeedKind? = nil) -> Signal<MomentsPage, MomentsAPIError> {
+            let refs = momentsFeedRefPage(data: data, kind: kind) ?? MomentsFeedRefPage(ids: [], cursor: nil)
             if refs.ids.isEmpty {
                 return .single(MomentsPage(items: [], nextCursor: refs.cursor))
             }

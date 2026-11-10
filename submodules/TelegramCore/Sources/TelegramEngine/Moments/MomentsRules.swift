@@ -109,6 +109,50 @@ public func momentsCanRepostOrQuote(audience: MomentsAudienceKind?) -> Bool {
     return audience == .everyone
 }
 
+func momentsRenditionLongEdge(_ rendition: MomentsRendition) -> Int {
+    return max(rendition.width, rendition.height)
+}
+
+/// Smallest rendition whose long edge is at least `targetPixels`. A shorter tier is not a substitute.
+public func momentsDisplayRendition(_ renditions: [MomentsRendition], targetPixels: Int) -> MomentsRendition? {
+    var best: MomentsRendition?
+    var bestEdge = Int.max
+    for rendition in renditions {
+        let edge = momentsRenditionLongEdge(rendition)
+        guard edge >= targetPixels, edge < bestEdge, let url = rendition.url, url.hasPrefix("https://") else {
+            continue
+        }
+        best = rendition
+        bestEdge = edge
+    }
+    return best
+}
+
+/// Feed image URL. Missing renditions, or no tier large enough, use the original.
+public func momentsFeedImageURL(_ media: MomentsMedia, targetPixels: Int) -> String? {
+    guard momentsPresentsAsImage(media.type) else {
+        return nil
+    }
+    if let chosen = momentsDisplayRendition(media.renditions, targetPixels: targetPixels), let url = chosen.url {
+        return url
+    }
+    if let remote = media.remoteURL, remote.hasPrefix("https://") {
+        return remote
+    }
+    return nil
+}
+
+/// Video cell poster. `poster` first, then `cover_key`. The video file is not an image.
+public func momentsVideoPosterURL(_ media: MomentsMedia) -> String? {
+    if let poster = media.poster, let url = poster.url, url.hasPrefix("https://") {
+        return url
+    }
+    if let cover = media.coverKey, cover.hasPrefix("https://") {
+        return cover
+    }
+    return nil
+}
+
 /// FR-051: collapse when the rendered height exceeds `limit` lines. The caller measures with the live font and width.
 public func momentsTextExceedsLineLimit(fullHeight: CGFloat, lineHeight: CGFloat, limit: Int) -> Bool {
     guard lineHeight > 0, limit > 0, fullHeight > 0 else {

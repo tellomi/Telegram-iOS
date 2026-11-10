@@ -17271,6 +17271,7 @@ Error: %8$@";
 "Moments.Like" = "Like";
 "Moments.Comment" = "Comment";
 "Moments.Repost" = "Repost";
+"Moments.RepostPublicOnly" = "Only public posts can be reposted or quoted.";
 "Moments.Quote" = "Quote";
 "Moments.Share" = "Share";
 "Moments.Save" = "Save";
