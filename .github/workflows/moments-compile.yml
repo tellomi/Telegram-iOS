@@ -83,6 +83,9 @@ jobs:
       - name: Build release IPA (no upload)
         run: |
           set -euo pipefail
+          # The full Bazel log stays in the artifact. Streaming it into the
+          # job log filled the runner disk and the following test step died
+          # with "No space left on device".
           python3 -u build-system/Make/Make.py \
             --overrideXcodeVersion \
             --cacheDir /Users/runner/telegram-bazel-cache \
@@ -90,7 +93,8 @@ jobs:
             --configurationPath "${RUNNER_TEMP}/tellomi-configuration.json" \
             --codesigningInformationPath "${RUNNER_TEMP}/tellomi-signing" \
             --configuration release_arm64 \
-            --buildNumber "${BUILD_NUMBER}" 2>&1 | tee "${RUNNER_TEMP}/build.log"
+            --buildNumber "${BUILD_NUMBER}" > "${RUNNER_TEMP}/build.log" 2>&1
+          tail -n 40 "${RUNNER_TEMP}/build.log"
           test -f bazel-bin/Telegram/Telegram.ipa
           echo "Built bazel-bin/Telegram/Telegram.ipa. Not uploaded."
 
