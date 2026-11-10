@@ -436,7 +436,7 @@ public final class MomentsComposerScreen: ViewController {
         let audience = momentsAudience(from: self.privacy)
         let text = self.textView.text ?? ""
         let scan = momentsScanText(text)
-        let submit = { [weak self] in
+        let submit: () -> Void = { [weak self] in
             self?.submitPost()
         }
         if !scan.mentions.isEmpty && audience.kind != .everyone {
