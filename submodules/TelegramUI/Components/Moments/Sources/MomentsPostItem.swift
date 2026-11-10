@@ -470,7 +470,7 @@ final class MomentsPostItemNode: ListViewItemNode {
             label.textColor = item.theme.list.itemSecondaryTextColor
             label.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
             if momentsPresentsAsVideo(media.type) {
-                let seconds = media.durationMs / 1000
+                let seconds = max(media.durationMs / 1000, 0)
                 if let cover = momentsVideoPosterURL(media) ?? momentsMediaURL(base: momentsPublicMediaBaseURL, key: media.coverKey), let context = item.context {
                     let imageView = UIImageView(frame: frame)
                     imageView.layer.cornerRadius = 12
@@ -487,7 +487,7 @@ final class MomentsPostItemNode: ListViewItemNode {
                 }
                 label.frame = CGRect(x: frame.minX + 8, y: frame.maxY - 28, width: 64, height: 20)
                 label.layer.cornerRadius = 8
-                label.text = timeIntervalString(strings: item.strings, value: Int32(max(seconds, 0)), usage: .timer)
+                label.text = String(format: "%d:%02d", seconds / 60, seconds % 60)
                 label.accessibilityLabel = label.text
                 label.backgroundColor = UIColor.black.withAlphaComponent(0.45)
                 if item.playing && index == item.albumIndex {
@@ -748,7 +748,33 @@ func momentsRelativeTime(_ strings: PresentationStrings, _ timestamp: Int64) -> 
         return ""
     }
     let delta = max(0, Int(Date().timeIntervalSince1970) - Int(timestamp))
-    return timeIntervalString(strings: strings, value: Int32(min(delta, Int(Int32.max))), usage: .generic, preferLowerValue: false)
+    let value = Int32(min(delta, Int(Int32.max)))
+    let resolved = timeIntervalString(strings: strings, value: value, usage: .generic, preferLowerValue: false)
+    let codes = [strings.primaryComponent.languageCode, strings.baseLanguageCode].map { $0.lowercased() }
+    guard codes.contains(where: { $0.hasPrefix("zh") }) else {
+        return resolved
+    }
+    let (count, unit, chineseUnit): (Int32, String, String)
+    if value < 60 {
+        (count, unit, chineseUnit) = (max(1, value), value <= 1 ? "second" : "seconds", "秒")
+    } else if value < 60 * 60 {
+        (count, unit, chineseUnit) = (max(1, value / 60), value < 120 ? "minute" : "minutes", "分钟")
+    } else if value < 60 * 60 * 24 {
+        (count, unit, chineseUnit) = (max(1, value / (60 * 60)), value < 60 * 60 * 2 ? "hour" : "hours", "小时")
+    } else if value < 60 * 60 * 24 * 7 {
+        (count, unit, chineseUnit) = (max(1, value / (60 * 60 * 24)), value < 60 * 60 * 24 * 2 ? "day" : "days", "天")
+    } else if value < 60 * 60 * 24 * 30 {
+        (count, unit, chineseUnit) = (max(1, value / (60 * 60 * 24 * 7)), value < 60 * 60 * 24 * 14 ? "week" : "weeks", "周")
+    } else if value < 60 * 60 * 24 * 365 {
+        (count, unit, chineseUnit) = (max(1, value / (60 * 60 * 24 * 30)), value < 60 * 60 * 24 * 60 ? "month" : "months", "个月")
+    } else {
+        (count, unit, chineseUnit) = (max(1, value / (60 * 60 * 24 * 365)), value < 60 * 60 * 24 * 365 * 2 ? "year" : "years", "年")
+    }
+    let english = "\(count) \(unit)"
+    if resolved == english || resolved.isEmpty {
+        return "\(count)\(chineseUnit)"
+    }
+    return resolved
 }
 
 final class MomentsStatusItem: ListViewItem {

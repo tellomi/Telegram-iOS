@@ -473,9 +473,9 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private func load(_ kind: MomentsFeedKind, refresh: Bool) {
         guard let model = self.models[kind] else { return }
         guard momentsShouldLoadFeedPage(loaded: model.loaded, cursor: model.cursor, refresh: refresh, loading: model.loading) else { return }
-        self.loadDisposables[kind]?.dispose()
         let epoch = (self.loadEpoch[kind] ?? 0) + 1
         self.loadEpoch[kind] = epoch
+        self.loadDisposables[kind]?.dispose()
         if refresh {
             self.probeEpoch += 1
             self.probeDisposable?.dispose()
