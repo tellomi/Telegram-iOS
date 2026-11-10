@@ -1340,6 +1340,8 @@ private final class SparseItemGridBindingImpl: SparseItemGridBinding {
                 topRightIcon = .privacyCloseFriends
             case .nobody:
                 topRightIcon = .privacySelected
+            case .mutualFollowers:
+                topRightIcon = .privacySelected
             }
         }
         

@@ -1,4 +1,5 @@
 import Foundation
+import MomentsUI
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -558,6 +559,8 @@ private final class PeerInfoPendingPane {
             paneNode = PeerInfoChatPaneNode(context: context, chatLocation: .replyThread(message: ChatReplyThreadMessage(peerId: context.account.peerId, threadId: peerId.toInt64(), channelMessageId: nil, isChannelPost: false, isForumPost: false, isMonoforumPost: false, maxMessage: nil, maxReadIncomingMessageId: nil, maxReadOutgoingMessageId: nil, unreadCount: 0, initialFilledHoles: IndexSet(), initialAnchor: .automatic, isNotAvailable: false)), tag: nil, hideTopPanels: true, navigationController: chatControllerInteraction.navigationController)
         case .polls:
             paneNode = PeerInfoChatPaneNode(context: context, chatLocation: .peer(id: peerId), tag: .polls, navigationController: chatControllerInteraction.navigationController)
+        case .moments:
+            paneNode = MomentsProfilePaneNode(context: context, peerId: data.peer?.id ?? peerId)
         }
         paneNode.externalDataUpdated = externalDataUpdated
         paneNode.parentController = parentController
@@ -1331,6 +1334,8 @@ final class PeerInfoPaneContainerNode: ASDisplayNode, ASGestureRecognizerDelegat
                         canReorder = true
                     case .polls:
                         content = .title(HorizontalTabsComponent.Tab.Title(text: presentationData.strings.PeerInfo_PanePolls, entities: [], enableAnimations: false))
+                    case .moments:
+                        content = .title(HorizontalTabsComponent.Tab.Title(text: presentationData.strings.Moments_Title, entities: [], enableAnimations: false))
                     }
                     
                     return HorizontalTabsComponent.Tab(

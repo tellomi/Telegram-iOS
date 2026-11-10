@@ -500,6 +500,8 @@ final class LiveStreamSettingsScreenComponent: Component {
                         isSelected = item.id == .closeFriends
                     case .nobody:
                         isSelected = item.id == .selectedContacts
+                    case .mutualFollowers:
+                        isSelected = false
                     }
                     
                     privacySectionItems.append(AnyComponentWithIdentity(id: item.id, component: AnyComponent(
@@ -528,6 +530,8 @@ final class LiveStreamSettingsScreenComponent: Component {
                                         base = .closeFriends
                                     case .selectedContacts:
                                         base = .nobody
+                                    case .mutualFollowers:
+                                        base = .mutualFollowers
                                     }
                                     let selectedPeers = component.stateContext.stateValue?.savedSelectedPeers[base] ?? []
                                     
@@ -572,6 +576,8 @@ final class LiveStreamSettingsScreenComponent: Component {
                                     base = .closeFriends
                                 case .selectedContacts:
                                     base = .nobody
+                                case .mutualFollowers:
+                                    base = .mutualFollowers
                                 }
                                 let selectedPeers = component.stateContext.stateValue?.savedSelectedPeers[base] ?? []
                                 

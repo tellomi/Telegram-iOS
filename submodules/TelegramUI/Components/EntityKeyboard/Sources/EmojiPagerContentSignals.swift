@@ -10,7 +10,28 @@ import TelegramNotices
 import FlatBuffers
 import FlatSerialization
 
-public extension EmojiPagerContentComponent {    
+public extension EmojiPagerContentComponent {
+    static func momentsStickerInput(
+        context: AccountContext,
+        animationCache: AnimationCache,
+        animationRenderer: MultiAnimationRenderer,
+        stickerNamespaces: [ItemCollectionId.Namespace],
+        stickerOrderedItemListCollectionIds: [Int32],
+        chatPeerId: EnginePeer.Id?
+    ) -> Signal<EmojiPagerContentComponent, NoError> {
+        return stickerInputData(
+            context: context,
+            animationCache: animationCache,
+            animationRenderer: animationRenderer,
+            stickerNamespaces: stickerNamespaces,
+            stickerOrderedItemListCollectionIds: stickerOrderedItemListCollectionIds,
+            chatPeerId: chatPeerId,
+            hasSearch: true,
+            hasTrending: false,
+            forceHasPremium: true
+        )
+    }
+    
     private static func hasPremium(context: AccountContext, chatPeerId: EnginePeer.Id?, premiumIfSavedMessages: Bool) -> Signal<Bool, NoError> {
         let hasPremium: Signal<Bool, NoError>
         if premiumIfSavedMessages, let chatPeerId = chatPeerId, chatPeerId == context.account.peerId {

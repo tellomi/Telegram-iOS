@@ -1,0 +1,40 @@
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
+swift_library(
+    name = "MomentsUI",
+    module_name = "MomentsUI",
+    srcs = glob([
+        "Sources/**/*.swift",
+    ]),
+    copts = [
+        "-warnings-as-errors",
+    ],
+    deps = [
+        "//submodules/AsyncDisplayKit",
+        "//submodules/Display",
+        "//submodules/AppBundle",
+        "//submodules/SSignalKit/SwiftSignalKit",
+        "//submodules/TelegramCore",
+        "//submodules/TelegramPresentationData",
+        "//submodules/TelegramUIPreferences",
+        "//submodules/AccountContext",
+        "//submodules/ComponentFlow",
+        "//submodules/TelegramUI/Components/HorizontalTabsComponent",
+        "//submodules/ContextUI",
+        "//submodules/ItemListUI",
+        "//submodules/PresentationDataUtils",
+        "//submodules/UndoUI",
+        "//submodules/MediaPickerUI",
+        "//submodules/LegacyMediaPickerUI",
+        "//submodules/TelegramUI/Components/ShareWithPeersScreen",
+        "//submodules/TelegramUniversalVideoContent",
+        "//submodules/ItemListPeerItem",
+        "//submodules/TelegramUI/Components/StickerPickerScreen",
+        "//submodules/TelegramUI/Components/EntityKeyboard",
+        "//submodules/TelegramUI/Components/MediaEditor",
+        "//submodules/TelegramUI/Components/PeerReportScreen",
+        "//submodules/DeviceLocationManager",
+        "//submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode",
+    ],
+    visibility = ["//visibility:public"],
+)

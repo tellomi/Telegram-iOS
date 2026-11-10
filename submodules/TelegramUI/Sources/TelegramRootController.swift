@@ -31,6 +31,7 @@ import PeerInfoStoryGridScreen
 import ShareWithPeersScreen
 import ChatEmptyNode
 import NewsScreen
+import MomentsUI
 
 private class DetailsChatPlaceholderNode: ASDisplayNode, NavigationDetailsPlaceholderNode {
     private var presentationData: PresentationData
@@ -81,6 +82,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     public var chatListController: ChatListController?
     public var accountSettingsController: PeerInfoScreen?
     public var newsController: NewsScreen?
+    public var momentsController: MomentsScreen?
     
     private var permissionsDisposable: Disposable?
     private var presentationDataDisposable: Disposable?
@@ -196,7 +198,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         super.containerLayoutUpdated(layout, transition: transition)
     }
     
-    public func addRootControllers(showCallsTab: Bool, showNewsTab: Bool) {
+    public func addRootControllers(showCallsTab: Bool, showNewsTab: Bool, showMomentsTab: Bool) {
         let tabBarController = TabBarControllerImpl(theme: self.presentationData.theme, strings: self.presentationData.strings)
         tabBarController.navigationPresentation = .master
         let chatListController = self.context.sharedContext.makeChatListController(context: self.context, location: .chatList(groupId: .root), controlsHistoryPreload: true, hideNetworkActivityStatus: false, previewing: false, enableDebugActions: !GlobalExperimentalSettings.isAppStoreBuild)
@@ -206,6 +208,13 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         let callListController = CallListController(context: self.context, mode: .tab)
         // Created even when hidden, like the calls tab: `updateRootControllers` shows and hides it.
         let newsController = NewsScreen(context: self.context)
+        let momentsController = MomentsScreen(context: self.context)
+        momentsController.openPeer = { [weak self] peerId in
+            guard let self else {
+                return
+            }
+            self.pushViewController(PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil, peerId: peerId, avatarInitiallyExpanded: false, isOpenedFromChat: false, reactionSourceMessageId: nil, callMessages: []))
+        }
         
         var controllers: [ViewController] = []
         
@@ -217,6 +226,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         
         if showCallsTab {
             controllers.append(callListController)
+        }
+        if showMomentsTab {
+            controllers.append(momentsController)
         }
         controllers.append(chatListController)
         if showNewsTab {
@@ -248,13 +260,14 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.contactsController = contactsController
         self.callListController = callListController
         self.newsController = newsController
+        self.momentsController = momentsController
         self.chatListController = chatListController
         self.accountSettingsController = accountSettingsController
         self.rootTabController = tabBarController
         self.pushViewController(tabBarController, animated: false)
     }
         
-    public func updateRootControllers(showCallsTab: Bool, showNewsTab: Bool) {
+    public func updateRootControllers(showCallsTab: Bool, showNewsTab: Bool, showMomentsTab: Bool) {
         guard let rootTabController = self.rootTabController as? TabBarControllerImpl else {
             return
         }
@@ -262,6 +275,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         controllers.append(self.contactsController!)
         if showCallsTab {
             controllers.append(self.callListController!)
+        }
+        if showMomentsTab, let momentsController = self.momentsController {
+            controllers.append(momentsController)
         }
         controllers.append(self.chatListController!)
         if showNewsTab, let newsController = self.newsController {
