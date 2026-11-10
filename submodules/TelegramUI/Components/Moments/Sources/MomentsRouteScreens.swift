@@ -7,7 +7,7 @@ import TelegramCore
 import TelegramPresentationData
 import AccountContext
 
-final class MomentsPostListScreen: ViewController {
+public final class MomentsPostListScreen: ViewController {
     private let context: AccountContext
     private let actions: MomentsFeedActions
     private let loadPage: (String?, String) -> Signal<MomentsPage, MomentsAPIError>
@@ -80,7 +80,7 @@ final class MomentsPostListScreen: ViewController {
         self.disposable?.dispose()
     }
 
-    override func loadDisplayNode() {
+    override public func loadDisplayNode() {
         self.displayNode = ASDisplayNode()
         self.displayNode.addSubnode(self.list)
         self.list.displayedItemRangeChanged = { [weak self] range, _ in
@@ -108,7 +108,7 @@ final class MomentsPostListScreen: ViewController {
         self.displayNodeDidLoad()
     }
 
-    override func viewDidAppear(_ animated: Bool) {
+    override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         let name = self.topicName ?? ""
         self.anchor.returned(root: { offset in
@@ -121,7 +121,7 @@ final class MomentsPostListScreen: ViewController {
         })
     }
 
-    override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
+    override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
         let top = self.navigationLayout(layout: layout).navigationFrame.maxY
         let sortHeight: CGFloat = self.showsSort ? 32 : 0
@@ -253,18 +253,12 @@ final class MomentsPostListScreen: ViewController {
     }
 }
 
-public final class MomentsTopicScreen: MomentsPostListScreen {
-    public init(context: AccountContext, name: String) {
-        let topic = momentsTopicName(name) ?? name
-        super.init(context: context, title: "#\(topic)", emptyText: { $0.Moments_TopicEmpty }, showsSort: true, topicName: topic, load: { cursor, sort in
-            context.engine.moments.topic(name: topic, sort: sort, cursor: cursor)
-            |> map { page in
-                MomentsPage(items: page.items, nextCursor: page.nextCursor)
-            }
-        })
-    }
-
-    required init(coder aDecoder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
+public func MomentsTopicScreen(context: AccountContext, name: String) -> MomentsPostListScreen {
+    let topic = momentsTopicName(name) ?? name
+    return MomentsPostListScreen(context: context, title: "#\(topic)", emptyText: { $0.Moments_TopicEmpty }, showsSort: true, topicName: topic, load: { cursor, sort in
+        context.engine.moments.topic(name: topic, sort: sort, cursor: cursor)
+        |> map { page in
+            MomentsPage(items: page.items, nextCursor: page.nextCursor)
+        }
+    })
 }

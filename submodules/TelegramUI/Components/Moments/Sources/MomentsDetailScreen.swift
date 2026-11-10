@@ -130,7 +130,7 @@ public final class MomentsDetailScreen: ViewController {
         let previous = self.rendered
         let count = items.count
         self.rendering = true
-        let scroll = scrollIndex.map { ListViewScrollToItem(index: $0, position: .center(0), animated: false, curve: .Default(duration: nil), directionHint: .Down) }
+        let scroll = scrollIndex.map { ListViewScrollToItem(index: $0, position: .center(.bottom), animated: false, curve: .Default(duration: nil), directionHint: .Down) }
         self.pendingScrollCommentId = nil
         self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: items.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], scrollToItem: scroll, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { [weak self] _ in
             guard let self else { return }

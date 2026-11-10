@@ -90,6 +90,15 @@ The profile Moments pane opens an author with the same peer navigation the rest 
 | --- | --- |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift` | Sets `MomentsProfilePaneNode.openPeer` from `ChatControllerInteraction.openPeer`. |
 
+## Moments comment focus and topic screen — 2026-11-10
+
+`ListViewScrollPosition.center` takes `ListViewCenterScrollPositionOverflow`. A focused comment uses `.center(.bottom)`, the same unanimated scroll a chat uses to land on a message. A short row is centered either way; a row taller than the screen keeps its bottom in view. The topic screen is the shared post list with that topic's title, sort and loader. It does not subclass the list.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsDetailScreen.swift` | Comment focus scrolls with `.center(.bottom)`. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsRouteScreens.swift` | `MomentsTopicScreen` returns the shared post list. |
+
 ## On-device MapKit venues
 
 Nearby places and the location search box call `nearbyVenues`. That asks `help.getConfig`'s `venue_search_username` (otherwise `foursquare`), resolves the bot, then calls `messages.getInlineBotResults`. This server's venue bot returns an empty list, and a mainland Apple developer account cannot get a MapKit JS key, so the list stays empty unless the device asks MapKit itself.
