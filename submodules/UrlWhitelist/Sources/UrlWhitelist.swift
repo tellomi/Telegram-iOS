@@ -2,6 +2,7 @@ import Foundation
 import UrlEscaping
 
 private let whitelistedHosts: Set<String> = Set([
+    "tell.cc",
     "t.me",
     "telegram.me",
     "telegra.ph",
