@@ -323,7 +323,7 @@ private func momentsChoose(_ strings: PresentationStrings, _ resolved: String, _
 }
 
 public func momentsShowReplies(_ strings: PresentationStrings, _ count: Int) -> String {
-    let resolved = strings.Moments_ShowReplies(Int32(count)).string
+    let resolved = strings.Moments_ShowReplies(count).string
     return momentsChoose(strings, resolved, String(format: "Show %d replies", count), String(format: "展开%d条回复", count))
 }
 

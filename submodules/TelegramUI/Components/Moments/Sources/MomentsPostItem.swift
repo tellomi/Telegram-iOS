@@ -408,9 +408,9 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.share.accessibilityLabel = momentsText(strings, .share)
         self.save.accessibilityLabel = item.card.viewer.saved ? momentsText(strings, .saved) : momentsText(strings, .save)
         self.more.accessibilityLabel = momentsText(strings, .more)
-        let slides = item.card.images.count + item.card.videos.count
-        if slides > 0 {
-            self.album.accessibilityLabel = "\(min(self.albumIndex + 1, slides))/\(slides)"
+        let slideCount = item.card.images.count + item.card.videos.count
+        if slideCount > 0 {
+            self.album.accessibilityLabel = "\(min(self.albumIndex + 1, slideCount))/\(slideCount)"
         }
         self.separator.frame = CGRect(x: side + momentsInset, y: self.bounds.height - UIScreenPixel, width: width + momentsAvatar + 10, height: UIScreenPixel)
         let _ = item.playing

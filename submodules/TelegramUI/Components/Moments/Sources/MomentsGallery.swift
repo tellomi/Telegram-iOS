@@ -4,6 +4,7 @@ import Display
 import SwiftSignalKit
 import TelegramCore
 import AccountContext
+import Postbox
 
 func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: Int, controller: ViewController) {
     let slides = card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
@@ -13,11 +14,11 @@ func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: In
         guard let url = media.remoteURL, url.hasPrefix("https://") else {
             continue
         }
-        let engineMedia: Media
+        let attached: Media
         if momentsPresentsAsVideo(media.type) {
-            engineMedia = momentsGalleryFile(url: url, media: media)
+            attached = momentsGalleryFile(url: url, media: media)
         } else {
-            engineMedia = momentsGalleryImage(url: url, media: media, id: Int64(offset + 1))
+            attached = momentsGalleryImage(url: url, media: media, id: Int64(offset + 1))
         }
         let messageId = EngineMessage.Id(peerId: peerId, namespace: Namespaces.Message.Local, id: Int32(offset + 1))
         messages.append(EngineRawMessage(
@@ -38,7 +39,7 @@ func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: In
             author: nil,
             text: "",
             attributes: [],
-            media: [engineMedia],
+            media: [attached],
             peers: EngineSimpleDictionary(),
             associatedMessages: EngineSimpleDictionary(),
             associatedMessageIds: [],

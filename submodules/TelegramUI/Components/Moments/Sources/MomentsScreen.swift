@@ -167,7 +167,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var appliedIds: [MomentsFeedKind: [String]] = [:]
     private var appliedPrints: [MomentsFeedKind: [String]] = [:]
     private var listBusy: [MomentsFeedKind: Bool] = [:]
-    private var renderQueued: Set<MomentsFeedKind> = [:]
+    private var renderQueued: Set<MomentsFeedKind> = []
     private var renderEpoch: [MomentsFeedKind: Int] = [:]
     private var renderedListSize: [MomentsFeedKind: CGSize] = [:]
     private var loadEpoch: [MomentsFeedKind: Int] = [:]
