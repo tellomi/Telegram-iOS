@@ -90,16 +90,20 @@ func momentsBool(_ json: [String: Any], _ keys: String...) -> Bool {
     return false
 }
 
-func momentsAuthor(_ json: [String: Any]?) -> MomentsAuthor? {
+func momentsAuthor(_ json: [String: Any]?, mediaBaseURL: String? = nil) -> MomentsAuthor? {
     guard let json, let id = momentsString(json, "id", "profile_id") else {
         return nil
     }
+    let avatarURL = momentsString(json, "avatar_url")
+    let avatarKey = momentsString(json, "avatar_key", "avatar")
+    let avatar = avatarURL ?? momentsMediaURL(base: mediaBaseURL, key: avatarKey) ?? avatarKey
+    let native = momentsObject(json["native"])
     return MomentsAuthor(
         id: id,
-        telegramUserId: momentsInt64(json, "telegram_user_id", "user_id"),
+        telegramUserId: momentsInt64(json, "telegram_user_id", "user_id") != 0 ? momentsInt64(json, "telegram_user_id", "user_id") : momentsInt64(native ?? [:], "user_id", "telegram_user_id"),
         displayName: momentsString(json, "display_name", "name") ?? "",
         username: momentsString(json, "username", "handle"),
-        avatarKey: momentsString(json, "avatar_key", "avatar"),
+        avatarKey: avatar,
         followed: momentsBool(json, "followed", "following"),
         followsViewer: momentsBool(json, "follows_viewer", "follows_me")
     )

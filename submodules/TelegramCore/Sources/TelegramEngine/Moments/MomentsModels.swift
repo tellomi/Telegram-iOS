@@ -429,7 +429,11 @@ public struct MomentsReply: Codable, Equatable {
     public var likeCount: Int
     public var liked: Bool
 
-    public init(id: String, postId: String, rootId: String, replyToName: String? = nil, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false) {
+    public var isAuthor: Bool
+    public var ipRegionLabel: String?
+    public var disliked: Bool
+
+    public init(id: String, postId: String, rootId: String, replyToName: String? = nil, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false, isAuthor: Bool = false, ipRegionLabel: String? = nil, disliked: Bool = false) {
         self.id = id
         self.postId = postId
         self.rootId = rootId
@@ -440,6 +444,9 @@ public struct MomentsReply: Codable, Equatable {
         self.createdAt = createdAt
         self.likeCount = likeCount
         self.liked = liked
+        self.isAuthor = isAuthor
+        self.ipRegionLabel = ipRegionLabel
+        self.disliked = disliked
     }
 }
 
@@ -454,8 +461,11 @@ public struct MomentsComment: Codable, Equatable {
     public var liked: Bool
     public var replies: [MomentsReply]
     public var replyCount: Int
+    public var isAuthor: Bool
+    public var ipRegionLabel: String?
+    public var disliked: Bool
 
-    public init(id: String, postId: String, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false, replies: [MomentsReply] = [], replyCount: Int = 0) {
+    public init(id: String, postId: String, author: MomentsAuthor? = nil, text: String, attachment: MomentsMedia? = nil, createdAt: Int64 = 0, likeCount: Int = 0, liked: Bool = false, replies: [MomentsReply] = [], replyCount: Int = 0, isAuthor: Bool = false, ipRegionLabel: String? = nil, disliked: Bool = false) {
         self.id = id
         self.postId = postId
         self.author = author
@@ -466,6 +476,33 @@ public struct MomentsComment: Codable, Equatable {
         self.liked = liked
         self.replies = replies
         self.replyCount = replyCount
+        self.isAuthor = isAuthor
+        self.ipRegionLabel = ipRegionLabel
+        self.disliked = disliked
+    }
+}
+
+public struct MomentsCommentPage: Equatable {
+    public var comments: [MomentsComment]
+    public var total: Int
+    public var cursor: String?
+
+    public init(comments: [MomentsComment], total: Int, cursor: String?) {
+        self.comments = comments
+        self.total = total
+        self.cursor = cursor
+    }
+}
+
+public struct MomentsReplyPage: Equatable {
+    public var replies: [MomentsReply]
+    public var total: Int
+    public var cursor: String?
+
+    public init(replies: [MomentsReply], total: Int, cursor: String?) {
+        self.replies = replies
+        self.total = total
+        self.cursor = cursor
     }
 }
 

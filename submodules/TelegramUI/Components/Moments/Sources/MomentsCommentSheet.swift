@@ -14,6 +14,8 @@ public final class MomentsCommentSheet: ViewController {
     public var openPeer: ((EnginePeer.Id) -> Void)?
     private var presentationData: PresentationData
     private var comments: [MomentsComment] = []
+    private var total = 0
+    private var loadedReplies: [String: [MomentsReply]] = [:]
     private var expanded: Set<String> = []
     private var expandedSheet = false
     private let dim = UIButton(type: .custom)
@@ -95,16 +97,18 @@ public final class MomentsCommentSheet: ViewController {
     }
 
     private func reload() {
-        self.disposable.set((self.context.engine.moments.comments(postId: self.card.id, sort: "hot", cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] comments in
-            self?.comments = comments
-            self?.relayoutComments()
+        self.disposable.set((self.context.engine.moments.comments(postId: self.card.id, sort: "hot", cursor: nil, thread: true) |> deliverOnMainQueue).start(next: { [weak self] page in
+            guard let self else { return }
+            self.comments = page.comments.filter { !$0.disliked }
+            self.total = page.total
+            self.relayoutComments()
         }))
     }
 
     private func relayoutComments() {
         let strings = self.presentationData.strings
         let theme = self.presentationData.theme
-        let total = self.card.counts.comments
+        let total = self.total > 0 ? self.total : self.card.counts.comments
         let countWord = momentsText(strings, .commentCount)
         self.titleLabel.text = countWord == "条评论" ? "\(total)\(countWord)" : "\(total) \(countWord)"
         self.list.subviews.forEach { $0.removeFromSuperview() }
@@ -127,7 +131,7 @@ public final class MomentsCommentSheet: ViewController {
                 self.list.addSubview(button)
                 y += 32
             } else if shown {
-                for reply in comment.replies {
+                for reply in self.loadedReplies[comment.id] ?? comment.replies where !reply.disliked {
                     y = self.addRow(comment: comment, reply: reply, x: 44, y: y, width: width - 56, theme: theme, strings: strings)
                 }
             }
@@ -140,6 +144,11 @@ public final class MomentsCommentSheet: ViewController {
         let text = reply?.text ?? comment.text
         let created = reply?.createdAt ?? comment.createdAt
         let likes = reply?.likeCount ?? comment.likeCount
+        let isAuthor = reply?.isAuthor ?? comment.isAuthor
+        let region = reply?.ipRegionLabel ?? comment.ipRegionLabel
+        let attachment = reply?.attachment ?? comment.attachment
+        let rowId = reply?.id ?? comment.id
+        let liked = reply?.liked ?? comment.liked
         let avatar = UILabel(frame: CGRect(x: x, y: y, width: 32, height: 32))
         avatar.backgroundColor = theme.list.itemHighlightedBackgroundColor
         avatar.layer.cornerRadius = 16
@@ -153,8 +162,12 @@ public final class MomentsCommentSheet: ViewController {
         let nameLabel = UILabel(frame: CGRect(x: x + 40, y: y, width: width - 80, height: 16))
         nameLabel.font = Font.regular(12)
         nameLabel.textColor = theme.list.itemSecondaryTextColor
-        if author?.id == self.card.author?.id && !(author?.id ?? "").isEmpty {
-            nameLabel.text = name + "  " + momentsText(strings, .authorTag)
+        if isAuthor {
+            let tag = momentsText(strings, .authorTag)
+            let prefix = (name + "  ") as NSString
+            let marked = NSMutableAttributedString(string: prefix as String + tag, attributes: [.font: Font.regular(12), .foregroundColor: theme.list.itemSecondaryTextColor])
+            marked.addAttributes([.foregroundColor: UIColor(rgb: 0xFF3B30)], range: NSRange(location: prefix.length, length: (tag as NSString).length))
+            nameLabel.attributedText = marked
         } else {
             nameLabel.text = name
         }
@@ -171,23 +184,102 @@ public final class MomentsCommentSheet: ViewController {
         let bodyHeight = body.sizeThatFits(CGSize(width: width - 80, height: 200)).height
         body.frame.size.height = bodyHeight
         self.list.addSubview(body)
-        let meta = UILabel(frame: CGRect(x: x + 40, y: body.frame.maxY + 4, width: width - 80, height: 16))
+        var cursor = body.frame.maxY
+        if let attachment, let remoteURL = attachment.remoteURL, remoteURL.hasPrefix("https://"), momentsPresentsAsImage(attachment.type) {
+            let image = UIImageView(frame: CGRect(x: x + 40, y: cursor + 6, width: 72, height: 72))
+            image.layer.cornerRadius = 8
+            image.clipsToBounds = true
+            image.contentMode = .scaleAspectFill
+            momentsLoadImage(remoteURL, into: image)
+            self.list.addSubview(image)
+            cursor += 80
+        }
+        let meta = UILabel(frame: CGRect(x: x + 40, y: cursor + 4, width: width - 110, height: 16))
         meta.font = Font.regular(12)
         meta.textColor = theme.list.itemSecondaryTextColor
-        meta.text = momentsRelativeTime(created) + "  " + momentsText(strings, .reply)
+        var metaText = momentsRelativeTime(created)
+        if let region, !region.isEmpty {
+            metaText += " · " + region
+        }
+        metaText += "  " + momentsText(strings, .reply)
+        meta.text = metaText
         self.list.addSubview(meta)
-        let like = UILabel(frame: CGRect(x: x + width - 36, y: y, width: 36, height: 32))
-        like.font = Font.regular(12)
-        like.textColor = theme.list.itemSecondaryTextColor
-        like.textAlignment = .right
-        like.text = likes > 0 ? "♡ \(likes)" : "♡"
+        let like = UIButton(type: .system)
+        like.frame = CGRect(x: x + width - 72, y: y, width: 36, height: 32)
+        like.setTitle(likes > 0 ? "\(likes)" : "♡", for: .normal)
+        like.setTitleColor(liked ? UIColor(rgb: 0xFF3B30) : theme.list.itemSecondaryTextColor, for: .normal)
+        like.accessibilityIdentifier = rowId
+        like.addTarget(self, action: #selector(self.likePressed(_:)), for: .touchUpInside)
         self.list.addSubview(like)
+        let dislike = UIButton(type: .system)
+        dislike.frame = CGRect(x: x + width - 32, y: y, width: 28, height: 32)
+        dislike.setTitle("⇩", for: .normal)
+        dislike.setTitleColor(theme.list.itemSecondaryTextColor, for: .normal)
+        dislike.accessibilityIdentifier = rowId
+        dislike.addTarget(self, action: #selector(self.dislikePressed(_:)), for: .touchUpInside)
+        self.list.addSubview(dislike)
         return meta.frame.maxY + 12
     }
 
     @objc private func expandReplies(_ button: UIButton) {
         guard self.comments.indices.contains(button.tag) else { return }
-        self.expanded.insert(self.comments[button.tag].id)
+        let comment = self.comments[button.tag]
+        self.expanded.insert(comment.id)
+        let _ = (self.context.engine.moments.replies(rootId: comment.id, cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] page in
+            self?.loadedReplies[comment.id] = page.replies
+            self?.relayoutComments()
+        })
+        self.relayoutComments()
+    }
+
+    @objc private func likePressed(_ button: UIButton) {
+        guard let id = button.accessibilityIdentifier else { return }
+        let liked = self.reaction(id: id)?.liked == true
+        let _ = self.context.engine.moments.setCommentLiked(id: id, liked: !liked).start()
+        self.toggleLike(id: id)
+    }
+
+    @objc private func dislikePressed(_ button: UIButton) {
+        guard let id = button.accessibilityIdentifier else { return }
+        let _ = self.context.engine.moments.setCommentDisliked(id: id, disliked: true).start()
+        self.comments.removeAll { $0.id == id }
+        for key in self.loadedReplies.keys {
+            self.loadedReplies[key]?.removeAll { $0.id == id }
+        }
+        self.relayoutComments()
+    }
+
+    private func reaction(id: String) -> (liked: Bool, count: Int)? {
+        if let comment = self.comments.first(where: { $0.id == id }) {
+            return (comment.liked, comment.likeCount)
+        }
+        for replies in self.loadedReplies.values {
+            if let reply = replies.first(where: { $0.id == id }) {
+                return (reply.liked, reply.likeCount)
+            }
+        }
+        return nil
+    }
+
+    private func toggleLike(id: String) {
+        self.comments = self.comments.map { item in
+            guard item.id == id else { return item }
+            var copy = item
+            copy.liked.toggle()
+            copy.likeCount += copy.liked ? 1 : -1
+            if copy.likeCount < 0 { copy.likeCount = 0 }
+            return copy
+        }
+        for key in self.loadedReplies.keys {
+            self.loadedReplies[key] = self.loadedReplies[key]?.map { item in
+                guard item.id == id else { return item }
+                var copy = item
+                copy.liked.toggle()
+                copy.likeCount += copy.liked ? 1 : -1
+                if copy.likeCount < 0 { copy.likeCount = 0 }
+                return copy
+            }
+        }
         self.relayoutComments()
     }
 

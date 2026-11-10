@@ -73,8 +73,8 @@ public final class MomentsDetailScreen: ViewController {
     }
 
     private func reload() {
-        let _ = (self.context.engine.moments.comments(postId: self.card.id, sort: self.sort, cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] comments in
-            self?.comments = comments
+        let _ = (self.context.engine.moments.comments(postId: self.card.id, sort: self.sort, cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] page in
+            self?.comments = page.comments
             self?.render()
         })
     }

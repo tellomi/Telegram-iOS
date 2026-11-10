@@ -259,6 +259,31 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertTrue(replaced.deletes.allSatisfy { $0 < 1 })
     }
 
+    func testDouyinCommentThreadContract() {
+        let raw = #"{"comments":[{"id":"c1","state":"published","is_author":true,"reply_count":2,"card":{"kind":"comment","text":"hello","root_id":"p1","author":{"id":"a1","display_name":"Ada","handle":"ada","avatar_key":"av"},"ip_region_label":"陕西","media":[{"type":"image","key":"pic","w":64,"h":64}]},"stats":{"likes":3,"comments":2,"reposts":0},"me":{"liked":true,"disliked":false,"author":false}}],"total":12}"#.data(using: .utf8)!
+        let page = momentsCommentPage(data: raw, mediaBaseURL: "https://media.tellomi.app/feed")
+        XCTAssertEqual(page.total, 12)
+        XCTAssertEqual(page.comments.count, 1)
+        let comment = page.comments[0]
+        XCTAssertEqual(comment.text, "hello")
+        XCTAssertTrue(comment.isAuthor)
+        XCTAssertEqual(comment.ipRegionLabel, "陕西")
+        XCTAssertEqual(comment.likeCount, 3)
+        XCTAssertTrue(comment.liked)
+        XCTAssertFalse(comment.disliked)
+        XCTAssertEqual(comment.replyCount, 2)
+        XCTAssertEqual(comment.author?.displayName, "Ada")
+        XCTAssertEqual(comment.author?.avatarKey, "https://media.tellomi.app/feed/av")
+        XCTAssertEqual(comment.attachment?.type, .image)
+        XCTAssertEqual(comment.attachment?.remoteURL, "https://media.tellomi.app/feed/pic")
+
+        let replies = #"{"replies":[{"id":"r1","reply_count":0,"card":{"text":"back","parent_id":"c1","reply_to":{"id":"a1","display_name":"Ada","handle":"ada"},"author":{"id":"a2","display_name":"Bo"}}}],"total":2}"#.data(using: .utf8)!
+        let replyPage = momentsReplyPage(data: replies, rootId: "c1", mediaBaseURL: nil)
+        XCTAssertEqual(replyPage.total, 2)
+        XCTAssertEqual(replyPage.replies.first?.text, "back")
+        XCTAssertEqual(replyPage.replies.first?.replyToName, "Ada")
+    }
+
     func testDraftCapKeepsNewest() {
         let kept = momentsTrimDrafts([1, 2, 3, 4], limit: 2, newer: >)
         XCTAssertEqual(kept, [4, 3])
