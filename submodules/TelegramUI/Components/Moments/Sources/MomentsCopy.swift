@@ -303,13 +303,13 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
     case .voiceFailed:
         (resolved, english, chinese) = (strings.Moments_VoiceFailed, "Could not record a voice post.", "语音没有录上")
     case .commentCount:
-        (resolved, english, chinese) = (strings.Moments_CommentCount, "%d comments", "%d条评论")
+        (resolved, english, chinese) = (strings.Moments_CommentCount, "comments", "条评论")
     case .commentPrompt:
         (resolved, english, chinese) = (strings.Moments_CommentPrompt, "Say something", "发条评论，说说你的感受")
     case .authorTag:
         (resolved, english, chinese) = (strings.Moments_AuthorTag, "Author", "作者")
     case .expandReplies:
-        (resolved, english, chinese) = (strings.Moments_ExpandReplies, "Show %d replies", "展开%d条回复")
+        (resolved, english, chinese) = (strings.Moments_ExpandReplies, "replies", "条回复")
     }
     let codes = [strings.primaryComponent.languageCode, strings.baseLanguageCode].map { $0.lowercased() }
     if codes.contains(where: { $0.hasPrefix("zh") }), resolved == english || resolved.isEmpty {

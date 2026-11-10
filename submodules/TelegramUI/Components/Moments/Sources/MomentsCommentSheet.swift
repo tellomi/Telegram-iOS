@@ -105,7 +105,8 @@ public final class MomentsCommentSheet: ViewController {
         let strings = self.presentationData.strings
         let theme = self.presentationData.theme
         let total = self.card.counts.comments
-        self.titleLabel.text = String(format: momentsText(strings, .commentCount), total)
+        let countWord = momentsText(strings, .commentCount)
+        self.titleLabel.text = countWord == "条评论" ? "\(total)\(countWord)" : "\(total) \(countWord)"
         self.list.subviews.forEach { $0.removeFromSuperview() }
         var y: CGFloat = 8
         let width = self.list.bounds.width
@@ -117,7 +118,9 @@ public final class MomentsCommentSheet: ViewController {
                 let button = UIButton(type: .system)
                 button.frame = CGRect(x: 56, y: y, width: width - 80, height: 28)
                 button.contentHorizontalAlignment = .left
-                button.setTitle("—— " + String(format: momentsText(strings, .expandReplies), comment.replyCount), for: .normal)
+                let replyWord = momentsText(strings, .expandReplies)
+                let replyTitle = replyWord == "条回复" ? "—— 展开\(comment.replyCount)\(replyWord)" : "—— \(comment.replyCount) \(replyWord)"
+                button.setTitle(replyTitle, for: .normal)
                 button.setTitleColor(theme.list.itemSecondaryTextColor, for: .normal)
                 button.tag = self.comments.firstIndex(where: { $0.id == comment.id }) ?? 0
                 button.addTarget(self, action: #selector(self.expandReplies(_:)), for: .touchUpInside)
