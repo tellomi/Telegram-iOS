@@ -117,7 +117,7 @@ public func parseWebProxySettingsLink(_ value: String) -> ProxyServerSettings? {
 
     let scheme = components.scheme?.lowercased()
     let isTelegramLink = scheme == "https"
-        && components.host?.lowercased() == "t.me"
+        && (components.host?.lowercased() == "t.me" || components.host?.lowercased() == "tell.cc")
         && components.path == "/webproxy"
         && (components.port == nil || components.port == Int(WebProxyConfiguration.port))
     let isTelegramScheme = scheme == "tg"
@@ -141,7 +141,7 @@ public func webProxySettingsLink(_ settings: ProxyServerSettings) -> String? {
     }
     var components = URLComponents()
     components.scheme = "https"
-    components.host = "t.me"
+    components.host = "tell.cc"
     components.path = "/webproxy"
     components.percentEncodedQueryItems = [
         URLQueryItem(name: "server", value: webProxyPercentEncodedAddress(configuration.address)),
