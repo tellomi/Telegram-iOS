@@ -314,14 +314,14 @@ extension MomentsDetailScreen: UITextFieldDelegate {
         let parent = textField.accessibilityHint
         let draft = momentsCommentComposerForSend(previous: self.commentComposer, text: text, parentId: parent, mediaKey: nil, sticker: false)
         guard case .success = momentsEncodeComment(draft) else {
-            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .failedRetry))
+            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .commentSendFailed))
             return false
         }
         self.commentComposer = draft
         let _ = self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: parent, clientNonce: draft.clientNonce).start(error: { [weak self] _ in
             guard let self else { return }
             self.commentComposer = momentsCommentComposerAfterFailure(draft)
-            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .failedRetry))
+            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .commentSendFailed))
         }, completed: { [weak self] in
             guard let self else { return }
             if textField.text == text {

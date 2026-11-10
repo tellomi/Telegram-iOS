@@ -86,6 +86,8 @@ public enum MomentsTextKey {
     case endPoll
     case whoCanSee
     case failedRetry
+    case commentSendFailed
+    case audienceKept
     case uploading
     case mentionWarning
     case allowNearby
@@ -277,6 +279,10 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
         (resolved, english, chinese) = (strings.Moments_WhoCanSee, "Who can see this", "谁可以看")
     case .failedRetry:
         (resolved, english, chinese) = (strings.Moments_FailedRetry, "Could not post. Retry", "发布失败 · 重试")
+    case .commentSendFailed:
+        return strings.Moments_Comment_SendFailed
+    case .audienceKept:
+        return strings.Moments_Audience_Kept
     case .uploading:
         (resolved, english, chinese) = (strings.Moments_Uploading, "Posting", "发布中")
     case .mentionWarning:

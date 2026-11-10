@@ -662,7 +662,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         case let .invalid(code) where code == "comments_closed" || code == "reply_not_allowed" || code == "not_commentable" || code == "harassment_guard":
             text = momentsText(self.presentationData.strings, .commentClosed)
         default:
-            text = momentsText(self.presentationData.strings, .failedRetry)
+            text = momentsText(self.presentationData.strings, .commentSendFailed)
         }
         self.errorLabel.text = text
         self.errorLabel.isHidden = false

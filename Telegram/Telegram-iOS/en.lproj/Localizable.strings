@@ -17327,6 +17327,8 @@ Error: %8$@";
 "Moments.EndPoll" = "End poll";
 "Moments.WhoCanSee" = "Who can see this";
 "Moments.FailedRetry" = "Could not post. Retry";
+"Moments_Comment_SendFailed" = "Couldn't send this comment. Your text is still here.";
+"Moments_Audience_Kept" = "Couldn't update who can see this. Your selection was kept.";
 "Moments.Uploading" = "Posting";
 "Moments.MentionWarning" = "These people cannot see this post and will not be notified.";
 "Moments.AllowNearby" = "Show in Nearby";

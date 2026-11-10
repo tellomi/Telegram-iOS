@@ -486,7 +486,9 @@ public final class MomentsComposerScreen: ViewController {
         switch momentsEncodePost(draft, audienceToken: token) {
         case let .success(.needsAudienceToken(kind, userIds)):
             self.fetchAudienceToken(kind: kind, userIds: userIds, draft: draft)
-        case .failure(_):
+        case .failure(.audienceTokenRequired), .failure(.audienceNotRepresentable):
+            self.presentAudienceKept()
+        case .failure(.invalidClientNonce):
             self.presentPublishError()
         case let .success(.ready(body)):
             self.sendPost(body)
@@ -505,13 +507,13 @@ public final class MomentsComposerScreen: ViewController {
             case let .success(.ready(body)):
                 self.sendPost(body)
             case .success(.needsAudienceToken(_, _)), .failure(_):
-                self.presentPublishError()
+                self.presentAudienceKept()
             }
         }, error: { [weak self] _ in
             guard let self else { return }
             self.publishing = false
             self.refresh()
-            self.presentPublishError()
+            self.presentAudienceKept()
         })
     }
 
@@ -533,7 +535,15 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     private func presentPublishError() {
-        self.present(textAlertController(context: self.context, title: nil, text: momentsText(self.presentationData.strings, .failedRetry), actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .retry), action: { [weak self] in
+        self.presentFailure(momentsText(self.presentationData.strings, .failedRetry))
+    }
+
+    private func presentAudienceKept() {
+        self.presentFailure(momentsText(self.presentationData.strings, .audienceKept))
+    }
+
+    private func presentFailure(_ text: String) {
+        self.present(textAlertController(context: self.context, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .retry), action: { [weak self] in
             self?.submitPost()
         })]), in: .window(.root))
     }
