@@ -152,6 +152,8 @@ extension PeerInfoScreenNode {
             push(themeSettingsController(context: self.context))
         case .language:
             push(LocalizationListController(context: self.context))
+        case .menuSettings:
+            push(tellomiMenuSettingsController(context: self.context))
         case .premium:
             let controller = self.context.sharedContext.makePremiumIntroController(context: self.context, source: .settings, forceDark: false, dismissed: nil)
             self.controller?.push(controller)

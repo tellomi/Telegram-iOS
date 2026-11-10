@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
 
 swift_library(
     name = "TelegramUIPreferences",
@@ -15,5 +15,19 @@ swift_library(
     ],
     visibility = [
         "//visibility:public",
+    ],
+)
+
+# Host test of the tab-bar rules and the built-in menu strings. No UIKit.
+# Run with `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/TelegramUIPreferences:TellomiTabBarPreferencesTests`.
+swift_test(
+    name = "TellomiTabBarPreferencesTests",
+    srcs = [
+        "Sources/TellomiTabBarPreferences.swift",
+        "Sources/TellomiMenuSettingsStrings.swift",
+        "Tests/TellomiTabBarPreferencesTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
     ],
 )

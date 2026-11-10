@@ -17352,3 +17352,7 @@ Error: %8$@";
 "Moments.ExpandReplies" = "replies";
 "Moments.ShowReplies" = "Show %d replies";
 "Moments.ReplyTo" = "Reply @%@";
+"Tellomi.MenuSettings.Tools" = "Tools";
+"Tellomi.MenuSettings.Title" = "Menu settings";
+"Tellomi.MenuSettings.HideButtonTitles" = "Hide button titles";
+"Tellomi.MenuSettings.NavigationButtons" = "Navigation bar buttons";

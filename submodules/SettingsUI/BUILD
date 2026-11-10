@@ -28,6 +28,7 @@ swift_library(
         "//submodules/ChatListSearchItemHeader:ChatListSearchItemHeader",
         "//submodules/ChatListUI:ChatListUI",
         "//submodules/TelegramUI/Components/Moments:MomentsUI",
+        "//submodules/TelegramUI/Components/News/NewsFeedSupport:NewsFeedSupport",
         "//submodules/ContactsPeerItem:ContactsPeerItem",
         "//submodules/CountrySelectionUI:CountrySelectionUI",
         "//submodules/DeviceAccess:DeviceAccess",

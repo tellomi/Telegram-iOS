@@ -1,5 +1,24 @@
 # Upstream patches
 
+## Root tab menu (选单设定) — 2026-11-10
+
+A fresh install shows 动态, 聊天, 设置. Contacts, Calls and News stay off until the person turns them on. Chats and Settings cannot be hidden. The choice is per device (`UserDefaults` suite `app.tellomi.chat.tab-bar`), not an account record. Hiding button titles shortens the phone tab bar; an iPad or vertical bar is unchanged. The bar rebuilds when the switches move.
+
+The screen is Settings → a Tools card → 选单设定. iMe's public iOS tree (only `master`, pushed 2019-10-31, no tags) does not contain this screen. Swiftgram's tab settings (`CallListSettings.showContactsTab`, `SGSimpleSettings.showTabNames`, `addRootControllers`) are the pattern: optional tabs are left out of the controller list, and chats and settings are always appended. Swiftgram asks for a restart to hide titles. This build applies that immediately. No Swiftgram or iMe source was copied.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Sources/TelegramRootController.swift` | Builds the root tabs from `TellomiTabBarPreferences`. |
+| `submodules/TelegramUI/Sources/ApplicationContext.swift` | Applies a saved menu immediately, and keeps the old Calls "show tab" switch in step with it. |
+| `submodules/TelegramPresentationData/Sources/PresentationData.swift` | Fills menu strings the active language pack does not have yet. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings row that opens the screen. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | Tools card. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift` | Pushes the screen. |
+| `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Hides phone tab titles and shortens the bar. |
+| `submodules/TabBarUI/Sources/TabBarController.swift` | `showsItemTitles`, applied on the next layout. |
+| `submodules/TabBarUI/Sources/TabBarContollerNode.swift` | Passes that flag into the bar. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | English keys for the generated string accessors. |
+
 ## Login language, sign-up handoff, upstream crash logs — 2026-11-10
 
 Build 80 on a Chinese phone showed the English tour plus "Continue in 简体中文", and `initConnection` sent `system_lang_code=zh-Hans-US` with `lang_code=en`. `AppleLanguages` is the system list. `zh-Hans-US`, `zh-Hans-CN`, `zh-CN` and `zh` resolve to bundled `zh-Hans`. `zh-Hant-TW`, `zh-Hant-HK`, `zh-TW` and `zh-HK` resolve to `zh-Hant`. Anything else is English. A language stored with `tellomiRememberExplicitLanguage` wins. The welcome pages are the bundled `Tour.*` strings, so they do not wait for a langpack, and the suggested-language button is not shown.
