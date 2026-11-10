@@ -7,28 +7,11 @@ import TelegramPresentationData
 /// Reinstalling the app clears this key together with the saved langpack.
 public let tellomiSystemLangPackDefaultsKey = "TellomiDidApplySystemLangPack"
 
-/// The system language list, not the list filtered by the app's `en.lproj`.
-/// An English-only bundle makes `Locale.preferredLanguages` report `en` on a Chinese phone.
-public func tellomiDevicePreferredLanguages() -> [String] {
-    if let global = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String], !global.isEmpty {
-        return global
-    }
-    return Locale.preferredLanguages
-}
-
-/// Server langpack for the first preferred language. Nil for every language other than Chinese.
-/// `zh-Hant` / `zh-TW` / `zh-HK` / `zh-MO` are `zh-hant`. Other `zh*` values are `zh-hans`.
+/// Server langpack for a built-in Chinese localization. Nil for English and every other language.
+/// `zh-Hans-US` and `zh-Hans-CN` are `zh-Hans`. `zh-Hant-TW` and `zh-Hant-HK` are `zh-Hant`.
 public func tellomiLangPackCode(preferredLanguages: [String]) -> String? {
-    guard let language = preferredLanguages.first?.lowercased(), !language.isEmpty else {
-        return nil
-    }
-    if language.hasPrefix("zh-hant") || language.hasPrefix("zh-tw") || language.hasPrefix("zh-hk") || language.hasPrefix("zh-mo") {
-        return "zh-hant"
-    }
-    if language == "zh" || language.hasPrefix("zh-hans") || language.hasPrefix("zh-cn") || language.hasPrefix("zh-") {
-        return "zh-hans"
-    }
-    return nil
+    let resolved = tellomiResolvedBuiltinLanguage(preferredLanguages: preferredLanguages, explicitChoice: nil)
+    return resolved == "en" ? nil : resolved
 }
 
 /// Server langpack for a Chinese system language. Nil for every other language.
@@ -80,7 +63,6 @@ public func tellomiMarkSystemLangPackApplied() {
 
 /// Written by the login language button and by Settings ▸ Language. Login chrome reads this
 /// before the saved pack, so a pre-login choice applies with no network and survives restart.
-public let tellomiPreferredInterfaceLanguageKey = "TellomiPreferredInterfaceLanguage"
 
 public enum TellomiLoginScript: Equatable {
     case hans

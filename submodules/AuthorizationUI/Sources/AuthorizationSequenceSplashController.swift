@@ -72,7 +72,8 @@ public final class AuthorizationSequenceSplashController: ViewController {
         })
         
         self.controller = RMIntroViewController(backgroundColor: theme.list.plainBackgroundColor, primaryColor: theme.list.itemPrimaryTextColor, buttonColor: theme.intro.startButtonColor, accentColor: theme.list.itemAccentColor, regularDotColor: theme.intro.dotColor, highlightedDotColor: theme.list.itemAccentColor, suggestedLocalizationSignal: localizationSignal)
-        let intro = tellomiIntroCopy()
+        let welcomeLanguage = tellomiNetworkLanguageCode(savedLanguageCode: nil)
+        let intro = tellomiWelcomeCopy(languageCode: welcomeLanguage)
         self.controller.setIntroHeadlines(intro.headlines, descriptions: intro.descriptions)
         
         self.startButton = SolidRoundedButtonNode(title: intro.startButton, theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
@@ -87,7 +88,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
         self.statusBar.statusBarStyle = theme.intro.statusBarStyle.style
         
         self.controller.startMessaging = { [weak self] in
-            self?.activateLocalization("en")
+            self?.activateLocalization(welcomeLanguage)
         }
         self.controller.startMessagingInAlternativeLanguage = { [weak self] code in
             if let code = code {
@@ -96,7 +97,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
         }
         
         self.startButton.pressed = { [weak self] in
-            self?.activateLocalization("en")
+            self?.activateLocalization(welcomeLanguage)
         }
         
         self.controller.createStartButton = { [weak self] width in
@@ -236,16 +237,15 @@ public final class AuthorizationSequenceSplashController: ViewController {
                 _ = TelegramEngineUnauthorized(account: strongSelf.account).localization.markSuggestedLocalizationAsSeenInteractively(languageCode: suggestedCode).start()
             }
 
-            // The stock button always requested "en". A Chinese system language downloads
-            // zh-hans or zh-hant instead. Once that pack has been applied, later taps keep
-            // the saved language, including a choice made in Settings.
+            // The stock button always requested "en". zh-Hans-US is zh-Hans. A language
+            // picked in Settings wins over both the button and the system language.
             let resolvedCode: String
-            if UserDefaults.standard.bool(forKey: tellomiSystemLangPackDefaultsKey) {
-                resolvedCode = currentCode
-            } else if let preferred = tellomiSystemLangPackCode() {
-                resolvedCode = preferred
+            if UserDefaults.standard.string(forKey: tellomiPreferredInterfaceLanguageKey) != nil {
+                resolvedCode = tellomiNetworkLanguageCode(savedLanguageCode: currentCode)
+            } else if code.caseInsensitiveCompare("en") != .orderedSame {
+                resolvedCode = tellomiCanonicalBuiltinLanguage(code)
             } else {
-                resolvedCode = code
+                resolvedCode = tellomiNetworkLanguageCode(savedLanguageCode: currentCode)
             }
             
             if currentCode == resolvedCode {

@@ -220,13 +220,16 @@
 
 "Login.CodeFloodError" = "尝试次数过多，请稍后再试。";
 "Login.CodeFloodWait" = "请在 %@ 秒后重试。";
-"CrashReport.AvailableTitle" = "有新的崩溃日志";
-"CrashReport.AvailableText" = "应用意外关闭了。\n\n要把崩溃日志发出去，帮我们修好这个问题吗？";
-"CrashReport.SendLog" = "发送日志";
-"CrashReport.BotMissingTitle" = "找不到崩溃日志机器人";
-"CrashReport.BotMissingText" = "请检查网络后再试。日志仍保存在这台设备上。";
-"CrashReport.SavedInstead" = "崩溃日志机器人不可用，日志已保存到收藏夹。";
-"CrashReport.Thanks" = "谢谢你帮忙把 Tellomi 做得更好。";
-"CrashReport.Offline" = "当前没有网络。日志仍在这台设备上，连上网络后再发送。";
-"CrashReport.Failed" = "崩溃日志没有发出去。它仍保存在这台设备上。";
-"CrashReport.Caption" = "Tellomi 崩溃日志";
+"Tour.Title1" = "Tellomi";
+"Tour.Text1" = "世界上**最快**的聊天应用。\n**免费**，也**安全**。";
+"Tour.Title2" = "快速";
+"Tour.Text2" = "**Tellomi** 发送消息\n比其他应用更快。";
+"Tour.Title3" = "强大";
+"Tour.Text3" = "**Tellomi** 不限制\n媒体和聊天的大小。";
+"Tour.Title4" = "安全";
+"Tour.Text4" = "**Tellomi** 保护你的消息\n免受攻击。";
+"Tour.Title5" = "云端";
+"Tour.Text5" = "**Tellomi** 让你在多台设备上\n查看消息。";
+"Tour.Title6" = "免费";
+"Tour.Text6" = "**Tellomi** 为聊天和媒体\n提供免费的无限云存储。";
+"Tour.StartButton" = "开始使用";

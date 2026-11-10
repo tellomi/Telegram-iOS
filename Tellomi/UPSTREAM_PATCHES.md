@@ -1,26 +1,21 @@
 # Upstream patches
 
-## Login language, sign-up root, and pre-login crashes — 2026-11-10
+## Login language, sign-up handoff, upstream crash logs — 2026-11-10
 
-TestFlight 14.0.5 (79) on an iPhone 12 set to zh-Hans stayed in English, then died after the first `auth.signUp` while the logged-in root was still coming up. `release/ios` commit `fc420b8589` had dropped the Tellomi login-locale files that `master` still has. The Moments feed from #155 is unchanged.
+Build 80 on a Chinese phone showed the English tour plus "Continue in 简体中文", and `initConnection` sent `system_lang_code=zh-Hans-US` with `lang_code=en`. `AppleLanguages` is the system list. `zh-Hans-US`, `zh-Hans-CN`, `zh-CN` and `zh` resolve to bundled `zh-Hans`. `zh-Hant-TW`, `zh-Hant-HK`, `zh-TW` and `zh-HK` resolve to `zh-Hant`. Anything else is English. A language stored with `tellomiRememberExplicitLanguage` wins. The welcome pages are the bundled `Tour.*` strings, so they do not wait for a langpack, and the suggested-language button is not shown.
 
-`NSLocale.preferredLanguages` is filtered to localizations the bundle ships. With only `en.lproj` it is `en` on a Chinese phone, so `initConnection.system_lang_code` and the welcome tour were English. The system list is the global `AppleLanguages` domain. `zh-Hans` / `zh-CN` / `zh` download langpack `zh-hans`. `zh-Hant` / `zh-TW` / `zh-HK` / `zh-MO` download `zh-hant`. The server already suggests that pack. `TellomiDidApplySystemLangPack` records that the automatic pack was applied, so a later choice in Settings is kept. The welcome pages are bundled copy (`tellomiIntroCopy`) and do not wait on the download. `FLOOD_WAIT_N` on the login screens says to try again in N seconds.
+`auth.signUp` returned `auth.authorization` (`auth.authorization#2ea2c0d4`, layer 232). About 49ms later the client closed the connection and opened a new unauthorized session (new temp keys, no `updates.getState`). `signUp` used to write the authorized state and switch the account record as two later signals. The record could leave the auth slot while the postbox still looked unauthorized, `SharedAccountContext` deleted that record, and `beginNewAuth` showed the welcome screen. `signUp` now writes `AuthorizedAccountState` and switches the record in the same order as `auth.signIn`. A following nil state does not rebuild the welcome on that controller. If the open still races, a postbox that already holds `AuthorizedAccountState` is opened again instead of being deleted.
 
-After `auth.signUp`, the window waits for the authorized root's `isReady`, installs that controller, and only then dismisses the authorization controller. A nil video converter or a photo without a `CGImage` no longer traps on the sign-up screen.
-
-Crashes before login are written from a signal handler (`SIGABRT`, `SIGSEGV`, `SIGBUS`, `SIGILL`, `SIGFPE`, `SIGTRAP`) and from the uncaught-exception handler into `Library/Application Support/CrashReports/incoming`. The next launch imports those files into the same store MetricKit uses. The existing prompt sends the report to `tellomi_crash_report_bot` once an account is authorized, and still falls back to Saved Messages.
+Crash logs are the upstream Telegram-iOS screen again (MetricKit store, debug Settings list, prompt that resolves `@iOSCrashReportsBot` and gives up after 15 seconds). The Tellomi prompt that waited on `networkState` and never called `contacts.resolveUsername`, the `tellomi_crash_report_bot` upload, the Saved Messages fallback, and the pre-login signal handler are gone. `CrashReport.*` strings were removed from every `Localizable.strings`.
 
 | File | Change |
 | --- | --- |
-| `submodules/MtProtoKit/Sources/MTApiEnvironment.m` | `system_lang_code` reads `AppleLanguages`. |
-| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | System language, langpack code, flood-wait sentence. |
-| `submodules/AuthorizationUI/Sources/TellomiIntroCopy.swift` | Welcome copy for zh-Hans, zh-Hant, and English. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | One button, bundled welcome copy, downloads zh-hans / zh-hant instead of `en`. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Applies the pack before the login screens. Does not rebuild login after authorization. |
-| `submodules/TelegramUI/Sources/ApplicationContext.swift` | Applies the same pack after sign-in if it is still pending. |
-| `submodules/TelegramUI/Sources/AppDelegate.swift` | Sets the ready logged-in root before dismissing authorization. |
-| `Telegram/Telegram-iOS/zh-Hans.lproj/Localizable.strings`, `zh-Hant.lproj` | Restored from `master`, plus the flood-wait and crash-report sentences. |
-| `submodules/CrashReporting/Sources/TellomiCrashSignalHandler.m` | Immediate signal and exception handler. |
+| `submodules/TelegramCore/Sources/TellomiBuiltinLanguage.swift` | Resolves `zh-Hans-US` and the other variants. Sets `lang_code`. |
+| `submodules/AuthorizationUI/Sources/TellomiBundledWelcome.swift` | Welcome and pre-login strings from the bundled lproj. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | No second language button. |
+| `submodules/TelegramCore/Sources/Authorization.swift` | `signUp` persists the account the same way `signIn` does. |
+| `submodules/DebugSettingsUI/Sources/CrashReportsController.swift` | Restored from upstream Telegram-iOS. |
+| `submodules/CrashReporting/Sources/*` | Restored from upstream. The signal handler is deleted. |
 
 ## Moments feed (动态) — 2026-11-09
 

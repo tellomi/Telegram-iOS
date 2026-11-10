@@ -1583,7 +1583,12 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                     if let phone = user.phone, phone.hasPrefix("42") {
                         isSupportUser = true
                     }
-                    let appliedState = account.postbox.transaction { transaction -> Void in
+                    // Same order as authorizeWithCode: write AuthorizedAccountState, then switch the
+                    // account record only after that transaction commits. Switching first made
+                    // accountWithId still see the unauthorized state, delete the record, and
+                    // beginNewAuth — the connection closed and a new temp key was created, with no
+                    // updates.getState.
+                    let activated = account.postbox.transaction { transaction -> Signal<Void, NoError> in
                         let state = AuthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
                         storeAuthorizedUser(transaction: transaction, user: user)
                         if let hole = account.postbox.seedConfiguration.initializeChatListWithHole.topLevel {
@@ -1594,36 +1599,36 @@ public func signUpWithName(accountManager: AccountManager<TelegramAccountManager
                         if let otherwiseReloginDays = otherwiseReloginDays, let value = forcedPasswordSetupNotice(otherwiseReloginDays) {
                             transaction.setNoticeEntry(key: value.0, value: value.1)
                         }
+                        return accountManager.transaction { transaction -> Void in
+                            switchToAuthorizedAccount(transaction: transaction, account: account, isSupportUser: isSupportUser)
+                        }
                     }
-                    |> castError(SignUpError.self)
+                    |> mapError { _ -> SignUpError in }
+                    |> switchToLatest
 
-                    let switchedAccounts = accountManager.transaction { transaction -> Void in
-                        switchToAuthorizedAccount(transaction: transaction, account: account, isSupportUser: isSupportUser)
+                    if avatarData == nil && avatarVideo == nil {
+                        return activated
                     }
-                    |> castError(SignUpError.self)
-                    
-                    if let avatarData = avatarData {
+                    let uploaded: Signal<Void, SignUpError>
+                    if let avatarData {
                         let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
                         account.postbox.mediaBox.storeResourceData(resource.id, data: avatarData)
-                        
-                        return _internal_updatePeerPhotoInternal(postbox: account.postbox, network: account.network, stateManager: nil, accountPeerId: user.id, peer: .single(user), photo: _internal_uploadedPeerPhoto(postbox: account.postbox, network: account.network, resource: resource), video: avatarVideo, videoStartTimestamp: videoStartTimestamp, mapResourceToAvatarSizes: { _, _ in .single([:]) })
-                            |> `catch` { _ -> Signal<UpdatePeerPhotoStatus, SignUpError> in
+                        uploaded = _internal_updatePeerPhotoInternal(postbox: account.postbox, network: account.network, stateManager: nil, accountPeerId: user.id, peer: .single(user), photo: _internal_uploadedPeerPhoto(postbox: account.postbox, network: account.network, resource: resource), video: avatarVideo, videoStartTimestamp: videoStartTimestamp, mapResourceToAvatarSizes: { _, _ in .single([:]) })
+                        |> `catch` { _ -> Signal<UpdatePeerPhotoStatus, SignUpError> in
+                            return .complete()
+                        }
+                        |> mapToSignal { result -> Signal<Void, SignUpError> in
+                            switch result {
+                            case .complete:
                                 return .complete()
+                            case .progress:
+                                return .never()
                             }
-                            |> mapToSignal { result -> Signal<Void, SignUpError> in
-                                switch result {
-                                case .complete:
-                                    return .complete()
-                                case .progress:
-                                    return .never()
-                                }
-                            }
-                            |> then(appliedState)
-                            |> then(switchedAccounts)
+                        }
                     } else {
-                        return appliedState
-                        |> then(switchedAccounts)
+                        uploaded = .complete()
                     }
+                    return activated |> then(uploaded)
                 case .authorizationSignUpRequired:
                     return .fail(.generic)
                 }

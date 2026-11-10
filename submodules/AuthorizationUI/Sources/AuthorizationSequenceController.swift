@@ -49,10 +49,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     private let actionDisposable = MetaDisposable()
     private var applicationStateDisposable: Disposable?
     private var tellomiDidAuthorize = false
-    private var tellomiLanguageGate = 0
-    private var tellomiLatestState: InnerState?
-    private let tellomiLanguageDisposable = MetaDisposable()
-    private let tellomiLanguageStringsDisposable = MetaDisposable()
     
     private var didPlayPresentationAnimation = false
     
@@ -74,7 +70,13 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         self.otherAccountPhoneNumbers = otherAccountPhoneNumbers
         self.apiId = apiId
         self.apiHash = apiHash
-        self.presentationData = presentationData
+        let resolvedLanguage = tellomiNetworkLanguageCode(savedLanguageCode: presentationData.strings.primaryComponent.languageCode)
+        let bundled = tellomiBundledPresentationStrings(languageCode: resolvedLanguage)
+        if bundled.primaryComponent.languageCode != presentationData.strings.primaryComponent.languageCode {
+            self.presentationData = presentationData.withStrings(bundled)
+        } else {
+            self.presentationData = presentationData
+        }
         self.openUrl = openUrl
         self.authorizationCompleted = authorizationCompleted
         
@@ -126,8 +128,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         self.stateDisposable?.dispose()
         self.actionDisposable.dispose()
         self.applicationStateDisposable?.dispose()
-        self.tellomiLanguageDisposable.dispose()
-        self.tellomiLanguageStringsDisposable.dispose()
     }
     
     override public func loadView() {
@@ -1258,53 +1258,12 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         if self.tellomiDidAuthorize {
             return
         }
-        self.tellomiLatestState = state
         if case .authorized = state {
+            // auth.signUp writes AuthorizedAccountState, then the postbox state view can emit nil
+            // while the account record is switched. Treating that nil as .empty rebuilt the welcome
+            // carousel on this same controller.
             self.tellomiDidAuthorize = true
             self.authorizationCompleted()
-            return
-        }
-        // Download zh-hans / zh-hant before the login screens are built. The carousel
-        // words are the bundled copy for AppleLanguages, so they are not the English tour.
-        if self.tellomiLanguageGate == 1 {
-            return
-        } else if self.tellomiLanguageGate == 0, let code = tellomiLangPackCodePendingApplication(currentLanguageCode: self.presentationData.strings.primaryComponent.languageCode) {
-            self.tellomiLanguageGate = 1
-            let accountManager = self.sharedContext.accountManager
-            let signal = TelegramEngineUnauthorized(account: self.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: code)
-            |> timeout(12.0, queue: .mainQueue(), alternate: .fail(.generic))
-            self.tellomiLanguageDisposable.set(signal.start(error: { [weak self] _ in
-                Queue.mainQueue().async {
-                    guard let self else {
-                        return
-                    }
-                    self.tellomiLanguageGate = 2
-                    self.updateState(state: self.tellomiLatestState ?? state)
-                }
-            }, completed: { [weak self] in
-                Queue.mainQueue().async {
-                    guard let self else {
-                        return
-                    }
-                    tellomiMarkSystemLangPackApplied()
-                    self.tellomiLanguageStringsDisposable.set((accountManager.transaction { transaction -> PresentationStrings? in
-                        guard let localizationSettings = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self) else {
-                            return nil
-                        }
-                        return PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: dictFromLocalization(localizationSettings.primaryComponent.localization)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: "")
-                    }
-                    |> deliverOnMainQueue).start(next: { [weak self] strings in
-                        guard let self else {
-                            return
-                        }
-                        if let strings {
-                            self.presentationData = self.presentationData.withStrings(strings)
-                        }
-                        self.tellomiLanguageGate = 2
-                        self.updateState(state: self.tellomiLatestState ?? state)
-                    }))
-                }
-            }))
             return
         }
         switch state {
