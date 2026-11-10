@@ -24,6 +24,7 @@ public final class MomentsDetailScreen: ViewController {
     private var rendered = 0
     private var rendering = false
     private var renderAgain = false
+    private var commentComposer = MomentsCommentComposerState()
 
     public init(context: AccountContext, card: MomentsCard) {
         self.context = context
@@ -309,12 +310,30 @@ extension MomentsDetailScreen: UITextFieldDelegate {
     public func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         let text = textField.text ?? ""
         guard !text.isEmpty, text.count <= MomentsLimits.standard.commentTextLimit else { return false }
+        guard self.card.viewer.canComment, self.card.commentPolicy != .closed else { return false }
         let parent = textField.accessibilityHint
-        let _ = self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: parent).start()
-        textField.text = ""
-        textField.accessibilityHint = nil
-        textField.resignFirstResponder()
-        self.reload()
+        let draft = momentsCommentComposerForSend(previous: self.commentComposer, text: text, parentId: parent, mediaKey: nil, sticker: false)
+        guard case .success = momentsEncodeComment(draft) else {
+            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .failedRetry))
+            return false
+        }
+        self.commentComposer = draft
+        let _ = self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: parent, clientNonce: draft.clientNonce).start(error: { [weak self] _ in
+            guard let self else { return }
+            self.commentComposer = momentsCommentComposerAfterFailure(draft)
+            momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .failedRetry))
+        }, completed: { [weak self] in
+            guard let self else { return }
+            if textField.text == text {
+                textField.text = ""
+            }
+            if textField.accessibilityHint == parent {
+                textField.accessibilityHint = nil
+            }
+            self.commentComposer = momentsCommentComposerAfterSuccess()
+            textField.resignFirstResponder()
+            self.reload()
+        })
         return false
     }
 }

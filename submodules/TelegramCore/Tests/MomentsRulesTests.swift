@@ -326,6 +326,7 @@ final class MomentsRulesTests: XCTestCase {
         let comment = page.comments[0]
         XCTAssertEqual(comment.text, "hello")
         XCTAssertTrue(comment.isAuthor)
+        XCTAssertFalse(comment.viewerAuthored)
         XCTAssertEqual(comment.ipRegionLabel, "陕西")
         XCTAssertEqual(comment.likeCount, 3)
         XCTAssertTrue(comment.liked)
@@ -347,5 +348,180 @@ final class MomentsRulesTests: XCTestCase {
     func testDraftCapKeepsNewest() {
         let kept = momentsTrimDrafts([1, 2, 3, 4], limit: 2, newer: >)
         XCTAssertEqual(kept, [4, 3])
+    }
+
+    func testPostRequestMatchesContentEngine() {
+        let nonce = "11111111-1111-4111-8111-111111111111"
+        let text = momentsTestPost(text: "hello", nonce: nonce)
+        let textBody = momentsTestReady(momentsEncodePost(text, audienceToken: nil))
+        XCTAssertEqual(textBody["kind"] as? String, "post")
+        XCTAssertEqual(textBody["text"] as? String, "hello")
+        XCTAssertEqual(textBody["visibility"] as? String, "public")
+        XCTAssertEqual(textBody["client_nonce"] as? String, nonce)
+        XCTAssertEqual(Set(textBody.keys), ["kind", "text", "visibility", "client_nonce"])
+        momentsAssertNoLegacyPostKeys(textBody)
+
+        let images = momentsTestPost(text: "", mediaKeys: ["m/a", "m/b", "m/c"], nonce: nonce)
+        let imageBody = momentsTestReady(momentsEncodePost(images, audienceToken: nil))
+        XCTAssertNil(imageBody["text"])
+        XCTAssertEqual(imageBody["media_keys"] as? [String], ["m/a", "m/b", "m/c"])
+        XCTAssertNil(imageBody["media"])
+
+        let video = momentsTestPost(text: "clip", mediaKeys: ["m/video"], nonce: nonce)
+        let videoBody = momentsTestReady(momentsEncodePost(video, audienceToken: nil))
+        XCTAssertEqual(videoBody["media_keys"] as? [String], ["m/video"])
+        XCTAssertNil(videoBody["media"])
+
+        let nearby = momentsTestPost(text: "here", allowNearby: true, city: "cn:chengdu", placeId: "poi-1", nonce: nonce)
+        let nearbyBody = momentsTestReady(momentsEncodePost(nearby, audienceToken: nil))
+        XCTAssertEqual(nearbyBody["visibility"] as? String, "public")
+        XCTAssertEqual(nearbyBody["allow_nearby"] as? Bool, true)
+        XCTAssertEqual(nearbyBody["city"] as? String, "cn:chengdu")
+        XCTAssertEqual(nearbyBody["place_id"] as? String, "poi-1")
+        XCTAssertNil(nearbyBody["location"])
+
+        let contacts = momentsTestPost(text: "contacts", audience: MomentsAudience(kind: .contacts), allowNearby: true, nonce: nonce)
+        let contactsBody = momentsTestReady(momentsEncodePost(contacts, audienceToken: nil))
+        XCTAssertEqual(contactsBody["visibility"] as? String, "contacts")
+        XCTAssertNil(contactsBody["audience"])
+        XCTAssertNil(contactsBody["allow_nearby"])
+
+        let close = momentsTestPost(text: "close", audience: MomentsAudience(kind: .closeFriends), nonce: nonce)
+        XCTAssertEqual(momentsTestReady(momentsEncodePost(close, audienceToken: nil))["visibility"] as? String, "close_friends")
+
+        let friends = momentsTestPost(text: "friends", audience: MomentsAudience(kind: .mutualFollowers), nonce: nonce)
+        XCTAssertEqual(momentsTestReady(momentsEncodePost(friends, audienceToken: nil))["visibility"] as? String, "friends")
+
+        let selected = MomentsAudience(kind: .selected, include: [3, 4])
+        let selectedDraft = momentsTestPost(text: "picked", audience: selected, nonce: nonce)
+        guard case let .success(.needsAudienceToken(kind, userIds)) = momentsEncodePost(selectedDraft, audienceToken: nil) else {
+            return XCTFail("selected people need a token")
+        }
+        XCTAssertEqual(kind, "include")
+        XCTAssertEqual(userIds, [3, 4])
+        let selectedBody = momentsTestReady(momentsEncodePost(selectedDraft, audienceToken: "signed-include"))
+        XCTAssertEqual(selectedBody["visibility"] as? String, "include")
+        XCTAssertEqual((selectedBody["audience"] as? [String: Any])?["audience_token"] as? String, "signed-include")
+        XCTAssertNil(selectedBody["include"])
+        XCTAssertNotEqual(selectedBody["visibility"] as? String, "public")
+        XCTAssertEqual(momentsAudienceKeptAfterTokenFailure(selected), selected)
+
+        let excluded = MomentsAudience(kind: .everyone, exclude: [8])
+        let excludedDraft = momentsTestPost(text: "hidden", audience: excluded, nonce: nonce)
+        guard case let .success(.needsAudienceToken(excludeKind, excludeIds)) = momentsEncodePost(excludedDraft, audienceToken: nil) else {
+            return XCTFail("excluded people need a token")
+        }
+        XCTAssertEqual(excludeKind, "exclude")
+        XCTAssertEqual(excludeIds, [8])
+        let excludedBody = momentsTestReady(momentsEncodePost(excludedDraft, audienceToken: "signed-exclude"))
+        XCTAssertEqual(excludedBody["visibility"] as? String, "exclude")
+        XCTAssertEqual((excludedBody["audience"] as? [String: Any])?["audience_token"] as? String, "signed-exclude")
+        XCTAssertNotEqual(excludedBody["visibility"] as? String, "public")
+        XCTAssertEqual(momentsAudienceKeptAfterTokenFailure(excluded), excluded)
+
+        let contactsExcept = momentsTestPost(text: "no", audience: MomentsAudience(kind: .contacts, exclude: [9]), nonce: nonce)
+        guard case .failure(.audienceNotRepresentable) = momentsEncodePost(contactsExcept, audienceToken: "token") else {
+            return XCTFail("contacts plus an exclude list must not be published")
+        }
+
+        let quote = momentsTestPost(text: "quoting", quoteOf: "quoted-id", nonce: nonce)
+        XCTAssertEqual(momentsTestReady(momentsEncodePost(quote, audienceToken: nil))["quote_of"] as? String, "quoted-id")
+
+        let again = momentsTestReady(momentsEncodePost(text, audienceToken: nil))
+        XCTAssertEqual(again["client_nonce"] as? String, nonce)
+        guard case .failure(.invalidClientNonce) = momentsEncodePost(momentsTestPost(text: "x", nonce: "not-a-uuid"), audienceToken: nil) else {
+            return XCTFail("nonce must be a UUID")
+        }
+        guard case .failure(.audienceTokenRequired) = momentsEncodePost(momentsTestPost(text: "nobody", audience: MomentsAudience(kind: .selected), nonce: nonce), audienceToken: nil) else {
+            return XCTFail("an empty include list is not public")
+        }
+    }
+
+    func testCommentSendKeepsDraftAndNonceOnFailure() {
+        let nonce = "22222222-2222-4222-8222-222222222222"
+        let other = "33333333-3333-4333-8333-333333333333"
+        let first = momentsCommentComposerForSend(previous: MomentsCommentComposerState(), text: "hello", parentId: "parent-1", mediaKey: "m/voice", sticker: false, makeNonce: { nonce })
+        let retry = momentsCommentComposerForSend(previous: first, text: "hello", parentId: "parent-1", mediaKey: "m/voice", sticker: false, makeNonce: { other })
+        XCTAssertEqual(retry.clientNonce, nonce)
+        let kept = momentsCommentComposerAfterFailure(retry)
+        XCTAssertEqual(kept, retry)
+        XCTAssertEqual(kept.text, "hello")
+        XCTAssertEqual(kept.parentId, "parent-1")
+        XCTAssertEqual(kept.mediaKey, "m/voice")
+        let body = try! momentsEncodeComment(kept).get()
+        XCTAssertEqual(body["text"] as? String, "hello")
+        XCTAssertEqual(body["parent_id"] as? String, "parent-1")
+        XCTAssertEqual(body["media_keys"] as? [String], ["m/voice"])
+        XCTAssertEqual(body["client_nonce"] as? String, nonce)
+        XCTAssertNil(body["sticker"])
+        let sticker = momentsCommentComposerForSend(previous: MomentsCommentComposerState(), text: "", parentId: nil, mediaKey: "m/sticker", sticker: true, makeNonce: { nonce })
+        let stickerBody = try! momentsEncodeComment(sticker).get()
+        XCTAssertEqual(stickerBody["sticker"] as? Bool, true)
+        XCTAssertNil(stickerBody["text"])
+        let edited = momentsCommentComposerForSend(previous: kept, text: "hello!", parentId: "parent-1", mediaKey: "m/voice", sticker: false, makeNonce: { other })
+        XCTAssertEqual(edited.clientNonce, other)
+        let cleared = momentsCommentComposerAfterSuccess()
+        XCTAssertEqual(cleared.text, "")
+        XCTAssertNil(cleared.parentId)
+        XCTAssertNil(cleared.mediaKey)
+        XCTAssertNotEqual(cleared.clientNonce, nonce)
+        guard case .failure(.invalidClientNonce) = momentsEncodeComment(MomentsCommentComposerState(text: "x", clientNonce: "bad")) else {
+            return XCTFail("a comment nonce has to be a UUID")
+        }
+    }
+
+    func testFeedPagingProbeAndCommentCursors() {
+        XCTAssertFalse(momentsShouldLoadFeedPage(loaded: true, cursor: nil, refresh: false, loading: false))
+        XCTAssertFalse(momentsShouldLoadFeedPage(loaded: false, cursor: nil, refresh: false, loading: true))
+        XCTAssertTrue(momentsShouldLoadFeedPage(loaded: true, cursor: nil, refresh: true, loading: false))
+        XCTAssertTrue(momentsShouldLoadFeedPage(loaded: true, cursor: "next", refresh: false, loading: false))
+        XCTAssertFalse(momentsFeedShouldProbe(kind: .recommend, screenVisible: true))
+        XCTAssertTrue(momentsFeedShouldProbe(kind: .following, screenVisible: true))
+        XCTAssertTrue(momentsFeedShouldProbe(kind: .friends, screenVisible: true))
+        XCTAssertTrue(momentsFeedShouldProbe(kind: .nearby, screenVisible: true))
+        XCTAssertFalse(momentsFeedShouldProbe(kind: .following, screenVisible: false))
+        XCTAssertEqual(momentsUnseenHeadCount(visibleIds: ["a", "b"], probedIds: ["n1", "n2", "a", "b"]), 2)
+        XCTAssertEqual(momentsUnseenHeadCount(visibleIds: ["a"], probedIds: ["a", "n1"]), 0)
+        XCTAssertEqual(momentsUnseenHeadCount(visibleIds: ["a"], probedIds: ["n1", "n1", "a"]), 1)
+
+        var cursors = MomentsCommentCursors()
+        cursors = cursors.storing(sort: "hot", cursor: "hot-1")
+        cursors = cursors.storing(sort: "latest", cursor: "new-1")
+        XCTAssertEqual(cursors.cursor(sort: "hot"), "hot-1")
+        XCTAssertEqual(cursors.cursor(sort: "latest"), "new-1")
+        cursors = cursors.storing(sort: "hot", cursor: "hot-2")
+        XCTAssertEqual(cursors.cursor(sort: "latest"), "new-1")
+        XCTAssertNil(cursors.storing(sort: "latest", cursor: "").cursor(sort: "latest"))
+
+        let refreshed = momentsMergeFeed(existing: [MomentsCard(id: "old")], pageItems: [MomentsCard(id: "new"), MomentsCard(id: "new")], cursor: nil, refreshing: true)
+        XCTAssertEqual(refreshed.items.map(\.id), ["new"])
+        XCTAssertNil(refreshed.cursor)
+        let appended = momentsMergeFeed(existing: refreshed.items, pageItems: [MomentsCard(id: "new"), MomentsCard(id: "next")], cursor: "c2", refreshing: false)
+        XCTAssertEqual(appended.items.map(\.id), ["new", "next"])
+
+        let grant = MomentsAudienceGrant(token: "t", expiresAt: 1_000)
+        XCTAssertFalse(grant.needsRefresh(now: 1_000 - MomentsCredential.refreshMargin - 1))
+        XCTAssertTrue(grant.needsRefresh(now: 1_000 - MomentsCredential.refreshMargin))
+    }
+}
+
+private func momentsTestPost(text: String, audience: MomentsAudience = MomentsAudience(kind: .everyone), mediaKeys: [String] = [], allowNearby: Bool = false, city: String? = nil, placeId: String? = nil, quoteOf: String? = nil, nonce: String) -> MomentsPostDraft {
+    return MomentsPostDraft(text: text, audience: audience, mediaKeys: mediaKeys, allowNearby: allowNearby, city: city, placeId: placeId, quoteOf: quoteOf, clientNonce: nonce)
+}
+
+private func momentsTestReady(_ result: Result<MomentsEncodedPost, MomentsPostEncodeError>) -> [String: Any] {
+    guard case let .success(.ready(body)) = result else {
+        XCTFail("expected a ready post body, got \(result)")
+        return [:]
+    }
+    return body
+}
+
+private func momentsAssertNoLegacyPostKeys(_ body: [String: Any]) {
+    for key in ["media", "location", "comment_policy", "link_preview", "include", "exclude", "user_ids"] {
+        XCTAssertNil(body[key], key)
+    }
+    if let audience = body["audience"] as? [String: Any] {
+        XCTAssertEqual(Set(audience.keys), ["audience_token"])
     }
 }
