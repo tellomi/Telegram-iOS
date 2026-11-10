@@ -9,7 +9,7 @@
 			<string>INSendMessageIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Send a Telegram message to Alex saying I&apos;ll be there in 10 minutes</string>
+				<string>Alexga Tellomi orqali xabar yubor, o‘n daqiqadan keyin yetib boraman deb ayt</string>
 			</array>
 		</dict>
 		<dict>
@@ -17,7 +17,7 @@
 			<string>INStartAudioCallIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Telegram orqali Alisaga qo‘ng‘iroq qil</string>
+				<string>Tellomi orqali Alisaga qo‘ng‘iroq qil</string>
 			</array>
 		</dict>
 		<dict>
@@ -25,7 +25,7 @@
 			<string>INSearchForMessagesIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Telegramdagi o‘qilmagan xabarlarimni o‘qib ber</string>
+				<string>Tellomidagi o‘qilmagan xabarlarimni o‘qib ber</string>
 			</array>
 		</dict>
 		<dict>
@@ -33,7 +33,7 @@
 			<string>INSetMessageAttributeIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Telegramdagi xabarlarimni o‘qilgan deb belgilab qo‘y</string>
+				<string>Tellomidagi xabarlarimni o‘qilgan deb belgilab qo‘y</string>
 			</array>
 		</dict>
 		<dict>
@@ -41,7 +41,7 @@
 			<string>INSearchCallHistoryIntent</string>
 			<key>IntentExamples</key>
 			<array>
-				<string>Telegramdagi javobsiz qo‘ng‘iroqlarimni ko‘rsat</string>
+				<string>Tellomidagi javobsiz qo‘ng‘iroqlarimni ko‘rsat</string>
 			</array>
 		</dict>
 	</array>

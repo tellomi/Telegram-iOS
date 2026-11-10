@@ -727,23 +727,95 @@ REQUIRED_INTENTS = (
 
 def check_siri_vocabulary() -> None:
     import plistlib
+    import re
 
-    for language in ("zh-Hans", "zh-Hant"):
-        path = ROOT / "Telegram/Telegram-iOS" / f"{language}.lproj" / "AppIntentVocabulary.plist"
-        if not path.is_file():
-            fail(f"missing {path.relative_to(ROOT)}")
+    build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
+    if 'name = "AppIntentVocabularyResources"' not in build:
+        fail("AppIntentVocabularyResources is missing from Telegram/BUILD")
+    if '":AppIntentVocabularyResources"' not in build:
+        fail("Lib data does not bundle AppIntentVocabularyResources")
+    on_disk = sorted((ROOT / "Telegram/Telegram-iOS").glob("*.lproj/AppIntentVocabulary.plist"))
+    if not on_disk:
+        fail("no AppIntentVocabulary.plist files")
+    banned = ("Telegram", "TELEGRAM", "تيليجرام", "تلگرام")
+    languages = []
+    for path in on_disk:
+        language = path.parent.name.removesuffix(".lproj")
+        languages.append(language)
+        src = f"Telegram-iOS/{language}.lproj/AppIntentVocabulary.plist"
+        if f'"{src}"' not in build:
+            fail(f"{src} is not an explicit AppIntentVocabularyResources src")
+    for language in ("en", "zh-Hans", "zh-Hant"):
+        if language not in languages:
+            fail(f"missing {language} AppIntentVocabulary.plist")
+    for path in on_disk:
+        language = path.parent.name.removesuffix(".lproj")
         data = plistlib.loads(path.read_bytes())
         phrases = data.get("IntentPhrases") or []
         by_name = {item.get("IntentName"): item.get("IntentExamples") or [] for item in phrases}
         for intent in REQUIRED_INTENTS:
             examples = by_name.get(intent) or []
-            if not examples or not any("Tellomi" in example for example in examples):
-                fail(f"{language} {intent} has no Tellomi example phrase")
-            if any("Telegram" in example for example in examples):
-                fail(f"{language} {intent} still says Telegram")
-    build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
-    if "Telegram-iOS/*.lproj/AppIntentVocabulary.plist" not in build:
-        fail("AppIntentVocabulary resources are not globbed into the app")
+            if not examples or not any(str(example).strip() for example in examples):
+                fail(f"{language} {intent} has no example phrase")
+            blob = "\n".join(str(example) for example in examples)
+            if "Tellomi" not in blob:
+                fail(f"{language} {intent} example does not say Tellomi")
+            for word in banned:
+                if word in blob:
+                    fail(f"{language} {intent} still says {word}")
+
+    brand = re.compile(r"(?:(?<=\\[ntr])|(?<![A-Za-z0-9_]))Telegram(?![A-Za-z0-9_])|TELEGRAM|TelegramTips")
+    bundles = [
+        ROOT / "Telegram/Telegram-iOS/en.lproj/Localizable.strings",
+        ROOT / "Telegram/Share/en.lproj/Localizable.strings",
+        ROOT / "Telegram/WidgetKitWidget/en.lproj/Localizable.strings",
+    ]
+    bundles.extend((ROOT / "Telegram/Telegram-iOS").glob("*.lproj/InfoPlist.strings"))
+    bundles.extend((ROOT / "Telegram/SiriIntents").glob("*.lproj/Intents.intentdefinition"))
+    for path in bundles:
+        text = path.read_text(encoding="utf-8")
+        if path.suffix == ".intentdefinition":
+            if "Telegram" in text or "TELEGRAM" in text:
+                fail(f"{path.relative_to(ROOT)} still says Telegram")
+            continue
+        if _strings_value_has_brand(text, brand):
+            fail(f"{path.relative_to(ROOT)} still has Telegram in a string value")
+
+
+def _strings_value_has_brand(text: str, brand) -> bool:
+    i = 0
+    n = len(text)
+    expect_value = False
+    while i < n:
+        if text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            if end < 0:
+                return True
+            i = end + 2
+            continue
+        if text.startswith("//", i):
+            end = text.find("\n", i)
+            i = n if end < 0 else end
+            continue
+        if text[i] == '"':
+            j = i + 1
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == '"':
+                    j += 1
+                    break
+                j += 1
+            if expect_value and brand.search(text[i + 1:j - 1]):
+                return True
+            expect_value = False
+            i = j
+            continue
+        if text[i] == "=":
+            expect_value = True
+        i += 1
+    return False
 
 
 def check_marketing_version() -> None:
@@ -765,6 +837,7 @@ def main() -> None:
     check_public_links()
     check_wiring()
     check_app_store_submission()
+    check_siri_vocabulary()
     check_marketing_version()
     print("Tellomi server config checks passed")
 
