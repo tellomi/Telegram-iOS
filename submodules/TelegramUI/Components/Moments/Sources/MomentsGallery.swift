@@ -4,7 +4,6 @@ import Display
 import SwiftSignalKit
 import TelegramCore
 import AccountContext
-import Postbox
 
 func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: Int, controller: ViewController) {
     let slides = card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }

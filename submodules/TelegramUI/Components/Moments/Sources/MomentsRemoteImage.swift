@@ -1,6 +1,5 @@
 import Foundation
 import UIKit
-import Postbox
 import SwiftSignalKit
 import TelegramCore
 import AccountContext
@@ -37,8 +36,8 @@ func momentsDownsampleImage(path: String, maxPixel: CGFloat, scale: CGFloat) -> 
     return UIImage(cgImage: cgImage, scale: scale > 0 ? scale : 1, orientation: .up)
 }
 
-private func momentsRemoteResource(url: String) -> HttpReferenceMediaResource {
-    return HttpReferenceMediaResource(url: url, size: nil)
+private func momentsRemoteResource(url: String) -> EngineMediaResource {
+    return EngineMediaResource(HttpReferenceMediaResource(url: url, size: nil))
 }
 
 func momentsPrefetchRemoteImage(context: AccountContext, url: String) -> Signal<Never, NoError> {
@@ -46,9 +45,10 @@ func momentsPrefetchRemoteImage(context: AccountContext, url: String) -> Signal<
         return .complete()
     }
     let resource = momentsRemoteResource(url: url)
-    return context.engine.resources.fetch(reference: .standalone(resource: resource), userLocation: .other, userContentType: .image, statsCategory: .image)
-    |> `catch` { _ -> Signal<FetchResourceSourceType, NoError> in
-        return .complete()
+    return context.engine.resources.fetch(reference: .standalone(resource: resource._asResource()), userLocation: .other, userContentType: .image, statsCategory: .image)
+    |> map { _ -> Void in }
+    |> `catch` { _ -> Signal<Void, NoError> in
+        return .single(())
     }
     |> ignoreValues
 }
@@ -76,13 +76,14 @@ final class MomentsRemoteImageSlot {
         let scale = UIScreen.main.scale
         let maxPixel = max(maxSide, 1) * (scale > 0 ? scale : 1)
         let expected = url
-        let fetch = context.engine.resources.fetch(reference: .standalone(resource: resource), userLocation: .other, userContentType: .image, statsCategory: .image)
-        |> `catch` { _ -> Signal<FetchResourceSourceType, NoError> in
-            return .complete()
+        let fetch = context.engine.resources.fetch(reference: .standalone(resource: resource._asResource()), userLocation: .other, userContentType: .image, statsCategory: .image)
+        |> map { _ -> Void in }
+        |> `catch` { _ -> Signal<Void, NoError> in
+            return .single(())
         }
         |> ignoreValues
-        let data = context.account.postbox.mediaBox.resourceData(resource, option: .complete(waitUntilFetchStatus: true))
-        |> filter { $0.complete }
+        let data = context.engine.resources.data(resource: resource, waitUntilFetchStatus: true)
+        |> filter { $0.isComplete }
         |> take(1)
         |> deliverOn(Queue.concurrentDefaultQueue())
         |> map { resourceData -> UIImage? in

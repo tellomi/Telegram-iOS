@@ -7,7 +7,6 @@ import TelegramCore
 import TelegramPresentationData
 import AccountContext
 import AvatarNode
-import Postbox
 import TelegramUniversalVideoContent
 
 public struct MomentsPostHandlers {
