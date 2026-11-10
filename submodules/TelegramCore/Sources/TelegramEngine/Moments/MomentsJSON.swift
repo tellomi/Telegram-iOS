@@ -36,7 +36,46 @@ func momentsInt64(_ json: [String: Any], _ keys: String...) -> Int64 {
 }
 
 func momentsInt(_ json: [String: Any], _ keys: String...) -> Int {
-    return Int(momentsInt64(json, keys[0], keys.count > 1 ? keys[1] : keys[0]))
+    guard let first = keys.first else {
+        return 0
+    }
+    let second = keys.count > 1 ? keys[1] : first
+    let value = momentsInt64(json, first, second)
+    if value > Int64(Int.max) || value < Int64(Int.min) {
+        return 0
+    }
+    return Int(value)
+}
+
+/// `{id}` plus at most `reason` and `type:post`. That is a list ref, not a card.
+func momentsBarePostRef(_ json: [String: Any]) -> Bool {
+    guard momentsString(json, "id") != nil else {
+        return false
+    }
+    if let type = momentsString(json, "type"), !type.isEmpty, type != "post" {
+        return false
+    }
+    let allowed: Set<String> = ["id", "reason", "type"]
+    return json.keys.allSatisfy { allowed.contains($0) }
+}
+
+/// The cards API wraps a post as `{id, card:{...}}` or `{id, post:{...}}`. The inner object is the card.
+func momentsUnwrapCardJSON(_ json: [String: Any]) -> [String: Any] {
+    if let card = momentsObject(json["card"]) {
+        var body = card
+        if momentsString(body, "id") == nil, let id = momentsString(json, "id") {
+            body["id"] = id
+        }
+        return body
+    }
+    if let post = momentsObject(json["post"]), momentsObject(json["author"]) == nil, momentsString(json, "text") == nil {
+        var body = post
+        if momentsString(body, "id") == nil, let id = momentsString(json, "id") {
+            body["id"] = id
+        }
+        return body
+    }
+    return json
 }
 
 func momentsBool(_ json: [String: Any], _ keys: String...) -> Bool {
@@ -67,7 +106,11 @@ func momentsAuthor(_ json: [String: Any]?) -> MomentsAuthor? {
 }
 
 func momentsMedia(_ json: [String: Any], mediaBaseURL: String? = nil) -> MomentsMedia? {
-    guard let key = momentsString(json, "key", "id"), let rawType = momentsString(json, "type"), let type = MomentsMediaType(rawValue: rawType) else {
+    guard let key = momentsString(json, "key", "id"), let rawType = momentsString(json, "type") else {
+        return nil
+    }
+    let normalizedType = rawType == "voice" ? "audio" : rawType
+    guard let type = MomentsMediaType(rawValue: normalizedType) else {
         return nil
     }
     let cover = momentsString(json, "cover_key", "cover")
@@ -85,8 +128,12 @@ func momentsMedia(_ json: [String: Any], mediaBaseURL: String? = nil) -> Moments
 }
 
 func momentsCard(json: [String: Any], mediaBaseURL: String? = nil) -> MomentsCard? {
+    let json = momentsUnwrapCardJSON(json)
     guard let id = momentsString(json, "id") else {
         return nil
+    }
+    if momentsBarePostRef(json) {
+        return MomentsCard(id: id, state: "unavailable")
     }
     let state = momentsString(json, "state") ?? "published"
     if state == "unavailable" || state == "deleted" {
@@ -153,12 +200,17 @@ func momentsCard(json: [String: Any], mediaBaseURL: String? = nil) -> MomentsCar
     let policy = MomentsCommentPolicy(rawValue: momentsString(json, "comment_policy") ?? "") ?? .everyoneWhoCanView
     let countsJSON = momentsObject(json["counts"]) ?? json
     let viewerJSON = momentsObject(json["viewer"]) ?? [:]
-    let topics = (json["topics"] as? [String]) ?? []
+    let topics = momentsStringList(json["topics"])
+    var author = momentsAuthor(momentsObject(json["author"]))
+    if var value = author, !value.followed, momentsBool(viewerJSON, "following", "followed") {
+        value.followed = true
+        author = value
+    }
     return MomentsCard(
         id: id,
         version: momentsInt64(json, "version"),
         state: state,
-        author: momentsAuthor(momentsObject(json["author"])),
+        author: author,
         text: momentsString(json, "text") ?? "",
         createdAt: momentsInt64(json, "created_at"),
         editedAt: json["edited_at"] == nil ? nil : momentsInt64(json, "edited_at"),
@@ -218,11 +270,74 @@ func momentsStringList(_ value: Any?) -> [String] {
     return []
 }
 
+func momentsCardRows(_ root: [String: Any]) -> [[String: Any]] {
+    let items = momentsArray(root["items"])
+    let cards = momentsArray(root["cards"])
+    let posts = momentsArray(root["posts"])
+    if !items.isEmpty, items.allSatisfy(momentsBarePostRef), !cards.isEmpty {
+        return cards
+    }
+    if !items.isEmpty {
+        return items
+    }
+    if !cards.isEmpty {
+        return cards
+    }
+    return posts
+}
+
+/// Cards aligned to the recommend order. A missing id is an unavailable row, not a blank post.
+public func momentsHydratedCards(ids: [String], cardsData: Data, mediaBaseURL: String? = nil) -> [MomentsCard] {
+    var byId: [String: MomentsCard] = [:]
+    if let root = try? JSONSerialization.jsonObject(with: cardsData) as? [String: Any] {
+        for row in momentsCardRows(root) {
+            let body = momentsUnwrapCardJSON(row)
+            guard let card = momentsCard(json: body, mediaBaseURL: mediaBaseURL) else {
+                continue
+            }
+            byId[card.id] = card
+        }
+    }
+    if ids.isEmpty {
+        return Array(byId.values)
+    }
+    return ids.map { id in
+        byId[id] ?? MomentsCard(id: id, state: "unavailable")
+    }
+}
+
+/// Append a page. An empty `items` with no cursor is the last page: keep what is on screen and stop.
+public func momentsMergeFeed(existing: [MomentsCard], pageItems: [MomentsCard], cursor: String?, refreshing: Bool) -> (items: [MomentsCard], cursor: String?) {
+    let nextCursor = cursor.flatMap { $0.isEmpty ? nil : $0 }
+    if refreshing {
+        var seen = Set<String>()
+        let items = pageItems.filter { seen.insert($0.id).inserted }
+        return (items, pageItems.isEmpty ? nil : nextCursor)
+    }
+    if pageItems.isEmpty {
+        return (existing, nil)
+    }
+    var seen = Set(existing.map { $0.id })
+    var items = existing
+    for card in pageItems where seen.insert(card.id).inserted {
+        items.append(card)
+    }
+    return (items, nextCursor)
+}
+
+/// List rows the feed has already applied. Same ids update in place. A different list replaces every row.
+public func momentsListEdit(previousIds: [String], nextIds: [String]) -> (deletes: [Int], inserts: [Int], updates: [Int]) {
+    if previousIds == nextIds {
+        return ([], [], Array(nextIds.indices))
+    }
+    return (Array(previousIds.indices), Array(nextIds.indices), [])
+}
+
 func momentsPage(data: Data, mediaBaseURL: String? = nil) -> MomentsPage? {
     guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         return nil
     }
-    let rows = momentsArray(root["items"] ?? root["cards"] ?? root["posts"])
+    let rows = momentsCardRows(root)
     return MomentsPage(items: rows.compactMap { momentsCard(json: $0, mediaBaseURL: mediaBaseURL) }, nextCursor: momentsString(root, "next_cursor", "cursor"))
 }
 

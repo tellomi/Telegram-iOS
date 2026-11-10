@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   app:
-    if: github.head_ref == 'cursor/moments-feed-v1-b405'
+    if: github.head_ref == 'cursor/moments-feed-cards-b405'
     runs-on: xcode-27
     timeout-minutes: 360
     env:

@@ -161,7 +161,12 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private let disposable = DisposableSet()
     private var probe: SwiftSignalKit.Timer?
     private let sortControl = UIButton(type: .system)
+    private let composeFab = UIButton(type: .system)
     private var validLayout: ContainerViewLayout?
+    /// Ids the list has already applied. A second layout pass must not update rows the list does not have yet.
+    private var appliedIds: [MomentsFeedKind: [String]] = [:]
+    private var listBusy: [MomentsFeedKind: Bool] = [:]
+    private var renderQueued: Set<MomentsFeedKind> = []
 
     init(context: AccountContext, controller: MomentsScreen) {
         self.context = context
@@ -191,16 +196,19 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             }
         })
         self.view.addSubview(self.titleLabel)
-        self.view.addSubview(self.compose)
         self.view.addSubview(self.heart)
         self.view.addSubview(self.pill)
         self.view.addSubview(self.sortControl)
         self.view.addSubview(self.pager)
+        self.view.addSubview(self.composeFab)
+        self.composeFab.layer.cornerRadius = 28
+        self.composeFab.clipsToBounds = true
+        self.compose.isHidden = true
         self.pager.delegate = self
         self.pager.albumHit = { [weak self] point in
             self?.pointHitsAlbum(point) ?? false
         }
-        self.compose.addTarget(self, action: #selector(self.composePressed), for: .touchUpInside)
+        self.composeFab.addTarget(self, action: #selector(self.composePressed), for: .touchUpInside)
         self.heart.addTarget(self, action: #selector(self.heartPressed), for: .touchUpInside)
         self.pill.addTarget(self, action: #selector(self.pillPressed), for: .touchUpInside)
         self.sortControl.addTarget(self, action: #selector(self.sortPressed), for: .touchUpInside)
@@ -261,15 +269,19 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             self.titleLabel.text = momentsText(self.presentationData.strings, .title)
         }
         self.titleLabel.frame = CGRect(x: 16, y: top, width: width - 140, height: 44)
-        self.heart.frame = CGRect(x: width - 96, y: top + 6, width: 36, height: 32)
-        self.compose.frame = CGRect(x: width - 52, y: top + 6, width: 40, height: 32)
+        self.heart.frame = CGRect(x: width - 52, y: top + 6, width: 40, height: 32)
         let iconColor = self.presentationData.theme.list.itemPrimaryTextColor
         self.heart.setTitle(nil, for: .normal)
-        self.compose.setTitle(nil, for: .normal)
         self.heart.setImage(generateTintedImage(image: UIImage(bundleImageName: "Stories/InputLikeOff"), color: iconColor), for: .normal)
-        self.compose.setImage(PresentationResourcesRootController.navigationComposeIcon(self.presentationData.theme), for: .normal)
         self.heart.accessibilityLabel = momentsText(self.presentationData.strings, .notifications)
-        self.compose.accessibilityLabel = momentsText(self.presentationData.strings, .compose)
+        let accent = self.presentationData.theme.list.itemAccentColor
+        self.composeFab.backgroundColor = accent
+        self.composeFab.setImage(generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Add"), color: .white), for: .normal)
+        self.composeFab.accessibilityLabel = momentsText(self.presentationData.strings, .compose)
+        let fabSide: CGFloat = 56
+        let fabBottom = layout.intrinsicInsets.bottom + 16
+        self.composeFab.frame = CGRect(x: width - 20 - fabSide, y: layout.size.height - fabBottom - fabSide, width: fabSide, height: fabSide)
+        self.view.bringSubviewToFront(self.composeFab)
         let tabSize = self.tabs.update(transition: .immediate, component: AnyComponent(self.tabsComponent(width: width)), environment: {}, containerSize: CGSize(width: width - 16, height: 36))
         if let view = self.tabs.view {
             if view.superview == nil { self.view.addSubview(view) }
@@ -375,13 +387,11 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             model.loading = false
             model.loaded = true
             model.failed = false
-            model.cursor = page.nextCursor
+            let refreshing = refresh || cursor == nil
+            let merged = momentsMergeFeed(existing: refreshing ? [] : model.items, pageItems: page.items, cursor: page.nextCursor, refreshing: refreshing)
+            model.cursor = merged.cursor
             model.newCount = 0
-            if refresh || cursor == nil {
-                model.items = page.items
-            } else {
-                model.items.append(contentsOf: page.items)
-            }
+            model.items = merged.items
             self.models[kind] = model
             self.render(kind, resetScroll: refresh)
             self.pill.isHidden = self.models[self.selected]?.newCount ?? 0 == 0
@@ -436,22 +446,27 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             if let post = item as? MomentsPostItem { return post.hidden ? "h:\(post.card.id)" : post.card.id + ":\(post.card.version)" }
             return "status"
         }
-        let previous = model.renderedIds
-        self.models[kind]?.renderedIds = ids
-        let insets = UIEdgeInsets(top: 0, left: 0, bottom: 8, right: 0)
-        if previous == ids && !resetScroll {
-            list.transaction(deleteIndices: [], insertIndicesAndItems: [], updateIndicesAndItems: entries.enumerated().map { ListViewUpdateItem(index: $0.offset, previousIndex: $0.offset, item: $0.element, directionHint: nil) }, options: [.Synchronous, .LowLatency], scrollToItem: nil, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), stationaryItemRange: nil, updateOpaqueState: nil, completion: { [weak self] _ in
-            if kind == self?.selected {
-                self?.updateVisiblePlayback()
-            }
-        })
-        } else {
-            list.transaction(deleteIndices: previous.enumerated().map { ListViewDeleteItem(index: $0.offset, directionHint: nil) }, insertIndicesAndItems: entries.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous, .LowLatency], scrollToItem: resetScroll ? ListViewScrollToItem(index: 0, position: .top(0), animated: false, curve: .Default(duration: nil), directionHint: .Up) : nil, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), stationaryItemRange: nil, updateOpaqueState: nil, completion: { [weak self] _ in
-            if kind == self?.selected {
-                self?.updateVisiblePlayback()
-            }
-        })
+        if self.listBusy[kind] == true {
+            self.renderQueued.insert(kind)
+            return
         }
+        let previous = self.appliedIds[kind] ?? []
+        let edit = momentsListEdit(previousIds: previous, nextIds: ids)
+        let insets = UIEdgeInsets(top: 0, left: 0, bottom: 72, right: 0)
+        self.listBusy[kind] = true
+        let scroll = resetScroll && !entries.isEmpty ? ListViewScrollToItem(index: 0, position: .top(0), animated: false, curve: .Default(duration: nil), directionHint: .Up) : nil
+        list.transaction(deleteIndices: edit.deletes.map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: edit.inserts.map { ListViewInsertItem(index: $0, previousIndex: nil, item: entries[$0], directionHint: nil) }, updateIndicesAndItems: edit.updates.map { ListViewUpdateItem(index: $0, previousIndex: $0, item: entries[$0], directionHint: nil) }, options: [.Synchronous, .LowLatency], scrollToItem: scroll, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), stationaryItemRange: nil, updateOpaqueState: nil, completion: { [weak self] _ in
+            guard let self else { return }
+            self.appliedIds[kind] = ids
+            self.listBusy[kind] = false
+            if kind == self.selected {
+                self.updateVisiblePlayback()
+            }
+            if self.renderQueued.contains(kind) {
+                self.renderQueued.remove(kind)
+                self.render(kind, resetScroll: false)
+            }
+        })
         self.pill.setTitle(momentsText(strings, .newPosts), for: .normal)
         self.pill.backgroundColor = theme.list.itemAccentColor
         self.pill.setTitleColor(theme.list.plainBackgroundColor, for: .normal)
@@ -464,9 +479,9 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
 
     private func open(_ card: MomentsCard) {
         guard let controller = self.controller else { return }
-        let detail = MomentsDetailScreen(context: self.context, card: card)
-        detail.openPeer = self.controller?.openPeer
-        (controller.navigationController as? NavigationController)?.pushViewController(detail)
+        let sheet = MomentsCommentSheet(context: self.context, card: card)
+        sheet.openPeer = self.controller?.openPeer
+        controller.present(sheet, in: .window(.root))
     }
 
     private func openAuthor(_ card: MomentsCard) {
@@ -722,15 +737,5 @@ private final class MomentsContextSource: ContextReferenceContentSource {
 }
 
 private func momentsTabIcon() -> UIImage? {
-    let renderer = UIGraphicsImageRenderer(size: CGSize(width: 26, height: 26))
-    return renderer.image { ctx in
-        let context = ctx.cgContext
-        context.setStrokeColor(UIColor.white.cgColor)
-        context.setLineWidth(1.6)
-        context.setLineCap(.round)
-        context.stroke(CGRect(x: 4, y: 5, width: 18, height: 14).insetBy(dx: 0.8, dy: 0.8))
-        context.move(to: CGPoint(x: 8, y: 23))
-        context.addLine(to: CGPoint(x: 13, y: 18))
-        context.strokePath()
-    }.withRenderingMode(.alwaysTemplate)
+    return UIImage(bundleImageName: "Chat List/Tabs/IconNews")?.withRenderingMode(.alwaysTemplate)
 }
