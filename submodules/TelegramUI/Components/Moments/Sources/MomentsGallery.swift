@@ -11,8 +11,14 @@ func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: In
     let peerId = context.account.peerId
     var messages: [EngineRawMessage] = []
     for (offset, media) in slides.enumerated() {
-        // Gallery plays the original. Feed cells use renditions and posters.
-        guard let url = media.remoteURL, url.hasPrefix("https://") else {
+        // Gallery plays the original file. A relative key is joined onto the public media host.
+        let url: String?
+        if momentsPresentsAsVideo(media.type) {
+            url = media.remoteURL.flatMap { $0.hasPrefix("https://") ? $0 : nil } ?? momentsMediaURL(base: momentsPublicMediaBaseURL, key: media.key)
+        } else {
+            url = momentsFeedImageURL(media, targetPixels: momentsSingleImagePixels) ?? momentsMediaURL(base: momentsPublicMediaBaseURL, key: media.key)
+        }
+        guard let url, url.hasPrefix("https://") else {
             continue
         }
         let attached: Media

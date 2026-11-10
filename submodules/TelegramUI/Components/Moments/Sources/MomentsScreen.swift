@@ -456,9 +456,11 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 
     private func cancelLoad(_ kind: MomentsFeedKind) {
+        // Bump the epoch before dispose. A cancelled request can call its error handler
+        // synchronously, and that handler must not render while a tab swipe is still in the scroll view.
+        self.loadEpoch[kind] = (self.loadEpoch[kind] ?? 0) + 1
         self.loadDisposables[kind]?.dispose()
         self.loadDisposables[kind] = nil
-        self.loadEpoch[kind] = (self.loadEpoch[kind] ?? 0) + 1
         self.models[kind]?.loading = false
     }
 
@@ -521,7 +523,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.loadDisposables[kind] = bag
     }
 
-    private func render(_ kind: MomentsFeedKind, resetScroll: Bool) {
+    private func render(_ kind: MomentsFeedKind, resetScroll: Bool, updateInsets: Bool = true) {
         guard let list = self.lists[kind], let model = self.models[kind], list.bounds.width > 0 else { return }
         let strings = self.presentationData.strings
         let theme = self.presentationData.theme
@@ -607,17 +609,17 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.renderEpoch[kind] = epoch
         self.listBusy[kind] = true
         let scroll = resetScroll && !entries.isEmpty ? ListViewScrollToItem(index: 0, position: .top(0), animated: false, curve: .Default(duration: nil), directionHint: .Up) : nil
-        list.transaction(deleteIndices: edit.deletes.map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: edit.inserts.map { ListViewInsertItem(index: $0, previousIndex: nil, item: entries[$0], directionHint: nil) }, updateIndicesAndItems: edit.updates.map { ListViewUpdateItem(index: $0, previousIndex: $0, item: entries[$0], directionHint: nil) }, options: [.Synchronous, .LowLatency], scrollToItem: scroll, updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), stationaryItemRange: nil, updateOpaqueState: nil, completion: { [weak self] _ in
-            guard let self, self.renderEpoch[kind] == epoch else { return }
-            self.appliedIds[kind] = ids
-            self.appliedPrints[kind] = prints
-            self.listBusy[kind] = false
-            if kind == self.selected {
-                self.updateVisiblePlayback()
-            }
-            if self.renderQueued.contains(kind) {
-                self.renderQueued.remove(kind)
-                self.render(kind, resetScroll: false)
+        let sizeUpdate = updateInsets || resetScroll ? ListViewUpdateSizeAndInsets(size: list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)) : nil
+        list.transaction(deleteIndices: edit.deletes.map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: edit.inserts.map { ListViewInsertItem(index: $0, previousIndex: nil, item: entries[$0], directionHint: nil) }, updateIndicesAndItems: edit.updates.map { ListViewUpdateItem(index: $0, previousIndex: $0, item: entries[$0], directionHint: nil) }, options: [.Synchronous, .LowLatency], scrollToItem: scroll, updateSizeAndInsets: sizeUpdate, stationaryItemRange: nil, updateOpaqueState: nil, completion: { [weak self] _ in
+            Queue.mainQueue().async {
+                guard let self, self.renderEpoch[kind] == epoch else { return }
+                self.appliedIds[kind] = ids
+                self.appliedPrints[kind] = prints
+                self.listBusy[kind] = false
+                if self.renderQueued.contains(kind) {
+                    self.renderQueued.remove(kind)
+                    self.render(kind, resetScroll: false)
+                }
             }
         })
         self.pill.backgroundColor = theme.list.itemAccentColor
@@ -626,11 +628,18 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 
     private func handlers() -> MomentsPostHandlers {
-        return MomentsPostHandlers(open: { [weak self] card in self?.open(card) }, author: { [weak self] card in self?.openAuthor(card) }, like: { [weak self] card in self?.toggleLike(card) }, comment: { [weak self] card in self?.open(card) }, repost: { [weak self] card in self?.repost(card) }, share: { [weak self] card in self?.share(card) }, save: { [weak self] card in self?.toggleSave(card) }, more: { [weak self] card, view in self?.more(card, view) }, follow: { [weak self] card in self?.follow(card) }, undo: { [weak self] id in self?.undo(id) }, fullText: { [weak self] card in self?.expanded.insert(card.id); self?.render(self?.selected ?? .recommend, resetScroll: false) }, topic: { _ in }, link: { [weak self] url in self?.openURL(url) }, likers: { [weak self] card in self?.openLikers(card) }, voters: { [weak self] card in self?.openVoters(card) }, openMedia: { [weak self] card, index in self?.openMedia(card, index: index) })
+        return MomentsPostHandlers(open: { [weak self] card in self?.open(card) }, author: { [weak self] card in self?.openAuthor(card) }, like: { [weak self] card in self?.toggleLike(card) }, comment: { [weak self] card in self?.openComments(card) }, repost: { [weak self] card in self?.repost(card) }, share: { [weak self] card in self?.share(card) }, save: { [weak self] card in self?.toggleSave(card) }, more: { [weak self] card, view in self?.more(card, view) }, follow: { [weak self] card in self?.follow(card) }, undo: { [weak self] id in self?.undo(id) }, fullText: { [weak self] card in self?.expanded.insert(card.id); self?.render(self?.selected ?? .recommend, resetScroll: false, updateInsets: false) }, topic: { _ in }, link: { [weak self] url in self?.openURL(url) }, likers: { [weak self] card in self?.openLikers(card) }, voters: { [weak self] card in self?.openVoters(card) }, openMedia: { [weak self] card, index in self?.openMedia(card, index: index) })
     }
 
-    /// Body and comment open the sheet over this list. Profile, search and a post deep link still push `MomentsDetailScreen`.
+    /// The post body opens the standalone detail screen. The comment button keeps the sheet over this list.
     private func open(_ card: MomentsCard) {
+        guard let controller = self.controller, !card.isUnavailable else { return }
+        let detail = MomentsDetailScreen(context: self.context, card: card)
+        detail.openPeer = controller.openPeer
+        (controller.navigationController as? NavigationController)?.pushViewController(detail)
+    }
+
+    private func openComments(_ card: MomentsCard) {
         guard let controller = self.controller, !card.isUnavailable else { return }
         let sheet = MomentsCommentSheet(context: self.context, card: card)
         sheet.openPeer = controller.openPeer
@@ -798,7 +807,8 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             guard let model = self.models[kind] else { continue }
             model.items = model.items.map { $0.id == id ? transform($0) : $0 }
             self.models[kind] = model
-            self.render(kind, resetScroll: false)
+            // One row, no inset pass. A full layout pass redraws every visible cell and the neighbours flash.
+            self.render(kind, resetScroll: false, updateInsets: false)
         }
     }
 
@@ -904,7 +914,16 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         guard next != self.playing else { return }
         self.playing = next
         self.resolvingPlayback = true
-        self.render(self.selected, resetScroll: false)
+        list.forEachItemNode { node in
+            guard let post = node as? MomentsPostItemNode else { return }
+            let active: Bool
+            if case let .video(postId, _) = next {
+                active = post.showsCard(postId)
+            } else {
+                active = false
+            }
+            post.setPlaybackActive(active)
+        }
         self.resolvingPlayback = false
     }
 

@@ -65,7 +65,7 @@ public final class MomentsDetailScreen: ViewController {
         if self.displayNode.view.viewWithTag(11) == nil {
             let stickers = UIButton(type: .system)
             stickers.tag = 11
-            stickers.setTitle("GIF", for: .normal)
+            stickers.setTitle(self.presentationData.strings.Preview_SaveGif, for: .normal)
             stickers.addTarget(self, action: #selector(self.stickerPressed), for: .touchUpInside)
             self.displayNode.view.addSubview(stickers)
         }

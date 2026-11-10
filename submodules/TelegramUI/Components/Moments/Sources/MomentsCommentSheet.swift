@@ -382,7 +382,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         let meta = UILabel(frame: CGRect(x: 40, y: cursor + 4, width: width - 160, height: 16))
         meta.font = Font.regular(12)
         meta.textColor = theme.list.itemSecondaryTextColor
-        var parts = [momentsRelativeTime(created)]
+        var parts = [momentsRelativeTime(strings, created)]
         if let region, !region.isEmpty {
             parts.append(region)
         }
