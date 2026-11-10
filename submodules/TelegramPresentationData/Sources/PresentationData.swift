@@ -124,7 +124,7 @@ public final class PresentationData: Equatable {
     }
 }
 
-public func dictFromLocalization(_ value: Localization, languageCode: String? = nil) -> [String: String] {
+public func dictFromLocalization(_ value: Localization) -> [String: String] {
     var dict: [String: String] = [:]
     for entry in value.entries {
         switch entry {
@@ -148,9 +148,6 @@ public func dictFromLocalization(_ value: Localization, languageCode: String? = 
                 }
                 dict["\(key)_any"] = other
         }
-    }
-    if let languageCode {
-        tellomiMergeMenuSettingsStrings(&dict, languageCode: languageCode)
     }
     return dict
 }
@@ -419,7 +416,7 @@ public func currentPresentationDataAndSettings(accountManager: AccountManager<Te
         let dateTimeFormat = currentDateTimeFormat()
         let stringsValue: PresentationStrings
         if let localizationSettings = localizationSettings {
-            stringsValue = PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: dictFromLocalization(localizationSettings.primaryComponent.localization, languageCode: localizationSettings.primaryComponent.languageCode)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization, languageCode: $0.languageCode)) }), groupingSeparator: dateTimeFormat.groupingSeparator)
+            stringsValue = PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: dictFromLocalization(localizationSettings.primaryComponent.localization)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: dateTimeFormat.groupingSeparator)
         } else {
             stringsValue = defaultPresentationStrings
         }
@@ -826,7 +823,7 @@ public func updatedPresentationData(accountManager: AccountManager<TelegramAccou
                         let dateTimeFormat = currentDateTimeFormat()
                         let stringsValue: PresentationStrings
                         if let localizationSettings = localizationSettings {
-                            stringsValue = PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: dictFromLocalization(localizationSettings.primaryComponent.localization, languageCode: localizationSettings.primaryComponent.languageCode)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization, languageCode: $0.languageCode)) }), groupingSeparator: dateTimeFormat.groupingSeparator)
+                            stringsValue = PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: dictFromLocalization(localizationSettings.primaryComponent.localization)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: dateTimeFormat.groupingSeparator)
                         } else {
                             stringsValue = defaultPresentationStrings
                         }
