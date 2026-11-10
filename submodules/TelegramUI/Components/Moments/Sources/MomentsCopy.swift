@@ -99,6 +99,10 @@ public enum MomentsTextKey {
     case voice
     case voiceStop
     case voiceFailed
+    case commentCount
+    case commentPrompt
+    case authorTag
+    case expandReplies
 }
 
 public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -> String {
@@ -109,7 +113,7 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
     case .title:
         (resolved, english, chinese) = (strings.Moments_Title, "Moments", "动态")
     case .recommend:
-        (resolved, english, chinese) = (strings.Moments_Segment_Recommend, "For you", "推荐")
+        (resolved, english, chinese) = (strings.Moments_Segment_Recommend, "For You", "推荐")
     case .following:
         (resolved, english, chinese) = (strings.Moments_Segment_Following, "Following", "关注")
     case .friends:
@@ -123,11 +127,11 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
     case .notifications:
         (resolved, english, chinese) = (strings.Moments_Notifications, "Activity", "互动")
     case .emptyRecommend:
-        (resolved, english, chinese) = (strings.Moments_Empty_Recommend, "Nothing here yet. Post the first one.", "还没有内容，发布第一条动态吧")
+        (resolved, english, chinese) = (strings.Moments_Empty_Recommend, "Nothing here yet. Share the first post.", "还没有内容，发布第一条动态吧")
     case .emptyFollowing:
         (resolved, english, chinese) = (strings.Moments_Empty_Following, "People you follow have not posted yet.", "你关注的人还没有发动态")
     case .emptyFriends:
-        (resolved, english, chinese) = (strings.Moments_Empty_Friends, "Follow each other to become friends.", "互相关注后就是好友，好友的动态会出现在这里")
+        (resolved, english, chinese) = (strings.Moments_Empty_Friends, "Follow each other and you are friends. Their posts show up here.", "互相关注后就是好友，好友的动态会出现在这里")
     case .emptyNearby:
         (resolved, english, chinese) = (strings.Moments_Empty_Nearby, "No posts in this city yet.", "这座城市还没有动态")
     case .publish:
@@ -135,9 +139,9 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
     case .findPeople:
         (resolved, english, chinese) = (strings.Moments_FindPeople, "Find people", "找人关注")
     case .switchCity:
-        (resolved, english, chinese) = (strings.Moments_SwitchCity, "Switch city", "切换城市")
+        (resolved, english, chinese) = (strings.Moments_SwitchCity, "Change city", "切换城市")
     case .retry:
-        (resolved, english, chinese) = (strings.Moments_Retry, "Retry", "重试")
+        (resolved, english, chinese) = (strings.Moments_Retry, "Couldn't load. Tap to retry.", "加载失败，点击重试")
     case .loadFailed:
         (resolved, english, chinese) = (strings.Moments_LoadFailed, "Could not load. Tap to retry.", "加载失败，点击重试")
     case .unavailable:
@@ -171,7 +175,7 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
     case .hidePost:
         (resolved, english, chinese) = (strings.Moments_HidePost, "Hide this post", "隐藏该帖子")
     case .mute:
-        (resolved, english, chinese) = (strings.Moments_Mute, "Mute in feed", "屏蔽")
+        (resolved, english, chinese) = (strings.Moments_Mute, "Mute in feed", "屏蔽动态")
     case .unmute:
         (resolved, english, chinese) = (strings.Moments_Unmute, "Unmute in feed", "取消屏蔽")
     case .report:
@@ -298,8 +302,17 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
         (resolved, english, chinese) = (strings.Moments_VoiceStop, "Stop", "停止")
     case .voiceFailed:
         (resolved, english, chinese) = (strings.Moments_VoiceFailed, "Could not record a voice post.", "语音没有录上")
+    case .commentCount:
+        (resolved, english, chinese) = (strings.Moments_CommentCount, "%d comments", "%d条评论")
+    case .commentPrompt:
+        (resolved, english, chinese) = (strings.Moments_CommentPrompt, "Say something", "发条评论，说说你的感受")
+    case .authorTag:
+        (resolved, english, chinese) = (strings.Moments_AuthorTag, "Author", "作者")
+    case .expandReplies:
+        (resolved, english, chinese) = (strings.Moments_ExpandReplies, "Show %d replies", "展开%d条回复")
     }
-    if strings.baseLanguageCode.hasPrefix("zh"), resolved == english {
+    let codes = [strings.primaryComponent.languageCode, strings.baseLanguageCode].map { $0.lowercased() }
+    if codes.contains(where: { $0.hasPrefix("zh") }), resolved == english || resolved.isEmpty {
         return chinese
     }
     return resolved

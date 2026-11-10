@@ -222,6 +222,43 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(momentsCapabilityTabs(#"{"tabs":["recommend","friends","following"]}"#.data(using: .utf8)!), ["recommend", "following"])
     }
 
+    func testProdCardsUnwrapAndLastPageDoesNotDuplicate() {
+        let recommend = #"{"items":[{"id":"p1","reason":"recommend"},{"id":"p2","reason":"hot"}],"cursor":"c1"}"#.data(using: .utf8)!
+        let refs = momentsFeedRefPage(data: recommend)
+        XCTAssertEqual(refs?.ids, ["p1", "p2"])
+        let cards = #"{"items":[{"id":"p1","card":{"id":"p1","text":"hello from prod","author":{"id":"a1","name":"Ada","user_id":7},"counts":{"likes":4,"comments":2,"reposts":1},"created_at":1700000000,"media":[{"type":"image","key":"pic","url":"https://media.tellomi.app/feed/pic"}],"viewer":{"liked":true,"following":true}}},{"id":"missing","reason":"hot"}]}"#.data(using: .utf8)!
+        let hydrated = momentsHydratedCards(ids: refs?.ids ?? [], cardsData: cards, mediaBaseURL: "https://media.tellomi.app/feed")
+        XCTAssertEqual(hydrated.count, 2)
+        XCTAssertEqual(hydrated[0].text, "hello from prod")
+        XCTAssertEqual(hydrated[0].author?.displayName, "Ada")
+        XCTAssertEqual(hydrated[0].author?.telegramUserId, 7)
+        XCTAssertTrue(hydrated[0].author?.followed == true)
+        XCTAssertEqual(hydrated[0].counts.likes, 4)
+        XCTAssertEqual(hydrated[0].counts.comments, 2)
+        XCTAssertTrue(hydrated[0].viewer.liked)
+        XCTAssertEqual(hydrated[0].media.first?.remoteURL, "https://media.tellomi.app/feed/pic")
+        XCTAssertFalse(hydrated[0].isUnavailable)
+        XCTAssertTrue(hydrated[1].isUnavailable)
+        XCTAssertEqual(hydrated[1].text, "")
+
+        let first = momentsMergeFeed(existing: [], pageItems: hydrated, cursor: "c1", refreshing: true)
+        XCTAssertEqual(first.items.map(\.id), ["p1", "p2"])
+        XCTAssertEqual(first.cursor, "c1")
+        let repeated = momentsMergeFeed(existing: first.items, pageItems: hydrated, cursor: "c1", refreshing: false)
+        XCTAssertEqual(repeated.items.map(\.id), ["p1", "p2"])
+        let last = momentsMergeFeed(existing: first.items, pageItems: [], cursor: nil, refreshing: false)
+        XCTAssertEqual(last.items.map(\.id), ["p1", "p2"])
+        XCTAssertNil(last.cursor)
+
+        let same = momentsListEdit(previousIds: ["p1", "p2"], nextIds: ["p1", "p2"])
+        XCTAssertTrue(same.deletes.isEmpty)
+        XCTAssertEqual(same.updates, [0, 1])
+        let replaced = momentsListEdit(previousIds: ["status"], nextIds: ["p1", "p2"])
+        XCTAssertEqual(replaced.deletes, [0])
+        XCTAssertEqual(replaced.inserts, [0, 1])
+        XCTAssertTrue(replaced.deletes.allSatisfy { $0 < 1 })
+    }
+
     func testDraftCapKeepsNewest() {
         let kept = momentsTrimDrafts([1, 2, 3, 4], limit: 2, newer: >)
         XCTAssertEqual(kept, [4, 3])

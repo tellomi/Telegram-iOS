@@ -103,10 +103,12 @@ final class MomentsPostItem: ListViewItem {
     }
 }
 
-private let momentsAvatar: CGFloat = 36.0
-private let momentsInset: CGFloat = 16.0
+private let momentsAvatar: CGFloat = 40.0
+private let momentsInset: CGFloat = 12.0
 
 final class MomentsPostItemNode: ListViewItemNode {
+    private let avatar = UIImageView()
+    private let avatarLetter = UILabel()
     private let name = UILabel()
     private let meta = UILabel()
     private let body = UILabel()
@@ -131,10 +133,21 @@ final class MomentsPostItemNode: ListViewItemNode {
 
     init() {
         super.init(layerBacked: false)
+        self.avatar.layer.cornerRadius = 20
+        self.follow.layer.cornerRadius = 8
+        self.follow.clipsToBounds = true
+        self.follow.titleLabel?.font = Font.semibold(12)
+        self.avatar.clipsToBounds = true
+        self.avatar.contentMode = .scaleAspectFill
+        self.avatarLetter.font = Font.semibold(15)
+        self.avatarLetter.textAlignment = .center
+        self.avatar.addSubview(self.avatarLetter)
         self.name.font = Font.semibold(15)
         self.meta.font = Font.regular(13)
         self.body.numberOfLines = 0
         self.quote.numberOfLines = 3
+        self.quote.layer.cornerRadius = 12
+        self.quote.clipsToBounds = true
         self.place.font = Font.regular(13)
         self.actions.axis = .horizontal
         self.actions.distribution = .fillEqually
@@ -146,6 +159,7 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.album.showsHorizontalScrollIndicator = false
         self.album.layer.cornerRadius = 12
         self.album.clipsToBounds = true
+        self.view.addSubview(self.avatar)
         self.view.addSubview(self.name)
         self.view.addSubview(self.meta)
         self.view.addSubview(self.follow)
@@ -187,14 +201,14 @@ final class MomentsPostItemNode: ListViewItemNode {
             let fullHeight = (text as NSString).boundingRect(with: CGSize(width: textWidth, height: 10000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font], context: nil).height
             let collapsed = !item.expanded && momentsTextExceedsLineLimit(fullHeight: fullHeight, lineHeight: font.lineHeight, limit: MomentsLimits.standard.collapsedLineCount)
             let bodyHeight = collapsed ? font.lineHeight * CGFloat(MomentsLimits.standard.collapsedLineCount) : fullHeight
-            var height: CGFloat = 12 + 20 + 4 + 16
+            var height: CGFloat = 12 + 22 + 8
             if item.hidden {
                 height = 64
             } else {
                 height += bodyHeight + 8
                 if collapsed { height += 22 }
                 let slides = item.card.images.count + item.card.videos.count
-                if slides > 0 { height += 220 }
+                if slides > 0 { height += slides > 1 ? 200 : 220 }
                 if item.card.voice != nil { height += 36 }
                 if item.card.poll != nil { height += 28 + CGFloat(item.card.poll?.options.count ?? 0) * 28 }
                 if item.card.quote != nil { height += 64 }
@@ -234,6 +248,27 @@ final class MomentsPostItemNode: ListViewItemNode {
             return
         }
         self.setChrome(hidden: false)
+        self.avatar.frame = CGRect(x: side + momentsInset, y: 10, width: momentsAvatar, height: momentsAvatar)
+        self.avatarLetter.frame = self.avatar.bounds
+        self.avatar.backgroundColor = theme.list.itemHighlightedBackgroundColor
+        self.avatarLetter.textColor = theme.list.itemPrimaryTextColor
+        let displayName = item.card.author?.displayName ?? ""
+        self.avatarLetter.text = displayName.isEmpty ? "" : String(displayName.prefix(1))
+        if let avatarURL = item.card.author?.avatarKey, avatarURL.hasPrefix("https://") {
+            self.avatarLetter.isHidden = true
+            momentsLoadImage(avatarURL, into: self.avatar)
+        } else {
+            self.avatar.image = nil
+            self.avatarLetter.isHidden = displayName.isEmpty
+        }
+        let secondary = theme.list.itemSecondaryTextColor
+        let likedColor = UIColor(rgb: 0xFF3B30)
+        for button in [self.like, self.comment, self.repost, self.share, self.save, self.more] {
+            button.setTitleColor(secondary, for: .normal)
+            button.tintColor = secondary
+        }
+        self.follow.setTitleColor(.white, for: .normal)
+        self.follow.backgroundColor = theme.list.itemAccentColor
         if item.card.isUnavailable {
             self.name.text = momentsText(strings, .unavailable)
             self.meta.text = ""
@@ -253,14 +288,17 @@ final class MomentsPostItemNode: ListViewItemNode {
             }
             self.meta.text = meta
             self.body.text = item.card.text
-            self.follow.isHidden = !item.showFollow
-            self.follow.setTitle(item.card.author?.followed == true ? momentsText(strings, .followingState) : momentsText(strings, .follow), for: .normal)
+            let showBadge = item.showFollow && item.card.author?.followed != true
+            self.follow.isHidden = !showBadge
+            self.follow.setTitle("+", for: .normal)
+            self.follow.accessibilityLabel = momentsText(strings, .follow)
         }
-        self.name.frame = CGRect(x: x, y: 10, width: width - 88, height: 18)
-        self.meta.frame = CGRect(x: x, y: 28, width: width - 88, height: 16)
-        self.more.frame = CGRect(x: x + width - 32, y: 8, width: 32, height: 32)
-        self.follow.frame = CGRect(x: x + width - 88, y: 8, width: 52, height: 28)
-        self.body.frame = CGRect(x: x, y: 50, width: width, height: bodyHeight)
+        let nameWidth = min((self.name.text as NSString?)?.size(withAttributes: [.font: self.name.font as Any]).width ?? 80, width * 0.55)
+        self.name.frame = CGRect(x: x, y: 12, width: nameWidth, height: 20)
+        self.meta.frame = CGRect(x: x + nameWidth + 6, y: 14, width: width - nameWidth - 46, height: 18)
+        self.more.frame = CGRect(x: x + width - 32, y: 6, width: 32, height: 32)
+        self.follow.frame = CGRect(x: self.avatar.frame.maxX - 16, y: self.avatar.frame.maxY - 16, width: 16, height: 16)
+        self.body.frame = CGRect(x: x, y: 36, width: width, height: bodyHeight)
         self.full.isHidden = !collapsed
         self.full.setTitle(momentsText(strings, .fullText), for: .normal)
         self.full.frame = CGRect(x: x, y: self.body.frame.maxY, width: 80, height: 20)
@@ -302,11 +340,19 @@ final class MomentsPostItemNode: ListViewItemNode {
             cursor += 22
         }
         self.actions.frame = CGRect(x: x, y: cursor, width: width, height: 32)
-        self.like.setTitle("\(momentsText(strings, .like)) \(item.card.counts.likes)", for: .normal)
-        self.comment.setTitle("\(momentsText(strings, .comment)) \(item.card.counts.comments)", for: .normal)
-        self.repost.setTitle(momentsText(strings, .repost), for: .normal)
-        self.share.setTitle(momentsText(strings, .share), for: .normal)
-        self.save.setTitle(item.card.viewer.saved ? momentsText(strings, .saved) : momentsText(strings, .save), for: .normal)
+        let liked = item.card.viewer.liked
+        self.like.tintColor = liked ? likedColor : secondary
+        self.like.setImage(generateTintedImage(image: UIImage(bundleImageName: liked ? "Stories/InputLikeOn" : "Stories/InputLikeOff"), color: liked ? likedColor : secondary), for: .normal)
+        self.like.setTitle(item.card.counts.likes > 0 ? " \(item.card.counts.likes)" : nil, for: .normal)
+        self.comment.setImage(generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Reply"), color: secondary), for: .normal)
+        self.comment.setTitle(item.card.counts.comments > 0 ? " \(item.card.counts.comments)" : nil, for: .normal)
+        self.repost.setImage(generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Forward"), color: secondary), for: .normal)
+        self.repost.setTitle(item.card.counts.reposts > 0 ? " \(item.card.counts.reposts)" : nil, for: .normal)
+        self.share.setImage(generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Share"), color: secondary), for: .normal)
+        self.share.setTitle(nil, for: .normal)
+        self.save.isHidden = true
+        self.more.setImage(generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/More"), color: secondary), for: .normal)
+        self.more.setTitle(nil, for: .normal)
         self.like.accessibilityLabel = "\(momentsText(strings, .like)), \(item.card.counts.likes)"
         self.comment.accessibilityLabel = "\(momentsText(strings, .comment)), \(item.card.counts.comments)"
         self.repost.accessibilityLabel = momentsText(strings, .repost)
@@ -322,6 +368,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     }
 
     private func setChrome(hidden: Bool) {
+        self.avatar.isHidden = hidden
         self.name.isHidden = hidden
         self.meta.isHidden = hidden
         self.more.isHidden = hidden
@@ -336,13 +383,17 @@ final class MomentsPostItemNode: ListViewItemNode {
 
     private func layoutAlbum(_ item: MomentsPostItem, x: CGFloat, y: CGFloat, width: CGFloat) {
         let slides = item.card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
-        self.album.frame = CGRect(x: x, y: y, width: width, height: slides.isEmpty ? 0 : 212)
-        self.album.contentSize = CGSize(width: width * CGFloat(max(slides.count, 1)), height: 212)
+        let slideWidth = slides.count > 1 ? floor(width * 0.78) : width
+        self.album.frame = CGRect(x: x, y: y, width: width, height: slides.isEmpty ? 0 : (slides.count > 1 ? 188 : 212))
+        self.album.contentSize = CGSize(width: slideWidth * CGFloat(max(slides.count, 1)) + (slides.count > 1 ? 8 : 0), height: self.album.frame.height)
         self.album.subviews.forEach { $0.removeFromSuperview() }
         var playingURL: String?
+        let albumHeight = self.album.frame.height
         for (index, media) in slides.enumerated() {
-            let frame = CGRect(x: width * CGFloat(index), y: 0, width: width, height: 212)
+            let frame = CGRect(x: slideWidth * CGFloat(index), y: 0, width: slideWidth - (slides.count > 1 ? 8 : 0), height: albumHeight)
             let label = UILabel(frame: frame)
+            label.layer.cornerRadius = 12
+            label.clipsToBounds = true
             label.textAlignment = .center
             label.textColor = item.theme.list.itemSecondaryTextColor
             label.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
@@ -356,6 +407,7 @@ final class MomentsPostItemNode: ListViewItemNode {
                 label.accessibilityIdentifier = media.type.rawValue
             } else if let remoteURL = media.remoteURL {
                 let imageView = UIImageView(frame: frame)
+                imageView.layer.cornerRadius = 12
                 imageView.contentMode = .scaleAspectFill
                 imageView.clipsToBounds = true
                 imageView.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
@@ -371,9 +423,9 @@ final class MomentsPostItemNode: ListViewItemNode {
         }
         let page = min(item.albumIndex, max(slides.count - 1, 0))
         self.albumIndex = page
-        self.album.setContentOffset(CGPoint(x: width * CGFloat(page), y: 0), animated: false)
+        self.album.setContentOffset(CGPoint(x: slideWidth * CGFloat(page), y: 0), animated: false)
         let playingType = slides.indices.contains(page) ? slides[page].type : .video
-        self.attachVideo(url: playingURL, type: playingType, item: item, frame: CGRect(x: x + width * CGFloat(page), y: y, width: width, height: 212))
+        self.attachVideo(url: playingURL, type: playingType, item: item, frame: CGRect(x: x + slideWidth * CGFloat(page), y: y, width: slideWidth - (slides.count > 1 ? 8 : 0), height: albumHeight))
     }
 
     private func layoutPoll(_ item: MomentsPostItem, x: CGFloat, y: CGFloat, width: CGFloat) {

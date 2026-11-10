@@ -664,11 +664,9 @@ public extension TelegramEngine {
                 return .single(MomentsPage(items: [], nextCursor: refs.cursor))
             }
             return self.call(method: "POST", path: "/v1/feed/cards", body: ["ids": refs.ids])
-            |> mapToSignal { cardData in
-                guard let page = momentsPage(data: cardData, mediaBaseURL: self.mediaBaseURL.with { $0 }) else {
-                    return .fail(.invalid("cards"))
-                }
-                return .single(MomentsPage(items: page.items, nextCursor: refs.cursor))
+            |> map { cardData in
+                let items = momentsHydratedCards(ids: refs.ids, cardsData: cardData, mediaBaseURL: self.mediaBaseURL.with { $0 })
+                return MomentsPage(items: items, nextCursor: refs.cursor)
             }
         }
     }

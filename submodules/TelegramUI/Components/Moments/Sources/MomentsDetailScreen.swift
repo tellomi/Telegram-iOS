@@ -22,6 +22,8 @@ public final class MomentsDetailScreen: ViewController {
     private let list = ListViewImpl()
     private let field = UITextField()
     private var rendered = 0
+    private var rendering = false
+    private var renderAgain = false
 
     public init(context: AccountContext, card: MomentsCard) {
         self.context = context
@@ -79,6 +81,10 @@ public final class MomentsDetailScreen: ViewController {
 
     private func render() {
         guard self.list.bounds.width > 0 else { return }
+        if self.rendering {
+            self.renderAgain = true
+            return
+        }
         let strings = self.presentationData.strings
         let theme = self.presentationData.theme
         var items: [ListViewItem] = [MomentsPostItem(card: self.card, strings: strings, theme: theme, fontSize: self.presentationData.listsFontSize.baseDisplaySize, showFollow: false, expanded: true, hidden: false, albumIndex: 0, playing: false, handlers: self.handlers())]
@@ -97,8 +103,17 @@ public final class MomentsDetailScreen: ViewController {
             }
         }
         let previous = self.rendered
-        self.rendered = items.count
-        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: items.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { _ in })
+        let count = items.count
+        self.rendering = true
+        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: items.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { [weak self] _ in
+            guard let self else { return }
+            self.rendered = count
+            self.rendering = false
+            if self.renderAgain {
+                self.renderAgain = false
+                self.render()
+            }
+        })
         self.field.isEnabled = self.card.viewer.canComment && self.card.commentPolicy != .closed
         if self.card.commentPolicy == .closed {
             self.field.placeholder = momentsText(strings, .commentClosed)
@@ -312,6 +327,8 @@ public final class MomentsNotificationsScreen: ViewController {
     private var items: [MomentsNotification] = []
     private var kind = "interactions"
     private var rendered = 0
+    private var rendering = false
+    private var renderAgain = false
 
     public init(context: AccountContext) {
         self.context = context
@@ -372,8 +389,22 @@ public final class MomentsNotificationsScreen: ViewController {
                 }))
             }
         }
+        guard self.list.bounds.width > 0 else { return }
+        if self.rendering {
+            self.renderAgain = true
+            return
+        }
         let previous = self.rendered
-        self.rendered = rows.count
-        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: rows.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { _ in })
+        let count = rows.count
+        self.rendering = true
+        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: rows.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { [weak self] _ in
+            guard let self else { return }
+            self.rendered = count
+            self.rendering = false
+            if self.renderAgain {
+                self.renderAgain = false
+                self.render()
+            }
+        })
     }
 }
