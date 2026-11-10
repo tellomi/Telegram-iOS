@@ -277,9 +277,10 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(comment.attachment?.type, .image)
         XCTAssertEqual(comment.attachment?.remoteURL, "https://media.tellomi.app/feed/pic")
 
-        let replies = #"{"replies":[{"id":"r1","reply_count":0,"card":{"text":"back","parent_id":"c1","reply_to":{"id":"a1","display_name":"Ada","handle":"ada"},"author":{"id":"a2","display_name":"Bo"}}}],"total":2}"#.data(using: .utf8)!
+        let replies = #"{"replies":[{"id":"r1","reply_count":0,"card":{"text":"back","parent_id":"c1","reply_to":{"id":"a1","display_name":"Ada","handle":"ada"},"author":{"id":"a2","display_name":"Bo"}}}],"total":2,"cursor":"n1"}"#.data(using: .utf8)!
         let replyPage = momentsReplyPage(data: replies, rootId: "c1", mediaBaseURL: nil)
         XCTAssertEqual(replyPage.total, 2)
+        XCTAssertEqual(replyPage.cursor, "n1")
         XCTAssertEqual(replyPage.replies.first?.text, "back")
         XCTAssertEqual(replyPage.replies.first?.replyToName, "Ada")
     }

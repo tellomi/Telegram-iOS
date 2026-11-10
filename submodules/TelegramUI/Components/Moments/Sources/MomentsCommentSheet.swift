@@ -7,7 +7,7 @@ import TelegramCore
 import TelegramPresentationData
 import AccountContext
 
-/// Douyin-style comment sheet. Fields the engine does not send (province, dislike) are omitted.
+/// Douyin-style comment sheet. Hot cursors stay on `sort=hot` and are never sent as a time cursor.
 public final class MomentsCommentSheet: ViewController {
     private let context: AccountContext
     private let card: MomentsCard
@@ -15,7 +15,9 @@ public final class MomentsCommentSheet: ViewController {
     private var presentationData: PresentationData
     private var comments: [MomentsComment] = []
     private var total = 0
+    private var commentCursor: String?
     private var loadedReplies: [String: [MomentsReply]] = [:]
+    private var replyCursor: [String: String] = [:]
     private var expanded: Set<String> = []
     private var expandedSheet = false
     private let dim = UIButton(type: .custom)
@@ -97,12 +99,32 @@ public final class MomentsCommentSheet: ViewController {
     }
 
     private func reload() {
+        self.commentCursor = nil
         self.disposable.set((self.context.engine.moments.comments(postId: self.card.id, sort: "hot", cursor: nil, thread: true) |> deliverOnMainQueue).start(next: { [weak self] page in
             guard let self else { return }
-            self.comments = page.comments.filter { !$0.disliked }
-            self.total = page.total
-            self.relayoutComments()
+            self.applyCommentPage(page, appending: false)
         }))
+    }
+
+    private func loadMoreComments() {
+        guard let cursor = self.commentCursor, !cursor.isEmpty else { return }
+        self.commentCursor = nil
+        let _ = (self.context.engine.moments.comments(postId: self.card.id, sort: "hot", cursor: cursor, thread: true) |> deliverOnMainQueue).start(next: { [weak self] page in
+            self?.applyCommentPage(page, appending: true)
+        })
+    }
+
+    private func applyCommentPage(_ page: MomentsCommentPage, appending: Bool) {
+        let incoming = page.comments.filter { !$0.disliked }
+        if appending {
+            let existing = Set(self.comments.map { $0.id })
+            self.comments.append(contentsOf: incoming.filter { !existing.contains($0.id) })
+        } else {
+            self.comments = incoming
+        }
+        self.total = page.total
+        self.commentCursor = page.cursor
+        self.relayoutComments()
     }
 
     private func relayoutComments() {
@@ -119,24 +141,40 @@ public final class MomentsCommentSheet: ViewController {
             y = self.addRow(comment: comment, reply: nil, x: 12, y: y, width: width - 24, theme: theme, strings: strings)
             let shown = self.expanded.contains(comment.id)
             if comment.replyCount > 0 && !shown {
-                let button = UIButton(type: .system)
-                button.frame = CGRect(x: 56, y: y, width: width - 80, height: 28)
-                button.contentHorizontalAlignment = .left
-                let replyWord = momentsText(strings, .expandReplies)
-                let replyTitle = replyWord == "条回复" ? "—— 展开\(comment.replyCount)\(replyWord)" : "—— \(comment.replyCount) \(replyWord)"
-                button.setTitle(replyTitle, for: .normal)
-                button.setTitleColor(theme.list.itemSecondaryTextColor, for: .normal)
-                button.tag = self.comments.firstIndex(where: { $0.id == comment.id }) ?? 0
-                button.addTarget(self, action: #selector(self.expandReplies(_:)), for: .touchUpInside)
-                self.list.addSubview(button)
-                y += 32
+                y = self.addMoreButton(title: self.collapsedRepliesTitle(count: comment.replyCount, strings: strings), identifier: "expand:" + comment.id, x: 48, y: y, width: width - 72, theme: theme, action: #selector(self.expandReplies(_:)))
             } else if shown {
                 for reply in self.loadedReplies[comment.id] ?? comment.replies where !reply.disliked {
-                    y = self.addRow(comment: comment, reply: reply, x: 44, y: y, width: width - 56, theme: theme, strings: strings)
+                    y = self.addRow(comment: comment, reply: reply, x: 48, y: y, width: width - 60, theme: theme, strings: strings)
+                }
+                if self.replyCursor[comment.id]?.isEmpty == false {
+                    y = self.addMoreButton(title: self.collapsedRepliesTitle(count: max(comment.replyCount - (self.loadedReplies[comment.id]?.count ?? 0), 1), strings: strings), identifier: "more:" + comment.id, x: 48, y: y, width: width - 72, theme: theme, action: #selector(self.expandReplies(_:)))
                 }
             }
         }
+        if self.commentCursor?.isEmpty == false {
+            y = self.addMoreButton(title: momentsText(strings, .more), identifier: "comments", x: 12, y: y, width: width - 24, theme: theme, action: #selector(self.moreCommentsPressed))
+        }
         self.list.contentSize = CGSize(width: width, height: y + 12)
+    }
+
+    private func collapsedRepliesTitle(count: Int, strings: PresentationStrings) -> String {
+        let replyWord = momentsText(strings, .expandReplies)
+        if replyWord == "条回复" {
+            return "—— 展开\(count)\(replyWord)"
+        }
+        return "—— \(count) \(replyWord)"
+    }
+
+    private func addMoreButton(title: String, identifier: String, x: CGFloat, y: CGFloat, width: CGFloat, theme: PresentationTheme, action: Selector) -> CGFloat {
+        let button = UIButton(type: .system)
+        button.frame = CGRect(x: x, y: y, width: width, height: 28)
+        button.contentHorizontalAlignment = .left
+        button.setTitle(title, for: .normal)
+        button.setTitleColor(theme.list.itemSecondaryTextColor, for: .normal)
+        button.accessibilityIdentifier = identifier
+        button.addTarget(self, action: action, for: .touchUpInside)
+        self.list.addSubview(button)
+        return y + 32
     }
 
     private func addRow(comment: MomentsComment, reply: MomentsReply?, x: CGFloat, y: CGFloat, width: CGFloat, theme: PresentationTheme, strings: PresentationStrings) -> CGFloat {
@@ -221,13 +259,33 @@ public final class MomentsCommentSheet: ViewController {
         return meta.frame.maxY + 12
     }
 
+    @objc private func moreCommentsPressed() {
+        self.loadMoreComments()
+    }
+
     @objc private func expandReplies(_ button: UIButton) {
-        guard self.comments.indices.contains(button.tag) else { return }
-        let comment = self.comments[button.tag]
+        guard let identifier = button.accessibilityIdentifier else { return }
+        let commentId = identifier.replacingOccurrences(of: "expand:", with: "").replacingOccurrences(of: "more:", with: "")
+        guard let comment = self.comments.first(where: { $0.id == commentId }) else { return }
+        let cursor = identifier.hasPrefix("more:") ? self.replyCursor[comment.id] : nil
         self.expanded.insert(comment.id)
-        let _ = (self.context.engine.moments.replies(rootId: comment.id, cursor: nil) |> deliverOnMainQueue).start(next: { [weak self] page in
-            self?.loadedReplies[comment.id] = page.replies
-            self?.relayoutComments()
+        let _ = (self.context.engine.moments.replies(rootId: comment.id, cursor: cursor) |> deliverOnMainQueue).start(next: { [weak self] page in
+            guard let self else { return }
+            let incoming = page.replies.filter { !$0.disliked }
+            if cursor == nil {
+                self.loadedReplies[comment.id] = incoming
+            } else {
+                var current = self.loadedReplies[comment.id] ?? []
+                let existing = Set(current.map { $0.id })
+                current.append(contentsOf: incoming.filter { !existing.contains($0.id) })
+                self.loadedReplies[comment.id] = current
+            }
+            if let next = page.cursor, !next.isEmpty, next != cursor {
+                self.replyCursor[comment.id] = next
+            } else {
+                self.replyCursor.removeValue(forKey: comment.id)
+            }
+            self.relayoutComments()
         })
         self.relayoutComments()
     }
