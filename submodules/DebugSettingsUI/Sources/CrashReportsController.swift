@@ -367,11 +367,11 @@ private final class CrashReportActions {
         crashReportMarkPending(report.id)
         self.disposable.set((context.account.networkState |> take(1) |> deliverOnMainQueue).start(next: { [weak self] state in
             guard let self, self.canPresent, !self.busy else { return }
-            guard state == .online else {
+            if case .online = state {
+                self.beginSend(report, context: context)
+            } else {
                 self.toast(crashReportText(context, "offline", english: "You're offline. The log stays on this device and will be sent when you reconnect.", chinese: "当前没有网络。日志仍在这台设备上，连上网络后会发送。"))
-                return
             }
-            self.beginSend(report, context: context)
         }))
     }
 
