@@ -10,6 +10,13 @@ final class TellomiBrandRewriteTests: XCTestCase {
 
     func testWebsiteLinksUsePagesThatExist() {
         XCTAssertEqual(tellomiRewriteBrand("https://telegram.org/faq#general"), "https://tellomi.cn/help#general")
+        XCTAssertEqual(tellomiRewriteBrand("https://tellomi.cn/faq#general"), "https://tellomi.cn/help")
+        XCTAssertEqual(tellomiRewriteBrand("https://tellomi.cn/faq#q-can-i-delete-my-messages"), "https://tellomi.cn/account/delete/")
+        XCTAssertEqual(tellomiRewriteBrand("https://tellomi.cn/tos/stars"), "https://tellomi.cn/legal/terms/")
+        XCTAssertEqual(tellomiRewriteBrand("https://tellomi.cn/terms"), "https://tellomi.cn/legal/terms/")
+        XCTAssertEqual(tellomiRewriteBrand("https://tellomi.cn/tos/mini-apps"), "https://tellomi.cn/legal/terms/")
+        XCTAssertEqual(tellomiRewriteBrand("https://tellomi.cn/privacy-tpa"), "https://tellomi.cn/legal/privacy/")
+        XCTAssertEqual(tellomiRewriteBrand("https://tellomi.cn/apps"), "https://tellomi.cn/download/")
         XCTAssertEqual(tellomiRewriteBrand("https://telegram.org/privacy"), "https://tellomi.cn/legal/privacy/")
         XCTAssertEqual(tellomiRewriteBrand("https://telegram.org/tos"), "https://tellomi.cn/legal/terms/")
         XCTAssertEqual(tellomiRewriteBrand("https://telegram.org/terms"), "https://tellomi.cn/legal/terms/")

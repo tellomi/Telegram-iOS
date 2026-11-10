@@ -7,7 +7,8 @@ public func tellomiRewriteBrand(_ value: String) -> String {
         return value
     }
     let folded = value.lowercased()
-    if !folded.contains("telegram") && !folded.contains("t.me") && !value.contains("电报") && !value.contains("تيليجرام") && !value.contains("텔레그램") && !value.contains("टेलीग्राम") {
+    let deadSitePaths = ["tellomi.cn/faq", "tellomi.cn/tos", "tellomi.cn/terms", "tellomi.cn/privacy-tpa", "tellomi.cn/apps"]
+    if !folded.contains("telegram") && !folded.contains("t.me") && !deadSitePaths.contains(where: { folded.contains($0) }) && !value.contains("电报") && !value.contains("تيليجرام") && !value.contains("텔레그램") && !value.contains("टेलीग्राम") {
         return value
     }
     var result = value
@@ -21,6 +22,19 @@ public func tellomiRewriteBrand(_ value: String) -> String {
     // Short links (t.me, telegram.me, telegram.dog) stay on tell.cc below.
     // support@tellomi.app is the address published on tellomi.cn/support/.
     let hosts = [
+        ("https://tellomi.cn/faq#q-can-i-delete-my-messages", "https://tellomi.cn/account/delete/"),
+        ("https://tellomi.cn/faq#general-questions", "https://tellomi.cn/help"),
+        ("https://tellomi.cn/faq#general", "https://tellomi.cn/help"),
+        ("https://tellomi.cn/faq#passport", "https://tellomi.cn/help"),
+        ("https://tellomi.cn/faq#secret-chats", "https://tellomi.cn/help"),
+        ("https://tellomi.cn/faq", "https://tellomi.cn/help"),
+        ("https://tellomi.cn/tos/bot-developers", "https://tellomi.cn/legal/terms/"),
+        ("https://tellomi.cn/tos/mini-apps", "https://tellomi.cn/legal/terms/"),
+        ("https://tellomi.cn/tos/stars", "https://tellomi.cn/legal/terms/"),
+        ("https://tellomi.cn/tos", "https://tellomi.cn/legal/terms/"),
+        ("https://tellomi.cn/terms", "https://tellomi.cn/legal/terms/"),
+        ("https://tellomi.cn/privacy-tpa", "https://tellomi.cn/legal/privacy/"),
+        ("https://tellomi.cn/apps", "https://tellomi.cn/download/"),
         ("https://core.telegram.org/bots/webapps#launching-the-main-mini-app", "https://tellomi.cn/help"),
         ("https://ads.telegram.org/guidelines", "https://tellomi.cn/legal/community/"),
         ("https://telegram.org/blog/coronavirus", "https://tellomi.cn/help"),
