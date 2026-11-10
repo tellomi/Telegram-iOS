@@ -149,28 +149,21 @@ public struct MomentsFeedEndpoint: Equatable {
     }
 }
 
-/// The feed is on only when app config has both keys. Anything else stays off. No default host.
+/// Production content-engine. A valid `tellomi_discover_feed_base_url` overrides it.
+/// `tellomi_discover_feed_enabled` is ignored: the tab is always built in.
+public let momentsProductionFeedBaseURL = "https://feed.tellomi.cn"
+
+/// The host is the app-config URL when that value is an https origin, otherwise production.
+/// The tab is not gated on this. An unreachable engine is an in-feed error.
 public func momentsFeedEndpoint(appConfiguration: AppConfiguration) -> MomentsFeedEndpoint? {
-    guard let data = appConfiguration.data else {
-        return nil
+    if let data = appConfiguration.data, let raw = data["tellomi_discover_feed_base_url"] as? String, let baseURL = momentsFeedBaseURL(raw) {
+        return MomentsFeedEndpoint(baseURL: baseURL)
     }
-    guard data["tellomi_discover_feed_enabled"] as? Bool == true else {
-        return nil
-    }
-    guard let raw = data["tellomi_discover_feed_base_url"] as? String else {
-        return nil
-    }
-    guard let baseURL = momentsFeedBaseURL(raw) else {
-        return nil
-    }
-    return MomentsFeedEndpoint(baseURL: baseURL)
+    return MomentsFeedEndpoint(baseURL: momentsProductionFeedBaseURL)
 }
 
-public func isMomentsFeedEnabled(appConfiguration: AppConfiguration) -> Bool {
-    guard MomentsLimits.standard.tabEnabled else {
-        return false
-    }
-    return momentsFeedEndpoint(appConfiguration: appConfiguration) != nil
+public func isMomentsFeedEnabled(appConfiguration _: AppConfiguration) -> Bool {
+    return MomentsLimits.standard.tabEnabled
 }
 
 /// `https://host` or `https://host:port`. No user, path, query, or fragment. `region` is not accepted.

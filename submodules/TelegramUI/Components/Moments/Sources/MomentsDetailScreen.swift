@@ -87,7 +87,7 @@ public final class MomentsDetailScreen: ViewController {
         }
         let strings = self.presentationData.strings
         let theme = self.presentationData.theme
-        var items: [ListViewItem] = [MomentsPostItem(card: self.card, strings: strings, theme: theme, fontSize: self.presentationData.listsFontSize.baseDisplaySize, showFollow: false, expanded: true, hidden: false, albumIndex: 0, playing: false, handlers: self.handlers())]
+        var items: [ListViewItem] = [MomentsPostItem(card: self.card, strings: strings, theme: theme, fontSize: self.presentationData.listsFontSize.baseDisplaySize, showFollow: false, expanded: true, hidden: false, albumIndex: 0, playing: false, context: self.context, handlers: self.handlers())]
         if !self.card.viewer.canComment {
             items.append(MomentsStatusItem(text: self.card.viewer.commentDeniedReason ?? momentsText(strings, .commentClosed), theme: theme, action: {}))
         }

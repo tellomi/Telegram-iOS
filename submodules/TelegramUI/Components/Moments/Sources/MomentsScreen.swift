@@ -167,11 +167,13 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var appliedIds: [MomentsFeedKind: [String]] = [:]
     private var listBusy: [MomentsFeedKind: Bool] = [:]
     private var renderQueued: Set<MomentsFeedKind> = []
+    private let prefetch: MomentsPrefetchManager
 
     init(context: AccountContext, controller: MomentsScreen) {
         self.context = context
         self.controller = controller
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        self.prefetch = MomentsPrefetchManager(context: context)
         super.init()
         self.setViewBlock { UITracingLayerView() }
         for kind in self.visibleTabs {
@@ -179,6 +181,15 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             let list = ListViewImpl()
             list.didScrollWithOffset = { [weak self] _, _, _, _ in
                 self?.updateVisiblePlayback()
+            }
+            list.displayedItemRangeChanged = { [weak self] range, _ in
+                guard let self, kind == self.selected else {
+                    return
+                }
+                let cards = self.models[kind]?.items ?? []
+                let first = range.visibleRange?.firstIndex ?? range.loadedRange?.firstIndex ?? 0
+                let last = range.visibleRange?.lastIndex ?? range.loadedRange?.lastIndex ?? first
+                self.prefetch.update(cards: cards, firstIndex: first, lastIndex: last)
             }
             self.lists[kind] = list
             self.pager.addSubview(list.view)
@@ -201,7 +212,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.view.addSubview(self.sortControl)
         self.view.addSubview(self.pager)
         self.view.addSubview(self.composeFab)
-        self.composeFab.layer.cornerRadius = 28
+        self.composeFab.layer.cornerRadius = 24
         self.composeFab.clipsToBounds = true
         self.compose.isHidden = true
         self.pager.delegate = self
@@ -276,18 +287,22 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.heart.accessibilityLabel = momentsText(self.presentationData.strings, .notifications)
         let accent = self.presentationData.theme.list.itemAccentColor
         self.composeFab.backgroundColor = accent
-        self.composeFab.setImage(generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Add"), color: .white), for: .normal)
+        self.composeFab.setImage(momentsTintedIcon("Chat List/ComposeIcon", .white), for: .normal)
         self.composeFab.accessibilityLabel = momentsText(self.presentationData.strings, .compose)
-        let fabSide: CGFloat = 56
-        let fabBottom = layout.intrinsicInsets.bottom + 16
-        self.composeFab.frame = CGRect(x: width - 20 - fabSide, y: layout.size.height - fabBottom - fabSide, width: fabSide, height: fabSide)
+        let fabFrame: CGFloat = 56
+        let fabCircle: CGFloat = 48
+        let fabInset = (fabFrame - fabCircle) / 2
+        let fabX = width - 20 - fabFrame + fabInset
+        let fabY = layout.size.height - (layout.intrinsicInsets.bottom + 16 + fabFrame) + fabInset
+        self.composeFab.frame = CGRect(x: fabX, y: fabY, width: fabCircle, height: fabCircle)
+        self.composeFab.layer.cornerRadius = fabCircle / 2
         self.view.bringSubviewToFront(self.composeFab)
-        let tabSize = self.tabs.update(transition: .immediate, component: AnyComponent(self.tabsComponent(width: width)), environment: {}, containerSize: CGSize(width: width - 16, height: 36))
+        let tabSize = self.tabs.update(transition: .immediate, component: AnyComponent(self.tabsComponent(width: width)), environment: {}, containerSize: CGSize(width: width - 16, height: 40))
         if let view = self.tabs.view {
             if view.superview == nil { self.view.addSubview(view) }
-            view.frame = CGRect(x: 8, y: top + 44, width: tabSize.width, height: 36)
+            view.frame = CGRect(x: 8, y: top + 44, width: tabSize.width, height: 40)
         }
-        let pillY = top + 84
+        let pillY = top + 88
         self.pill.frame = CGRect(x: (width - 140) / 2, y: pillY, width: 140, height: 28)
         self.sortControl.isHidden = self.selected != .nearby
         self.sortControl.setTitle(momentsText(self.presentationData.strings, self.nearbySort == "latest" ? .nearbyLatest : .nearbyMixed), for: .normal)

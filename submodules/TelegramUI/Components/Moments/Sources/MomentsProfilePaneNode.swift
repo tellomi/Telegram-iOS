@@ -15,6 +15,8 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
     private let ready = Promise<Bool>(false)
     private var items: [MomentsCard] = []
     private var rendered = 0
+    private var rendering = false
+    private var renderAgain = false
     private var presentationData: PresentationData
     public var parentController: ViewController?
     public var tabBarOffsetUpdated: ((ContainedViewLayoutTransition) -> Void)?
@@ -58,6 +60,10 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
 
     private func render() {
         guard self.list.bounds.width > 0 else { return }
+        if self.rendering {
+            self.renderAgain = true
+            return
+        }
         let strings = self.presentationData.strings
         let theme = self.presentationData.theme
         let handlers = MomentsPostHandlers(open: { [weak self] card in
@@ -65,11 +71,20 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
             (parent.navigationController as? NavigationController)?.pushViewController(MomentsDetailScreen(context: self.context, card: card))
         }, author: { _ in }, like: { _ in }, comment: { _ in }, repost: { _ in }, share: { _ in }, save: { _ in }, more: { _, _ in }, follow: { _ in }, undo: { _ in }, fullText: { _ in }, topic: { _ in }, link: { _ in })
         let rows: [ListViewItem] = self.items.map { card in
-            MomentsPostItem(card: card, strings: strings, theme: theme, fontSize: self.presentationData.listsFontSize.baseDisplaySize, showFollow: false, expanded: false, hidden: false, albumIndex: 0, playing: false, handlers: handlers)
+            MomentsPostItem(card: card, strings: strings, theme: theme, fontSize: self.presentationData.listsFontSize.baseDisplaySize, showFollow: false, expanded: false, hidden: false, albumIndex: 0, playing: false, context: self.context, handlers: handlers)
         }
         let previous = self.rendered
-        self.rendered = rows.count
-        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: rows.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: UIEdgeInsets(top: 0, left: 0, bottom: 24, right: 0), duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { _ in })
+        let count = rows.count
+        self.rendering = true
+        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: rows.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: UIEdgeInsets(top: 0, left: 0, bottom: 24, right: 0), duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { [weak self] _ in
+            guard let self else { return }
+            self.rendered = count
+            self.rendering = false
+            if self.renderAgain {
+                self.renderAgain = false
+                self.render()
+            }
+        })
     }
 }
 
@@ -79,6 +94,8 @@ public final class MomentsSearchContentNode: ASDisplayNode {
     private var query = ""
     private var result = MomentsSearchResult()
     private var rendered = 0
+    private var rendering = false
+    private var renderAgain = false
     private var presentationData: PresentationData
     public var openPeer: ((EnginePeer.Id) -> Void)?
     public var openPost: ((MomentsCard) -> Void)?
@@ -111,6 +128,10 @@ public final class MomentsSearchContentNode: ASDisplayNode {
 
     private func render() {
         guard self.list.bounds.width > 0 else { return }
+        if self.rendering {
+            self.renderAgain = true
+            return
+        }
         let theme = self.presentationData.theme
         let strings = self.presentationData.strings
         var rows: [ListViewItem] = []
@@ -131,7 +152,16 @@ public final class MomentsSearchContentNode: ASDisplayNode {
             rows = [MomentsStatusItem(text: momentsText(strings, .search), theme: theme, action: {})]
         }
         let previous = self.rendered
-        self.rendered = rows.count
-        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: rows.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { _ in })
+        let count = rows.count
+        self.rendering = true
+        self.list.transaction(deleteIndices: (0..<previous).map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: rows.enumerated().map { ListViewInsertItem(index: $0.offset, previousIndex: nil, item: $0.element, directionHint: nil) }, updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: .zero, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { [weak self] _ in
+            guard let self else { return }
+            self.rendered = count
+            self.rendering = false
+            if self.renderAgain {
+                self.renderAgain = false
+                self.render()
+            }
+        })
     }
 }

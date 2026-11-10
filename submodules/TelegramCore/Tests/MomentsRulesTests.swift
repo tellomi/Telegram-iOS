@@ -122,22 +122,24 @@ final class MomentsRulesTests: XCTestCase {
     }
 
     func testFeedOriginComesOnlyFromAppConfig() {
-        XCTAssertNil(momentsFeedEndpoint(appConfiguration: .defaultValue))
-        XCTAssertFalse(isMomentsFeedEnabled(appConfiguration: .defaultValue))
+        XCTAssertEqual(momentsFeedEndpoint(appConfiguration: .defaultValue)?.baseURL, momentsProductionFeedBaseURL)
+        XCTAssertTrue(isMomentsFeedEnabled(appConfiguration: .defaultValue))
 
         let disabled = AppConfiguration(data: JSON(dictionary: [
             "tellomi_discover_feed_enabled": false,
             "tellomi_discover_feed_base_url": "https://feed.example"
         ]), hash: 0)
-        XCTAssertNil(momentsFeedEndpoint(appConfiguration: disabled))
+        XCTAssertEqual(momentsFeedEndpoint(appConfiguration: disabled)?.baseURL, "https://feed.example")
+        XCTAssertTrue(isMomentsFeedEnabled(appConfiguration: disabled))
 
         let missingHost = AppConfiguration(data: JSON(dictionary: [
             "tellomi_discover_feed_enabled": true
         ]), hash: 0)
-        XCTAssertNil(momentsFeedEndpoint(appConfiguration: missingHost))
+        XCTAssertEqual(momentsFeedEndpoint(appConfiguration: missingHost)?.baseURL, momentsProductionFeedBaseURL)
+        XCTAssertTrue(isMomentsFeedEnabled(appConfiguration: missingHost))
 
         let enabled = AppConfiguration(data: JSON(dictionary: [
-            "tellomi_discover_feed_enabled": true,
+            "tellomi_discover_feed_enabled": false,
             "tellomi_discover_feed_base_url": "https://feed.example:8443/"
         ]), hash: 0)
         XCTAssertEqual(momentsFeedEndpoint(appConfiguration: enabled)?.baseURL, "https://feed.example:8443")
