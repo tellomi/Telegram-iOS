@@ -102,6 +102,11 @@ jobs:
       - name: Run MomentsRulesTests
         run: |
           set -euo pipefail
+          df -h /
+          # The IPA is already checked. Its bazel outputs stay on the same disk as the
+          # simulator test, and the last run died here with "No space left on device".
+          rm -rf bazel-bin bazel-out bazel-testlogs
+          df -h /
           # xctestrunner builds a runtime id itself and hides the simctl error
           # behind exit 15. Create the simulator here, from the runtime id
           # simctl actually lists, and hand that device to the test runner.
@@ -159,6 +164,7 @@ jobs:
           )"
           xcrun simctl boot "${SIM_UDID}" || true
           xcrun simctl bootstatus "${SIM_UDID}" -b
+          set +e
           python3 -u build-system/Make/Make.py \
             --overrideXcodeVersion \
             --cacheDir /Users/runner/telegram-bazel-cache \
@@ -167,18 +173,24 @@ jobs:
             --codesigningInformationPath "${RUNNER_TEMP}/tellomi-signing" \
             --target //submodules/TelegramCore:MomentsRulesTests \
             --testFilter MomentsRulesTests \
-            --testOutput all \
-            --testArg=--destination=platform=ios_simulator,id=${SIM_UDID}
+            --testOutput errors \
+            --testArg=--destination=platform=ios_simulator,id=${SIM_UDID} > "${RUNNER_TEMP}/test.log" 2>&1
+          status=$?
+          set -e
+          tail -n 80 "${RUNNER_TEMP}/test.log"
+          exit "${status}"
 
       - name: Summarize compiler errors
         if: failure()
         run: |
-          grep -E "error:|ERROR:" "${RUNNER_TEMP}/build.log" | sort -u | head -200 || true
+          grep -E "error:|ERROR:|failed|Fatal" "${RUNNER_TEMP}/build.log" "${RUNNER_TEMP}/test.log" 2>/dev/null | sort -u | head -200 || true
 
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: moments-build-log
-          path: ${{ runner.temp }}/build.log
+          path: |
+            ${{ runner.temp }}/build.log
+            ${{ runner.temp }}/test.log
           if-no-files-found: ignore
