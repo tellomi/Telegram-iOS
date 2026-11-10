@@ -94,6 +94,16 @@ jobs:
           test -f bazel-bin/Telegram/Telegram.ipa
           echo "Built bazel-bin/Telegram/Telegram.ipa. Not uploaded."
 
+      - name: Free disk before simulator tests
+        run: |
+          set -euo pipefail
+          df -h
+          # The release products and the simulator test are different configurations.
+          # Keeping both filled the runner while the test bundle was zipped.
+          rm -rf bazel-out/ bazel-bin bazel-testlogs
+          rm -rf "${HOME}/Library/Caches/bazel"
+          df -h
+
       - name: Run MomentsRulesTests
         run: |
           set -euo pipefail
