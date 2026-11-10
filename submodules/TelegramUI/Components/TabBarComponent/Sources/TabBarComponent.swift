@@ -358,8 +358,10 @@ public final class TabBarComponent: Component {
     public let outerInsets: UIEdgeInsets
     public typealias Axis = TabBarAxis
     public let axis: Axis
-    /// Icons without labels, on either axis.
+    /// Icons without labels, on either axis. A regular-width or vertical bar.
     public let isCompact: Bool
+    /// Phone bar labels. False hides the titles and shortens the bar. Compact bars ignore this.
+    public let showsItemTitles: Bool
     
     public init(
         theme: PresentationTheme,
@@ -371,7 +373,8 @@ public final class TabBarComponent: Component {
         selectedId: AnyHashable?,
         outerInsets: UIEdgeInsets,
         axis: Axis,
-        isCompact: Bool
+        isCompact: Bool,
+        showsItemTitles: Bool = true
     ) {
         self.theme = theme
         self.tintSelectedItem = tintSelectedItem
@@ -383,6 +386,7 @@ public final class TabBarComponent: Component {
         self.outerInsets = outerInsets
         self.axis = axis
         self.isCompact = isCompact
+        self.showsItemTitles = showsItemTitles
     }
     
     public static func ==(lhs: TabBarComponent, rhs: TabBarComponent) -> Bool {
@@ -414,6 +418,9 @@ public final class TabBarComponent: Component {
             return false
         }
         if lhs.isCompact != rhs.isCompact {
+            return false
+        }
+        if lhs.showsItemTitles != rhs.showsItemTitles {
             return false
         }
         return true
@@ -690,7 +697,10 @@ public final class TabBarComponent: Component {
             
             self.overrideUserInterfaceStyle = component.theme.overallDarkAppearance ? .dark : .light
 
-            let barHeight: CGFloat = 56.0 + innerInset * 2.0
+            let showsItemTitles = !component.isCompact && component.showsItemTitles
+            // Compact (iPad / vertical) keeps the previous 56pt measure. Hiding titles on a phone
+            // shortens the bar to the icon height.
+            let barHeight: CGFloat = (component.isCompact || showsItemTitles ? 56.0 : tabBarCompactItemThickness) + innerInset * 2.0
 
             var unboundItemWidths: [CGFloat] = []
             var validIds: [AnyHashable] = []
@@ -712,13 +722,13 @@ public final class TabBarComponent: Component {
                         item: item,
                         theme: component.theme,
                         isSearchActive: false,
-                        showsTitle: true,
+                        showsTitle: component.isCompact ? true : showsItemTitles,
                         isSelected: false,
                         tintSelectedItem: true,
                         isUnconstrained: true
                     )),
                     environment: {},
-                    containerSize: CGSize(width: 200.0, height: 56.0)
+                    containerSize: CGSize(width: 200.0, height: component.isCompact || showsItemTitles ? 56.0 : tabBarCompactItemThickness)
                 )
                 unboundItemWidths.append(itemSize.width)
             }
@@ -727,7 +737,13 @@ public final class TabBarComponent: Component {
             if search != nil {
                 availableLength -= barHeight + 8.0
             }
-            let itemsLayout = tabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, unboundItemWidths: unboundItemWidths, availableLength: availableLength)
+            var itemsLayout = tabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, unboundItemWidths: unboundItemWidths, availableLength: availableLength)
+            if component.axis == .horizontal && !component.isCompact && !showsItemTitles {
+                itemsLayout.size.height = barHeight
+                for index in itemsLayout.itemFrames.indices {
+                    itemsLayout.itemFrames[index].size.height = barHeight - innerInset * 2.0
+                }
+            }
             let tabsSize = itemsLayout.size
 
             var selectedItemFrame: CGRect?
@@ -769,7 +785,7 @@ public final class TabBarComponent: Component {
                         item: item,
                         theme: component.theme,
                         isSearchActive: search?.isActive == true,
-                        showsTitle: !component.isCompact,
+                        showsTitle: showsItemTitles,
                         isSelected: false,
                         tintSelectedItem: component.tintSelectedItem,
                         isUnconstrained: false
@@ -783,7 +799,7 @@ public final class TabBarComponent: Component {
                         item: item,
                         theme: component.theme,
                         isSearchActive: search?.isActive == true,
-                        showsTitle: !component.isCompact,
+                        showsTitle: showsItemTitles,
                         isSelected: true,
                         tintSelectedItem: component.tintSelectedItem,
                         isUnconstrained: false
@@ -1305,6 +1321,13 @@ private final class ItemComponent: Component {
                 }
                 titleView.frame = titleFrame
                 alphaTransition.setAlpha(view: titleView, alpha: (component.isSearchActive || !component.showsTitle) ? 0.0 : 1.0)
+            }
+            if !component.showsTitle {
+                self.isAccessibilityElement = true
+                self.accessibilityLabel = title
+            } else {
+                self.isAccessibilityElement = false
+                self.accessibilityLabel = nil
             }
 
             if let badgeText = badgeValue, !badgeText.isEmpty {

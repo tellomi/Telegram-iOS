@@ -153,6 +153,7 @@ final class AuthorizedApplicationContext {
     
     private var showCallsTab: Bool
     private var showCallsTabDisposable: Disposable?
+    private var tabBarPreferencesObserver: NSObjectProtocol?
     private var showNewsTab: Bool
     private var showNewsTabDisposable: Disposable?
     private var showMomentsTab: Bool
@@ -808,19 +809,46 @@ final class AuthorizedApplicationContext {
         })
         
         let showCallsTabSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.callListSettings])
-        |> map { sharedData -> Bool in
-            var value = CallListSettings.defaultSettings.showTab
+        |> map { sharedData -> (Bool, Bool) in
             if let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.callListSettings]?.get(CallListSettings.self) {
-                value = settings.showTab
+                return (settings.showTab, settings._showTab != nil)
             }
-            return value
+            return (CallListSettings.defaultSettings.showTab, false)
         }
+        self.tabBarPreferencesObserver = NotificationCenter.default.addObserver(forName: TellomiTabBarPreferencesStore.didChangeNotification, object: TellomiTabBarPreferencesStore.shared, queue: .main, using: { [weak self] _ in
+            guard let self else {
+                return
+            }
+            self.rootController.updateRootControllers(showCallsTab: self.showCallsTab, showNewsTab: self.showNewsTab, showMomentsTab: self.showMomentsTab)
+        })
         self.showCallsTabDisposable = (showCallsTabSignal |> deliverOnMainQueue).start(next: { [weak self] value in
-            if let strongSelf = self {
-                if strongSelf.showCallsTab != value {
-                    strongSelf.showCallsTab = value
-                    strongSelf.rootController.updateRootControllers(showCallsTab: value, showNewsTab: strongSelf.showNewsTab, showMomentsTab: strongSelf.showMomentsTab)
+            guard let strongSelf = self else {
+                return
+            }
+            let (showTab, explicit) = value
+            let store = TellomiTabBarPreferencesStore.shared
+            if !store.hasAppliedCallsMigration {
+                let preferences = store.hasStoredValue ? store.load() : tellomiPreferencesForFirstLaunch(calls: TellomiCallsTabMigration(showTab: showTab, explicit: explicit))
+                if !store.hasStoredValue {
+                    store.save(preferences)
                 }
+                store.markCallsMigrationApplied()
+                strongSelf.showCallsTab = preferences.isShown(.calls)
+                if showTab != preferences.isShown(.calls) {
+                    let _ = updateCallListSettingsInteractively(accountManager: strongSelf.context.sharedContext.accountManager, {
+                        $0.withUpdatedShowTab(preferences.isShown(.calls))
+                    }).start()
+                }
+                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab, showNewsTab: strongSelf.showNewsTab, showMomentsTab: strongSelf.showMomentsTab)
+                return
+            }
+            if strongSelf.showCallsTab != showTab {
+                let preferences = store.load()
+                if preferences.isShown(.calls) != showTab {
+                    store.update { $0.updating(.calls, shown: showTab) }
+                }
+                strongSelf.showCallsTab = showTab
+                strongSelf.rootController.updateRootControllers(showCallsTab: showTab, showNewsTab: strongSelf.showNewsTab, showMomentsTab: strongSelf.showMomentsTab)
             }
         })
 
@@ -849,6 +877,9 @@ final class AuthorizedApplicationContext {
     deinit {
         self.context.account.postbox.clearCaches()
         self.showNewsTabDisposable?.dispose()
+        if let tabBarPreferencesObserver = self.tabBarPreferencesObserver {
+            NotificationCenter.default.removeObserver(tabBarPreferencesObserver)
+        }
         self.context.account.shouldKeepOnlinePresence.set(.single(false))
         self.context.account.shouldBeServiceTaskMaster.set(.single(.never))
         self.loggedOutDisposable.dispose()

@@ -17358,3 +17358,8 @@ Error: %8$@";
 "CrashReport.Thanks" = "Thank you for helping make Tellomi better!";
 "CrashReport.Offline" = "You're offline. The log stays on this device and will be sent when you reconnect.";
 "CrashReport.Failed" = "Could not send the crash log. It remains saved on this device.";
+
+"Tellomi.MenuSettings.Tools" = "Tools";
+"Tellomi.MenuSettings.Title" = "Menu settings";
+"Tellomi.MenuSettings.HideButtonTitles" = "Hide button titles";
+"Tellomi.MenuSettings.NavigationButtons" = "Navigation bar buttons";

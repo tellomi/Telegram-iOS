@@ -1,5 +1,24 @@
 # Upstream patches
 
+## Root tab menu (选单设定) — 2026-11-10
+
+A fresh install shows 动态, 聊天, 设置. Contacts, Calls and News stay off until the person turns them on. Chats and Settings cannot be hidden. The choice is per device (`UserDefaults` suite `app.tellomi.chat.tab-bar`), not an account record. Hiding button titles shortens the phone tab bar; an iPad or vertical bar is unchanged. The bar rebuilds when the switches move.
+
+The screen is Settings → a Tools card → 选单设定. iMe's public iOS tree (only `master`, pushed 2019-10-31, no tags) does not contain this screen. Swiftgram's tab settings (`CallListSettings.showContactsTab`, `SGSimpleSettings.showTabNames`, `addRootControllers`) are the pattern: optional tabs are left out of the controller list, and chats and settings are always appended. Swiftgram asks for a restart to hide titles. This build applies that immediately. No Swiftgram or iMe source was copied.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Sources/TelegramRootController.swift` | Builds the root tabs from `TellomiTabBarPreferences`. |
+| `submodules/TelegramUI/Sources/ApplicationContext.swift` | Applies a saved menu immediately, and keeps the old Calls "show tab" switch in step with it. |
+| `submodules/TelegramPresentationData/Sources/PresentationData.swift` | Fills menu strings the active language pack does not have yet. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings row that opens the screen. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | Tools card. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift` | Pushes the screen. |
+| `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Hides phone tab titles and shortens the bar. |
+| `submodules/TabBarUI/Sources/TabBarController.swift` | `showsItemTitles`, applied on the next layout. |
+| `submodules/TabBarUI/Sources/TabBarContollerNode.swift` | Passes that flag into the bar. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | English keys for the generated string accessors. |
+
 ## MTProto port 443 fallback — 2026-11-10
 
 Overseas networks drop TCP 10443 and pass 443. The seed for datacenter 1 is `api.tellomi.cn` on 10443, then 443. 10443 is last in the address list, so a client that never sees 10443 fail still dials 10443 first. An endpoint that has never received a response uses a 5 second TCP handshake timeout; after it has answered once, the handshake timeout stays 12 seconds. The failure is recorded before the reconnect is queued, including before login, and the first reconnect is immediate, so the next dial is 443. A saved datacenter list and a `help.getConfig` `dc_options` list that omit 443 get it added back. The server does not have to return 443 for this client to keep the fallback.
