@@ -358,7 +358,7 @@ private func momentsLprojName(_ code: String) -> String? {
     }
     let base = normalized.split(separator: "-").first.map(String.init) ?? normalized
     switch base {
-    case "ar", "de", "es", "it", "ko", "nl", "ru", "uk":
+    case "ar", "be", "ca", "de", "es", "fa", "fr", "id", "it", "ko", "ms", "nl", "pl", "ru", "tr", "uk", "uz":
         return base
     default:
         return nil

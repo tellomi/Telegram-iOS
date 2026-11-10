@@ -191,18 +191,26 @@ empty_languages = [
     "uz",
 ]
 
-# These packs ship the two Moments failure strings. The other languages stay empty so a missing
-# key still falls through to English, and we do not copy the English sentence into them.
+# Every built-in language ships its own wording for the two Moments failure strings.
 moments_string_languages = [
     "ar",
+    "be",
+    "ca",
     "de",
     "es",
+    "fa",
+    "fr",
+    "id",
     "it",
     "ko",
+    "ms",
     "nl",
+    "pl",
     "pt",
     "ru",
+    "tr",
     "uk",
+    "uz",
     "zh-Hans",
     "zh-Hant",
 ]
