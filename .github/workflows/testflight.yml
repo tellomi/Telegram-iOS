@@ -24,6 +24,13 @@
 # workflow_dispatch remains, but the integration account cannot call it
 # (403). Docs-only pushes are ignored. A newer release/ios push cancels
 # an older in-progress upload.
+#
+# After a successful upload this job also stores the build's dSYMs as one
+# Actions artifact named dsym-<buildNumber>. Each bundle inside is
+# <buildNumber>-<UUID>.dSYM. Retention is 90 days. Nothing here is sent to
+# App Store Connect, a symbol server, or any other host. actions: write is
+# only for that artifact. Signing and the altool upload are unchanged.
+# A pull request or a master push does not run this workflow.
 
 name: TestFlight
 
@@ -47,6 +54,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   testflight:
@@ -173,6 +181,29 @@ jobs:
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \
             --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
           rm -rf "${HOME}/.private_keys"
+
+      # Runs only after altool has returned. A missing dSYM fails this job
+      # afterwards; it does not decide whether the IPA was signed or uploaded.
+      - name: Collect dSYMs
+        if: success()
+        run: |
+          set -euo pipefail
+          python3 Tellomi/collect_dsyms.py \
+            --search bazel-bin/Telegram \
+            --build-number "${BUILD_NUMBER}" \
+            --out "${RUNNER_TEMP}/dsyms"
+          test -s "${RUNNER_TEMP}/dsyms/manifest.tsv"
+          echo "DSYM_ARTIFACT_NAME=$(tr -d '[:space:]' < "${RUNNER_TEMP}/dsyms/artifact-name.txt")" >> "${GITHUB_ENV}"
+
+      - name: Upload dSYM artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DSYM_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/dsyms
+          retention-days: 90
+          if-no-files-found: error
+          compression-level: 6
 
       - name: Save Bazel cache
         if: always()
