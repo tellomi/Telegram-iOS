@@ -106,6 +106,7 @@ jobs:
             //submodules/TelegramCore:EphemeralMediaLifecycleTests
             //submodules/TelegramCore:TellomiNativeBatchTests
             //submodules/OpenInExternalAppUI:TellomiMapOpenInTests
+            //submodules/TelegramCallsUI:CallKitCompletionThreadTests
             //submodules/TellomiDiscover:TellomiFeedChromeMotionTests
           )
           ios=(

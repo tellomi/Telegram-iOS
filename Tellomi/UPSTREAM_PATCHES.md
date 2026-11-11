@@ -1285,3 +1285,16 @@ The bundled English fallback, the share sheet, and the widget login line said Te
 | `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Product name in values. Keys unchanged. |
 | `Telegram/Share/en.lproj/Localizable.strings`, `Telegram/WidgetKitWidget/en.lproj/Localizable.strings` | Login lines. |
 | `Tellomi/check_server_config.py` `check_siri_vocabulary` | Runs from `main`. Requires the five phrases, the explicit srcs, and no Telegram left in those bundle values. |
+
+## CallKit 完成回调回到主线程
+
+TestFlight 构建 91（14.0.5，提交 `e1ae313a1de4ade26714830ed4d387cdca46689a`）在 `com.apple.callkit.callcontroller.completion` 上崩溃：`UIView` 加入子视图时触发 Objective-C 断言，随后 `SIGABRT`。`CXCallController.request` 的完成回调在这条私有队列上直接调用上层 completion。失败分支会弹出 `Call_SystemStartErrorMessage`。成功分支在同一回调里更新通话状态（`activeCalls` / `hasActiveCalls`），不在这里打开通话界面；通话界面由 `provider(_:perform: CXStartCallAction)` 之后、已经 `deliverOnMainQueue` 的路径打开。语音和视频共用这一条 completion。CallKit 拒绝、不可用、重复拨打（`callUUIDAlreadyExists`）、取消、以及系统因已有通话拒绝（`maximumCallGroupsReached`）都是非 nil 的 error，走失败分支。本地已经发现的系统通话在进入 CallKit 之前返回 `.alreadyInProgress`，提示框本来就在主队列上，这次没有改。
+
+构建 91 的 `TelegramUIFramework` UUID 是 `1575DE22-0975-3591-A160-CCF1A2EA97F1`。TestFlight 工作流不上传 dSYM，Actions 产物里也没有这份符号。重新编译会得到新的 UUID，不能用来符号化 `+76885060`、`+76884624`、`+76887124`。
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCallsUI/Sources/CallKitCompletionThread.swift` | 完成回调切到 `Queue.mainQueue()`，并区分成功记账和失败放弃。 |
+| `submodules/TelegramCallsUI/Sources/CallKitIntegration.swift` | `request` 和 `reportNewIncomingCall` 的 completion 都走上面的切换。Provider 委托队列写明主队列。 |
+| `submodules/TelegramCallsUI/Sources/PresentationCallManager.swift` | 失败提示框在主队列上创建。 |
+| `submodules/TelegramCallsUI/Tests/CallKitCompletionThreadTests.swift` | 后台队列回到主线程；语音和视频的四种拒绝都走失败分支。 |
