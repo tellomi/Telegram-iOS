@@ -1,3 +1,9 @@
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "No s'ha pogut enviar el comentari. El vostre text encara és aquí.";
 "Moments_Audience_Kept" = "No s'ha pogut actualitzar qui pot veure això. La vostra selecció s'ha conservat.";
+
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Nou registre de fallada";
+"CrashReport.Prompt.Text" = "L'aplicació s'ha tancat de manera inesperada.\n\nVoleu enviar un registre de fallada perquè puguem corregir el problema?";
+"CrashReport.Prompt.NotNow" = "Ara no";
+"CrashReport.Prompt.Send" = "Envia el registre";

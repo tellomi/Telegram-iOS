@@ -1,3 +1,9 @@
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "Der Kommentar wurde nicht gesendet. Dein Text ist noch da.";
 "Moments_Audience_Kept" = "Wer das sehen kann, wurde nicht geändert. Deine Auswahl bleibt.";
+
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Neues Absturzprotokoll";
+"CrashReport.Prompt.Text" = "Die App wurde unerwartet beendet.\n\nMöchtest du ein Absturzprotokoll senden, damit wir das Problem beheben können?";
+"CrashReport.Prompt.NotNow" = "Nicht jetzt";
+"CrashReport.Prompt.Send" = "Protokoll senden";
