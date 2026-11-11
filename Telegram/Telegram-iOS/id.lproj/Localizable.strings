@@ -1,0 +1,5 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Log kerusakan baru";
+"CrashReport.Prompt.Text" = "Aplikasi tertutup secara tiba-tiba.\n\nKirim log kerusakan untuk membantu kami memperbaiki masalah ini?";
+"CrashReport.Prompt.NotNow" = "Nanti saja";
+"CrashReport.Prompt.Send" = "Kirim log";

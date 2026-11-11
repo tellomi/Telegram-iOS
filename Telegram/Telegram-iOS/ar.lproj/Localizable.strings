@@ -1,0 +1,5 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "سجل تعطل جديد";
+"CrashReport.Prompt.Text" = "أُغلق التطبيق بشكل غير متوقع.\n\nهل تريد إرسال سجل التعطل لمساعدتنا على إصلاح المشكلة؟";
+"CrashReport.Prompt.NotNow" = "ليس الآن";
+"CrashReport.Prompt.Send" = "إرسال السجل";

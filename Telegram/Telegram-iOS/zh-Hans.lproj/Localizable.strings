@@ -233,3 +233,10 @@
 "Tour.Title6" = "免费";
 "Tour.Text6" = "**Tellomi** 为聊天和媒体\n提供免费的无限云存储。";
 "Tour.StartButton" = "开始使用";
+
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "有新的崩溃日志";
+"CrashReport.Prompt.Text" = "应用意外关闭了。\n\n要把崩溃日志发给我们，帮我们修好这个问题吗？";
+"CrashReport.Prompt.NotNow" = "以后再说";
+"CrashReport.Prompt.Send" = "发送日志";
+

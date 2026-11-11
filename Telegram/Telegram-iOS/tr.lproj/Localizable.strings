@@ -1,0 +1,5 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Yeni çökme günlüğü";
+"CrashReport.Prompt.Text" = "Uygulama beklenmedik şekilde kapandı.\n\nSorunu düzeltmemize yardımcı olmak için çökme günlüğünü göndermek ister misin?";
+"CrashReport.Prompt.NotNow" = "Şimdi değil";
+"CrashReport.Prompt.Send" = "Günlüğü gönder";

@@ -1,0 +1,5 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Nowy dziennik awarii";
+"CrashReport.Prompt.Text" = "Aplikacja została nieoczekiwanie zamknięta.\n\nCzy chcesz wysłać dziennik awarii, żebyśmy mogli usunąć ten problem?";
+"CrashReport.Prompt.NotNow" = "Nie teraz";
+"CrashReport.Prompt.Send" = "Wyślij dziennik";

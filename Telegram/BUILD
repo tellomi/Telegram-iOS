@@ -191,9 +191,27 @@ empty_languages = [
     "uz",
 ]
 
-# Bundled UI strings besides English. Moments copy is the server langpack; these files are the
-# welcome tour and notification loc-keys.
+# Bundled UI strings besides English. Moments copy is the server langpack. These files are the
+# welcome tour (zh), notification loc-keys, and the crash-log prompt.
 bundled_string_languages = [
+    "ar",
+    "be",
+    "ca",
+    "de",
+    "es",
+    "fa",
+    "fr",
+    "id",
+    "it",
+    "ko",
+    "ms",
+    "nl",
+    "pl",
+    "pt",
+    "ru",
+    "tr",
+    "uk",
+    "uz",
     "zh-Hans",
     "zh-Hant",
 ]

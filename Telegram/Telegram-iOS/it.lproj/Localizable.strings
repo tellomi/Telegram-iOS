@@ -1,0 +1,5 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Nuovo registro di arresto anomalo";
+"CrashReport.Prompt.Text" = "L'app si è chiusa in modo imprevisto.\n\nVuoi inviare un registro di arresto anomalo per aiutarci a risolvere il problema?";
+"CrashReport.Prompt.NotNow" = "Non ora";
+"CrashReport.Prompt.Send" = "Invia registro";

@@ -1,0 +1,5 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Neues Absturzprotokoll";
+"CrashReport.Prompt.Text" = "Die App wurde unerwartet beendet.\n\nMöchtest du ein Absturzprotokoll senden, damit wir das Problem beheben können?";
+"CrashReport.Prompt.NotNow" = "Nicht jetzt";
+"CrashReport.Prompt.Send" = "Protokoll senden";

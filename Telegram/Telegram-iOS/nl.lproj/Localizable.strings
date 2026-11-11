@@ -1,0 +1,5 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Nieuw crashlogboek";
+"CrashReport.Prompt.Text" = "De app is onverwacht afgesloten.\n\nWil je een crashlogboek sturen zodat we het probleem kunnen oplossen?";
+"CrashReport.Prompt.NotNow" = "Niet nu";
+"CrashReport.Prompt.Send" = "Logboek sturen";

@@ -1,0 +1,5 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Новы журнал збою";
+"CrashReport.Prompt.Text" = "Праграма нечакана закрылася.\n\nАдправіць журнал збою, каб мы маглі выправіць праблему?";
+"CrashReport.Prompt.NotNow" = "Не зараз";
+"CrashReport.Prompt.Send" = "Адправіць журнал";

@@ -1,0 +1,5 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Novo registro de falha";
+"CrashReport.Prompt.Text" = "O aplicativo fechou inesperadamente.\n\nQuer enviar um registro de falha para nos ajudar a corrigir o problema?";
+"CrashReport.Prompt.NotNow" = "Agora não";
+"CrashReport.Prompt.Send" = "Enviar registro";

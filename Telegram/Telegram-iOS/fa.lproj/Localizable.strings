@@ -1,0 +1,5 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "گزارش خرابی جدید";
+"CrashReport.Prompt.Text" = "برنامه به‌طور غیرمنتظره بسته شد.\n\nمی‌خواهید گزارش خرابی را بفرستید تا این مشکل را رفع کنیم؟";
+"CrashReport.Prompt.NotNow" = "الآن نه";
+"CrashReport.Prompt.Send" = "ارسال گزارش";
