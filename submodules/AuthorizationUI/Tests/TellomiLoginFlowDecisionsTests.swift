@@ -13,6 +13,33 @@ final class TellomiLoginFlowDecisionsTests: XCTestCase {
         XCTAssertEqual(tellomiBundledPhoneTitle(languageCode: "en"), "Log in to see more")
     }
 
+    func testSkippedWelcomeOpensThePhoneScreen() {
+        XCTAssertTrue(tellomiSkipsWelcomeSplash)
+        XCTAssertEqual(tellomiLoggedOutRoot(skipsWelcome: true, countryCode: 86), .phoneEntry(countryCode: 86))
+        XCTAssertEqual(tellomiLoggedOutRoot(skipsWelcome: false, countryCode: 86), .welcome)
+        XCTAssertEqual(tellomiLoggedOutRoot(skipsWelcome: true, countryCode: 1), .phoneEntry(countryCode: 1))
+
+        XCTAssertEqual(tellomiPhoneRootBack(hasOtherAccounts: false, skipsWelcome: true), .stayOnPhone)
+        XCTAssertEqual(tellomiPhoneRootBack(hasOtherAccounts: true, skipsWelcome: true), .dismissAddAccount)
+        XCTAssertEqual(tellomiPhoneRootBack(hasOtherAccounts: false, skipsWelcome: false), .showWelcome)
+        XCTAssertEqual(tellomiPhoneRootBack(hasOtherAccounts: true, skipsWelcome: false), .dismissAddAccount)
+
+        XCTAssertFalse(tellomiPhoneRootShowsDismiss(hasOtherAccounts: false, skipsWelcome: true))
+        XCTAssertTrue(tellomiPhoneRootShowsDismiss(hasOtherAccounts: true, skipsWelcome: true))
+        XCTAssertTrue(tellomiPhoneRootShowsDismiss(hasOtherAccounts: false, skipsWelcome: false))
+    }
+
+    func testSkippedWelcomeKeepsSystemLanguageAndASettingsChoice() {
+        XCTAssertEqual(tellomiChromeLanguageCode(savedLanguageCode: "en", preferredInterfaceLanguage: nil, systemPackApplied: false, systemLangPackCode: "zh-hans"), "zh-hans")
+        XCTAssertEqual(tellomiChromeLanguageCode(savedLanguageCode: "en", preferredInterfaceLanguage: nil, systemPackApplied: false, systemLangPackCode: "zh-hant"), "zh-hant")
+        XCTAssertEqual(tellomiChromeLanguageCode(savedLanguageCode: "en", preferredInterfaceLanguage: "  ", systemPackApplied: false, systemLangPackCode: "zh-hans"), "zh-hans")
+        XCTAssertEqual(tellomiChromeLanguageCode(savedLanguageCode: "en", preferredInterfaceLanguage: nil, systemPackApplied: false, systemLangPackCode: nil), "en")
+        XCTAssertEqual(tellomiChromeLanguageCode(savedLanguageCode: "en", preferredInterfaceLanguage: "en", systemPackApplied: true, systemLangPackCode: "zh-hans"), "en")
+        XCTAssertEqual(tellomiChromeLanguageCode(savedLanguageCode: "zh-hant", preferredInterfaceLanguage: nil, systemPackApplied: true, systemLangPackCode: "zh-hans"), "zh-hant")
+        XCTAssertEqual(tellomiChromeLanguageCode(savedLanguageCode: "zh-hans", preferredInterfaceLanguage: nil, systemPackApplied: false, systemLangPackCode: "zh-hant"), "zh-hans")
+        XCTAssertEqual(tellomiBundledPhoneTitle(languageCode: tellomiChromeLanguageCode(savedLanguageCode: "en", preferredInterfaceLanguage: nil, systemPackApplied: false, systemLangPackCode: "zh-hans")), "登录发现更多精彩")
+    }
+
     func testDailyCapAndShortResendWaitAreDifferent() {
         XCTAssertEqual(tellomiSendCodeThrottle(description: "PHONE_NUMBER_FLOOD"), .dailyLimit)
         XCTAssertEqual(tellomiSendCodeThrottle(description: "FLOOD_WAIT_60"), .resendWait(60))
