@@ -17,7 +17,6 @@ import ContextUI
 import BuildConfig
 import AppBundle
 
-private let crashReportBot = "iOSCrashReportsBot"
 private let crashReportWorkQueue = DispatchQueue(label: "org.telegram.crash-report-ui", qos: .utility)
 
 private struct CrashReportItemTag: ItemListItemTag {
@@ -263,13 +262,17 @@ private final class CrashReportActions {
         }))
     }
 
-    func send(_ report: CrashReport, context: AccountContext) {
-        guard self.canPresent, !self.busy else { return }
+    func send(_ report: CrashReport, context: AccountContext, completion: @escaping (Bool) -> Void = { _ in }) {
+        guard self.canPresent, !self.busy else {
+            completion(false)
+            return
+        }
         self.busy = true
         let progress = OverlayStatusController(theme: self.sharedContext.currentPresentationData.with { $0 }.theme, type: .loading(cancelled: nil))
         self.progress = progress
         self.present(progress)
-        let resolution = context.engine.peers.resolvePeerByName(name: crashReportBot, referrer: nil)
+        let botName = resolvedCrashReportBot(context)
+        let resolution = context.engine.peers.resolvePeerByName(name: botName, referrer: nil)
         |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
             if case let .result(peer) = result { return .single(peer) }
             return .complete()
@@ -278,77 +281,80 @@ private final class CrashReportActions {
         |> timeout(15.0, queue: Queue.mainQueue(), alternate: .single(nil))
         |> deliverOnMainQueue
         self.disposable.set(resolution.start(next: { [weak self] peer in
-            guard let self else { return }
+            guard let self else {
+                completion(false)
+                return
+            }
             guard let peer, case let .user(user) = peer, user.botInfo != nil else {
                 self.finishSending()
+                completion(false)
                 self.alert("Could Not Find Crash Log Bot", "Check your connection and try again. The log remains saved on this device.")
                 return
             }
             // Cached resolution can complete synchronously. Install the next phase after
             // the current MetaDisposable.set has returned.
             DispatchQueue.main.async {
-                self.checkBlockedAndEnqueue(report, context: context, peer: peer)
+                self.checkBlockedAndEnqueue(report, context: context, peer: peer, botName: botName, completion: completion)
             }
         }))
     }
 
-    private func checkBlockedAndEnqueue(_ report: CrashReport, context: AccountContext, peer: EnginePeer) {
+    private func checkBlockedAndEnqueue(_ report: CrashReport, context: AccountContext, peer: EnginePeer, botName: String, completion: @escaping (Bool) -> Void) {
         let peerId = peer.id
         self.disposable.set((context.engine.data.get(TelegramEngine.EngineData.Item.Peer.IsBlocked(id: peerId))
         |> deliverOnMainQueue).start(next: { [weak self] blocked in
-            guard let self else { return }
-            if case .known(true) = blocked {
-                self.finishSending()
-                self.alert("Crash Log Bot Is Blocked", "Open @\(crashReportBot) and unblock it before sending the log.")
+            guard let self else {
+                completion(false)
                 return
             }
-            self.enqueue(report, context: context, peerId: peerId, threadId: nil, toTelegramTeam: true)
+            if case .known(true) = blocked {
+                self.finishSending()
+                completion(false)
+                self.alert("Crash Log Bot Is Blocked", "Open @\(botName) and unblock it before sending the log.")
+                return
+            }
+            self.enqueue(report, context: context, peerId: peerId, threadId: nil, toTelegramTeam: true, completion: completion)
         }))
     }
 
-    private func enqueue(_ report: CrashReport, context: AccountContext, peerId: EnginePeer.Id, threadId: Int64?, toTelegramTeam: Bool) {
+    private func enqueue(_ report: CrashReport, context: AccountContext, peerId: EnginePeer.Id, threadId: Int64?, toTelegramTeam: Bool, completion: @escaping (Bool) -> Void = { _ in }) {
         crashReportWorkQueue.async { [self] in
-            let archive = Result {
-                let data = try crashReportArchive(report)
-                let metadata = try report.exportMetadata(bundleId: getAppBundle().bundleIdentifier ?? "Unknown")
-                return (data: data, text: String(decoding: metadata, as: UTF8.self))
-            }
+            let archive = Result { try crashReportArchive(report) }
             DispatchQueue.main.async { [self] in
                 switch archive {
-                case let .success(payload):
-                    let data = payload.data
+                case let .success(data):
+                    let document = crashReportDocument(applicationVersion: report.metadata.applicationVersion, deviceType: report.metadata.deviceType)
                     let id = Int64.random(in: Int64.min ... Int64.max)
                     let resource = LocalFileMediaResource(fileId: id, size: Int64(data.count), isSecretRelated: false)
                     context.engine.resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: data)
-                    let file = TelegramMediaFile(fileId: EngineMedia.Id(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "application/zip", size: Int64(data.count), attributes: [.FileName(fileName: "CrashReport-\(report.id.prefix(12)).zip")], alternativeRepresentations: [])
-                    let instantPage = InstantPage(
-                        blocks: [
-                            .document(id: file.fileId, caption: InstantPageCaption(text: .empty, credit: .empty)),
-                            .details(title: .plain("Metadata"), blocks: [
-                                .preformatted(text: .plain(payload.text), language: "json")
-                            ], expanded: false)
-                        ],
-                        media: [file.fileId: .file(file)],
-                        isComplete: true,
-                        rtl: false,
-                        url: "",
-                        views: nil
-                    )
-                    let message: EnqueueMessage = .message(text: "", attributes: [RichTextMessageAttribute(instantPage: instantPage, fullInstantPage: nil)], inlineStickers: [:], mediaReference: nil, threadId: threadId, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+                    let file = TelegramMediaFile(fileId: EngineMedia.Id(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: document.mimeType, size: Int64(data.count), attributes: [.FileName(fileName: document.fileName)], alternativeRepresentations: [])
+                    let message: EnqueueMessage = .message(text: document.caption, attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: threadId, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
                     self.disposable.set((enqueueMessages(account: context.account, peerId: peerId, messages: [message])
-                    |> deliverOnMainQueue).start(next: { [weak self] ids in
-                        guard let self else { return }
-                        self.finishSending()
-                        guard ids.contains(where: { $0 != nil }) else {
-                            self.alert("Could Not Queue Log", "Please try again. The log remains saved on this device.")
+                    |> mapToSignal { ids -> Signal<Bool, NoError> in
+                        guard let messageId = ids.compactMap({ $0 }).first else {
+                            return .single(false)
+                        }
+                        return crashReportServerAcceptance(account: context.account, messageId: messageId)
+                    }
+                    |> deliverOnMainQueue).start(next: { [weak self] confirmed in
+                        guard let self else {
+                            completion(confirmed)
                             return
                         }
-                        self.show(UndoOverlayController(presentationData: self.sharedContext.currentPresentationData.with { $0 }, content: .succeed(text: toTelegramTeam ? "Thank you for helping make Telegram better!" : "Log shared", timeout: nil, customUndoText: nil), action: { _ in
-                            return false
-                        }))
+                        self.finishSending()
+                        if confirmed {
+                            completion(true)
+                            self.show(UndoOverlayController(presentationData: self.sharedContext.currentPresentationData.with { $0 }, content: .succeed(text: toTelegramTeam ? "Thank you for helping make Telegram better!" : "Log shared", timeout: nil, customUndoText: nil), action: { _ in
+                                return false
+                            }))
+                        } else {
+                            completion(false)
+                            self.alert("Could Not Send Log", "Please try again. The log remains saved on this device.")
+                        }
                     }))
                 case .failure:
                     self.finishSending()
+                    completion(false)
                     self.alert("Could Not Prepare Log", "Please try again. The log remains saved on this device.")
                 }
             }
@@ -488,40 +494,189 @@ private final class CrashReportTextController: ViewController {
     }
 }
 
+/// `PresentationStrings` uses the server langpack, then the English bundle. A language
+/// Tellomi ships uses its own lproj until that pack has a translation that is not the English sentence.
+private var crashReportPromptTables: [String: [String: String]] = [:]
+private let crashReportPromptTablesLock = NSLock()
+
+private func crashReportPromptLproj(_ code: String) -> String? {
+    let normalized = code.lowercased().replacingOccurrences(of: "_", with: "-")
+    if normalized.isEmpty {
+        return nil
+    }
+    if normalized == "en" || normalized.hasPrefix("en-") {
+        return "en"
+    }
+    if normalized == "zh-hant" || normalized.hasPrefix("zh-hant-") || normalized == "zh-tw" || normalized.hasPrefix("zh-tw-") || normalized == "zh-hk" || normalized.hasPrefix("zh-hk-") || normalized == "zh-mo" || normalized.hasPrefix("zh-mo-") {
+        return "zh-Hant"
+    }
+    if normalized == "zh" || normalized.hasPrefix("zh-") {
+        return "zh-Hans"
+    }
+    if normalized.hasPrefix("pt") {
+        return "pt"
+    }
+    let base = normalized.split(separator: "-").first.map(String.init) ?? normalized
+    switch base {
+    case "ar", "be", "ca", "de", "es", "fa", "fr", "id", "it", "ko", "ms", "nl", "pl", "ru", "tr", "uk", "uz":
+        return base
+    default:
+        return nil
+    }
+}
+
+private func crashReportPromptBundledString(_ key: String, _ folder: String) -> String? {
+    crashReportPromptTablesLock.lock()
+    let cached = crashReportPromptTables[folder]
+    crashReportPromptTablesLock.unlock()
+    let table: [String: String]
+    if let cached {
+        table = cached
+    } else {
+        guard let path = getAppBundle().path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: folder),
+              let loaded = NSDictionary(contentsOfFile: path) as? [String: String] else {
+            return nil
+        }
+        crashReportPromptTablesLock.lock()
+        crashReportPromptTables[folder] = loaded
+        crashReportPromptTablesLock.unlock()
+        table = loaded
+    }
+    if let value = table[key], !value.isEmpty {
+        return value
+    }
+    return nil
+}
+
+private func crashReportPromptString(_ strings: PresentationStrings, _ key: String, _ resolved: String) -> String {
+    let english = crashReportPromptBundledString(key, "en")
+    for code in [strings.primaryComponent.languageCode, strings.baseLanguageCode] {
+        guard let folder = crashReportPromptLproj(code), folder != "en" else {
+            continue
+        }
+        guard let bundled = crashReportPromptBundledString(key, folder) else {
+            continue
+        }
+        if let english, resolved != english, resolved != key {
+            return resolved
+        }
+        return bundled
+    }
+    return resolved
+}
+
+private func resolvedCrashReportBot(_ context: AccountContext) -> String {
+    let configured = context.currentAppConfiguration.with { configuration -> String? in
+        guard let data = configuration.data else {
+            return nil
+        }
+        return data[crashReportBotConfigKey] as? String
+    }
+    return crashReportBotUsername(configured: configured)
+}
+
+/// Completes with the server's answer. A message that is still uploading or sending stays open.
+private func crashReportServerAcceptance(account: Account, messageId: MessageId) -> Signal<Bool, NoError> {
+    return account.postbox.messageView(messageId)
+    |> map { view -> CrashReportDelivery in
+        guard let message = view.message else {
+            return .waiting
+        }
+        return crashReportDelivery(failed: message.flags.contains(.Failed), stillSending: message.flags.isSending)
+    }
+    |> mapToSignal { delivery -> Signal<Bool, NoError> in
+        switch delivery {
+        case .waiting:
+            return .complete()
+        case .sent:
+            return .single(true)
+        case .failed:
+            return .single(false)
+        }
+    }
+    |> take(1)
+}
+
+private func crashReportPromptApply(_ effects: [CrashReportPromptEffect], ids: Set<String>) {
+    for effect in effects {
+        if case .markResolved = effect {
+            guard !ids.isEmpty else {
+                return
+            }
+            crashReportWorkQueue.async {
+                do {
+                    try CrashReportStore.shared.markPresented(ids: ids)
+                } catch {
+                    // The choice stands for this launch. A failed write leaves the reports pending, so the next launch asks again.
+                }
+            }
+        }
+    }
+}
+
 /// Install only after the authorized root controller becomes ready. Storage and capture do not depend on this subscription.
 public func setupCrashReportPrompt(context: AccountContext, isInternalBuild: Bool, navigationController: NavigationController, present: @escaping (ViewController) -> Void) -> Disposable {
     let actions = CrashReportActions(sharedContext: context.sharedContext, context: context)
     actions.present = present
     actions.push = { [weak navigationController] in navigationController?.pushViewController($0) }
-    var didPresent = false
+    var machine = CrashReportPromptMachine()
+    var latestEnvironment = CrashReportPromptEnvironment(canPresent: false, alertsEnabled: false, hasPending: false)
+    var latestPending: [CrashReport] = []
     weak var alert: ViewController?
-    let disposable = (combineLatest(crashReportsSignal(), context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.experimentalUISettings]), context.sharedContext.applicationBindings.applicationIsActive, context.sharedContext.appLockContext.isPasscodeLocked)
-    |> deliverOnMainQueue).start(next: { result, sharedData, active, locked in
-        actions.canPresent = active && !locked
-        guard active && !locked else {
-            alert?.dismiss()
-            return
-        }
-        let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.experimentalUISettings]?.get(ExperimentalUISettings.self) ?? .defaultSettings
-        guard !didPresent, crashReportAlertsEnabled(override: settings.showCrashReportAlerts, isInternalBuild: isInternalBuild), case let .success(reports) = result else { return }
-        let pending = reports.filter { !$0.wasPresented }
-        guard !pending.isEmpty else { return }
-        didPresent = true
-        let controller = textAlertController(sharedContext: context.sharedContext, title: "New Crash Log Available", text: "The app closed unexpectedly.\n\nWould you like to send a crash log to help us fix the issue?", actions: [
-            TextAlertAction(type: .genericAction, title: "Not Now", action: {}),
-            TextAlertAction(type: .defaultAction, title: "Send Log", action: {
-                actions.send(pending[0], context: context)
-            })
-        ])
-        alert = controller
-        present(controller)
-        crashReportWorkQueue.async {
-            do {
-                try CrashReportStore.shared.markPresented(ids: Set(pending.map(\.id)))
-            } catch {
-                // Keep the reports available; retrying the prompt next launch is preferable to losing diagnostics.
+    var deliver: ([CrashReportPromptEffect], [CrashReport]) -> Void = { _, _ in }
+    deliver = { effects, pending in
+        for effect in effects {
+            switch effect {
+            case .dismiss:
+                alert?.dismiss()
+                alert = nil
+            case .present:
+                let offered = pending
+                let ids = Set(offered.map(\.id))
+                let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
+                let controller = textAlertController(sharedContext: context.sharedContext, title: crashReportPromptString(strings, "CrashReport.Prompt.Title", strings.CrashReport_Prompt_Title), text: crashReportPromptString(strings, "CrashReport.Prompt.Text", strings.CrashReport_Prompt_Text), actions: [
+                    TextAlertAction(type: .genericAction, title: crashReportPromptString(strings, "CrashReport.Prompt.NotNow", strings.CrashReport_Prompt_NotNow), action: {
+                        crashReportPromptApply(machine.decline(), ids: ids)
+                    }),
+                    TextAlertAction(type: .defaultAction, title: crashReportPromptString(strings, "CrashReport.Prompt.Send", strings.CrashReport_Prompt_Send), action: {
+                        let _ = machine.beginSend()
+                        guard let report = offered.first else {
+                            let _ = machine.sendFailed()
+                            deliver(machine.environment(latestEnvironment), latestPending)
+                            return
+                        }
+                        actions.send(report, context: context, completion: { confirmed in
+                            if confirmed {
+                                crashReportPromptApply(machine.sendConfirmed(), ids: ids)
+                            } else {
+                                let _ = machine.sendFailed()
+                                deliver(machine.environment(latestEnvironment), latestPending)
+                            }
+                        })
+                    })
+                ])
+                alert = controller
+                present(controller)
+            case .markResolved:
+                break
             }
         }
+    }
+    let disposable = (combineLatest(crashReportsSignal(), context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.experimentalUISettings]), context.sharedContext.applicationBindings.applicationIsActive, context.sharedContext.appLockContext.isPasscodeLocked)
+    |> deliverOnMainQueue).start(next: { result, sharedData, active, locked in
+        let canPresent = active && !locked
+        actions.canPresent = canPresent
+        let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.experimentalUISettings]?.get(ExperimentalUISettings.self) ?? .defaultSettings
+        let alertsEnabled = crashReportAlertsEnabled(override: settings.showCrashReportAlerts, isInternalBuild: isInternalBuild)
+        let pending: [CrashReport]
+        if case let .success(reports) = result {
+            pending = reports.filter { !$0.wasPresented }
+        } else {
+            pending = []
+        }
+        latestEnvironment = CrashReportPromptEnvironment(canPresent: canPresent, alertsEnabled: alertsEnabled, hasPending: !pending.isEmpty)
+        latestPending = pending
+        deliver(machine.environment(latestEnvironment), pending)
     })
     return ActionDisposable {
         disposable.dispose()

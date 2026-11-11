@@ -1,3 +1,9 @@
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "Não foi possível enviar o comentário. Seu texto continua aqui.";
 "Moments_Audience_Kept" = "Não foi possível atualizar quem pode ver. Sua seleção foi mantida.";
+
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Novo registro de falha";
+"CrashReport.Prompt.Text" = "O aplicativo fechou inesperadamente.\n\nQuer enviar um registro de falha para nos ajudar a corrigir o problema?";
+"CrashReport.Prompt.NotNow" = "Agora não";
+"CrashReport.Prompt.Send" = "Enviar registro";
