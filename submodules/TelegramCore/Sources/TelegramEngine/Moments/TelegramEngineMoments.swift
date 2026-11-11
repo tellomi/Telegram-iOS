@@ -37,14 +37,7 @@ private final class MomentsHTTP {
 
     func send(credential: MomentsCredential, method: String, path: String, query: [String: String] = [:], body: Data? = nil, contentType: String = "application/json") -> Signal<Data, MomentsAPIError> {
         return Signal { [session] subscriber in
-            guard var components = URLComponents(string: credential.baseURL + path) else {
-                subscriber.putError(.invalid("bad url"))
-                return EmptyDisposable
-            }
-            if !query.isEmpty {
-                components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
-            }
-            guard let url = components.url else {
+            guard let url = URL(string: momentsRequestURL(base: credential.baseURL, path: path, query: query)) else {
                 subscriber.putError(.invalid("bad url"))
                 return EmptyDisposable
             }
@@ -378,8 +371,8 @@ public extension TelegramEngine {
             return self.call(method: disliked ? "PUT" : "DELETE", path: "/v1/feed/comments/\(id)/dislike") |> ignoreValues
         }
 
-        public func deleteComment(id: String) -> Signal<Never, MomentsAPIError> {
-            return self.call(method: "DELETE", path: "/v1/feed/posts/\(id)") |> ignoreValues
+        public func deleteComment(postId: String, commentId: String) -> Signal<Never, MomentsAPIError> {
+            return self.call(method: "DELETE", path: momentsDeleteCommentPath(postId: postId, commentId: commentId)) |> ignoreValues
         }
 
         public func storedAudience() -> Signal<EngineStoryPrivacy?, NoError> {
@@ -569,7 +562,26 @@ public extension TelegramEngine {
             }
         }
 
-        public func notifications(tab: String) -> Signal<[MomentsNotification], MomentsAPIError> {
+        public func post(id: String) -> Signal<MomentsCard, MomentsAPIError> {
+            let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+            return self.prepareMediaBase()
+            |> mapToSignal { _ in
+                return self.call(method: "GET", path: "/v1/feed/posts/\(encoded)")
+            }
+            |> map { data in
+                momentsLoadedPost(data: data, fallbackId: id, mediaBaseURL: self.mediaBaseURL.with { $0 })
+            }
+        }
+
+        public func following(id: String, cursor: String?) -> Signal<MomentsPeoplePage, MomentsAPIError> {
+            return self.peopleList("/v1/feed/profiles/\(momentsPathSegment(id))/following", cursor: cursor)
+        }
+
+        public func followers(id: String, cursor: String?) -> Signal<MomentsPeoplePage, MomentsAPIError> {
+            return self.peopleList("/v1/feed/profiles/\(momentsPathSegment(id))/followers", cursor: cursor)
+        }
+
+        public func notifications(tab: String, cursor: String? = nil) -> Signal<MomentsNotificationPage, MomentsAPIError> {
             let normalized: String
             switch tab {
             case "follows", "system":
@@ -577,17 +589,23 @@ public extension TelegramEngine {
             default:
                 normalized = "interactions"
             }
-            return self.call(method: "GET", path: "/v1/feed/me/notifications", query: ["tab": normalized])
+            var query = ["tab": normalized]
+            if let cursor, !cursor.isEmpty {
+                query["cursor"] = cursor
+            }
+            return self.call(method: "GET", path: "/v1/feed/me/notifications", query: query)
             |> map { data in
-                guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    return []
-                }
-                return momentsArray(root["items"] ?? root["notifications"]).compactMap(momentsNotification)
+                momentsNotificationPage(data: data)
             }
         }
 
-        public func markNotificationsRead() -> Signal<Never, MomentsAPIError> {
-            return self.call(method: "POST", path: "/v1/feed/me/notifications/read") |> ignoreValues
+        /// An empty object marks every tab. A `tab` field marks only that tab.
+        public func markNotificationsRead(tab: String? = nil) -> Signal<Never, MomentsAPIError> {
+            var body: [String: Any] = [:]
+            for (key, value) in momentsNotificationReadBody(tab: tab) {
+                body[key] = value
+            }
+            return self.call(method: "POST", path: "/v1/feed/me/notifications/read", body: body) |> ignoreValues
         }
 
         public func notificationSettings() -> Signal<MomentsNotificationSettings, MomentsAPIError> {
@@ -767,6 +785,20 @@ public extension TelegramEngine {
             }.start()
         }
 
+        private func peopleList(_ path: String, cursor: String?) -> Signal<MomentsPeoplePage, MomentsAPIError> {
+            var query: [String: String] = [:]
+            if let cursor, !cursor.isEmpty {
+                query["cursor"] = cursor
+            }
+            return self.call(method: "GET", path: path, query: query)
+            |> mapToSignal { data in
+                if let error = momentsPeopleListError(data: data) {
+                    return .fail(error)
+                }
+                return .single(momentsPeoplePage(data: data))
+            }
+        }
+
         private func listPage(_ path: String, cursor: String?) -> Signal<MomentsPage, MomentsAPIError> {
             var query: [String: String] = [:]
             if let cursor {
@@ -909,6 +941,20 @@ public func momentsReplyPage(data: Data, rootId: String, mediaBaseURL: String? =
     let replies = momentsArray(root["replies"] ?? root["items"]).compactMap { momentsReply($0, rootId: rootId, mediaBaseURL: mediaBaseURL) }
     let total = root["total"] == nil ? replies.count : momentsInt(root, "total")
     return MomentsReplyPage(replies: replies, total: total, cursor: momentsString(root, "cursor", "next_cursor"))
+}
+
+func momentsPathSegment(_ raw: String) -> String {
+    var allowed = CharacterSet.alphanumerics
+    allowed.insert(charactersIn: "-._~")
+    return raw.addingPercentEncoding(withAllowedCharacters: allowed) ?? raw
+}
+
+func momentsNotificationPage(data: Data) -> MomentsNotificationPage {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return MomentsNotificationPage()
+    }
+    let cursor = momentsString(root, "next_cursor", "cursor").flatMap { $0.isEmpty ? nil : $0 }
+    return MomentsNotificationPage(items: momentsArray(root["items"] ?? root["notifications"]).compactMap(momentsNotification), nextCursor: cursor)
 }
 
 func momentsNotification(_ json: [String: Any]) -> MomentsNotification? {

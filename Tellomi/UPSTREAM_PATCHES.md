@@ -118,7 +118,7 @@ The feed is new client code. It does not revive the cancelled Discover/Feed work
 - `TelegramEngine.Moments` calls content-engine `/v1/feed`. The host is `https://feed.tellomi.cn` unless `help.getAppConfig` supplies a valid `tellomi_discover_feed_base_url`. `tellomi_discover_feed_enabled` does not show or hide the tab. The bearer token is `discover.getEngineCredential` (`#a80a7f76` / `#0578ccaa`, appended to `swift_scheme.tl` the same way as the other Tellomi constructors) and is sent as `Authorization: Bearer`, refreshed before `expires`. `region` is `cn` or `global` and is not a host. Image URLs are joined onto `media_base_url` from `GET /v1/feed/config`. Photos are fetched with `HttpReferenceMediaResource` into `MediaBox` and decoded as an ImageIO thumbnail at the view size. `MomentsPrefetchManager` starts that fetch for the visible rows and the next 8.
 - The Moments tab is created with the other root tabs and is not removed when `GET /v1/feed/status` fails or reports `visible: false`. An unreachable engine is an error row inside the feed.
 - Feed pages, hides and the one-page cache live in the account Postbox item-cache collection `moments` (id 63), which is cleaned with the rest of the account database. The composer does not restore the previous audience; each post asks again.
-- Audience reuses `ShareWithPeersScreen` with a mutual-followers category. Story-only rows stay off. Exclude lists stay in the story peer-list cache.
+- Audience reuses `ShareWithPeersScreen` with a mutual-followers category. The row title is `presentationData.strings.Story_Privacy_CategoryMutualFollowers` (`Story.Privacy.CategoryMutualFollowers` in `en.lproj`). Other languages, including 互相关注, come from the server langpack. Story-only rows stay off. Exclude lists stay in the story peer-list cache.
 - Gallery media goes through `legacyAssetPickerEnqueueMessages` and tus `POST /v1/feed/media/uploads`.
 - A visible video uses `UniversalVideoNode` only when autoplay is on and Reduce Motion is off.
 - Comment stickers and GIFs use `StickerPickerScreen` (`hasGifs`) and are uploaded with tus. Likes and poll votes open an `ItemListPeerItem` list filled from `/v1/feed`.
@@ -128,6 +128,23 @@ The feed is new client code. It does not revive the cancelled Discover/Feed work
 - Voice posts and voice comments are capped at 180 seconds, unless `limits.voice_post_max_seconds` or `limits.voice_comment_max_seconds` says otherwise.
 - Comment stickers and GIFs are uploaded with tus and sent as `{type,key,...}`. They are not Telegram document ids.
 - Relative media keys use `media_base_url`, or `https://media.tellomi.app/feed` when that is missing. Absolute https URLs (signed R2) are left as returned. Image versus video follows the card `type`, not the HTTP content-type.
+
+## Moments profile peer open — 2026-11-10
+
+The profile Moments pane opens an author with the same peer navigation the rest of the profile uses. The pane is created in the shared pane container, so that one assignment lives next to the other panes.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift` | Sets `MomentsProfilePaneNode.openPeer` from `ChatControllerInteraction.openPeer`. |
+
+## Moments comment focus and topic screen — 2026-11-10
+
+`ListViewScrollPosition.center` takes `ListViewCenterScrollPositionOverflow`. A focused comment uses `.center(.bottom)`, the same unanimated scroll a chat uses to land on a message. A short row is centered either way; a row taller than the screen keeps its bottom in view. The topic screen is the shared post list with that topic's title, sort and loader. It does not subclass the list.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsDetailScreen.swift` | Comment focus scrolls with `.center(.bottom)`. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsRouteScreens.swift` | `MomentsTopicScreen` returns the shared post list. |
 
 ## On-device MapKit venues
 

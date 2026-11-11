@@ -560,7 +560,16 @@ private final class PeerInfoPendingPane {
         case .polls:
             paneNode = PeerInfoChatPaneNode(context: context, chatLocation: .peer(id: peerId), tag: .polls, navigationController: chatControllerInteraction.navigationController)
         case .moments:
-            paneNode = MomentsProfilePaneNode(context: context, peerId: data.peer?.id ?? peerId)
+            let momentsPane = MomentsProfilePaneNode(context: context, peerId: data.peer?.id ?? peerId)
+            momentsPane.openPeer = { peerId in
+                let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+                |> deliverOnMainQueue).start(next: { peer in
+                    if let peer {
+                        chatControllerInteraction.openPeer(peer, .default, nil, .default)
+                    }
+                })
+            }
+            paneNode = momentsPane
         }
         paneNode.externalDataUpdated = externalDataUpdated
         paneNode.parentController = parentController

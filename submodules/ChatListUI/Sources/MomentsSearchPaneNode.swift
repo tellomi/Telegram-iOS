@@ -26,6 +26,18 @@ final class MomentsSearchPaneNode: ASDisplayNode, ChatListSearchPaneNode {
         self.content.openPost = { card in
             interaction.present(MomentsDetailScreen(context: context, card: card), nil)
         }
+        self.content.openTopic = { name in
+            let screen = MomentsTopicScreen(context: context, name: name)
+            screen.openPeer = { peerId in
+                let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+                |> deliverOnMainQueue).start(next: { peer in
+                    if let peer {
+                        interaction.openPeer(peer, nil, nil, false)
+                    }
+                })
+            }
+            interaction.present(screen, nil)
+        }
         self.content.openPeer = { peerId in
             let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
             |> deliverOnMainQueue).start(next: { peer in
