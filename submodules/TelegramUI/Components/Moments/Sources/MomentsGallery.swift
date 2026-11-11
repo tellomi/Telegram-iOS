@@ -137,12 +137,12 @@ func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: In
             source.focus(slide: Int(messageId.id) - 1)
         }
     }
-    let arguments = GalleryControllerPresentationArguments(transitionArguments: { messageId, _ in
+    let arguments = GalleryControllerPresentationArguments(transitionArguments: { [weak controller] messageId, _ in
         guard let source, let transition = source.transition(for: Int(messageId.id) - 1) else {
             return nil
         }
         source.hide(transition.views)
-        return GalleryTransitionArguments(transitionNode: transition.node, addToTransitionSurface: { [weak controller] view in
+        return GalleryTransitionArguments(transitionNode: transition.node, addToTransitionSurface: { view in
             assert(Queue.mainQueue().isCurrent())
             controller?.view.addSubview(view)
         })
