@@ -17367,3 +17367,9 @@ Error: %8$@";
 "Tellomi.MenuSettings.Title" = "Menu settings";
 "Tellomi.MenuSettings.HideButtonTitles" = "Hide button titles";
 "Tellomi.MenuSettings.NavigationButtons" = "Navigation bar buttons";
+
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "New Crash Log Available";
+"CrashReport.Prompt.Text" = "The app closed unexpectedly.\n\nWould you like to send a crash log to help us fix the issue?";
+"CrashReport.Prompt.NotNow" = "Not Now";
+"CrashReport.Prompt.Send" = "Send Log";
