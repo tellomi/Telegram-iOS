@@ -458,8 +458,11 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     @objc private func cancelPressed() {
-        let complete = { [weak self] in
-            self?.navigationController?.popViewController(animated: true)
+        let complete: () -> Void = { [weak self] in
+            guard let self else {
+                return
+            }
+            let _ = self.navigationController?.popViewController(animated: true)
         }
         if self.requestLeave(complete) {
             complete()
@@ -588,7 +591,7 @@ public final class MomentsComposerScreen: ViewController {
             self.context.engine.moments.storeDraft(nil)
             momentsRemovePendingFiles(accountPath: self.context.account.basePath)
             let card = momentsPostedCard(receipt: receipt, text: text, media: media)
-            self.navigationController?.popViewController(animated: false)
+            let _ = self.navigationController?.popViewController(animated: false)
             self.onPosted?(card)
         }, error: { [weak self] _ in
             guard let self else { return }
