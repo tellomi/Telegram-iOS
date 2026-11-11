@@ -12,20 +12,11 @@
 
 // A fresh production install dials the built-in IP 8.156.40.105 on 10443, then
 // that IP on 443, then api.tellomi.cn on 10443, then that name on 443.
-// Overseas paths drop TCP 10443 and pass 443. A saved datacenter list and a
-// help.getConfig dc_options list that omit a seed endpoint gain it back, and
-// 8.156.40.105:10443 stays last so the first dial is still that endpoint.
+// A non-empty learned list is used in the order it was saved. An empty list
+// falls back to that seed.
 
 static MTDatacenterAddress *MTSeedAddress(NSString *ip, uint16_t port, bool thisPortOnly) {
     return [[MTDatacenterAddress alloc] initWithIp:ip port:port preferForMedia:false restrictToTcp:false cdn:false preferForProxy:false secret:nil thisPortOnly:thisPortOnly];
-}
-
-static NSArray<NSNumber *> *MTSeedPorts(MTDatacenterAddressSet *set) {
-    NSMutableArray<NSNumber *> *ports = [[NSMutableArray alloc] init];
-    for (MTDatacenterAddress *address in set.addressList) {
-        [ports addObject:@(address.port)];
-    }
-    return ports;
 }
 
 @interface MTSeedFallbackKeychain : NSObject <MTKeychain>
@@ -124,84 +115,42 @@ static NSArray<NSNumber *> *MTSeedPorts(MTDatacenterAddressSet *set) {
     }
 }
 
-- (void)testSaved10443OnlyListGains443AndKeepsTheBuiltInIpLast {
-    MTDatacenterAddress *saved = MTSeedAddress(@"api.tellomi.cn", 10443, false);
-    MTDatacenterAddressSet *stored = [[MTDatacenterAddressSet alloc] initWithAddressList:@[saved]];
-    NSArray *seed = TellomiSeedAddressSets(false)[@1].addressList;
-
-    MTDatacenterAddressSet *merged = [stored addressSetByAddingSeedAddresses:seed];
-    NSArray<MTDatacenterAddress *> *list = merged.addressList;
-    XCTAssertEqual(list.count, 4u);
-    XCTAssertEqual(list[0], saved);
-    XCTAssertFalse(list[0].thisPortOnly);
-    XCTAssertEqualObjects(list[1].ip, @"api.tellomi.cn");
-    XCTAssertEqual(list[1].port, 443);
-    XCTAssertEqualObjects(list[2].ip, @"8.156.40.105");
-    XCTAssertEqual(list[2].port, 443);
-    XCTAssertEqualObjects(list[3].ip, @"8.156.40.105");
-    XCTAssertEqual(list[3].port, 10443);
-    XCTAssertEqualObjects([merged addressSetByAddingSeedAddresses:seed], merged);
-}
-
-- (void)testServerListThatAlreadyHasBothPortsIsNotDuplicated {
-    MTDatacenterAddress *primary = MTSeedAddress(@"api.tellomi.cn", 10443, true);
-    MTDatacenterAddress *fallback = MTSeedAddress(@"api.tellomi.cn", 443, true);
-    MTDatacenterAddressSet *stored = [[MTDatacenterAddressSet alloc] initWithAddressList:@[primary, fallback]];
-
-    MTDatacenterAddressSet *merged = [stored addressSetByAddingSeedAddresses:TellomiSeedAddressSets(false)[@1].addressList];
-    NSArray<MTDatacenterAddress *> *list = merged.addressList;
-    XCTAssertEqual(list.count, 4u);
-    XCTAssertEqual(list[0], primary);
-    XCTAssertEqual(list[1], fallback);
-    XCTAssertEqualObjects(list[2].ip, @"8.156.40.105");
-    XCTAssertEqual(list[2].port, 443);
-    XCTAssertEqualObjects(list[3].ip, @"8.156.40.105");
-    XCTAssertEqual(list[3].port, 10443);
-}
-
-- (void)testDifferentHostIsKeptAnd10443StaysThePreferredEndpoint {
-    MTDatacenterAddress *literal = MTSeedAddress(@"198.51.100.8", 10443, true);
-    MTDatacenterAddressSet *stored = [[MTDatacenterAddressSet alloc] initWithAddressList:@[literal]];
-
-    NSArray<MTDatacenterAddress *> *list = [stored addressSetByAddingSeedAddresses:TellomiSeedAddressSets(false)[@1].addressList].addressList;
-    XCTAssertEqual(list.count, 5u);
-    XCTAssertEqualObjects(list[0].ip, @"198.51.100.8");
-    XCTAssertEqual(list[0].port, 10443);
-    XCTAssertEqualObjects(list[1].ip, @"api.tellomi.cn");
-    XCTAssertEqual(list[1].port, 443);
-    XCTAssertEqualObjects(list[2].ip, @"api.tellomi.cn");
-    XCTAssertEqual(list[2].port, 10443);
-    XCTAssertEqualObjects(list[3].ip, @"8.156.40.105");
-    XCTAssertEqual(list[3].port, 443);
-    XCTAssertEqualObjects(list[4].ip, @"8.156.40.105");
-    XCTAssertEqual(list[4].port, 10443);
-}
-
-- (void)testConfigReplacementAndFailureRotateTo443 {
+- (void)testLearnedConfigIsUsedAsReceived {
     MTContext *context = MTTestMakeContext(false);
     [context setSeedAddressSetForDatacenterWithId:1 seedAddressSet:TellomiSeedAddressSets(false)[@1]];
 
-    // What help.getConfig writes when dc_options lists only port 10443.
-    MTDatacenterAddress *saved = MTSeedAddress(@"api.tellomi.cn", 10443, false);
-    [context updateAddressSetForDatacenterWithId:1 addressSet:[[MTDatacenterAddressSet alloc] initWithAddressList:@[saved]] forceUpdateSchemes:false];
-    [context updateAddressSetForDatacenterWithId:2 addressSet:[[MTDatacenterAddressSet alloc] initWithAddressList:@[MTSeedAddress(@"203.0.113.10", 443, false)]] forceUpdateSchemes:false];
+    // The built-in IP is in the middle. Moving the preferred seed to the end
+    // would make the first dial 8.156.40.105:10443.
+    MTDatacenterAddress *first = MTSeedAddress(@"203.0.113.10", 10443, true);
+    MTDatacenterAddress *second = MTSeedAddress(@"203.0.113.10", 443, true);
+    MTDatacenterAddress *third = MTSeedAddress(@"8.156.40.105", 10443, true);
+    MTDatacenterAddress *fourth = MTSeedAddress(@"203.0.113.11", 443, true);
+    NSArray<MTDatacenterAddress *> *received = @[first, second, third, fourth];
+    [context updateAddressSetForDatacenterWithId:1 addressSet:[[MTDatacenterAddressSet alloc] initWithAddressList:received] forceUpdateSchemes:false];
 
-    MTDatacenterAddressSet *effective = [context addressSetForDatacenterWithId:1];
-    NSArray<MTDatacenterAddress *> *effectiveList = effective.addressList;
-    XCTAssertEqual(effectiveList.count, 4u);
-    XCTAssertEqualObjects(effectiveList.lastObject.ip, @"8.156.40.105");
-    XCTAssertEqual(effectiveList.lastObject.port, 10443);
-    XCTAssertEqual([context addressSetForDatacenterWithId:2].addressList.count, 1u);
+    NSArray<MTDatacenterAddress *> *list = [context addressSetForDatacenterWithId:1].addressList;
+    XCTAssertEqual(list.count, received.count);
+    XCTAssertEqual(list[0], first);
+    XCTAssertEqual(list[1], second);
+    XCTAssertEqual(list[2], third);
+    XCTAssertEqual(list[3], fourth);
 
     NSArray<MTTransportScheme *> *schemes = [context transportSchemesForDatacenterWithId:1 media:false enforceMedia:false isProxy:false];
-    MTTransportScheme *first = [context chooseTransportSchemeForConnectionToDatacenterId:1 schemes:schemes];
-    XCTAssertEqualObjects(first.address.ip, @"8.156.40.105");
-    XCTAssertEqual(first.address.port, 10443);
+    MTTransportScheme *chosen = [context chooseTransportSchemeForConnectionToDatacenterId:1 schemes:schemes];
+    XCTAssertEqualObjects(chosen.address.ip, @"203.0.113.11");
+    XCTAssertEqual(chosen.address.port, 443);
+}
 
-    [context reportTransportSchemeFailureForDatacenterId:1 transportScheme:first];
-    MTTransportScheme *second = [context chooseTransportSchemeForConnectionToDatacenterId:1 schemes:schemes];
-    XCTAssertEqualObjects(second.address.ip, @"8.156.40.105");
-    XCTAssertEqual(second.address.port, 443);
+- (void)testEmptyConfigFallsBackToTheSeed {
+    MTContext *context = MTTestMakeContext(false);
+    [context setSeedAddressSetForDatacenterWithId:1 seedAddressSet:TellomiSeedAddressSets(false)[@1]];
+    [context updateAddressSetForDatacenterWithId:1 addressSet:[[MTDatacenterAddressSet alloc] initWithAddressList:@[]] forceUpdateSchemes:false];
+
+    NSArray<MTTransportScheme *> *schemes = [context transportSchemesForDatacenterWithId:1 media:false enforceMedia:false isProxy:false];
+    MTTransportScheme *chosen = [context chooseTransportSchemeForConnectionToDatacenterId:1 schemes:schemes];
+    XCTAssertEqualObjects(chosen.address.ip, @"8.156.40.105");
+    XCTAssertEqual(chosen.address.port, 10443);
+    XCTAssertEqual([context addressSetForDatacenterWithId:1].addressList.count, 4u);
 }
 
 - (void)testSuccessOn10443DoesNotMoveTheNextDialTo443 {
@@ -227,30 +176,26 @@ static NSArray<NSNumber *> *MTSeedPorts(MTDatacenterAddressSet *set) {
     XCTAssertEqualWithAccuracy(MTTcpConnectTimeoutInterval(true), 12.0, 0.001);
 }
 
-- (void)testExistingKeychainGainsTheFallbackPort {
+- (void)testExistingKeychainKeepsTheLearnedList {
     MTContext *context = MTTestMakeContext(false);
     [context setSeedAddressSetForDatacenterWithId:1 seedAddressSet:TellomiSeedAddressSets(false)[@1]];
 
     MTSeedFallbackKeychain *keychain = [[MTSeedFallbackKeychain alloc] init];
-    MTDatacenterAddressSet *saved = [[MTDatacenterAddressSet alloc] initWithAddressList:@[MTSeedAddress(@"api.tellomi.cn", 10443, false)]];
+    MTDatacenterAddress *savedAddress = MTSeedAddress(@"203.0.113.10", 443, false);
+    MTDatacenterAddressSet *saved = [[MTDatacenterAddressSet alloc] initWithAddressList:@[savedAddress]];
     [keychain setObject:@{@1: saved} forKey:@"datacenterAddressSetById" group:@"persistent"];
     context.keychain = keychain;
 
     NSArray<MTDatacenterAddress *> *loaded = [context addressSetForDatacenterWithId:1].addressList;
-    XCTAssertEqual(loaded.count, 4u);
-    XCTAssertEqualObjects(loaded[0].ip, @"api.tellomi.cn");
-    XCTAssertEqual(loaded[0].port, 10443);
-    XCTAssertEqualObjects(loaded[1].ip, @"api.tellomi.cn");
-    XCTAssertEqual(loaded[1].port, 443);
-    XCTAssertEqualObjects(loaded.lastObject.ip, @"8.156.40.105");
-    XCTAssertEqual(loaded.lastObject.port, 10443);
+    XCTAssertEqual(loaded.count, 1u);
+    XCTAssertEqualObjects(loaded[0].ip, @"203.0.113.10");
+    XCTAssertEqual(loaded[0].port, 443);
     NSDictionary *persisted = [keychain dictionaryForKey:@"datacenterAddressSetById" group:@"persistent"];
     MTDatacenterAddressSet *stored = persisted[@1];
-    // addressList is an untyped NSArray, so lastObject is id until it is named.
-    MTDatacenterAddress *persistedPreferred = stored.addressList.lastObject;
-    XCTAssertEqualObjects(persistedPreferred.ip, @"8.156.40.105");
-    XCTAssertEqual(persistedPreferred.port, 10443);
-    XCTAssertEqual(stored.addressList.count, 4u);
+    XCTAssertEqual(stored.addressList.count, 1u);
+    MTDatacenterAddress *persistedAddress = stored.addressList[0];
+    XCTAssertEqualObjects(persistedAddress.ip, @"203.0.113.10");
+    XCTAssertEqual(persistedAddress.port, 443);
 }
 
 @end

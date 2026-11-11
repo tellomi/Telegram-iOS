@@ -2,13 +2,14 @@
 
 ## Production MTProto seed IP — 2026-11-11
 
-Production datacenter 1 dials `8.156.40.105` before `api.tellomi.cn`. Port 10443 is still first on that host. After it times out, the next dial is `8.156.40.105` on 443, then the hostname on 10443, then the hostname on 443. `help.getConfig` can add further IP literals later. A saved list that omits a seed endpoint gets it back, and `8.156.40.105:10443` stays last so it remains the first dial. `seed_address_a_record` is `8.156.40.105`, the current A record of `api.tellomi.cn`. That field is still not dialed by itself. The testing seed stays `api.tellomi.cn`. The previous host is no longer a seed.
+Production datacenter 1 dials `8.156.40.105` before `api.tellomi.cn` when no learned list exists. Port 10443 is still first on that host. After it times out, the next dial is `8.156.40.105` on 443, then the hostname on 10443, then the hostname on 443. A non-empty `help.getConfig` list replaces that seed and is dialed in the order it was saved. An empty or missing list uses the seed. `seed_address_a_record` is `8.156.40.105`, the current A record of `api.tellomi.cn`. That field is still not dialed by itself. The testing seed stays `api.tellomi.cn`. The previous host is no longer a seed.
 
 | File | Change |
 | --- | --- |
 | `Tellomi/tellomi-server.json` | Production seeds are `8.156.40.105`, then `api.tellomi.cn`. `seed_address_a_record` is the new IP. |
 | `submodules/MtProtoKit/Sources/TellomiServerConfig.m` | Seed hosts are written in reverse, like ports, so the first seed is dialed first. |
-| `submodules/MtProtoKit/Tests/MTSeedFallbackTests.m` | Fresh-install order and the merge that keeps the built-in IP on 10443 last. |
+| `submodules/MtProtoKit/Sources/MTContext.m` | A non-empty learned list is authoritative. The seed is the empty-cache fallback. |
+| `submodules/MtProtoKit/Tests/MTSeedFallbackTests.m` | Fresh-install order, a learned list kept in order, and an empty list falling back to the seed. |
 
 ## Moments feed main-thread layout — 2026-11-11
 
