@@ -201,7 +201,7 @@ public func momentsText(_ strings: PresentationStrings, _ key: MomentsTextKey) -
     case .audienceSelected:
         (resolved, english, chinese) = (strings.Moments_Audience_Selected, "Selected people", "选定的人")
     case .audienceMutual:
-        (resolved, english, chinese) = (strings.Moments_Audience_Mutual, "Mutual followers", "互关好友")
+        return strings.Moments_Audience_Mutual
     case .audienceChoose:
         (resolved, english, chinese) = (strings.Moments_Audience_Choose, "Who can see this: choose", "谁可以看：请选择")
     case .composerTitle:
