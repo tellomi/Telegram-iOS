@@ -1315,4 +1315,4 @@ Build 90 crashed on the `GCDAsyncSocket` queue: `Trying to recursively lock an o
 | --- | --- |
 | `submodules/MtProtoKit/Sources/GCDAsyncSocketCFSocketRelease.m` | Defers the `CFSocket` context release that re-enters `CFSocketInvalidate`. |
 | `submodules/MtProtoKit/Sources/GCDAsyncSocket.m` | Calls that before `CFStreamClose`. Keeps the single-close flag. |
-| `submodules/MtProtoKit/Tests/GCDAsyncSocketCloseTests.m` | On iOS: normal disconnect, read error, disconnect twice, reconnect. Each descriptor is closed once and the open-descriptor count returns. The deferral counter moves on the iOS paths. |
+| `submodules/MtProtoKit/Tests/GCDAsyncSocketCloseTests.m` | Its own iOS 27 test: normal disconnect, read error, disconnect twice, reconnect. Each descriptor is closed once, after the deferred `CFRelease` has run, and the open-descriptor count returns. The deferral counter moves. |

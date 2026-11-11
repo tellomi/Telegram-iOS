@@ -175,6 +175,7 @@ static const int kClosedSocket = -1;
     close(accepted);
     close(listenFD);
     socket = nil;
+    TellomiFlushDeferredCFSocketReleases();
     XCTAssertEqual([self countOpenDescriptors], openBefore);
 }
 
@@ -207,6 +208,7 @@ static const int kClosedSocket = -1;
     [self closeExtras:extras count:extraCount];
     close(listenFD);
     socket = nil;
+    TellomiFlushDeferredCFSocketReleases();
     XCTAssertEqual([self countOpenDescriptors], openBefore);
 }
 
@@ -233,6 +235,7 @@ static const int kClosedSocket = -1;
     close(accepted);
     close(listenFD);
     socket = nil;
+    TellomiFlushDeferredCFSocketReleases();
     XCTAssertEqual([self countOpenDescriptors], openBefore);
 }
 
@@ -277,6 +280,7 @@ static const int kClosedSocket = -1;
     close(acceptedAgain);
     close(listenFD);
     socket = nil;
+    TellomiFlushDeferredCFSocketReleases();
     XCTAssertEqual([self countOpenDescriptors], openBefore);
 }
 

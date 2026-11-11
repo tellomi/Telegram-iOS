@@ -8,6 +8,9 @@
 // CFSocket inside the stream pair.
 int TellomiDeferredCFSocketReleaseCount(void);
 
+// Blocks until releases queued by TellomiDeferCFSocketContextRelease have run.
+void TellomiFlushDeferredCFSocketReleases(void);
+
 // Build 90 died inside one CFStreamClose:
 //   CFSocketInvalidate
 //   SocketStream::~SocketStream

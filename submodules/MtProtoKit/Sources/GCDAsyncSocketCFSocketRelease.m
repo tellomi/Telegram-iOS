@@ -112,6 +112,13 @@ int TellomiDeferredCFSocketReleaseCount(void) {
     return gDeferredCFSocketReleaseCount;
 }
 
+void TellomiFlushDeferredCFSocketReleases(void) {
+    if (gDeferredCFSocketReleaseQueue == NULL) {
+        return;
+    }
+    dispatch_sync(gDeferredCFSocketReleaseQueue, ^{});
+}
+
 void TellomiDeferCFSocketContextRelease(CFTypeRef stream) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
