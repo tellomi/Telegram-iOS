@@ -153,14 +153,16 @@ final class AuthorizedApplicationContext {
     
     private var showCallsTab: Bool
     private var showCallsTabDisposable: Disposable?
-    private var tabBarPreferencesObserver: NSObjectProtocol?
+    private var tabBarPreferences: TellomiTabBarPreferences
+    /// The Calls "show tab" value already copied into `tabBarPreferences`. A later signal with the same value is the menu catching up, not a new choice.
+    private var appliedCallsShowTab: Bool
     private var showNewsTab: Bool
     private var showNewsTabDisposable: Disposable?
     private var tellomiLanguageDisposable: Disposable?
     private var showMomentsTab: Bool
     private var enablePostboxTransactionsDiposable: Disposable?
     
-    init(sharedApplicationContext: SharedApplicationContext, mainWindow: Window1, context: AccountContextImpl, accountManager: AccountManager<TelegramAccountManagerTypes>, showCallsTab: Bool, reinitializedNotificationSettings: @escaping () -> Void) {
+    init(sharedApplicationContext: SharedApplicationContext, mainWindow: Window1, context: AccountContextImpl, accountManager: AccountManager<TelegramAccountManagerTypes>, tabBarPreferences: TellomiTabBarPreferences, reinitializedNotificationSettings: @escaping () -> Void) {
         self.sharedApplicationContext = sharedApplicationContext
         
         setupLegacyComponents(context: context)
@@ -171,13 +173,17 @@ final class AuthorizedApplicationContext {
         
         self.context = context
         
-        self.showCallsTab = showCallsTab
+        let resolvedTabBarPreferences = tabBarPreferences.normalized()
+        self.tabBarPreferences = resolvedTabBarPreferences
+        self.appliedCallsShowTab = resolvedTabBarPreferences.isShown(.calls)
+        self.showCallsTab = resolvedTabBarPreferences.isShown(.calls)
         self.showNewsTab = isNewsFeedEnabled(appConfiguration: context.currentAppConfiguration.with { $0 })
         self.showMomentsTab = true
         
         self.notificationController = NotificationContainerController(context: context)
         
         self.rootController = TelegramRootController(context: context)
+        self.rootController.tabBarPreferences = resolvedTabBarPreferences
         self.rootController.minimizedContainer = self.sharedApplicationContext.minimizedContainer[context.account.id]
         self.rootController.minimizedContainerUpdated = { [weak self] minimizedContainer in
             guard let self else {
@@ -809,48 +815,39 @@ final class AuthorizedApplicationContext {
             }
         })
         
-        let showCallsTabSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.callListSettings])
-        |> map { sharedData -> (Bool, Bool) in
-            if let settings = sharedData.entries[ApplicationSpecificSharedDataKeys.callListSettings]?.get(CallListSettings.self) {
-                return (settings.showTab, settings._showTab != nil)
-            }
-            return (CallListSettings.defaultSettings.showTab, false)
+        let tabBarSignal = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.tellomiTabBarPreferences, ApplicationSpecificSharedDataKeys.callListSettings])
+        |> map { sharedData -> TellomiTabBarSnapshot in
+            return tellomiTabBarSnapshot(sharedData: sharedData)
         }
-        self.tabBarPreferencesObserver = NotificationCenter.default.addObserver(forName: TellomiTabBarPreferencesStore.didChangeNotification, object: TellomiTabBarPreferencesStore.shared, queue: .main, using: { [weak self] _ in
+        self.showCallsTabDisposable = (tabBarSignal |> deliverOnMainQueue).start(next: { [weak self] snapshot in
             guard let self else {
                 return
             }
-            self.rootController.updateRootControllers(showCallsTab: self.showCallsTab, showNewsTab: self.showNewsTab, showMomentsTab: self.showMomentsTab)
-        })
-        self.showCallsTabDisposable = (showCallsTabSignal |> deliverOnMainQueue).start(next: { [weak self] value in
-            guard let strongSelf = self else {
-                return
+            let legacy = snapshot.preferences == nil ? tellomiLegacyTabBarPreferencesFromSuite() : nil
+            let step = tellomiTabBarStep(snapshot: snapshot, appliedCallsShowTab: self.appliedCallsShowTab, legacy: legacy)
+            self.appliedCallsShowTab = step.appliedCallsShowTab
+            if step.persistPreferences || step.persistCallsShowTab != nil {
+                let _ = self.context.sharedContext.accountManager.transaction { transaction -> Void in
+                    if step.persistPreferences {
+                        transaction.updateSharedData(ApplicationSpecificSharedDataKeys.tellomiTabBarPreferences, { _ in
+                            return SharedPreferencesEntry(step.preferences)
+                        })
+                    }
+                    if let showTab = step.persistCallsShowTab {
+                        transaction.updateSharedData(ApplicationSpecificSharedDataKeys.callListSettings, { entry in
+                            let current = entry?.get(CallListSettings.self) ?? CallListSettings.defaultSettings
+                            if current._showTab != nil && current.showTab == showTab {
+                                return entry
+                            }
+                            return SharedPreferencesEntry(current.withUpdatedShowTab(showTab))
+                        })
+                    }
+                }.start()
             }
-            let (showTab, explicit) = value
-            let store = TellomiTabBarPreferencesStore.shared
-            if !store.hasAppliedCallsMigration {
-                let preferences = store.hasStoredValue ? store.load() : tellomiPreferencesForFirstLaunch(calls: TellomiCallsTabMigration(showTab: showTab, explicit: explicit))
-                if !store.hasStoredValue {
-                    store.save(preferences)
-                }
-                store.markCallsMigrationApplied()
-                strongSelf.showCallsTab = preferences.isShown(.calls)
-                if showTab != preferences.isShown(.calls) {
-                    let _ = updateCallListSettingsInteractively(accountManager: strongSelf.context.sharedContext.accountManager, {
-                        $0.withUpdatedShowTab(preferences.isShown(.calls))
-                    }).start()
-                }
-                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab, showNewsTab: strongSelf.showNewsTab, showMomentsTab: strongSelf.showMomentsTab)
-                return
+            if legacy != nil {
+                tellomiClearLegacyTabBarPreferences()
             }
-            if strongSelf.showCallsTab != showTab {
-                let preferences = store.load()
-                if preferences.isShown(.calls) != showTab {
-                    store.update { $0.updating(.calls, shown: showTab) }
-                }
-                strongSelf.showCallsTab = showTab
-                strongSelf.rootController.updateRootControllers(showCallsTab: showTab, showNewsTab: strongSelf.showNewsTab, showMomentsTab: strongSelf.showMomentsTab)
-            }
+            self.applyTabBarPreferences(step.preferences)
         })
 
         self.showNewsTabDisposable = (context.appConfiguration
@@ -884,12 +881,24 @@ final class AuthorizedApplicationContext {
         }
     }
     
+    private func applyTabBarPreferences(_ preferences: TellomiTabBarPreferences) {
+        let preferences = preferences.normalized()
+        guard preferences != self.tabBarPreferences || self.rootController.tabBarPreferences != preferences else {
+            return
+        }
+        self.tabBarPreferences = preferences
+        self.showCallsTab = preferences.isShown(.calls)
+        self.rootController.tabBarPreferences = preferences
+        guard self.rootController.rootTabController != nil else {
+            return
+        }
+        self.rootController.updateRootControllers(showCallsTab: self.showCallsTab, showNewsTab: self.showNewsTab, showMomentsTab: self.showMomentsTab)
+    }
+
     deinit {
         self.context.account.postbox.clearCaches()
         self.showNewsTabDisposable?.dispose()
-        if let tabBarPreferencesObserver = self.tabBarPreferencesObserver {
-            NotificationCenter.default.removeObserver(tabBarPreferencesObserver)
-        }
+        self.showCallsTabDisposable?.dispose()
         self.tellomiLanguageDisposable?.dispose()
         self.context.account.shouldKeepOnlinePresence.set(.single(false))
         self.context.account.shouldBeServiceTaskMaster.set(.single(.never))

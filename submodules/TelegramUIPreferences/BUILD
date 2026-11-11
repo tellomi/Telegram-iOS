@@ -18,13 +18,12 @@ swift_library(
     ],
 )
 
-# Host test of the tab-bar rules and the built-in menu strings. No UIKit.
+# Host test of the tab-bar rules. No UIKit.
 # Run with `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/TelegramUIPreferences:TellomiTabBarPreferencesTests`.
 swift_test(
     name = "TellomiTabBarPreferencesTests",
     srcs = [
         "Sources/TellomiTabBarPreferences.swift",
-        "Sources/TellomiMenuSettingsStrings.swift",
         "Tests/TellomiTabBarPreferencesTests.swift",
     ],
     copts = [
