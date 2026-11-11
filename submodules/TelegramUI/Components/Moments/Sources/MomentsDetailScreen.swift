@@ -193,6 +193,11 @@ public final class MomentsDetailScreen: ViewController {
             self.openPeople(title: momentsText(self.presentationData.strings, .endPoll), load: self.context.engine.moments.pollVoters(postId: card.id) |> map { options in
                 options.map { MomentsPeopleSection(title: $0.text, people: $0.voters) }
             })
+        }, openMedia: { [weak self] card, index, source in
+            guard let self else {
+                return
+            }
+            momentsPresentGallery(context: self.context, card: card, index: index, controller: self, source: source)
         })
     }
 
