@@ -1304,3 +1304,16 @@ The language download in `updateState` still runs before any login screen is bui
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | The root phone screen has no close control when it cannot leave. Email still has Back. |
 | `submodules/AuthorizationUI/Tests/TellomiLoginFlowDecisionsTests.swift` | Phone instead of welcome, back stays, Chinese before the pack, a Settings choice kept. |
 | `.github/workflows/login-auth-ui.yml` | The unsigned simulator step screenshots the phone screen in light and dark. It does not sign or upload. |
+
+## TestFlight dSYM artifact
+
+`release_arm64` already passes `--apple_generate_dsym`. The TestFlight workflow built the IPA and left the dSYMs on the runner. Build 91's `TelegramUIFramework` UUID `1575DE22-0975-3591-A160-CCF1A2EA97F1` could not be symbolicated.
+
+After the IPA exists, including when `altool` fails, the bundles are copied to `dsym-<buildNumber>` as `<buildNumber>-<UUID>.dSYM` plus `manifest.tsv`. GitHub Actions keeps that artifact for 90 days. It is not uploaded to App Store Connect or anywhere else. The workflow permission stays `contents: read`. Signing, the `altool` step, and the `release/ios` trigger are unchanged. A pull request does not run this workflow.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/collect_dsyms.py` | Names each bundle by build number and arm64 UUID. Leaves the IPA out. |
+| `Tellomi/collect_dsyms_test.py` | Parser, two bundles, and a missing directory. |
+| `.github/workflows/testflight.yml` | Stores the directory after the build, including when the upload fails. |
+

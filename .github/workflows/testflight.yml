@@ -25,12 +25,13 @@
 # (403). Docs-only pushes are ignored. A newer release/ios push cancels
 # an older in-progress upload.
 #
-# After a successful upload this job also stores the build's dSYMs as one
-# Actions artifact named dsym-<buildNumber>. Each bundle inside is
-# <buildNumber>-<UUID>.dSYM. Retention is 90 days. Nothing here is sent to
-# App Store Connect, a symbol server, or any other host. actions: write is
-# only for that artifact. Signing and the altool upload are unchanged.
-# A pull request or a master push does not run this workflow.
+# After the IPA build this job stores the dSYMs as one Actions artifact
+# named dsym-<buildNumber>, kept 90 days. Each bundle inside is
+# <buildNumber>-<UUID>.dSYM. Nothing is sent to App Store Connect, a
+# symbol server, or any other host. upload-artifact uses the runner's
+# runtime token, so this workflow does not add actions: write. Signing
+# and the altool upload are unchanged. The dSYM steps still run when
+# altool fails. A pull request or a master push does not run this workflow.
 
 name: TestFlight
 
@@ -54,7 +55,6 @@ concurrency:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   testflight:
@@ -182,10 +182,11 @@ jobs:
             --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
           rm -rf "${HOME}/.private_keys"
 
-      # Runs only after altool has returned. A missing dSYM fails this job
-      # afterwards; it does not decide whether the IPA was signed or uploaded.
+      # Still runs when altool fails, so the symbols for that IPA are kept.
+      # It does not decide whether the IPA was signed or uploaded.
       - name: Collect dSYMs
-        if: success()
+        id: dsyms
+        if: always()
         run: |
           set -euo pipefail
           python3 Tellomi/collect_dsyms.py \
@@ -196,7 +197,7 @@ jobs:
           echo "DSYM_ARTIFACT_NAME=$(tr -d '[:space:]' < "${RUNNER_TEMP}/dsyms/artifact-name.txt")" >> "${GITHUB_ENV}"
 
       - name: Upload dSYM artifact
-        if: success()
+        if: always() && steps.dsyms.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.DSYM_ARTIFACT_NAME }}
