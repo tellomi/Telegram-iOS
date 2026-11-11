@@ -81,6 +81,12 @@ jobs:
       - name: Checkout submodules
         run: bash .github/checkout-submodules.sh
 
+      # Before any signing or upload. This step does not sign or upload.
+      - name: Check Tellomi DC seeds
+        run: |
+          python3 Tellomi/check_server_config.py --seeds
+          python3 Tellomi/test_server_config.py
+
       # A v* tag must match Tellomi/version. A master push or a manual
       # dispatch from a branch does not: the marketing version is that file,
       # and the next step picks a build number above the latest ASC build.

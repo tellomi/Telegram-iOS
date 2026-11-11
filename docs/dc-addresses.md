@@ -8,12 +8,11 @@
 
 ## 种子只作回落
 
-`Tellomi/tellomi-server.json` 的 `seeds.production` / `seeds.testing` 是数据中心 `1` → `api.tellomi.cn`，端口 `seed_port` `10443`。`seed_address_a_record`（`8.137.39.82`）不参与拨号。生成头 `TellomiServerConfigJSON.h` 在每次创建网络时被读出来，调用 `setSeedAddressSetForDatacenterWithId`（`submodules/TelegramCore/Sources/Network/Network.swift`）：
+`Tellomi/tellomi-server.json` 的 `seeds.production` / `seeds.testing` 是数据中心 `1` 和 `2`。每只数据中心 4 个地址，拨号顺序为 `8.137.198.240:10443`、`8.137.198.240:443`、`api.tellomi.cn:10443`、`api.tellomi.cn:443`。地址列表按这个顺序的倒序写入，因为 `chooseTransportScheme` 在都还没失败时选最后一条。每条种子都带 `thisPortOnly`，发现传输不会再给它们加别的端口。`seed_address_a_record`（`8.137.198.240`）只记录中继，不单独再拨一次。生成头 `TellomiServerConfigJSON.h` 在每次创建网络时被读出来，调用 `setSeedAddressSetForDatacenterWithId`（`submodules/TelegramCore/Sources/Network/Network.swift`）：
 
 ```swift
-let seedPort = TellomiSeedPort()
-for (id, ips) in TellomiSeedAddresses(testingEnvironment) {
-    context.setSeedAddressSetForDatacenterWithId(id.intValue, seedAddressSet: ...)
+for (id, addressSet) in TellomiSeedAddressSets(testingEnvironment) {
+    context.setSeedAddressSetForDatacenterWithId(id.intValue, seedAddressSet: addressSet)
 }
 ```
 
@@ -65,7 +64,7 @@ if !addressList.isEmpty {
 
 `forceUpdateSchemes` 这里是 `false`。持久表原先就是空的时（按当前这份空 `dc_options` 连过的客户端就是这样），`previousAddressSetWasEmpty` 为真，`MTProto` `contextDatacenterTransportSchemesUpdated:shouldReset:` 会当场拆掉传输并按新表重连。持久表里已经有上一份非空地址时，当前这条连接要等下次进程启动，或等这条连接失败后的重探，才改用新 IP。启动时方案来自持久表；种子主机名对不上表里的 IP，不会被当成已选方案留下。
 
-iOS 从 `dcOption` 读的标志位：bit 0 是否按 IPv6 做 `inet_pton`、bit 1 媒体、bit 2 仅 TCP、bit 3 CDN、bit 4 代理优先，以及可选 `secret`。**不读** `this_port_only`（bit 5）。发现传输时，除了声明的端口，还会额外探 80 和 5222（`MTDiscoverConnectionSignals` `alternatePortsForProxySettings:`）；声明端口没有那 5 秒附加延迟。正常建连用的是声明端口。唯一一条地址不要标 `media_only`，否则主连接会把该地址滤掉。
+iOS 从 `dcOption` 读的标志位：bit 0 是否按 IPv6 做 `inet_pton`、bit 1 媒体、bit 2 仅 TCP、bit 3 CDN、bit 4 代理优先，以及可选 `secret`。**不读** `this_port_only`（bit 5）。内置种子自己置 `thisPortOnly`，发现传输不会给这些地址再加端口。从 `dc_options` 写进持久表的地址没有这个标志，发现传输仍可能再探 80（`MTDiscoverConnectionSignals` `alternatePortsForProxySettings:`）；声明端口没有那 5 秒附加延迟。正常建连用的是声明端口。唯一一条地址不要标 `media_only`，否则主连接会把该地址滤掉。
 
 ## 和安卓 #52 的差别
 
@@ -78,9 +77,9 @@ iOS 从 `dcOption` 读的标志位：bit 0 是否按 IPv6 做 `inet_pton`、bit 
 | 主机名 | `inet_pton` 失败就丢掉。该地址族一个不剩则不替换。 | 同样丢掉。这只 DC 一个 IP 都不剩则不替换。 |
 | 合法 IP | 替换对应地址族。 | 替换这只 DC 的整张表（iOS 一张表装下四个族）。新表里只有通过过滤的地址。 |
 | 未登录 | 介绍页会请求 `help.getConfig`。 | `UnauthorizedAccount` 不跑这条轮询。登录成功后的 `Account` 启动时立刻请求。登录流程本身没有改。 |
-| 种子形式 | 构建期种子是 IP（`8.137.39.82`），因为拨号只用 `inet_pton`。 | 种子仍是 `api.tellomi.cn`，`GCDAsyncSocket` 用 `getaddrinfo` 解析。它不经过上面的过滤，也不会被 `getConfig` 写进持久表。 |
+| 种子形式 | 构建期种子先是中继 IP，再是主机名。 | 种子先是 `8.137.198.240`，然后是 `api.tellomi.cn`。IP 字面量直接拨，主机名由 `GCDAsyncSocket` 用 `getaddrinfo` 解析。主机名不经过上面的过滤，也不会被 `getConfig` 写进持久表。 |
 
-安卓按 IPv4、IPv6、媒体 IPv4、媒体 IPv6 四个族分别替换：某一族过滤后为空就留着该族的旧地址。iOS 的持久表是每只 DC 一张列表，有合法 IP 时整张换成这些 IP。Tellomi 只有 DC 1 的 IPv4，两边结果一样。不要靠「只下发 IPv6、旧的 IPv4 还留着」这种安卓行为。
+安卓按 IPv4、IPv6、媒体 IPv4、媒体 IPv6 四个族分别替换：某一族过滤后为空就留着该族的旧地址。iOS 的持久表是每只 DC 一张列表，有合法 IP 时整张换成这些 IP。服务端 `dc_options` 今天仍是空的。客户端种子已经为 DC 1 和 DC 2 各准备了同一组四个地址，和安卓可发布包一样。不要靠「只下发 IPv6、旧的 IPv4 还留着」这种安卓行为。
 
 ## 生产 `help.getConfig` 现在下发什么
 
@@ -90,12 +89,12 @@ iOS 从 `dcOption` 读的标志位：bit 0 是否按 IPv6 做 `inet_pton`、bit 
 
 | 字段 | 值 | 说明 |
 | --- | --- | --- |
-| `dc_options` | `[]` | 客户端不会更新地址。已安装的 iOS 继续用种子 `api.tellomi.cn:10443`。 |
+| `dc_options` | `[]` | 客户端不会更新地址。已安装的 iOS 继续用上述 8 条种子。 |
 | `this_dc` | `1` | 与种子、客户端默认 DC 一致。 |
 | `dc_txt_domain_name` | `apv2.stel.com` | 仍是 Telegram 的 TXT 域名。iOS 不读这个字段；备用发现已被 `disable_telegram_backup_discovery` 关掉。安卓若还拿它做备用发现，会指向 Telegram。 |
 | `webfile_dc_id` | `4` | 没有任何 DC 4 的地址。iOS 会把 4 存成网页文件所在 DC。主连接仍是 DC 1，但网页文件可能去探测一个不存在的 DC。 |
 
-gnetway（`teamgramd/etc/gnetway.yaml`，Docker 实际用 `teamgramd/etc2/gnetway.yaml` 的同一组监听）在 `0.0.0.0:10443` 和 `0.0.0.0:5222` 上收 TCP，WebSocket 在 `11443`。公网地址是 `8.137.39.82`。这些端口**没有**写进 `dc_options`。
+gnetway（`teamgramd/etc/gnetway.yaml`，Docker 实际用 `teamgramd/etc2/gnetway.yaml` 的同一组监听）在 `0.0.0.0:10443` 上收 TCP，WebSocket 在 `11443`。公网中继是 `8.137.198.240`。这些端口**没有**写进 `dc_options`。
 
 编码还有一个坑：`DcOption.Encode` 在 `predicate_name` 不是 `dcOption` 时直接报错，`TLConfig` 编码会把失败的条目从 vector 里丢掉（不写字节，只把个数减掉）。漏写 `predicate_name` 的配置，线上看起来仍是空的 `dc_options`。
 
@@ -103,7 +102,7 @@ gnetway（`teamgramd/etc/gnetway.yaml`，Docker 实际用 `teamgramd/etc2/gnetwa
 
 ## 用测试 IP 验证
 
-测试 IP 必须能完成 MTProto（同一台 gnetway，或转到 `8.137.39.82:10443` 的地址）。黑洞地址不会留下“已经连上新 IP”的证据；失败后的探测还会去试种子，客户端最终仍能连上生产，只是每次都会先撞测试 IP。
+测试 IP 必须能完成 MTProto（同一台 gnetway，或转到 `8.137.198.240:10443` 的地址）。黑洞地址不会留下“已经连上新 IP”的证据；失败后的探测还会去试种子，客户端最终仍能连上生产，只是每次都会先撞测试 IP。
 
 1. 校验 JSON 之后，把运行中容器的 `/app/bin/config.json` 里 `data2.dc_options` 换成例如：
 
@@ -119,7 +118,7 @@ gnetway（`teamgramd/etc/gnetway.yaml`，Docker 实际用 `teamgramd/etc2/gnetwa
    ]
    ```
 
-   `this_port_only` 给会读这个标志的客户端（含安卓）。iOS 忽略它，发现阶段仍会多探 80 和 5222。抓包时看到这两个端口是探测，不是地址集被改写。5222 在 gnetway 上是开的，80 不在监听列表里。10443 没有附加延迟，它先通就会被选中。不要给这一条设 `media_only`。
+   `this_port_only` 给会读这个标志的客户端（含安卓）。iOS 的 `dc_options` 路径仍不读这个 TL 位。内置种子另置 `thisPortOnly`，所以种子本身不会被发现传输改去别的端口。抓包时若看到 80，那是持久表里没有该标志的地址在探测，不是种子被改写。10443 没有附加延迟，它先通就会被选中。不要给这一条设 `media_only`。
 
 2. 重启容器，使 `bff` 重新读配置。`config.json` 非法时 `init` 会 panic，接口起不来。
 

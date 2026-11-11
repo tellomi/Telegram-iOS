@@ -36,6 +36,12 @@ jobs:
       - name: Checkout submodules
         run: bash .github/checkout-submodules.sh
 
+      # Before signing and the IPA build. This step does not sign or upload.
+      - name: Check Tellomi DC seeds
+        run: |
+          python3 Tellomi/check_server_config.py --seeds
+          python3 Tellomi/test_server_config.py
+
       - name: Check marketing version
         run: python3 Tellomi/check_marketing_version.py
 
