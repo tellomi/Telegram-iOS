@@ -1,10 +1,6 @@
 import Foundation
 import XCTest
 
-private final class TellomiNote {
-    var value = 0
-}
-
 final class TellomiTabBarPreferencesTests: XCTestCase {
     func testFreshInstallShowsMomentsChatsAndSettings() {
         let tabs = tellomiVisibleRootTabs(preferences: .freshInstall, available: Set(TellomiRootTab.allCases))
@@ -61,92 +57,140 @@ final class TellomiTabBarPreferencesTests: XCTestCase {
         XCTAssertFalse(keptOff.isShown(.calls))
     }
 
-    func testStoreRoundTripAndIgnoredAttemptToHideChats() {
-        let name = "tellomi-tab-bar-test-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defer {
-            defaults.removePersistentDomain(forName: name)
-        }
-        let store = TellomiTabBarPreferencesStore(defaults: defaults)
-        XCTAssertFalse(store.hasStoredValue)
-        XCTAssertEqual(store.load(), .freshInstall)
-
+    func testCodableRoundTripRepairsAnAttemptToHideChats() {
         var preferences = TellomiTabBarPreferences.freshInstall
         preferences.hideButtonTitles = true
         preferences = preferences.updating(.contacts, shown: true)
-        store.save(preferences)
-
-        let loaded = store.load()
-        XCTAssertTrue(store.hasStoredValue)
+        let data = try! JSONEncoder().encode(preferences)
+        let loaded = try! JSONDecoder().decode(TellomiTabBarPreferences.self, from: data).normalized()
         XCTAssertTrue(loaded.hideButtonTitles)
         XCTAssertTrue(loaded.isShown(.contacts))
         XCTAssertFalse(loaded.isShown(.calls))
         XCTAssertTrue(loaded.isShown(.chats))
         XCTAssertTrue(loaded.isShown(.settings))
 
-        defaults.set(["moments"], forKey: TellomiTabBarPreferencesKeys.shownTabs)
-        let repaired = store.load()
+        let object = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual((object["hideButtonTitles"] as? NSNumber)?.intValue, 1)
+        XCTAssertEqual(object["shownTabs"] as? [String], ["moments", "chats", "contacts", "settings"])
+
+        let broken = try! JSONSerialization.data(withJSONObject: ["hideButtonTitles": 0, "shownTabs": ["moments"]])
+        let repaired = try! JSONDecoder().decode(TellomiTabBarPreferences.self, from: broken).normalized()
         XCTAssertTrue(repaired.isShown(.chats))
         XCTAssertTrue(repaired.isShown(.settings))
         XCTAssertTrue(repaired.isShown(.moments))
         XCTAssertFalse(repaired.isShown(.contacts))
     }
 
-    func testSavingTheSameValueDoesNotNotifyAgain() {
+    func testLegacyDefaultsImportAndAMissingRecord() {
         let name = "tellomi-tab-bar-test-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer {
             defaults.removePersistentDomain(forName: name)
         }
-        let store = TellomiTabBarPreferencesStore(defaults: defaults)
-        store.save(.freshInstall)
-        let notes = TellomiNote()
-        let token = NotificationCenter.default.addObserver(forName: TellomiTabBarPreferencesStore.didChangeNotification, object: store, queue: nil) { _ in
-            notes.value += 1
+        XCTAssertNil(tellomiLegacyTabBarPreferences(defaults: defaults))
+
+        defaults.set(true, forKey: TellomiLegacyTabBarPreferenceKey.saved)
+        defaults.set(true, forKey: TellomiLegacyTabBarPreferenceKey.hideButtonTitles)
+        defaults.set(["moments"], forKey: TellomiLegacyTabBarPreferenceKey.shownTabs)
+        guard let imported = tellomiLegacyTabBarPreferences(defaults: defaults) else {
+            XCTFail("legacy record missing")
+            return
         }
-        store.save(.freshInstall)
-        NotificationCenter.default.removeObserver(token)
-        XCTAssertEqual(notes.value, 0)
-    }
-}
-
-final class TellomiMenuSettingsStringsTests: XCTestCase {
-    func testEveryBuiltinLanguageHasEveryKey() {
-        for language in tellomiBuiltinMenuLanguages {
-            XCTAssertTrue(tellomiMenuSettingsCatalogHasCompleteTable(language), language)
-            for key in TellomiMenuSettingsStringKey.allCases {
-                let value = tellomiMenuSettingsString(languageCode: language, key: key)
-                XCTAssertFalse(value.isEmpty, "\(language) \(key.rawValue)")
-            }
-            if language != "en" {
-                XCTAssertNotEqual(tellomiMenuSettingsString(languageCode: language, key: .title), "Menu settings", language)
-            }
-        }
+        XCTAssertTrue(imported.hideButtonTitles)
+        XCTAssertTrue(imported.isShown(.moments))
+        XCTAssertTrue(imported.isShown(.chats))
+        XCTAssertTrue(imported.isShown(.settings))
+        XCTAssertFalse(imported.isShown(.contacts))
     }
 
-    func testChineseAndEnglishProductStrings() {
-        XCTAssertEqual(tellomiMenuSettingsString(languageCode: "en", key: .tools), "Tools")
-        XCTAssertEqual(tellomiMenuSettingsString(languageCode: "en", key: .title), "Menu settings")
-        XCTAssertEqual(tellomiMenuSettingsString(languageCode: "en", key: .hideButtonTitles), "Hide button titles")
-        XCTAssertEqual(tellomiMenuSettingsString(languageCode: "en", key: .navigationButtons), "Navigation bar buttons")
-        XCTAssertEqual(tellomiMenuSettingsString(languageCode: "zh-Hans-CN", key: .title), "选单设定")
-        XCTAssertEqual(tellomiMenuSettingsString(languageCode: "zh-Hans-CN", key: .hideButtonTitles), "隐藏按钮文字")
-        XCTAssertEqual(tellomiMenuSettingsString(languageCode: "zh-Hans-CN", key: .navigationButtons), "导航栏按钮")
-        XCTAssertEqual(tellomiMenuSettingsString(languageCode: "zh-Hant-TW", key: .title), "選單設定")
-        XCTAssertEqual(tellomiMenuSettingsString(languageCode: "zh_HK", key: .hideButtonTitles), "隱藏按鈕文字")
+    func testFirstLaunchWithoutARecordHidesCallsAndPersistsBothRecords() {
+        let step = tellomiTabBarStep(
+            snapshot: TellomiTabBarSnapshot(preferences: nil, callsShowTab: true, callsExplicit: false),
+            appliedCallsShowTab: true,
+            legacy: nil
+        )
+        XCTAssertEqual(step.preferences, .freshInstall)
+        XCTAssertFalse(step.preferences.isShown(.calls))
+        XCTAssertTrue(step.persistPreferences)
+        XCTAssertEqual(step.persistCallsShowTab, false)
+        XCTAssertEqual(step.appliedCallsShowTab, false)
     }
 
-    func testUnknownLanguageFallsBackToEnglish() {
-        XCTAssertEqual(tellomiCanonicalMenuLanguage("ja-JP"), "en")
-        XCTAssertEqual(tellomiMenuSettingsString(languageCode: "ja", key: .title), "Menu settings")
+    func testExplicitCallsChoiceIsKeptOnFirstLaunch() {
+        let step = tellomiTabBarStep(
+            snapshot: TellomiTabBarSnapshot(preferences: nil, callsShowTab: true, callsExplicit: true),
+            appliedCallsShowTab: true,
+            legacy: nil
+        )
+        XCTAssertTrue(step.preferences.isShown(.calls))
+        XCTAssertTrue(step.preferences.isShown(.moments))
+        XCTAssertNil(step.persistCallsShowTab)
     }
 
-    func testMergeFillsMissingKeysAndKeepsAPackTranslation() {
-        var dict = ["Tellomi.MenuSettings.Title": "From pack"]
-        tellomiMergeMenuSettingsStrings(&dict, languageCode: "ru")
-        XCTAssertEqual(dict["Tellomi.MenuSettings.Title"], "From pack")
-        XCTAssertEqual(dict["Tellomi.MenuSettings.HideButtonTitles"], "Скрыть подписи кнопок")
-        XCTAssertEqual(dict["Tellomi.MenuSettings.Tools"], "Инструменты")
-        XCTAssertEqual(dict["Tellomi.MenuSettings.NavigationButtons"], "Кнопки панели навигации")
+    func testLegacyRecordIsUsedOnlyWhenTheSharedRecordIsMissing() {
+        let legacy = TellomiTabBarPreferences(hideButtonTitles: true, shown: [.moments, .chats, .contacts, .settings])
+        let step = tellomiTabBarStep(
+            snapshot: TellomiTabBarSnapshot(preferences: nil, callsShowTab: true, callsExplicit: false),
+            appliedCallsShowTab: true,
+            legacy: legacy
+        )
+        XCTAssertTrue(step.preferences.hideButtonTitles)
+        XCTAssertTrue(step.preferences.isShown(.contacts))
+        XCTAssertFalse(step.preferences.isShown(.calls))
+
+        let stored = TellomiTabBarPreferences.freshInstall
+        let ignored = tellomiTabBarStep(
+            snapshot: TellomiTabBarSnapshot(preferences: stored, callsShowTab: false, callsExplicit: true),
+            appliedCallsShowTab: false,
+            legacy: legacy
+        )
+        XCTAssertFalse(ignored.preferences.hideButtonTitles)
+        XCTAssertFalse(ignored.persistPreferences)
+        XCTAssertNil(ignored.persistCallsShowTab)
+    }
+
+    func testMenuChangePushesCallsAndAStaleCallsValueDoesNotUndoIt() {
+        let menu = TellomiTabBarPreferences.freshInstall.updating(.calls, shown: true)
+        let step = tellomiTabBarStep(
+            snapshot: TellomiTabBarSnapshot(preferences: menu, callsShowTab: false, callsExplicit: true),
+            appliedCallsShowTab: false,
+            legacy: nil
+        )
+        XCTAssertTrue(step.preferences.isShown(.calls))
+        XCTAssertFalse(step.persistPreferences)
+        XCTAssertEqual(step.persistCallsShowTab, true)
+        XCTAssertEqual(step.appliedCallsShowTab, true)
+
+        let caughtUp = tellomiTabBarStep(
+            snapshot: TellomiTabBarSnapshot(preferences: menu, callsShowTab: true, callsExplicit: true),
+            appliedCallsShowTab: step.appliedCallsShowTab,
+            legacy: nil
+        )
+        XCTAssertFalse(caughtUp.persistPreferences)
+        XCTAssertNil(caughtUp.persistCallsShowTab)
+    }
+
+    func testCallsSwitchUpdatesTheMenu() {
+        let step = tellomiTabBarStep(
+            snapshot: TellomiTabBarSnapshot(preferences: .freshInstall, callsShowTab: true, callsExplicit: true),
+            appliedCallsShowTab: false,
+            legacy: nil
+        )
+        XCTAssertTrue(step.preferences.isShown(.calls))
+        XCTAssertTrue(step.persistPreferences)
+        XCTAssertNil(step.persistCallsShowTab)
+        XCTAssertEqual(step.appliedCallsShowTab, true)
+    }
+
+    func testUnchangedSnapshotDoesNotWrite() {
+        let preferences = TellomiTabBarPreferences.freshInstall.updating(.contacts, shown: true)
+        let step = tellomiTabBarStep(
+            snapshot: TellomiTabBarSnapshot(preferences: preferences, callsShowTab: false, callsExplicit: true),
+            appliedCallsShowTab: false,
+            legacy: nil
+        )
+        XCTAssertEqual(step.preferences, preferences)
+        XCTAssertFalse(step.persistPreferences)
+        XCTAssertNil(step.persistCallsShowTab)
     }
 }

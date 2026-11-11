@@ -199,8 +199,11 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         super.containerLayoutUpdated(layout, transition: transition)
     }
     
+    /// Which tabs are on, and whether their titles are shown. Set before `addRootControllers` and `updateRootControllers`.
+    public var tabBarPreferences: TellomiTabBarPreferences = .freshInstall
+
     public func addRootControllers(showCallsTab: Bool, showNewsTab: Bool, showMomentsTab: Bool) {
-        // Calls visibility is the menu preference. The argument remains so existing callers still compile.
+        // Calls visibility is `tabBarPreferences`. The argument remains so existing callers still compile.
         let _ = showCallsTab
         let tabBarController = TabBarControllerImpl(theme: self.presentationData.theme, strings: self.presentationData.strings)
         tabBarController.navigationPresentation = .master
@@ -250,7 +253,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.accountSettingsController = accountSettingsController
         self.rootTabController = tabBarController
 
-        let preferences = TellomiTabBarPreferencesStore.shared.load()
+        let preferences = self.tabBarPreferences.normalized()
         tabBarController.showsItemTitles = !preferences.hideButtonTitles
         let controllers = self.tellomiOrderedControllers(newsAvailable: showNewsTab, momentsAvailable: showMomentsTab)
         let chatsIndex = controllers.firstIndex(where: { $0 === chatListController }) ?? controllers.firstIndex(where: { $0 === accountSettingsController }) ?? 0
@@ -258,14 +261,14 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.pushViewController(tabBarController, animated: false)
     }
 
-    /// `showCallsTab` still arrives from the Calls list switch. Which tabs are on the bar is
-    /// `TellomiTabBarPreferences`. `showNewsTab` and `showMomentsTab` are whether those tabs exist.
+    /// `showCallsTab` is unused. Which tabs are on the bar is `tabBarPreferences`.
+    /// `showNewsTab` and `showMomentsTab` are whether those tabs exist in this build.
     public func updateRootControllers(showCallsTab: Bool, showNewsTab: Bool, showMomentsTab: Bool) {
         guard let rootTabController = self.rootTabController as? TabBarControllerImpl else {
             return
         }
         let _ = showCallsTab
-        let preferences = TellomiTabBarPreferencesStore.shared.load()
+        let preferences = self.tabBarPreferences.normalized()
         if rootTabController.showsItemTitles != !preferences.hideButtonTitles {
             rootTabController.showsItemTitles = !preferences.hideButtonTitles
         }
@@ -291,7 +294,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         if newsAvailable {
             available.insert(.news)
         }
-        let tabs = tellomiVisibleRootTabs(preferences: TellomiTabBarPreferencesStore.shared.load(), available: available)
+        let tabs = tellomiVisibleRootTabs(preferences: self.tabBarPreferences, available: available)
         var controllers: [ViewController] = []
         for tab in tabs {
             switch tab {

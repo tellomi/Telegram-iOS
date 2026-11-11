@@ -233,8 +233,3 @@
 "Tour.Title6" = "免費";
 "Tour.Text6" = "**Tellomi** 為聊天和媒體\n提供免費的無限雲端儲存。";
 "Tour.StartButton" = "開始使用";
-
-"Tellomi.MenuSettings.Tools" = "工具";
-"Tellomi.MenuSettings.Title" = "選單設定";
-"Tellomi.MenuSettings.HideButtonTitles" = "隱藏按鈕文字";
-"Tellomi.MenuSettings.NavigationButtons" = "導覽列按鈕";
