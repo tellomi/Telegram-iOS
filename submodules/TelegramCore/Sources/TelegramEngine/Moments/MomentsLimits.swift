@@ -2,6 +2,7 @@ import Foundation
 
 /// Suggested defaults from the moments spec (SG-*). Kept in one place so a product change is a value change,
 /// not a search through the screens. The engine's `GET /config` overrides a copy of this at runtime.
+/// Numbers match content-engine: `MaxPostChars` 2000, 12 images, `MaxAudioSeconds` 180.
 public struct MomentsLimits: Equatable {
     public var pageSize: Int
     public var textLimit: Int
@@ -10,7 +11,8 @@ public struct MomentsLimits: Equatable {
     public var imageLimit: Int
     public var videoLimit: Int
     public var videoMaxDuration: Double
-    public var voiceMaxDuration: Double
+    public var voicePostMaxDuration: Double
+    public var voiceCommentMaxDuration: Double
     public var commentTextLimit: Int
     public var mentionLimit: Int
     public var topicLimit: Int
@@ -30,13 +32,14 @@ public struct MomentsLimits: Equatable {
 
     public init(
         pageSize: Int = 20,
-        textLimit: Int = 500,
+        textLimit: Int = 2000,
         textCounterFrom: Int = 400,
         collapsedLineCount: Int = 5,
-        imageLimit: Int = 10,
+        imageLimit: Int = 12,
         videoLimit: Int = 3,
         videoMaxDuration: Double = 60,
-        voiceMaxDuration: Double = 60,
+        voicePostMaxDuration: Double = 180,
+        voiceCommentMaxDuration: Double = 180,
         commentTextLimit: Int = 1000,
         mentionLimit: Int = 10,
         topicLimit: Int = 3,
@@ -59,7 +62,8 @@ public struct MomentsLimits: Equatable {
         self.imageLimit = imageLimit
         self.videoLimit = videoLimit
         self.videoMaxDuration = videoMaxDuration
-        self.voiceMaxDuration = voiceMaxDuration
+        self.voicePostMaxDuration = voicePostMaxDuration
+        self.voiceCommentMaxDuration = voiceCommentMaxDuration
         self.commentTextLimit = commentTextLimit
         self.mentionLimit = mentionLimit
         self.topicLimit = topicLimit
@@ -83,15 +87,28 @@ public struct MomentsLimits: Equatable {
             return self
         }
         var copy = self
-        if let value = config.textLimit { copy.textLimit = value }
-        if let value = config.imageLimit { copy.imageLimit = value }
-        if let value = config.videoLimit { copy.videoLimit = value }
-        if let value = config.videoMaxDuration { copy.videoMaxDuration = value }
-        if let value = config.voiceMaxDuration { copy.voiceMaxDuration = value }
-        if let value = config.commentTextLimit { copy.commentTextLimit = value }
-        if let value = config.pageSize { copy.pageSize = value }
+        if let value = momentsPositiveOverride(config.textLimit) { copy.textLimit = value }
+        if let value = momentsPositiveOverride(config.imageLimit) { copy.imageLimit = value }
+        if let value = momentsPositiveOverride(config.videoLimit) { copy.videoLimit = value }
+        if let value = momentsPositiveOverride(config.videoMaxDuration) { copy.videoMaxDuration = value }
+        if let value = momentsPositiveOverride(config.voicePostMaxDuration) { copy.voicePostMaxDuration = value }
+        if let value = momentsPositiveOverride(config.voiceCommentMaxDuration) { copy.voiceCommentMaxDuration = value }
+        if let value = momentsPositiveOverride(config.commentTextLimit) { copy.commentTextLimit = value }
+        if let value = momentsPositiveOverride(config.pageSize) { copy.pageSize = value }
+        if let value = momentsPositiveOverride(config.mentionLimit) { copy.mentionLimit = value }
+        if let value = momentsPositiveOverride(config.topicLimit) { copy.topicLimit = value }
+        if let value = momentsPositiveOverride(config.newPostsProbeInterval) { copy.newPostsProbeInterval = value }
+        if let value = momentsPositiveOverride(config.notificationRetentionDays) { copy.notificationRetentionDays = value }
         return copy
     }
+}
+
+/// Voice posts and voice comments are different caps. `comment` selects `voice_comment_max_seconds`.
+public func momentsVoiceMaxDuration(_ limits: MomentsLimits, comment: Bool) -> Double {
+    if comment {
+        return limits.voiceCommentMaxDuration
+    }
+    return limits.voicePostMaxDuration
 }
 
 public struct MomentsRemoteConfig: Equatable {
@@ -99,24 +116,143 @@ public struct MomentsRemoteConfig: Equatable {
     public var imageLimit: Int?
     public var videoLimit: Int?
     public var videoMaxDuration: Double?
-    public var voiceMaxDuration: Double?
+    public var voicePostMaxDuration: Double?
+    public var voiceCommentMaxDuration: Double?
     public var commentTextLimit: Int?
     public var pageSize: Int?
+    public var mentionLimit: Int?
+    public var topicLimit: Int?
+    public var newPostsProbeInterval: TimeInterval?
+    public var notificationRetentionDays: Int?
     public var tabs: [String]
     /// From `GET /v1/feed/config`. Image and other media keys are joined onto this. Not a feed host.
     public var mediaBaseURL: String?
+    /// Top-level `personalization_toggle_visible`. Missing or non-boolean hides the settings switch.
+    public var personalizationToggleVisible: Bool
 
-    public init(textLimit: Int? = nil, imageLimit: Int? = nil, videoLimit: Int? = nil, videoMaxDuration: Double? = nil, voiceMaxDuration: Double? = nil, commentTextLimit: Int? = nil, pageSize: Int? = nil, tabs: [String] = [], mediaBaseURL: String? = nil) {
+    public init(textLimit: Int? = nil, imageLimit: Int? = nil, videoLimit: Int? = nil, videoMaxDuration: Double? = nil, voicePostMaxDuration: Double? = nil, voiceCommentMaxDuration: Double? = nil, commentTextLimit: Int? = nil, pageSize: Int? = nil, mentionLimit: Int? = nil, topicLimit: Int? = nil, newPostsProbeInterval: TimeInterval? = nil, notificationRetentionDays: Int? = nil, tabs: [String] = [], mediaBaseURL: String? = nil, personalizationToggleVisible: Bool = false) {
         self.textLimit = textLimit
         self.imageLimit = imageLimit
         self.videoLimit = videoLimit
         self.videoMaxDuration = videoMaxDuration
-        self.voiceMaxDuration = voiceMaxDuration
+        self.voicePostMaxDuration = voicePostMaxDuration
+        self.voiceCommentMaxDuration = voiceCommentMaxDuration
         self.commentTextLimit = commentTextLimit
         self.pageSize = pageSize
+        self.mentionLimit = mentionLimit
+        self.topicLimit = topicLimit
+        self.newPostsProbeInterval = newPostsProbeInterval
+        self.notificationRetentionDays = notificationRetentionDays
         self.tabs = tabs
         self.mediaBaseURL = mediaBaseURL
+        self.personalizationToggleVisible = personalizationToggleVisible
     }
+}
+
+func momentsPositiveOverride(_ value: Int?) -> Int? {
+    guard let value, value > 0 else {
+        return nil
+    }
+    return value
+}
+
+func momentsPositiveOverride(_ value: Double?) -> Double? {
+    guard let value, value > 0 else {
+        return nil
+    }
+    return value
+}
+
+/// JSON `true`/`false` only. Numbers and strings are not booleans.
+func momentsStrictBool(_ value: Any?) -> Bool? {
+    guard let number = value as? NSNumber else {
+        return nil
+    }
+    if CFGetTypeID(number) != CFBooleanGetTypeID() {
+        return nil
+    }
+    return number.boolValue
+}
+
+/// A positive whole number. `0`, fractions, strings and booleans are missing.
+func momentsPositiveWholeNumber(_ value: Any?) -> Int? {
+    if momentsStrictBool(value) != nil {
+        return nil
+    }
+    guard let number = value as? NSNumber else {
+        return nil
+    }
+    let doubleValue = number.doubleValue
+    guard doubleValue.isFinite, doubleValue >= 1, doubleValue <= Double(Int.max), doubleValue.rounded() == doubleValue else {
+        return nil
+    }
+    return Int(doubleValue)
+}
+
+func momentsPositiveSeconds(_ value: Any?) -> Double? {
+    guard let whole = momentsPositiveWholeNumber(value) else {
+        return nil
+    }
+    return Double(whole)
+}
+
+/// `GET /v1/feed/config`. Limits are the nested `limits` object. The keys are the ones content-engine writes.
+/// A missing key, or a value that is not a positive whole number, stays nil so the caller keeps its default.
+func momentsRemoteConfig(data: Data) -> MomentsRemoteConfig {
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return MomentsRemoteConfig()
+    }
+    let limits = momentsObject(json["limits"]) ?? [:]
+    return MomentsRemoteConfig(
+        textLimit: momentsPositiveWholeNumber(limits["post_text_chars"]),
+        imageLimit: momentsPositiveWholeNumber(limits["post_images"]),
+        videoLimit: momentsPositiveWholeNumber(limits["post_videos"]),
+        videoMaxDuration: momentsPositiveSeconds(limits["video_max_seconds"]),
+        voicePostMaxDuration: momentsPositiveSeconds(limits["voice_post_max_seconds"]),
+        voiceCommentMaxDuration: momentsPositiveSeconds(limits["voice_comment_max_seconds"]),
+        commentTextLimit: momentsPositiveWholeNumber(limits["comment_text_chars"]),
+        pageSize: momentsPositiveWholeNumber(limits["page_size"]),
+        mentionLimit: momentsPositiveWholeNumber(limits["max_mentions"]),
+        topicLimit: momentsPositiveWholeNumber(limits["max_topics"]),
+        newPostsProbeInterval: momentsPositiveSeconds(limits["probe_interval_seconds"]),
+        notificationRetentionDays: momentsPositiveWholeNumber(limits["notification_days"]),
+        tabs: momentsStringList(json["tabs"]),
+        mediaBaseURL: momentsConfigMediaBase(data),
+        personalizationToggleVisible: momentsStrictBool(json["personalization_toggle_visible"]) == true
+    )
+}
+
+/// `personalized` is a JSON boolean. Other fields already on the document are kept.
+func momentsPreferenceBody(current: [String: Any], personalized: Bool) -> [String: Any] {
+    var body = current
+    body["personalized"] = personalized
+    return body
+}
+
+/// Nil when the key is missing or not a JSON boolean.
+func momentsPersonalizedFlag(data: Data) -> Bool? {
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return nil
+    }
+    return momentsStrictBool(json["personalized"])
+}
+
+/// Off adds `personalized=false` on recommend only. On leaves that request unchanged.
+func momentsFeedRequestQuery(kind: MomentsFeedKind, cursor: String?, city: String?, sort: String?, pageSize: Int, personalized: Bool) -> [String: String] {
+    var query: [String: String] = ["limit": "\(pageSize)"]
+    if let cursor, !cursor.isEmpty {
+        query["cursor"] = cursor
+    }
+    if kind == .nearby {
+        if let city {
+            query["city"] = city
+        }
+        query["sort"] = sort ?? "latest"
+    }
+    if kind == .recommend, !personalized {
+        query["personalized"] = "false"
+    }
+    return query
 }
 
 public struct MomentsFeedStatus: Equatable {

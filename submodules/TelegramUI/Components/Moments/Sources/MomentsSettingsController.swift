@@ -12,10 +12,19 @@ import PresentationDataUtils
 private final class MomentsSettingsArguments {
     let toggle: (String, Bool) -> Void
     let visibility: (Bool) -> Void
-    init(toggle: @escaping (String, Bool) -> Void, visibility: @escaping (Bool) -> Void) {
+    let personalized: (Bool) -> Void
+    init(toggle: @escaping (String, Bool) -> Void, visibility: @escaping (Bool) -> Void, personalized: @escaping (Bool) -> Void) {
         self.toggle = toggle
         self.visibility = visibility
+        self.personalized = personalized
     }
+}
+
+private final class MomentsSettingsHolder {
+    var push = MomentsNotificationSettings.defaults
+    var lists = MomentsListVisibilitySettings.defaults
+    var personalized = true
+    var showPersonalized = false
 }
 
 private enum MomentsSettingsEntry: ItemListNodeEntry {
@@ -30,8 +39,18 @@ private enum MomentsSettingsEntry: ItemListNodeEntry {
     case reposts(String, Bool)
     case newPosts(String, Bool)
     case footer(String)
+    case recommendationsHeader(String)
+    case personalized(String, Bool)
+    case personalizedInfo(String)
 
-    var section: ItemListSectionId { return 0 }
+    var section: ItemListSectionId {
+        switch self {
+        case .recommendationsHeader, .personalized, .personalizedInfo:
+            return 1
+        default:
+            return 0
+        }
+    }
 
     var stableId: Int32 {
         switch self {
@@ -46,6 +65,9 @@ private enum MomentsSettingsEntry: ItemListNodeEntry {
         case .reposts: return 8
         case .newPosts: return 9
         case .footer: return 10
+        case .recommendationsHeader: return 11
+        case .personalized: return 12
+        case .personalizedInfo: return 13
         }
     }
 
@@ -77,6 +99,12 @@ private enum MomentsSettingsEntry: ItemListNodeEntry {
             if case .newPosts(title, value) = rhs { return true } else { return false }
         case let .footer(text):
             if case .footer(text) = rhs { return true } else { return false }
+        case let .recommendationsHeader(text):
+            if case .recommendationsHeader(text) = rhs { return true } else { return false }
+        case let .personalized(title, value):
+            if case .personalized(title, value) = rhs { return true } else { return false }
+        case let .personalizedInfo(text):
+            if case .personalizedInfo(text) = rhs { return true } else { return false }
         }
     }
 
@@ -103,8 +131,14 @@ private enum MomentsSettingsEntry: ItemListNodeEntry {
             return self.switchItem(presentationData, arguments, "reposts", title, value)
         case let .newPosts(title, value):
             return self.switchItem(presentationData, arguments, "new", title, value)
-        case let .footer(text):
+        case let .footer(text), let .personalizedInfo(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case let .recommendationsHeader(text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case let .personalized(title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { updated in
+                arguments.personalized(updated)
+            })
         }
     }
 
@@ -116,43 +150,66 @@ private enum MomentsSettingsEntry: ItemListNodeEntry {
 }
 
 public func momentsPrivacyController(context: AccountContext) -> ViewController {
-    var settings = MomentsNotificationSettings.defaults
-    var lists = MomentsListVisibilitySettings.defaults
-    let state = Promise<(MomentsNotificationSettings, MomentsListVisibilitySettings)>()
-    state.set(.single((settings, lists)))
+    let holder = MomentsSettingsHolder()
+    holder.personalized = context.engine.moments.recommendIsPersonalized()
+    let state = Promise<(MomentsNotificationSettings, MomentsListVisibilitySettings, Bool, Bool)>()
+    let publish = {
+        state.set(.single((holder.push, holder.lists, holder.personalized, holder.showPersonalized)))
+    }
+    publish()
     let _ = (context.engine.moments.notificationSettings() |> deliverOnMainQueue).start(next: { value in
-        settings = value
-        state.set(.single((settings, lists)))
+        holder.push = value
+        publish()
     })
     let _ = (context.engine.moments.listVisibility() |> deliverOnMainQueue).start(next: { value in
-        lists = value
-        state.set(.single((settings, lists)))
+        holder.lists = value
+        publish()
+    })
+    let _ = (context.engine.moments.remoteConfig() |> deliverOnMainQueue).start(next: { config in
+        holder.showPersonalized = config.personalizationToggleVisible
+        publish()
+    })
+    let _ = (context.engine.moments.reloadPersonalizedRecommendations() |> deliverOnMainQueue).start(next: { value in
+        holder.personalized = value
+        publish()
     })
     let arguments = MomentsSettingsArguments(toggle: { id, value in
         switch id {
-        case "comments": settings.comments = value
-        case "replies": settings.replies = value
-        case "mentions": settings.mentions = value
-        case "follows": settings.follows = value
-        case "likes": settings.likes = value
-        case "reposts": settings.reposts = value
-        case "new": settings.newPosts = value
+        case "comments": holder.push.comments = value
+        case "replies": holder.push.replies = value
+        case "mentions": holder.push.mentions = value
+        case "follows": holder.push.follows = value
+        case "likes": holder.push.likes = value
+        case "reposts": holder.push.reposts = value
+        case "new": holder.push.newPosts = value
         default: break
         }
-        state.set(.single((settings, lists)))
-        let _ = context.engine.moments.updateNotificationSettings(settings).start()
+        publish()
+        let _ = context.engine.moments.updateNotificationSettings(holder.push).start()
     }, visibility: { _ in
-        lists.followingList = lists.followingList == .everyone ? .onlyMe : .everyone
-        lists.followersList = lists.followingList
-        state.set(.single((settings, lists)))
-        let _ = context.engine.moments.updateListVisibility(lists).start()
+        holder.lists.followingList = holder.lists.followingList == .everyone ? .onlyMe : .everyone
+        holder.lists.followersList = holder.lists.followingList
+        publish()
+        let _ = context.engine.moments.updateListVisibility(holder.lists).start()
+    }, personalized: { value in
+        let previous = holder.personalized
+        holder.personalized = value
+        publish()
+        let _ = (context.engine.moments.updatePersonalizedRecommendations(value) |> deliverOnMainQueue).start(error: { _ in
+            guard holder.personalized == value else {
+                return
+            }
+            holder.personalized = previous
+            context.engine.moments.setPersonalizedRecommendations(previous)
+            publish()
+        })
     })
     let signal = combineLatest(context.sharedContext.presentationData, state.get())
     |> map { presentationData, values -> (ItemListControllerState, (ItemListNodeState, MomentsSettingsArguments)) in
-        let (push, visibility) = values
+        let (push, visibility, personalized, showPersonalized) = values
         let strings = presentationData.strings
         let who = visibility.followingList == .everyone ? strings.Moments_Settings_Public : strings.Moments_Settings_OnlyMe
-        let entries: [MomentsSettingsEntry] = [
+        var entries: [MomentsSettingsEntry] = [
             .header(strings.Moments_Settings_Title),
             .following(strings.Moments_Settings_FollowingList, who),
             .followers(strings.Moments_Settings_FollowersList, who),
@@ -165,6 +222,11 @@ public func momentsPrivacyController(context: AccountContext) -> ViewController 
             .newPosts(strings.Moments_Push_NewPosts, push.newPosts),
             .footer(strings.Moments_FriendsHint)
         ]
+        if showPersonalized {
+            entries.append(.recommendationsHeader(strings.Moments_Settings_Recommendations))
+            entries.append(.personalized(strings.Moments_Settings_Personalized, personalized))
+            entries.append(.personalizedInfo(strings.Moments_Settings_PersonalizedInfo))
+        }
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(strings.Moments_Settings_Title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks)
         return (controllerState, (listState, arguments))

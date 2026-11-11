@@ -125,7 +125,7 @@ public final class MomentsComposerScreen: ViewController {
         } else {
             self.audienceButton.setTitle(strings.Moments_Audience_Choose, for: .normal)
         }
-        let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll, hasLinkPreview: !self.linkRemoved && momentsScanText(self.textView.text ?? "").firstURL != nil)
+        let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll, hasLinkPreview: !self.linkRemoved && momentsScanText(self.textView.text ?? "", limits: self.limits).firstURL != nil)
         let hasBody = !(self.textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.isEmpty || !self.media.isEmpty
         let canPublish = hasBody && !self.isRecordingVoice && self.audienceChosen && !self.publishing
         self.navigationItem.rightBarButtonItem?.isEnabled = canPublish
@@ -289,7 +289,7 @@ public final class MomentsComposerScreen: ViewController {
             return
         }
         let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll)
-        if let rejection = momentsCanAdd(kind: .voice, to: state, limits: self.limits) {
+        if let rejection = momentsCanAdd(kind: .voice, to: state, limits: self.limits, voiceComment: false) {
             self.presentRejection(rejection)
             return
         }
@@ -313,7 +313,7 @@ public final class MomentsComposerScreen: ViewController {
             self.voiceStateDisposable?.dispose()
             self.voiceStateDisposable = (recorder.recordingState |> deliverOnMainQueue).start(next: { [weak self, weak recorder] state in
                 guard let self, let recorder else { return }
-                if case let .recording(duration, _) = state, duration >= self.limits.voiceMaxDuration {
+                if case let .recording(duration, _) = state, duration >= momentsVoiceMaxDuration(self.limits, comment: false) {
                     self.finishVoice(recorder)
                 }
             })
@@ -336,9 +336,9 @@ public final class MomentsComposerScreen: ViewController {
                 self.presentVoiceFailure()
                 return
             }
-            let duration = min(data.duration, self.limits.voiceMaxDuration)
+            let duration = min(data.duration, momentsVoiceMaxDuration(self.limits, comment: false))
             let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll)
-            if let rejection = momentsCanAdd(kind: .voice, to: state, limits: self.limits, duration: duration) {
+            if let rejection = momentsCanAdd(kind: .voice, to: state, limits: self.limits, duration: duration, voiceComment: false) {
                 self.presentRejection(rejection)
                 return
             }
@@ -435,7 +435,7 @@ public final class MomentsComposerScreen: ViewController {
         guard self.audienceChosen, !self.publishing else { return }
         let audience = momentsAudience(from: self.privacy)
         let text = self.textView.text ?? ""
-        let scan = momentsScanText(text)
+        let scan = momentsScanText(text, limits: self.limits)
         let submit: () -> Void = { [weak self] in
             self?.submitPost()
         }

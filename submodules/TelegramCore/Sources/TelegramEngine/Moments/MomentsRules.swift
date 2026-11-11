@@ -42,7 +42,7 @@ public enum MomentsAttachmentRejection: Equatable {
 }
 
 /// FR-052, FR-058, FR-060, FR-062. Pure so the composer and the tests share one decision.
-public func momentsCanAdd(kind: MomentsAttachmentKind, to state: MomentsComposerAttachmentState, limits: MomentsLimits = .standard, duration: Double? = nil) -> MomentsAttachmentRejection? {
+public func momentsCanAdd(kind: MomentsAttachmentKind, to state: MomentsComposerAttachmentState, limits: MomentsLimits = .standard, duration: Double? = nil, voiceComment: Bool = false) -> MomentsAttachmentRejection? {
     switch kind {
     case .image:
         if state.videoCount > 0 || state.hasPoll {
@@ -74,7 +74,7 @@ public func momentsCanAdd(kind: MomentsAttachmentKind, to state: MomentsComposer
         if state.hasPoll {
             return .voiceWithPoll
         }
-        if let duration, duration > limits.voiceMaxDuration {
+        if let duration, duration > momentsVoiceMaxDuration(limits, comment: voiceComment) {
             return .voiceTooLong
         }
         if state.hasVoice {
