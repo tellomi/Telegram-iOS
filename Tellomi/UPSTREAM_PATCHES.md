@@ -710,9 +710,24 @@ The navigation screen gains 隐藏底栏文字. It hides labels and keeps the ic
 | `ChatMessageBubbleItemNode.swift` | Side translate button, outside the bubble's text measure. |
 | `TellomiTabSettings.swift`, `TellomiNavigationSettingsController.swift`, `TabBarComponent.swift` | Hide tab labels. |
 
+## Production DC relay seeds — 2026-11-11
+
+Shippable seeds match Android #142. Datacenters 1 and 2 each dial `8.137.198.240` on 10443, then 443, then `api.tellomi.cn` on those ports. `8.137.198.240` forwards that TCP. MTProto still terminates behind the relay, so the RSA public keys are unchanged: little-endian fingerprint `4381149949997195609` stays first and Teamgram's `12240908862933197005` stays last.
+
+`chooseTransportScheme` keeps the last address when nothing has failed, so `TellomiSeedAddressSets` writes hosts and ports in reverse. Every seed address is `thisPortOnly`, so discovery does not open another port on those addresses. The old extra discovery port is no longer probed for any address; port 80 remains for an address that is not `thisPortOnly`. A non-empty `help.getConfig` list still replaces the seed and is dialed in the order it was saved. `seed_address_a_record` is the relay, and it is not a separate dial entry. Login still defaults to +86. The welcome carousel stays skipped (`tellomiSkipsWelcomeSplash`).
+
+| File | Change |
+| --- | --- |
+| `Tellomi/tellomi-server.json` | Both environments seed DC 1 and DC 2 with the relay, then `api.tellomi.cn`. Ports are 10443 then 443. |
+| `submodules/MtProtoKit/Sources/TellomiServerConfig.m` | Builds one address set per datacenter, preference order reversed. |
+| `submodules/MtProtoKit/Sources/MTDatacenterAddress.m` | `thisPortOnly` keeps discovery on the declared port. |
+| `submodules/MtProtoKit/Sources/MTDiscoverConnectionSignals.m` | Skips extra ports when `thisPortOnly` is set. The only alternate port left is 80. |
+| `submodules/TelegramCore/Sources/Network/Network.swift` | Installs `TellomiSeedAddressSets`. |
+| `Tellomi/check_server_config.py`, `Tellomi/test_server_config.py` | Requires the eight endpoints and rejects the retired dial literals, including the negative cases. |
+
 ## DC addresses from help.getConfig (M7 / D-33)
 
-`Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
+`Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. When no persistent list exists, the built-in seed is dialed. `api.tellomi.cn` in that seed is still resolved with `getaddrinfo`. It is not written by this filter. The seed list itself is the relay list in Production DC relay seeds.
 
 | File | Change |
 | --- | --- |
@@ -1304,6 +1319,19 @@ The language download in `updateState` still runs before any login screen is bui
 | `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | The root phone screen has no close control when it cannot leave. Email still has Back. |
 | `submodules/AuthorizationUI/Tests/TellomiLoginFlowDecisionsTests.swift` | Phone instead of welcome, back stays, Chinese before the pack, a Settings choice kept. |
 | `.github/workflows/login-auth-ui.yml` | The unsigned simulator step screenshots the phone screen in light and dark. It does not sign or upload. |
+
+## CallKit 完成回调回到主线程
+
+TestFlight 构建 91（14.0.5，提交 `e1ae313a1de4ade26714830ed4d387cdca46689a`）在 `com.apple.callkit.callcontroller.completion` 上崩溃：`UIView` 加入子视图时触发 Objective-C 断言，随后 `SIGABRT`。`CXCallController.request` 的完成回调在这条私有队列上直接调用上层 completion。失败分支会弹出 `Call_SystemStartErrorMessage`。成功分支在同一回调里更新通话状态（`activeCalls` / `hasActiveCalls`），不在这里打开通话界面；通话界面由 `provider(_:perform: CXStartCallAction)` 之后、已经 `deliverOnMainQueue` 的路径打开。语音和视频共用这一条 completion。CallKit 拒绝、不可用、重复拨打（`callUUIDAlreadyExists`）、取消、以及系统因已有通话拒绝（`maximumCallGroupsReached`）都是非 nil 的 error，走失败分支。本地已经发现的系统通话在进入 CallKit 之前返回 `.alreadyInProgress`，提示框本来就在主队列上，这次没有改。
+
+构建 91 的 `TelegramUIFramework` UUID 是 `1575DE22-0975-3591-A160-CCF1A2EA97F1`。TestFlight 工作流不上传 dSYM，Actions 产物里也没有这份符号。重新编译会得到新的 UUID，不能用来符号化 `+76885060`、`+76884624`、`+76887124`。
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCallsUI/Sources/CallKitCompletionThread.swift` | 完成回调切到 `Queue.mainQueue()`，并区分成功记账和失败放弃。 |
+| `submodules/TelegramCallsUI/Sources/CallKitIntegration.swift` | `request` 和 `reportNewIncomingCall` 的 completion 都走上面的切换。Provider 委托队列写明主队列。 |
+| `submodules/TelegramCallsUI/Sources/PresentationCallManager.swift` | 失败提示框在主队列上创建。 |
+| `submodules/TelegramCallsUI/Tests/CallKitCompletionThreadTests.swift` | 后台队列回到主线程；语音和视频的四种拒绝都走失败分支。 |
 
 ## GCDAsyncSocket stream close
 
