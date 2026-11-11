@@ -1,5 +1,19 @@
 # Upstream patches
 
+## Moments feed main-thread layout — 2026-11-11
+
+Scrolling the feed asked `ListView` to build each new row on a global queue. `MomentsPostItemNode` and `MomentsStatusItemNode` are view-backed (`UIStackView`, labels, image views, content-hugging constraints). Creating them there opened an implicit `CATransaction`. When the GCD worker exited, Core Animation committed it and Auto Layout aborted (`_AssertAutoLayoutOnAllowedThreadsOnly`, TestFlight 14.0.5 (86)). Measurement still runs on that queue. The node, its frames and image assignment run on the main queue. Cached feed and hide reads, and like, save, follow and comment completions that touch views, are delivered on the main queue too. ImageIO thumbnails stay off the main queue; only `UIImageView.image` is set on it.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsMainQueue.swift` | `momentsOnMainQueue`. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsPostItem.swift` | Row and status nodes are created on the main queue. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsRemoteImage.swift` | Bitmap decode stays in the background. The image view is updated on the main queue. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsScreen.swift` | Cached page and hides render on the main queue. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsFeedActions.swift` | Like, save and follow rollbacks render on the main queue. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsCommentSheet.swift` | Comment send, delete and report errors update the sheet on the main queue. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsDetailScreen.swift` | Comment send updates the field on the main queue. |
+
 ## Moments feed limits and recommendation switch — 2026-11-11
 
 `GET /v1/feed/config` puts the caps in a nested `limits` object. The client was reading invented names from the top of the document, so every server cap was ignored. The parser now reads only the engine's keys. A missing key, or a value that is not a positive whole number, keeps the client default. Those defaults are the content-engine constants: 2000 characters, 12 images, and 180 seconds for both voice caps. `personalization_toggle_visible` is a top-level boolean. Anything else, including `1` and `"true"`, hides the switch.
