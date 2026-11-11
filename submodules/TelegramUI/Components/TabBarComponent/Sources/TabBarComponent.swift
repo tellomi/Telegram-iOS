@@ -698,9 +698,8 @@ public final class TabBarComponent: Component {
             self.overrideUserInterfaceStyle = component.theme.overallDarkAppearance ? .dark : .light
 
             let showsItemTitles = !component.isCompact && component.showsItemTitles
-            // Compact (iPad / vertical) keeps the previous 56pt measure. Hiding titles on a phone
-            // shortens the bar to the icon height.
-            let barHeight: CGFloat = (component.isCompact || showsItemTitles ? 56.0 : tabBarCompactItemThickness) + innerInset * 2.0
+            let titledBarHeight = tabBarItemLength + innerInset * 2.0
+            let barHeight: CGFloat = (component.isCompact || showsItemTitles ? titledBarHeight : tabBarCompactItemThickness + innerInset * 2.0)
 
             var unboundItemWidths: [CGFloat] = []
             var validIds: [AnyHashable] = []
@@ -728,7 +727,7 @@ public final class TabBarComponent: Component {
                         isUnconstrained: true
                     )),
                     environment: {},
-                    containerSize: CGSize(width: 200.0, height: component.isCompact || showsItemTitles ? 56.0 : tabBarCompactItemThickness)
+                    containerSize: CGSize(width: 200.0, height: component.isCompact || showsItemTitles ? tabBarItemLength : tabBarCompactItemThickness)
                 )
                 unboundItemWidths.append(itemSize.width)
             }

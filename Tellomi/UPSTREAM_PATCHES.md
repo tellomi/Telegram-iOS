@@ -19,15 +19,16 @@ content-engine dedupes `client_nonce`. `posts.go` returns the first post on a re
 
 ## Root tab menu (选单设定) — 2026-11-10
 
-A fresh install shows 动态, 聊天, 设置. Contacts, Calls and News stay off until the person turns them on. Chats and Settings cannot be hidden. The choice is per device (`UserDefaults` suite `app.tellomi.chat.tab-bar`), not an account record. Hiding button titles shortens the phone tab bar; an iPad or vertical bar is unchanged. The bar rebuilds when the switches move.
+A fresh install shows 动态, 聊天, 设置. Contacts, Calls and News stay off until the person turns them on. Chats and Settings cannot be hidden. The choice is shared account-manager data (`ApplicationSpecificSharedDataKeys.tellomiTabBarPreferences`), the same store as `CallListSettings`, not an account postbox record and not `UserDefaults`. A value saved by the first build in the `app.tellomi.chat.tab-bar` suite is copied in once and then removed. Hiding button titles shortens the phone tab bar; an iPad or vertical bar is unchanged. The bar rebuilds when the switches move.
 
-The screen is Settings → a Tools card → 选单设定. iMe's public iOS tree (only `master`, pushed 2019-10-31, no tags) does not contain this screen. Swiftgram's tab settings (`CallListSettings.showContactsTab`, `SGSimpleSettings.showTabNames`, `addRootControllers`) are the pattern: optional tabs are left out of the controller list, and chats and settings are always appended. Swiftgram asks for a restart to hide titles. This build applies that immediately. No Swiftgram or iMe source was copied.
+The screen is an `ItemListController`: Settings → a Tools card → 选单设定. Strings are `presentationData.strings` from `en.lproj` (`Tellomi.MenuSettings.*`). Other languages come from the server langpack. `dictFromLocalization` does not fill them. iMe's public iOS tree (only `master`, pushed 2019-10-31, no tags) does not contain this screen. Swiftgram's tab settings (`CallListSettings.showContactsTab`, `SGSimpleSettings.showTabNames`, `addRootControllers`) are the pattern: optional tabs are left out of the controller list, and chats and settings are always appended. Swiftgram asks for a restart to hide titles. This build applies that immediately. No Swiftgram or iMe source was copied.
 
 | File | Change |
 | --- | --- |
-| `submodules/TelegramUI/Sources/TelegramRootController.swift` | Builds the root tabs from `TellomiTabBarPreferences`. |
-| `submodules/TelegramUI/Sources/ApplicationContext.swift` | Applies a saved menu immediately, and keeps the old Calls "show tab" switch in step with it. |
-| `submodules/TelegramPresentationData/Sources/PresentationData.swift` | Fills menu strings the active language pack does not have yet. |
+| `submodules/TelegramUI/Sources/TelegramRootController.swift` | Builds the root tabs from `tabBarPreferences`. |
+| `submodules/TelegramUI/Sources/ApplicationContext.swift` | Follows the shared tab-bar record and keeps the Calls "show tab" switch in step with it. |
+| `submodules/TelegramUI/Sources/AppDelegate.swift` | Loads that record with the other shared settings before the root tabs are built. |
+| `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | `tellomiTabBarPreferences` shared-data key. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings row that opens the screen. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | Tools card. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift` | Pushes the screen. |
