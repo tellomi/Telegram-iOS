@@ -2,6 +2,7 @@ import Foundation
 
 /// Suggested defaults from the moments spec (SG-*). Kept in one place so a product change is a value change,
 /// not a search through the screens. The engine's `GET /config` overrides a copy of this at runtime.
+/// Numbers match content-engine: `MaxPostChars` 2000, 12 images, `MaxAudioSeconds` 180.
 public struct MomentsLimits: Equatable {
     public var pageSize: Int
     public var textLimit: Int
@@ -31,14 +32,14 @@ public struct MomentsLimits: Equatable {
 
     public init(
         pageSize: Int = 20,
-        textLimit: Int = 500,
+        textLimit: Int = 2000,
         textCounterFrom: Int = 400,
         collapsedLineCount: Int = 5,
-        imageLimit: Int = 10,
+        imageLimit: Int = 12,
         videoLimit: Int = 3,
         videoMaxDuration: Double = 60,
-        voicePostMaxDuration: Double = 60,
-        voiceCommentMaxDuration: Double = 60,
+        voicePostMaxDuration: Double = 180,
+        voiceCommentMaxDuration: Double = 180,
         commentTextLimit: Int = 1000,
         mentionLimit: Int = 10,
         topicLimit: Int = 3,
