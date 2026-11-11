@@ -25,9 +25,9 @@ public struct MomentsPostHandlers {
     public var link: (String) -> Void
     public var likers: (MomentsCard) -> Void
     public var voters: (MomentsCard) -> Void
-    public var openMedia: (MomentsCard, Int) -> Void
+    public var openMedia: (MomentsCard, Int, MomentsGallerySource?) -> Void
 
-    public init(open: @escaping (MomentsCard) -> Void, author: @escaping (MomentsCard) -> Void, like: @escaping (MomentsCard) -> Void, comment: @escaping (MomentsCard) -> Void, repost: @escaping (MomentsCard) -> Void, share: @escaping (MomentsCard) -> Void, save: @escaping (MomentsCard) -> Void, more: @escaping (MomentsCard, UIView) -> Void, follow: @escaping (MomentsCard) -> Void, undo: @escaping (String) -> Void, fullText: @escaping (MomentsCard) -> Void, topic: @escaping (String) -> Void, link: @escaping (String) -> Void, likers: @escaping (MomentsCard) -> Void = { _ in }, voters: @escaping (MomentsCard) -> Void = { _ in }, openMedia: @escaping (MomentsCard, Int) -> Void = { _, _ in }) {
+    public init(open: @escaping (MomentsCard) -> Void, author: @escaping (MomentsCard) -> Void, like: @escaping (MomentsCard) -> Void, comment: @escaping (MomentsCard) -> Void, repost: @escaping (MomentsCard) -> Void, share: @escaping (MomentsCard) -> Void, save: @escaping (MomentsCard) -> Void, more: @escaping (MomentsCard, UIView) -> Void, follow: @escaping (MomentsCard) -> Void, undo: @escaping (String) -> Void, fullText: @escaping (MomentsCard) -> Void, topic: @escaping (String) -> Void, link: @escaping (String) -> Void, likers: @escaping (MomentsCard) -> Void = { _ in }, voters: @escaping (MomentsCard) -> Void = { _ in }, openMedia: @escaping (MomentsCard, Int, MomentsGallerySource?) -> Void = { _, _, _ in }) {
         self.open = open
         self.author = author
         self.like = like
@@ -210,11 +210,14 @@ final class MomentsPostItemNode: ListViewItemNode {
     private var avatarPeerId: EnginePeer.Id?
     private var avatarPeerDisposable: Disposable?
     private var mediaSlots: [MomentsRemoteImageSlot] = []
+    private var slideViews: [UIView] = []
+    private let galleryAnchor = ASDisplayNode()
     private var albumKey = ""
 
     init() {
         assert(Queue.mainQueue().isCurrent())
         super.init(layerBacked: false)
+        self.galleryAnchor.isUserInteractionEnabled = false
         self.avatar.layer.cornerRadius = 20
         self.follow.layer.cornerRadius = 8
         self.follow.clipsToBounds = true
@@ -478,6 +481,7 @@ final class MomentsPostItemNode: ListViewItemNode {
             slot.cancel()
         }
         self.mediaSlots.removeAll()
+        self.slideViews.removeAll(keepingCapacity: true)
         var playingURL: String?
         for (index, media) in slides.enumerated() {
             let frame = CGRect(x: (cellWidth + gap) * CGFloat(index), y: 0, width: cellWidth, height: albumHeight)
@@ -487,6 +491,7 @@ final class MomentsPostItemNode: ListViewItemNode {
             label.textAlignment = .center
             label.textColor = item.theme.list.itemSecondaryTextColor
             label.backgroundColor = item.theme.list.itemHighlightedBackgroundColor
+            var slideView: UIView = label
             if momentsPresentsAsVideo(media.type) {
                 let seconds = max(media.durationMs / 1000, 0)
                 if let cover = momentsVideoPosterURL(media) ?? momentsMediaURL(base: momentsPublicMediaBaseURL, key: media.coverKey), let context = item.context {
@@ -502,6 +507,7 @@ final class MomentsPostItemNode: ListViewItemNode {
                     let slot = MomentsRemoteImageSlot()
                     slot.bind(url: cover, imageView: imageView, context: context, maxSide: max(cellWidth, albumHeight))
                     self.mediaSlots.append(slot)
+                    slideView = imageView
                 }
                 label.frame = CGRect(x: frame.minX + 8, y: frame.maxY - 28, width: 64, height: 20)
                 label.layer.cornerRadius = 8
@@ -512,6 +518,7 @@ final class MomentsPostItemNode: ListViewItemNode {
                     playingURL = media.remoteURL ?? momentsMediaURL(base: momentsPublicMediaBaseURL, key: media.key)
                 }
                 label.accessibilityIdentifier = media.type.rawValue
+                self.album.addSubview(label)
             } else if let remoteURL = momentsFeedImageURL(media, targetPixels: momentsFeedImageTargetPixels(slideCount: slides.count)) {
                 let imageView = UIImageView(frame: frame)
                 imageView.layer.cornerRadius = 12
@@ -528,12 +535,13 @@ final class MomentsPostItemNode: ListViewItemNode {
                     slot.bind(url: remoteURL, imageView: imageView, context: context, maxSide: max(cellWidth, albumHeight))
                     self.mediaSlots.append(slot)
                 }
-                continue
+                slideView = imageView
             } else {
                 label.text = "\(index + 1)/\(slides.count)"
                 label.accessibilityLabel = "\(index + 1)/\(slides.count)"
+                self.album.addSubview(label)
             }
-            self.album.addSubview(label)
+            self.slideViews.append(slideView)
         }
         let page = min(item.albumIndex, max(slides.count - 1, 0))
         self.albumIndex = page
@@ -677,12 +685,82 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.attachVideo(url: slides[page].remoteURL ?? momentsMediaURL(base: momentsPublicMediaBaseURL, key: slides[page].key), type: slides[page].type, item: item, frame: frame)
     }
 
+    func makeGallerySource() -> MomentsGallerySource {
+        assert(Queue.mainQueue().isCurrent())
+        let cardId = self.item?.card.id ?? ""
+        return MomentsGallerySource(aspects: self.galleryVisibleAspects(), transition: { [weak self] slide in
+            guard let self, self.item?.card.id == cardId else {
+                return nil
+            }
+            return self.galleryTransition(slide: slide)
+        }, viewsToHide: { [weak self] slide in
+            guard let self, self.item?.card.id == cardId else {
+                return []
+            }
+            return self.galleryViewsToHide(slide: slide)
+        })
+    }
+
+    private func galleryVisibleAspects() -> [Int: Double] {
+        var aspects: [Int: Double] = [:]
+        for (index, view) in self.slideViews.enumerated() {
+            guard let imageView = view as? UIImageView, let image = imageView.image, image.size.width > 1, image.size.height > 1 else {
+                continue
+            }
+            aspects[index] = Double(image.size.height / image.size.width)
+        }
+        return aspects
+    }
+
+    /// `ChatImageGalleryItem.animateIn` converts an `ASDisplayNode`. The thumbnail is a `UIImageView`,
+    /// so a non-interactive node is placed over it and the snapshot is taken from the image view.
+    private func galleryTransition(slide: Int) -> MomentsGalleryTransition? {
+        assert(Queue.mainQueue().isCurrent())
+        guard self.slideViews.indices.contains(slide) else {
+            return nil
+        }
+        let imageView = self.slideViews[slide]
+        guard imageView.window != nil || (self.videoNode?.view.window != nil && slide == self.albumIndex) else {
+            return nil
+        }
+        let node: ASDisplayNode
+        if let videoNode = self.videoNode, videoNode.view.window != nil, slide == self.albumIndex, self.videoURL != nil {
+            node = videoNode
+        } else {
+            if self.galleryAnchor.supernode == nil {
+                self.addSubnode(self.galleryAnchor)
+            }
+            self.galleryAnchor.frame = imageView.convert(imageView.bounds, to: self.view)
+            node = self.galleryAnchor
+        }
+        let snapshotView = imageView
+        return MomentsGalleryTransition(node: (node, node.bounds, { [weak snapshotView] in
+            return (momentsGallerySnapshot(of: snapshotView), nil)
+        }), views: self.galleryViewsToHide(slide: slide))
+    }
+
+    private func galleryViewsToHide(slide: Int) -> [UIView] {
+        var views: [UIView] = []
+        if self.slideViews.indices.contains(slide) {
+            views.append(self.slideViews[slide])
+        }
+        if slide == self.albumIndex, let videoNode = self.videoNode, self.videoURL != nil {
+            views.append(videoNode.view)
+        }
+        return views
+    }
+
     @objc private func bodyPressed() { if let item = self.item { item.handlers.open(item.card) } }
-    @objc private func mediaPressed() { if let item = self.item { item.handlers.openMedia(item.card, self.albumIndex) } }
+    @objc private func mediaPressed() {
+        guard let item = self.item else {
+            return
+        }
+        item.handlers.openMedia(item.card, self.albumIndex, self.makeGallerySource())
+    }
     @objc private func mediaImagePressed(_ gesture: UITapGestureRecognizer) {
         guard let item = self.item else { return }
         let index = gesture.view?.tag ?? self.albumIndex
-        item.handlers.openMedia(item.card, index)
+        item.handlers.openMedia(item.card, index, self.makeGallerySource())
     }
     @objc private func likePressed() { if let item = self.item { item.handlers.like(item.card) } }
     @objc private func likersPressed(_ gesture: UILongPressGestureRecognizer) {

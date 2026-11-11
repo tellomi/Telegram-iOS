@@ -18,6 +18,7 @@ swift_library(
         "//submodules/TelegramPresentationData",
         "//submodules/TelegramUIPreferences",
         "//submodules/AccountContext",
+        "//submodules/GalleryUI:GalleryUI",
         "//submodules/ComponentFlow",
         "//submodules/TelegramUI/Components/HorizontalTabsComponent",
         "//submodules/ContextUI",

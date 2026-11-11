@@ -1,40 +1,102 @@
 import Foundation
 import UIKit
 import Display
+import AsyncDisplayKit
 import SwiftSignalKit
 import TelegramCore
 import AccountContext
 import Postbox
+import GalleryUI
 
-func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: Int, controller: ViewController) {
+/// The row that was tapped. The gallery asks again for whichever page is on screen, including after
+/// a horizontal swipe, the same way a chat asks the visible bubble.
+public final class MomentsGallerySource {
+    let aspects: [Int: Double]
+    private let transition: (Int) -> MomentsGalleryTransition?
+    private let viewsToHide: (Int) -> [UIView]
+    private var hidden: [UIView] = []
+
+    init(aspects: [Int: Double], transition: @escaping (Int) -> MomentsGalleryTransition?, viewsToHide: @escaping (Int) -> [UIView]) {
+        self.aspects = aspects
+        self.transition = transition
+        self.viewsToHide = viewsToHide
+    }
+
+    func transition(for slide: Int) -> MomentsGalleryTransition? {
+        assert(Queue.mainQueue().isCurrent())
+        return self.transition(slide)
+    }
+
+    func hide(_ views: [UIView]) {
+        assert(Queue.mainQueue().isCurrent())
+        for view in views {
+            if self.hidden.contains(where: { $0 === view }) {
+                view.isHidden = true
+                continue
+            }
+            view.isHidden = true
+            self.hidden.append(view)
+        }
+    }
+
+    /// The page that is central in the gallery stays hidden. The others show again, matching
+    /// `GalleryController`'s hidden-media update when the pager moves.
+    func focus(slide: Int) {
+        assert(Queue.mainQueue().isCurrent())
+        let keep = self.viewsToHide(slide)
+        self.hidden.removeAll { view in
+            if keep.contains(where: { $0 === view }) {
+                return false
+            }
+            view.isHidden = false
+            return true
+        }
+        self.hide(keep)
+    }
+
+    deinit {
+        let views = self.hidden
+        momentsOnMainQueue {
+            for view in views {
+                view.isHidden = false
+            }
+        }
+    }
+}
+
+struct MomentsGalleryTransition {
+    let node: (ASDisplayNode, CGRect, () -> (UIView?, UIView?))
+    let views: [UIView]
+}
+
+func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: Int, controller: ViewController, source: MomentsGallerySource?) {
+    assert(Queue.mainQueue().isCurrent())
+    let entries = momentsGalleryEntries(from: card.media, visibleAspectBySlide: source?.aspects ?? [:])
+    guard let position = momentsGalleryEntryPosition(entries: entries, tappedSlide: index) else {
+        return
+    }
     let slides = card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
     let peerId = context.account.peerId
-    var messages: [EngineRawMessage] = []
-    for (offset, media) in slides.enumerated() {
-        // Gallery plays the original file. A relative key is joined onto the public media host.
-        let url: String?
-        if momentsPresentsAsVideo(media.type) {
-            url = media.remoteURL.flatMap { $0.hasPrefix("https://") ? $0 : nil } ?? momentsMediaURL(base: momentsPublicMediaBaseURL, key: media.key)
-        } else {
-            url = momentsFeedImageURL(media, targetPixels: momentsSingleImagePixels) ?? momentsMediaURL(base: momentsPublicMediaBaseURL, key: media.key)
-        }
-        guard let url, url.hasPrefix("https://") else {
-            continue
-        }
+    let grouped = entries.count > 1
+    var messages: [Message] = []
+    for entry in entries {
+        let media = slides[entry.slideIndex]
         let attached: Media
-        if momentsPresentsAsVideo(media.type) {
-            attached = momentsGalleryFile(url: url, media: media)
+        let width = Int32(entry.pixels.width)
+        let height = Int32(entry.pixels.height)
+        if entry.isVideo {
+            attached = momentsGalleryFile(url: entry.url, media: media, width: width, height: height)
         } else {
-            attached = momentsGalleryImage(url: url, media: media, id: Int64(offset + 1))
+            attached = momentsGalleryImage(url: entry.url, width: width, height: height, id: Int64(entry.slideIndex + 1))
         }
-        let messageId = EngineMessage.Id(peerId: peerId, namespace: Namespaces.Message.Local, id: Int32(offset + 1))
-        messages.append(EngineRawMessage(
-            stableId: UInt32(offset + 1),
+        let messageId = MessageId(peerId: peerId, namespace: Namespaces.Message.Local, id: Int32(entry.slideIndex + 1))
+        messages.append(Message(
+            stableId: UInt32(entry.slideIndex + 1),
             stableVersion: 0,
             id: messageId,
             globallyUniqueId: nil,
-            groupingKey: nil,
-            groupInfo: nil,
+            groupingKey: grouped ? 1 : nil,
+            groupInfo: grouped ? MessageGroupInfo(stableId: 1) : nil,
             threadId: nil,
             timestamp: 0,
             flags: [],
@@ -47,8 +109,8 @@ func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: In
             text: "",
             attributes: [],
             media: [attached],
-            peers: EngineSimpleDictionary(),
-            associatedMessages: EngineSimpleDictionary(),
+            peers: SimpleDictionary(),
+            associatedMessages: SimpleDictionary(),
             associatedMessageIds: [],
             associatedMedia: [:],
             associatedThreadInfo: nil,
@@ -58,19 +120,55 @@ func momentsPresentGallery(context: AccountContext, card: MomentsCard, index: In
     guard !messages.isEmpty else {
         return
     }
-    let tapped = min(max(0, index), messages.count - 1)
-    let source: GalleryControllerItemSource = .custom(
-        messages: .single((messages, Int32(tapped), false)),
-        messageId: messages[tapped].id,
+    let central = messages[position]
+    // `.custom` builds its history from the end of the array, the same order as a chat history.
+    // Hand it the reversed list so the pager runs in the post's own order. The central page is
+    // chosen by message id, not by that array position.
+    let sourceSignal: GalleryControllerItemSource = .custom(
+        messages: .single((Array(messages.reversed()), Int32(messages.count), false)),
+        messageId: central.id,
         loadMore: nil
     )
-    let gallery = context.sharedContext.makeGalleryController(context: context, source: source, streamSingleVideo: true, isPreview: false)
-    (controller.navigationController as? NavigationController)?.pushViewController(gallery)
+    let gallery = GalleryController(context: context, source: sourceSignal, streamSingleVideo: true, replaceRootController: { _, _ in
+    }, baseNavigationController: controller.navigationController as? NavigationController)
+    if let source {
+        gallery.centralItemUpdated = { messageId in
+            assert(Queue.mainQueue().isCurrent())
+            source.focus(slide: Int(messageId.id) - 1)
+        }
+    }
+    let arguments = GalleryControllerPresentationArguments(transitionArguments: { [weak controller] messageId, _ in
+        guard let source, let transition = source.transition(for: Int(messageId.id) - 1) else {
+            return nil
+        }
+        source.hide(transition.views)
+        return GalleryTransitionArguments(transitionNode: transition.node, addToTransitionSurface: { view in
+            assert(Queue.mainQueue().isCurrent())
+            controller?.view.addSubview(view)
+        })
+    })
+    controller.present(gallery, in: .window(.root), with: arguments, blockInteraction: true)
 }
 
-private func momentsGalleryImage(url: String, media: MomentsMedia, id: Int64) -> TelegramMediaImage {
-    let width = Int32(max(media.width, 1))
-    let height = Int32(max(media.height, 1))
+func momentsGallerySnapshot(of view: UIView?) -> UIView {
+    if let view, let snapshot = view.snapshotContentTree(unhide: true) {
+        return snapshot
+    }
+    if let imageView = view as? UIImageView, let image = imageView.image {
+        let copy = UIImageView(image: image)
+        copy.frame = CGRect(origin: CGPoint(), size: imageView.bounds.size)
+        copy.contentMode = imageView.contentMode
+        copy.clipsToBounds = true
+        copy.layer.cornerRadius = imageView.layer.cornerRadius
+        return copy
+    }
+    let size = view?.bounds.size ?? CGSize(width: 1, height: 1)
+    let placeholder = UIView(frame: CGRect(origin: CGPoint(), size: size))
+    placeholder.backgroundColor = view?.backgroundColor
+    return placeholder
+}
+
+private func momentsGalleryImage(url: String, width: Int32, height: Int32, id: Int64) -> TelegramMediaImage {
     let resource = HttpReferenceMediaResource(url: url, size: nil)
     let representation = TelegramMediaImageRepresentation(
         dimensions: PixelDimensions(width: width, height: height),
@@ -90,9 +188,7 @@ private func momentsGalleryImage(url: String, media: MomentsMedia, id: Int64) ->
     )
 }
 
-private func momentsGalleryFile(url: String, media: MomentsMedia) -> TelegramMediaFile {
-    let width = Int32(max(media.width, 16))
-    let height = Int32(max(media.height, 16))
+private func momentsGalleryFile(url: String, media: MomentsMedia, width: Int32, height: Int32) -> TelegramMediaFile {
     return TelegramMediaFile(
         fileId: EngineMedia.Id(namespace: Namespaces.Media.LocalFile, id: Int64(url.hashValue)),
         partialReference: nil,
@@ -104,7 +200,7 @@ private func momentsGalleryFile(url: String, media: MomentsMedia) -> TelegramMed
         size: nil,
         attributes: [
             .FileName(fileName: momentsPlaybackFileName(media.type)),
-            .Video(duration: Double(media.durationMs) / 1000.0, size: PixelDimensions(width: width, height: height), flags: TelegramMediaVideoFlags(), preloadSize: nil, coverTime: nil, videoCodec: nil)
+            .Video(duration: Double(media.durationMs) / 1000.0, size: PixelDimensions(width: max(width, 16), height: max(height, 16)), flags: TelegramMediaVideoFlags(), preloadSize: nil, coverTime: nil, videoCodec: nil)
         ],
         alternativeRepresentations: []
     )

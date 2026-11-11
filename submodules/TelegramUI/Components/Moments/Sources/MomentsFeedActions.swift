@@ -67,8 +67,8 @@ final class MomentsFeedActions {
             self?.openLikers(card)
         }, voters: { [weak self] card in
             self?.openVoters(card)
-        }, openMedia: { [weak self] card, index in
-            self?.openMedia(card, index: index)
+        }, openMedia: { [weak self] card, index, source in
+            self?.openMedia(card, index: index, source: source)
         })
     }
 
@@ -137,15 +137,13 @@ final class MomentsFeedActions {
         controller.present(sheet, in: .window(.root))
     }
 
-    private func openMedia(_ card: MomentsCard, index: Int) {
+    private func openMedia(_ card: MomentsCard, index: Int, source: MomentsGallerySource?) {
         guard let controller = self.controller() else {
             return
         }
-        let hasMedia = card.media.contains { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
-        if hasMedia {
-            self.beforeOpen?(.media(postId: card.id, index: index))
-        }
-        momentsPresentGallery(context: self.context, card: card, index: index, controller: controller)
+        // The gallery is an overlay on this screen, not a pushed controller, so the list does not
+        // leave and its scroll offset does not need to be restored.
+        momentsPresentGallery(context: self.context, card: card, index: index, controller: controller, source: source)
     }
 
     private func toggleLike(_ card: MomentsCard) {

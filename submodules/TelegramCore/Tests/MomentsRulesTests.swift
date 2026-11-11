@@ -751,6 +751,40 @@ final class MomentsRulesTests: XCTestCase {
         }
         wait(for: [exp], timeout: 2)
     }
+
+    func testGalleryKeepsTheTappedSlideWhenAnEarlierUrlIsMissing() {
+        let dropped = MomentsMedia(type: .image, key: "http://insecure.example/a.jpg")
+        let first = MomentsMedia(type: .image, key: "a", width: 400, height: 800, remoteURL: "https://cdn.example/a.jpg")
+        let second = MomentsMedia(type: .image, key: "b", width: 1000, height: 500, remoteURL: "https://cdn.example/b.jpg", renditions: [
+            MomentsRendition(key: "b-small", url: "https://cdn.example/b-360.jpg", width: 360, height: 180),
+            MomentsRendition(key: "b-full", url: "https://cdn.example/b-1080.jpg", width: 1080, height: 540)
+        ])
+        let video = MomentsMedia(type: .video, key: "v", remoteURL: "https://cdn.example/v.mp4")
+        let audio = MomentsMedia(type: .audio, key: "s", remoteURL: "https://cdn.example/a.mp3")
+        let entries = momentsGalleryEntries(from: [dropped, first, audio, second, video], visibleAspectBySlide: [:])
+        XCTAssertEqual(entries.map { $0.slideIndex }, [1, 2, 3])
+        XCTAssertEqual(momentsGalleryEntryPosition(entries: entries, tappedSlide: 2), 1)
+        XCTAssertEqual(momentsGalleryEntryPosition(entries: entries, tappedSlide: 0), 0)
+        XCTAssertEqual(entries[1].url, "https://cdn.example/b-1080.jpg")
+        XCTAssertEqual(entries[1].pixels, MomentsGalleryPixelSize(width: 1080, height: 540))
+        XCTAssertEqual(entries[0].pixels, MomentsGalleryPixelSize(width: 400, height: 800))
+        XCTAssertTrue(entries[2].isVideo)
+        XCTAssertNil(momentsGalleryEntries(from: [audio]).first)
+
+        let unknown = MomentsMedia(type: .image, key: "c", remoteURL: "https://cdn.example/c.jpg")
+        XCTAssertEqual(momentsGalleryEntries(from: [unknown], visibleAspectBySlide: [0: 2])[0].pixels, MomentsGalleryPixelSize(width: 640, height: 1280))
+        XCTAssertEqual(momentsGalleryEntries(from: [unknown])[0].pixels, MomentsGalleryPixelSize(width: 1280, height: 1280))
+
+        let huge = MomentsMedia(type: .image, key: "h", width: 8000, height: 4000, remoteURL: "https://cdn.example/h.jpg")
+        XCTAssertEqual(momentsGalleryEntries(from: [huge])[0].pixels, MomentsGalleryPixelSize(width: 4096, height: 2048))
+
+        let onlySmall = MomentsMedia(type: .image, key: "s2", width: 2000, height: 1000, remoteURL: "https://cdn.example/original.jpg", renditions: [
+            MomentsRendition(key: "small", url: "https://cdn.example/small.jpg", width: 360, height: 180)
+        ])
+        let smallEntry = momentsGalleryEntries(from: [onlySmall])[0]
+        XCTAssertEqual(smallEntry.url, "https://cdn.example/original.jpg")
+        XCTAssertEqual(smallEntry.pixels, MomentsGalleryPixelSize(width: 2000, height: 1000))
+    }
 }
 
 private let momentsServerConfigFixture = """
