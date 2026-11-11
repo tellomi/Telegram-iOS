@@ -416,6 +416,30 @@ public extension TelegramEngine {
             }.start()
         }
 
+        /// Pending sends survive the process. The post body is built again with `momentsEncodePost` and the stored nonce.
+        public func storedPendingPosts() -> Signal<[MomentsPendingPost], NoError> {
+            return self.account.postbox.transaction { transaction -> [MomentsPendingPost] in
+                guard let payload = momentsReadBlob(transaction: transaction, id: momentsOutboxCacheId()), let data = payload.data(using: .utf8), let blob = try? JSONDecoder().decode(MomentsOutboxBlob.self, from: data) else {
+                    return []
+                }
+                return blob.posts
+            }
+        }
+
+        public func storePendingPosts(_ posts: [MomentsPendingPost]) {
+            let payload: String?
+            if posts.isEmpty {
+                payload = nil
+            } else if let data = try? JSONEncoder().encode(MomentsOutboxBlob(posts: posts)), let text = String(data: data, encoding: .utf8) {
+                payload = text
+            } else {
+                payload = nil
+            }
+            let _ = self.account.postbox.transaction { transaction in
+                momentsWriteBlob(transaction: transaction, id: momentsOutboxCacheId(), payload: payload)
+            }.start()
+        }
+
         public func storeAudience(_ privacy: EngineStoryPrivacy) {
             let stored = MomentsStoredAudience(base: privacy.base.rawValue, peers: privacy.additionallyIncludePeers.map { $0.toInt64() })
             guard let data = try? JSONEncoder().encode(stored), let payload = String(data: data, encoding: .utf8) else {

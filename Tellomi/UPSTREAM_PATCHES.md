@@ -1,5 +1,22 @@
 # Upstream patches
 
+## Moments composer send task — 2026-11-11
+
+Branch `cursor/moments-composer-outbox-5d88`, based on `release/ios`.
+
+The composer keeps one `client_nonce` for a submission and stores that task in the account Postbox (`moments` cache, outbox). A retry sends the same nonce through `momentsEncodePost`. Cancel, the back button and swipe-back share `momentsComposerLeave`. No upstream navigation code was changed: `ViewController.attemptNavigation` already covers the back button and the interactive pop. New strings are keys added to `en.lproj` only.
+
+`tellomi/content-engine` is not readable with this environment's GitHub token (the repository returns 404). The field the audited server accepts and checks with `ids.Parse` is `client_nonce` (`posts.go` around 460–463 at `b41659e`). This client sends that field. It does not add an `Idempotency-Key` header. Whether the server stores the nonce and returns the original post on a duplicate is not visible from here, so a lost response can still create a second post if the server only checks the UUID shape.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsComposerSession.swift` | Publish gate, nonce, draft restore, pending-send disposition. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsModels.swift` | Draft keeps audience, quote, local files and the nonce. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/TelegramEngineMoments.swift` | Outbox read and write. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsComposerScreen.swift` | Gate, shared leave, persisted send. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsScreen.swift` | Offers a restored send. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | New Moments draft and outbox keys. |
+
 ## Root tab menu (选单设定) — 2026-11-10
 
 A fresh install shows 动态, 聊天, 设置. Contacts, Calls and News stay off until the person turns them on. Chats and Settings cannot be hidden. The choice is per device (`UserDefaults` suite `app.tellomi.chat.tab-bar`), not an account record. Hiding button titles shortens the phone tab bar; an iPad or vertical bar is unchanged. The bar rebuilds when the switches move.

@@ -185,6 +185,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var loadDisposables: [MomentsFeedKind: Disposable] = [:]
     private var pullOffset: [MomentsFeedKind: CGFloat] = [:]
     private var screenVisible = false
+    private var offeredPendingSend = false
     private var probeEpoch = 0
     private var probeDisposable: Disposable?
     private let prefetch: MomentsPrefetchManager
@@ -309,6 +310,46 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         guard visible != self.screenVisible else { return }
         self.screenVisible = visible
         self.scheduleProbe()
+        if visible {
+            self.offerPendingSend()
+        }
+    }
+
+    /// A killed app left a post in the outbox. Offer that one task; do not send it until asked.
+    private func offerPendingSend() {
+        guard !self.offeredPendingSend, let controller = self.controller else {
+            return
+        }
+        if controller.navigationController?.viewControllers.contains(where: { $0 is MomentsComposerScreen }) == true {
+            return
+        }
+        let _ = (self.context.engine.moments.storedPendingPosts()
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { [weak self] posts in
+            guard let self, let controller = self.controller, let post = momentsSelectPendingPost(posts) else {
+                return
+            }
+            if controller.navigationController?.viewControllers.contains(where: { $0 is MomentsComposerScreen }) == true {
+                return
+            }
+            guard momentsPendingDisposition(post, fileExists: { FileManager.default.fileExists(atPath: $0) }) == .offerRetry else {
+                return
+            }
+            guard !self.offeredPendingSend else {
+                return
+            }
+            self.offeredPendingSend = true
+            let strings = self.presentationData.strings
+            controller.present(textAlertController(context: self.context, title: strings.Moments_Outbox_Title, text: strings.Moments_Outbox_Text, actions: [
+                TextAlertAction(type: .defaultAction, title: strings.Moments_Outbox_Retry, action: { [weak self] in
+                    self?.presentComposer(quoteId: nil, sendPending: true)
+                }),
+                TextAlertAction(type: .destructiveAction, title: strings.Moments_Draft_Discard, action: { [weak self] in
+                    self?.context.engine.moments.storePendingPosts([])
+                }),
+                TextAlertAction(type: .genericAction, title: strings.Moments_Outbox_Later, action: {})
+            ], actionLayout: .vertical), in: .window(.root))
+        })
     }
 
     func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
@@ -831,9 +872,9 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.scheduleProbe()
     }
 
-    private func presentComposer(quoteId: String?) {
+    private func presentComposer(quoteId: String?, sendPending: Bool = false) {
         guard let controller = self.controller else { return }
-        let composer = MomentsComposerScreen(context: self.context, quoteId: quoteId)
+        let composer = MomentsComposerScreen(context: self.context, quoteId: quoteId, sendPending: sendPending)
         (controller.navigationController as? NavigationController)?.pushViewController(composer)
     }
 

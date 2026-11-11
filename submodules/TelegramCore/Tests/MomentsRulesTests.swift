@@ -503,6 +503,111 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertFalse(grant.needsRefresh(now: 1_000 - MomentsCredential.refreshMargin - 1))
         XCTAssertTrue(grant.needsRefresh(now: 1_000 - MomentsCredential.refreshMargin))
     }
+
+    func testComposerBlocksIncompleteMediaAndKeepsOneNonce() {
+        let ready = MomentsComposerPublishGate(trimmedText: "hello", completedMediaCount: 0, activity: .idle, audienceChosen: true, submitting: false)
+        XCTAssertNil(momentsComposerPublishDenial(ready))
+        XCTAssertEqual(momentsComposerPublishDenial(MomentsComposerPublishGate(trimmedText: "hello", completedMediaCount: 0, activity: .recordingVoice, audienceChosen: true, submitting: false)), .mediaNotReady)
+        XCTAssertEqual(momentsComposerPublishDenial(MomentsComposerPublishGate(trimmedText: "hello", completedMediaCount: 1, activity: .finishingVoice, audienceChosen: true, submitting: false)), .mediaNotReady)
+        XCTAssertEqual(momentsComposerPublishDenial(MomentsComposerPublishGate(trimmedText: "hello", completedMediaCount: 0, activity: .uploadingMedia(count: 2), audienceChosen: true, submitting: false)), .mediaNotReady)
+        XCTAssertEqual(momentsComposerPublishDenial(MomentsComposerPublishGate(trimmedText: "", completedMediaCount: 0, activity: .idle, audienceChosen: true, submitting: false)), .empty)
+        XCTAssertEqual(momentsComposerPublishDenial(MomentsComposerPublishGate(trimmedText: "hello", completedMediaCount: 0, activity: .idle, audienceChosen: false, submitting: false)), .audienceNotChosen)
+        XCTAssertEqual(momentsComposerPublishDenial(MomentsComposerPublishGate(trimmedText: "hello", completedMediaCount: 0, activity: .idle, audienceChosen: true, submitting: true)), .submitting)
+        XCTAssertEqual(momentsComposerPublishDenial(MomentsComposerPublishGate(trimmedText: "hello", completedMediaCount: 1, activity: .idle, audienceChosen: true, submitting: false, mediaBlocked: true)), .mediaNotReady)
+
+        let nonce = "44444444-4444-4444-8444-444444444444"
+        let other = "55555555-5555-4555-8555-555555555555"
+        let fingerprint = MomentsPostFingerprint(text: "hello", mediaKeys: ["m/a"], audience: MomentsAudience(kind: .everyone), allowNearby: false, quoteOf: "quoted-id")
+        let first = momentsClientNonceForSubmission(storedNonce: nil, storedFingerprint: nil, current: fingerprint, nonceLocked: false, make: { nonce })
+        XCTAssertEqual(first, nonce)
+        let retry = momentsClientNonceForSubmission(storedNonce: first, storedFingerprint: fingerprint, current: fingerprint, nonceLocked: true, make: { other })
+        XCTAssertEqual(retry, nonce)
+        var edited = fingerprint
+        edited.text = "hello!"
+        XCTAssertEqual(momentsClientNonceForSubmission(storedNonce: nonce, storedFingerprint: fingerprint, current: edited, nonceLocked: true, make: { other }), other)
+        var appended = fingerprint
+        appended.mediaKeys = ["m/a", "m/b"]
+        XCTAssertEqual(momentsClientNonceForSubmission(storedNonce: nonce, storedFingerprint: fingerprint, current: appended, nonceLocked: true, make: { other }), nonce)
+        XCTAssertEqual(momentsClientNonceForSubmission(storedNonce: nonce, storedFingerprint: fingerprint, current: appended, nonceLocked: false, make: { other }), other)
+        XCTAssertEqual(momentsClientNonceForSubmission(storedNonce: "not-a-uuid", storedFingerprint: fingerprint, current: fingerprint, nonceLocked: true, make: { other }), other)
+
+        let draft = momentsTestPost(text: fingerprint.text, mediaKeys: fingerprint.mediaKeys, quoteOf: fingerprint.quoteOf, nonce: retry)
+        let body = momentsTestReady(momentsEncodePost(draft, audienceToken: nil))
+        let again = momentsTestReady(momentsEncodePost(draft, audienceToken: nil))
+        XCTAssertEqual(body["client_nonce"] as? String, nonce)
+        XCTAssertEqual(again["client_nonce"] as? String, nonce)
+        XCTAssertEqual(body["quote_of"] as? String, "quoted-id")
+    }
+
+    func testDraftKeepsMediaAudienceAndQuote() {
+        let media = MomentsMedia(type: .image, key: "m/a", width: 10, height: 12, order: 0)
+        let local = MomentsComposerLocalMedia(path: "/tmp/a.jpg", filename: "a.jpg", mimeType: "image/jpeg", type: .image, width: 10, height: 12, durationMs: 0, order: 1)
+        let draft = MomentsComposerDraft(text: "hello", privacyBase: EngineStoryPrivacy.Base.nobody.rawValue, peerIds: [7, 8], allowNearby: false, quoteId: "quoted-id", media: [media], audienceChosen: true, clientNonce: "44444444-4444-4444-8444-444444444444", localMedia: [local])
+        let data = try! JSONEncoder().encode(draft)
+        let decoded = try! JSONDecoder().decode(MomentsComposerDraft.self, from: data)
+        XCTAssertEqual(decoded, draft)
+        XCTAssertEqual(decoded.media, [media])
+        XCTAssertEqual(decoded.localMedia, [local])
+        XCTAssertEqual(decoded.quoteId, "quoted-id")
+        XCTAssertEqual(decoded.peerIds, [7, 8])
+        XCTAssertEqual(decoded.clientNonce, draft.clientNonce)
+        let privacy = EngineStoryPrivacy(base: EngineStoryPrivacy.Base(rawValue: decoded.privacyBase)!, additionallyIncludePeers: decoded.peerIds.map { PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value($0)) })
+        XCTAssertEqual(momentsAudience(from: privacy), MomentsAudience(kind: .selected, include: [7, 8]))
+        XCTAssertEqual(momentsRestoredQuote(openedWith: nil, stored: decoded.quoteId), "quoted-id")
+        XCTAssertEqual(momentsRestoredQuote(openedWith: "newer", stored: decoded.quoteId), "newer")
+
+        let legacy = #"{"text":"hi","privacyBase":0,"peerIds":[3],"allowNearby":true,"quoteId":"q","media":[]}"#.data(using: .utf8)!
+        let old = try! JSONDecoder().decode(MomentsComposerDraft.self, from: legacy)
+        XCTAssertEqual(old.text, "hi")
+        XCTAssertEqual(old.quoteId, "q")
+        XCTAssertEqual(old.peerIds, [3])
+        XCTAssertTrue(old.audienceChosen)
+        XCTAssertTrue(old.localMedia.isEmpty)
+        XCTAssertNil(old.clientNonce)
+        XCTAssertTrue(old.allowNearby)
+    }
+
+    func testLeaveAndPendingRestore() {
+        for source in [MomentsComposerLeaveSource.cancel, .back, .interactivePop] {
+            XCTAssertEqual(momentsComposerLeave(source: source, dirty: false), .dismiss)
+            XCTAssertEqual(momentsComposerLeave(source: source, dirty: true), .confirm)
+        }
+        XCTAssertFalse(momentsComposerIsDirty(text: "", mediaCount: 0, localMediaCount: 0, audienceChosen: false, quoteId: nil, activity: .idle, hasPendingSend: false))
+        XCTAssertTrue(momentsComposerIsDirty(text: "", mediaCount: 0, localMediaCount: 0, audienceChosen: false, quoteId: "q", activity: .idle, hasPendingSend: false))
+        XCTAssertTrue(momentsComposerIsDirty(text: "", mediaCount: 1, localMediaCount: 0, audienceChosen: false, quoteId: nil, activity: .idle, hasPendingSend: false))
+        XCTAssertTrue(momentsComposerIsDirty(text: "a", mediaCount: 0, localMediaCount: 0, audienceChosen: true, quoteId: nil, activity: .uploadingMedia(count: 1), hasPendingSend: true))
+
+        let fingerprint = MomentsPostFingerprint(text: "hello", mediaKeys: ["m/a"], audience: MomentsAudience(kind: .contacts), allowNearby: false, quoteOf: "quoted-id")
+        let nonce = "44444444-4444-4444-8444-444444444444"
+        let sent = MomentsPendingPost(clientNonce: nonce, fingerprint: fingerprint, text: "hello", audience: fingerprint.audience, media: [MomentsMedia(type: .image, key: "m/a", order: 0)], localMedia: [], allowNearby: false, quoteOf: "quoted-id", phase: .sending, submitted: true, nonceLocked: true)
+        XCTAssertEqual(momentsPendingDisposition(sent, fileExists: { _ in false }), .offerRetry)
+        XCTAssertEqual(momentsPendingDisposition(MomentsPendingPost(clientNonce: nonce, fingerprint: fingerprint, text: "hello", audience: fingerprint.audience, media: [], localMedia: [], allowNearby: false, quoteOf: "quoted-id", phase: .failed, submitted: true, nonceLocked: true), fileExists: { _ in true }), .offerRetry)
+        let local = MomentsComposerLocalMedia(path: "/pending/a.jpg", filename: "a.jpg", mimeType: "image/jpeg", type: .image, width: 1, height: 1, durationMs: 0, order: 0)
+        let uploading = MomentsPendingPost(clientNonce: nonce, fingerprint: fingerprint, text: "hello", audience: fingerprint.audience, media: [], localMedia: [local], allowNearby: false, quoteOf: "quoted-id", phase: .uploading, submitted: false)
+        XCTAssertEqual(momentsPendingDisposition(uploading, fileExists: { $0 == "/pending/a.jpg" }), .resumeUpload)
+        var submittedUpload = uploading
+        submittedUpload.submitted = true
+        XCTAssertEqual(momentsPendingDisposition(submittedUpload, fileExists: { $0 == "/pending/a.jpg" }), .resumeThenSend)
+        XCTAssertEqual(momentsPendingDisposition(submittedUpload, fileExists: { _ in false }), .holdIncomplete)
+        XCTAssertEqual(momentsSelectPendingPost([uploading, sent])?.clientNonce, nonce)
+        XCTAssertEqual(momentsSelectPendingPost([uploading, sent])?.submitted, true)
+        let restored = momentsSelectPendingPost([sent])!.postDraft()
+        XCTAssertEqual(momentsTestReady(momentsEncodePost(restored, audienceToken: nil))["client_nonce"] as? String, nonce)
+        XCTAssertEqual(momentsTestReady(momentsEncodePost(restored, audienceToken: nil))["quote_of"] as? String, "quoted-id")
+        XCTAssertEqual(momentsTestReady(momentsEncodePost(restored, audienceToken: nil))["visibility"] as? String, "contacts")
+
+        let directory = NSTemporaryDirectory() + "moments-pending-\(UUID().uuidString)"
+        let source = directory + "-src.jpg"
+        try! FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        try! Data([1, 2, 3]).write(to: URL(fileURLWithPath: source))
+        let copied = momentsCopyPendingFile(from: source, accountPath: directory, name: "a.jpg")
+        XCTAssertEqual(copied, directory + "/moments-pending/a.jpg")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: copied!))
+        momentsRemovePendingFiles(accountPath: directory)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory + "/moments-pending"))
+        try? FileManager.default.removeItem(atPath: source)
+        XCTAssertNil(momentsCopyPendingFile(from: source, accountPath: directory, name: "../x"))
+    }
 }
 
 private func momentsTestPost(text: String, audience: MomentsAudience = MomentsAudience(kind: .everyone), mediaKeys: [String] = [], allowNearby: Bool = false, city: String? = nil, placeId: String? = nil, quoteOf: String? = nil, nonce: String) -> MomentsPostDraft {
