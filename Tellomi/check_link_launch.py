@@ -32,7 +32,6 @@ OFFICIAL_DOMAINS = [
 ]
 TELLOMI_DOMAINS = [
     "applinks:tell.cc",
-    "applinks:*.tell.cc",
     "webcredentials:tell.cc",
 ]
 PLIST_HEAD = """<?xml version="1.0" encoding="UTF-8"?>

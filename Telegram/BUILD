@@ -600,11 +600,11 @@ icloud_fragment = "" if not telegram_enable_icloud else """
 )
 
 # Official Telegram ids keep every host below. app.tellomi.chat is not one
-# of those ids, so the same gate used to drop Associated Domains from the
-# Tellomi app. Tellomi gets applinks for tell.cc. webcredentials is included
-# because this fragment already lists webcredentials entries; Tellomi's entry
-# names tell.cc. The host is written here, as the other hosts are: the
-# configuration file has no link-host field.
+# of those ids, so it gets its own fragment: applinks:tell.cc and
+# webcredentials:tell.cc. No *.tell.cc entry. www.tell.cc redirects its
+# association file to the apex, Apple does not follow that redirect, and
+# the app does not use subdomains. The host is written here, as the other
+# hosts are: the configuration file has no link-host field.
 official_associated_domains_fragment = """
 <key>com.apple.developer.associated-domains</key>
 <array>
@@ -622,7 +622,6 @@ tellomi_associated_domains_fragment = """
 <key>com.apple.developer.associated-domains</key>
 <array>
     <string>applinks:tell.cc</string>
-    <string>applinks:*.tell.cc</string>
     <string>webcredentials:tell.cc</string>
 </array>
 """
