@@ -687,7 +687,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
             return
         }
         let text = self.input.text ?? ""
-        guard text.count <= MomentsLimits.standard.commentTextLimit else {
+        guard text.count <= self.context.engine.moments.currentLimits().commentTextLimit else {
             self.showCommentError(.invalid("comment"))
             return
         }
@@ -743,6 +743,6 @@ extension MomentsCommentSheet: UITextFieldDelegate {
         let current = textField.text ?? ""
         guard let textRange = Range(range, in: current) else { return true }
         let updated = current.replacingCharacters(in: textRange, with: string)
-        return updated.count <= MomentsLimits.standard.commentTextLimit
+        return updated.count <= self.context.engine.moments.currentLimits().commentTextLimit
     }
 }
