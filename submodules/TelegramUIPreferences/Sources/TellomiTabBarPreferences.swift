@@ -132,6 +132,16 @@ public func tellomiPreferencesForFirstLaunch(calls: TellomiCallsTabMigration) ->
     return preferences
 }
 
+/// Whether the settings tab draws the signed-in account instead of the gear.
+///
+/// A profile photo is enough on its own: that is the icon once the account has an avatar.
+/// Another signed-in account also is, which is when the gear is replaced by the letter
+/// placeholder so the accounts can be told apart. The gear, and its selection animation,
+/// stay when neither is true.
+public func tellomiSettingsTabShowsAccountAvatar(hasProfilePhoto: Bool, hasOtherAccounts: Bool) -> Bool {
+    return hasProfilePhoto || hasOtherAccounts
+}
+
 /// Tabs that are both available in this build and turned on, in `displayOrder`.
 /// Chats and Settings are included even when `available` forgets them.
 public func tellomiVisibleRootTabs(preferences: TellomiTabBarPreferences, available: Set<TellomiRootTab>) -> [TellomiRootTab] {

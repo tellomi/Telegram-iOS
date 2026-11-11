@@ -6750,7 +6750,9 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
             
             let accountTabBarAvatar: Signal<(UIImage, UIImage)?, NoError> = combineLatest(self.accountsAndPeers.get(), context.sharedContext.presentationData)
             |> map { primaryAndOther, presentationData -> (Account, EnginePeer, PresentationTheme)? in
-                if let primary = primaryAndOther.0, !primaryAndOther.1.isEmpty {
+                let hasProfilePhoto = primaryAndOther.0?.1.profileImageRepresentations.first != nil
+                let hasOtherAccounts = !primaryAndOther.1.isEmpty
+                if let primary = primaryAndOther.0, tellomiSettingsTabShowsAccountAvatar(hasProfilePhoto: hasProfilePhoto, hasOtherAccounts: hasOtherAccounts) {
                     return (primary.0.account, primary.1, presentationData.theme)
                 } else {
                     return nil
@@ -6858,10 +6860,13 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
             self.tabBarItemDisposable = (tabBarItem |> deliverOnMainQueue).startStrict(next: { [weak self] title, image, selectedImage, badgeValue, isAvatar, reduceMotion in
                 if let strongSelf = self {
                     strongSelf.tabBarItem.title = title
-                    strongSelf.tabBarItem.image = image
-                    strongSelf.tabBarItem.selectedImage = selectedImage
+                    // animationName and ringSelection have no setter listener. The bar
+                    // refreshes from setImage, and that refresh reads both, so they are
+                    // assigned first.
                     strongSelf.tabBarItem.animationName = isAvatar || reduceMotion ? nil : "TabSettings"
                     strongSelf.tabBarItem.ringSelection = isAvatar
+                    strongSelf.tabBarItem.image = image
+                    strongSelf.tabBarItem.selectedImage = selectedImage
                     strongSelf.tabBarItem.badgeValue = badgeValue
                 }
             })

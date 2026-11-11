@@ -33,9 +33,7 @@ public final class MomentsScreen: ViewController {
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: nil)
         self.title = momentsText(self.presentationData.strings, .title)
-        self.tabBarItem.title = self.title
-        self.tabBarItem.image = momentsTabIcon()
-        self.tabBarItem.selectedImage = self.tabBarItem.image
+        self.updateTabBarItem()
         self.scrollToTop = { [weak self] in
             self?.nodeIfLoaded.scrollToTop()
         }
@@ -43,7 +41,7 @@ public final class MomentsScreen: ViewController {
             guard let self else { return }
             self.presentationData = presentationData
             self.title = momentsText(presentationData.strings, .title)
-            self.tabBarItem.title = self.title
+            self.updateTabBarItem()
             if self.isNodeLoaded {
                 self.nodeIfLoaded.updatePresentationData(presentationData)
             }
@@ -69,6 +67,24 @@ public final class MomentsScreen: ViewController {
 
     private var nodeIfLoadedIfReady: MomentsScreenNode? {
         return self.isNodeLoaded ? self.nodeIfLoaded : nil
+    }
+
+    /// The same tab-item contract as Chats, Contacts, Calls and News.
+    ///
+    /// The static template icon is the fallback. `TabMoments` is the selection animation, and it
+    /// is left unset while Reduce Motion is on. `animationName` has no setter listener, so the
+    /// image is assigned after it: that is the refresh the bar actually observes.
+    private func updateTabBarItem() {
+        self.tabBarItem.title = self.title
+        let icon = momentsTabIcon()
+        if self.presentationData.reduceMotion {
+            self.tabBarItem.animationName = nil
+        } else {
+            self.tabBarItem.animationName = "TabMoments"
+            self.tabBarItem.animationOffset = CGPoint(x: 0.0, y: UIScreenPixel)
+        }
+        self.tabBarItem.image = icon
+        self.tabBarItem.selectedImage = icon
     }
 
     override public func loadDisplayNode() {
