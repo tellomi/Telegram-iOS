@@ -2,6 +2,13 @@
 "Moments_Comment_SendFailed" = "Reactie niet verzonden. Je tekst staat er nog.";
 "Moments_Audience_Kept" = "Kon niet wijzigen wie dit mag zien. Je keuze blijft staan.";
 
+"Moments.Draft.Message" = "Dit bericht als concept bewaren of weggooien?";
+"Moments.Outbox.Title" = "Bericht niet verzonden";
+"Moments.Outbox.Text" = "Er wacht nog een bericht om verzonden te worden.";
+"Moments.Outbox.Retry" = "Opnieuw proberen";
+"Moments.Outbox.Later" = "Niet nu";
+"Moments.Outbox.Incomplete" = "Een bijlage ontbreekt, dus dit bericht is niet verzonden.";
+
 /* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
 "CrashReport.Prompt.Title" = "Nieuw crashlogboek";
 "CrashReport.Prompt.Text" = "De app is onverwacht afgesloten.\n\nWil je een crashlogboek sturen zodat we het probleem kunnen oplossen?";

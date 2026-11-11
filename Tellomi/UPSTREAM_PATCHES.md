@@ -4,7 +4,7 @@
 
 Branch `cursor/moments-composer-outbox-5d88`, based on `release/ios`.
 
-The composer keeps one `client_nonce` for a submission and stores that task in the account Postbox (`moments` cache, outbox). A retry sends the same nonce through `momentsEncodePost`. Cancel, the back button and swipe-back share `momentsComposerLeave`. No upstream navigation code was changed: `ViewController.attemptNavigation` already covers the back button and the interactive pop. New strings are keys added to `en.lproj` only.
+The composer keeps one `client_nonce` for a submission and stores that task in the account Postbox (`moments` cache, outbox). A retry sends the same nonce through `momentsEncodePost`. Cancel, the back button and swipe-back share `momentsComposerLeave`. No upstream navigation code was changed: `ViewController.attemptNavigation` already covers the back button and the interactive pop. New strings are `presentationData.strings` keys in every built-in lproj that already has Moments copy.
 
 content-engine dedupes `client_nonce`. `posts.go` returns the first post on a retry (`a retry gets the first post back`). `interactions.go` looks the nonce up and falls back to the unique index. `uploads_bind_test.go` asserts a repeated nonce returns the first post and the count stays 1. The HTTP result is 200 with the original `{id, state, version}`. The client treats that body as success: the outbox entry is removed and Following shows that post.
 
@@ -15,7 +15,7 @@ content-engine dedupes `client_nonce`. `posts.go` returns the first post on a re
 | `submodules/TelegramCore/Sources/TelegramEngine/Moments/TelegramEngineMoments.swift` | Outbox read and write. |
 | `submodules/TelegramUI/Components/Moments/Sources/MomentsComposerScreen.swift` | Gate, shared leave, persisted send. |
 | `submodules/TelegramUI/Components/Moments/Sources/MomentsScreen.swift` | Offers a restored send. |
-| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | New Moments draft and outbox keys. |
+| `Telegram/Telegram-iOS/*.lproj/Localizable.strings` | New Moments draft and outbox keys in every built-in language that already has Moments copy. |
 
 ## Crash log prompt — 2026-11-11
 

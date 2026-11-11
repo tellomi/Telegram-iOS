@@ -2,6 +2,13 @@
 "Moments_Comment_SendFailed" = "댓글을 보내지 못했습니다. 내용은 그대로입니다.";
 "Moments_Audience_Kept" = "공개 대상을 바꾸지 못했습니다. 선택한 사람은 그대로입니다.";
 
+"Moments.Draft.Message" = "이 게시물을 임시 저장할까요, 아니면 버릴까요?";
+"Moments.Outbox.Title" = "게시물이 전송되지 않음";
+"Moments.Outbox.Text" = "아직 보내지 못한 게시물이 있습니다.";
+"Moments.Outbox.Retry" = "다시 시도";
+"Moments.Outbox.Later" = "나중에";
+"Moments.Outbox.Incomplete" = "첨부 파일이 없어서 이 게시물은 보내지 않았습니다.";
+
 /* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
 "CrashReport.Prompt.Title" = "새 충돌 로그";
 "CrashReport.Prompt.Text" = "앱이 예기치 않게 종료되었습니다.\n\n문제를 고치는 데 도움이 되도록 충돌 로그를 보낼까요?";

@@ -2,6 +2,13 @@
 "Moments_Comment_SendFailed" = "Impossibile inviare il commento. Il testo è ancora qui.";
 "Moments_Audience_Kept" = "Impossibile aggiornare chi può vedere. La scelta è rimasta.";
 
+"Moments.Draft.Message" = "Salvare questo post come bozza o scartarlo?";
+"Moments.Outbox.Title" = "Post non inviato";
+"Moments.Outbox.Text" = "Un post è ancora in attesa di invio.";
+"Moments.Outbox.Retry" = "Riprova";
+"Moments.Outbox.Later" = "Non ora";
+"Moments.Outbox.Incomplete" = "Manca un allegato, quindi questo post non è stato inviato.";
+
 /* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
 "CrashReport.Prompt.Title" = "Nuovo registro di arresto anomalo";
 "CrashReport.Prompt.Text" = "L'app si è chiusa in modo imprevisto.\n\nVuoi inviare un registro di arresto anomalo per aiutarci a risolvere il problema?";

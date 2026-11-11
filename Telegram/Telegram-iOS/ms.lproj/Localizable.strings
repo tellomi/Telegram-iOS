@@ -2,6 +2,13 @@
 "Moments_Comment_SendFailed" = "Komen tidak dapat dihantar. Teks anda masih di sini.";
 "Moments_Audience_Kept" = "Tidak dapat mengemas kini siapa yang boleh melihat ini. Pilihan anda dikekalkan.";
 
+"Moments.Draft.Message" = "Simpan siaran ini sebagai draf, atau buang?";
+"Moments.Outbox.Title" = "Siaran tidak dihantar";
+"Moments.Outbox.Text" = "Ada siaran yang masih menunggu untuk dihantar.";
+"Moments.Outbox.Retry" = "Cuba lagi";
+"Moments.Outbox.Later" = "Bukan sekarang";
+"Moments.Outbox.Incomplete" = "Lampiran tiada, jadi siaran ini tidak dihantar.";
+
 /* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
 "CrashReport.Prompt.Title" = "Log ranap baharu";
 "CrashReport.Prompt.Text" = "Apl ditutup tanpa dijangka.\n\nHantar log ranap untuk membantu kami membaiki masalah ini?";

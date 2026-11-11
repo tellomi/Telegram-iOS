@@ -2,6 +2,13 @@
 "Moments_Comment_SendFailed" = "Le commentaire n'a pas pu être envoyé. Votre texte est toujours là.";
 "Moments_Audience_Kept" = "Impossible de modifier qui peut voir ceci. Votre sélection a été conservée.";
 
+"Moments.Draft.Message" = "Enregistrer cette publication comme brouillon, ou la supprimer ?";
+"Moments.Outbox.Title" = "Publication non envoyée";
+"Moments.Outbox.Text" = "Une publication attend encore d’être envoyée.";
+"Moments.Outbox.Retry" = "Réessayer";
+"Moments.Outbox.Later" = "Pas maintenant";
+"Moments.Outbox.Incomplete" = "Une pièce jointe manque, donc cette publication n’a pas été envoyée.";
+
 /* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
 "CrashReport.Prompt.Title" = "Nouveau journal de plantage";
 "CrashReport.Prompt.Text" = "L'application s'est fermée de façon inattendue.\n\nSouhaitez-vous envoyer un journal de plantage pour nous aider à corriger le problème ?";

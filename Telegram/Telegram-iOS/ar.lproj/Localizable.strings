@@ -2,6 +2,13 @@
 "Moments_Comment_SendFailed" = "تعذّر إرسال التعليق. نصك ما زال هنا.";
 "Moments_Audience_Kept" = "تعذّر تحديث من يمكنه المشاهدة. اختيارك ما زال محفوظًا.";
 
+"Moments.Draft.Message" = "هل تريد حفظ هذا المنشور كمسودة أم تجاهله؟";
+"Moments.Outbox.Title" = "لم يُرسل المنشور";
+"Moments.Outbox.Text" = "ما زال هناك منشور بانتظار الإرسال.";
+"Moments.Outbox.Retry" = "حاول مرة أخرى";
+"Moments.Outbox.Later" = "ليس الآن";
+"Moments.Outbox.Incomplete" = "أحد المرفقات مفقود، لذا لم يُرسل هذا المنشور.";
+
 /* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
 "CrashReport.Prompt.Title" = "سجل تعطل جديد";
 "CrashReport.Prompt.Text" = "أُغلق التطبيق بشكل غير متوقع.\n\nهل تريد إرسال سجل التعطل لمساعدتنا على إصلاح المشكلة؟";

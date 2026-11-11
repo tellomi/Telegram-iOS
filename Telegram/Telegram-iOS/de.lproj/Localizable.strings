@@ -2,6 +2,13 @@
 "Moments_Comment_SendFailed" = "Der Kommentar wurde nicht gesendet. Dein Text ist noch da.";
 "Moments_Audience_Kept" = "Wer das sehen kann, wurde nicht geändert. Deine Auswahl bleibt.";
 
+"Moments.Draft.Message" = "Diesen Beitrag als Entwurf speichern oder verwerfen?";
+"Moments.Outbox.Title" = "Beitrag nicht gesendet";
+"Moments.Outbox.Text" = "Ein Beitrag wartet noch auf den Versand.";
+"Moments.Outbox.Retry" = "Erneut versuchen";
+"Moments.Outbox.Later" = "Nicht jetzt";
+"Moments.Outbox.Incomplete" = "Ein Anhang fehlt, deshalb wurde dieser Beitrag nicht gesendet.";
+
 /* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
 "CrashReport.Prompt.Title" = "Neues Absturzprotokoll";
 "CrashReport.Prompt.Text" = "Die App wurde unerwartet beendet.\n\nMöchtest du ein Absturzprotokoll senden, damit wir das Problem beheben können?";

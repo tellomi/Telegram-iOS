@@ -2,6 +2,13 @@
 "Moments_Comment_SendFailed" = "نظر ارسال نشد. متن شما هنوز اینجاست.";
 "Moments_Audience_Kept" = "نتوانستیم مشخص کنیم چه کسانی این را می‌بینند. انتخاب شما حفظ شد.";
 
+"Moments.Draft.Message" = "این پست را پیش‌نویس ذخیره کنم یا کنار بگذارم؟";
+"Moments.Outbox.Title" = "پست ارسال نشد";
+"Moments.Outbox.Text" = "یک پست هنوز منتظر ارسال است.";
+"Moments.Outbox.Retry" = "دوباره تلاش کن";
+"Moments.Outbox.Later" = "حالا نه";
+"Moments.Outbox.Incomplete" = "یک پیوست نیست، پس این پست ارسال نشد.";
+
 /* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
 "CrashReport.Prompt.Title" = "گزارش خرابی جدید";
 "CrashReport.Prompt.Text" = "برنامه به‌طور غیرمنتظره بسته شد.\n\nمی‌خواهید گزارش خرابی را بفرستید تا این مشکل را رفع کنیم؟";
