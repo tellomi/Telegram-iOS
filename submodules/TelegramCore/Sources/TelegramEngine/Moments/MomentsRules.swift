@@ -153,6 +153,116 @@ public func momentsVideoPosterURL(_ media: MomentsMedia) -> String? {
     return nil
 }
 
+public struct MomentsGalleryPixelSize: Equatable {
+    public var width: Int
+    public var height: Int
+
+    public init(width: Int, height: Int) {
+        self.width = width
+        self.height = height
+    }
+}
+
+public struct MomentsGalleryEntry: Equatable {
+    public var slideIndex: Int
+    public var url: String
+    public var isVideo: Bool
+    public var pixels: MomentsGalleryPixelSize
+
+    public init(slideIndex: Int, url: String, isVideo: Bool, pixels: MomentsGalleryPixelSize) {
+        self.slideIndex = slideIndex
+        self.url = url
+        self.isVideo = isVideo
+        self.pixels = pixels
+    }
+}
+
+/// One gallery page per image or video that has an https URL. `slideIndex` is the index in that
+/// filtered list, which is what the row's album uses. A missing URL is left out rather than shifting
+/// the pages after it.
+public func momentsGalleryEntries(from media: [MomentsMedia], visibleAspectBySlide: [Int: Double] = [:]) -> [MomentsGalleryEntry] {
+    let slides = media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
+    var entries: [MomentsGalleryEntry] = []
+    for (index, item) in slides.enumerated() {
+        guard let url = momentsGalleryMediaURL(item) else {
+            continue
+        }
+        entries.append(MomentsGalleryEntry(
+            slideIndex: index,
+            url: url,
+            isVideo: momentsPresentsAsVideo(item.type),
+            pixels: momentsGalleryPixelSize(media: item, url: url, visibleAspect: visibleAspectBySlide[index])
+        ))
+    }
+    return entries
+}
+
+/// Where `tappedSlide` sits in `entries`. A slide with no URL opens the nearest earlier page, or the
+/// first page when every earlier slide was dropped.
+public func momentsGalleryEntryPosition(entries: [MomentsGalleryEntry], tappedSlide: Int) -> Int? {
+    guard !entries.isEmpty else {
+        return nil
+    }
+    if let exact = entries.firstIndex(where: { $0.slideIndex == tappedSlide }) {
+        return exact
+    }
+    if let earlier = entries.lastIndex(where: { $0.slideIndex <= tappedSlide }) {
+        return earlier
+    }
+    return 0
+}
+
+/// Viewer URL. Images use the 1080px rendition (the original when no tier is that large). Videos use
+/// the file, not the poster.
+public func momentsGalleryMediaURL(_ media: MomentsMedia) -> String? {
+    let url: String?
+    if momentsPresentsAsVideo(media.type) {
+        if let remote = media.remoteURL, remote.hasPrefix("https://") {
+            url = remote
+        } else {
+            url = momentsMediaURL(base: momentsPublicMediaBaseURL, key: media.key)
+        }
+    } else if momentsPresentsAsImage(media.type) {
+        url = momentsFeedImageURL(media, targetPixels: momentsSingleImagePixels) ?? momentsMediaURL(base: momentsPublicMediaBaseURL, key: media.key)
+    } else {
+        url = nil
+    }
+    guard let url, url.hasPrefix("https://") else {
+        return nil
+    }
+    return url
+}
+
+/// Pixel size the gallery representation declares. The viewer draws into this size, so a missing
+/// `width`/`height` must not become 1×1. The rendition that was actually chosen wins, then the
+/// media record, then the on-screen bitmap's aspect at a 1280px long edge.
+public func momentsGalleryPixelSize(media: MomentsMedia, url: String, visibleAspect: Double?) -> MomentsGalleryPixelSize {
+    if let rendition = media.renditions.first(where: { $0.url == url }), rendition.width > 1, rendition.height > 1 {
+        return momentsGalleryClampedPixels(width: rendition.width, height: rendition.height)
+    }
+    if media.width > 1, media.height > 1 {
+        return momentsGalleryClampedPixels(width: media.width, height: media.height)
+    }
+    if let visibleAspect, visibleAspect > 0 {
+        let longEdge = 1280.0
+        if visibleAspect >= 1 {
+            return MomentsGalleryPixelSize(width: max(1, Int((longEdge / visibleAspect).rounded())), height: Int(longEdge))
+        }
+        return MomentsGalleryPixelSize(width: Int(longEdge), height: max(1, Int((longEdge * visibleAspect).rounded())))
+    }
+    return MomentsGalleryPixelSize(width: 1280, height: 1280)
+}
+
+private func momentsGalleryClampedPixels(width: Int, height: Int) -> MomentsGalleryPixelSize {
+    let maxEdge = 4096
+    let longEdge = max(width, height)
+    guard longEdge > maxEdge else {
+        return MomentsGalleryPixelSize(width: width, height: height)
+    }
+    let scale = Double(maxEdge) / Double(longEdge)
+    return MomentsGalleryPixelSize(width: max(1, Int((Double(width) * scale).rounded())), height: max(1, Int((Double(height) * scale).rounded())))
+}
+
 /// FR-051: collapse when the rendered height exceeds `limit` lines. The caller measures with the live font and width.
 public func momentsTextExceedsLineLimit(fullHeight: CGFloat, lineHeight: CGFloat, limit: Int) -> Bool {
     guard lineHeight > 0, limit > 0, fullHeight > 0 else {

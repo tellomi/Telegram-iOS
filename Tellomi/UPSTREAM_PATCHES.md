@@ -1,5 +1,21 @@
 # Upstream patches
 
+## Moments gallery uses the chat media viewer — 2026-11-11
+
+Tapping a photo in the feed pushed `GalleryController` onto the navigation stack. That controller is an overlay: its back button, swipe-down and the end of the transition all call `presentingViewController?.dismiss`, which the navigation overlay installs and a push does not. The swipe still ran the dismiss animation (`animateOut` leaves the background clear and the content off-screen) and then did not remove the controller. `disablesInteractiveTransitionGestureRecognizer` also blocked the navigation edge swipe, so there was no way back. The open had no `GalleryControllerPresentationArguments`, so the thumbnail transition never ran. A missing `width`/`height` was stored as 1×1, and the viewer draws into the representation size, so the bitmap was a single pixel.
+
+The tap now presents `GalleryController` in the window overlay, the same call a chat photo uses, with a transition node on the tapped thumbnail. Pages are one https image or video each. The message id is the slide index, so a slide without a URL does not shift the later pages. `.custom` reverses its array the way a chat history is ordered; the list is passed reversed so the pager follows the post. Several pages share one `MessageGroupInfo`, which is what turns on the album filmstrip. The bytes are `HttpReferenceMediaResource` on the same URL the row already fetched, so MediaBox serves the cached file. Closing the overlay does not push or pop, and the feed list is not asked to restore its offset.
+
+No upstream file is modified. iMe's published iOS tree does not contain this feed. No iMe source was copied.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsRules.swift` | Gallery pages, the tapped index, and the pixel size. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsGallery.swift` | Presents `GalleryController` as an overlay with the thumbnail transition. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsPostItem.swift` | The row reports the thumbnail that was tapped. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsFeedActions.swift` | The feed opens the overlay and does not arm a scroll restore. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsDetailScreen.swift` | The post detail opens the same overlay. |
+
 ## Moments feed main-thread layout — 2026-11-11
 
 Scrolling the feed asked `ListView` to build each new row on a global queue. `MomentsPostItemNode` and `MomentsStatusItemNode` are view-backed (`UIStackView`, labels, image views, content-hugging constraints). Creating them there opened an implicit `CATransaction`. When the GCD worker exited, Core Animation committed it and Auto Layout aborted (`_AssertAutoLayoutOnAllowedThreadsOnly`, TestFlight 14.0.5 (86)). Measurement still runs on that queue. The node, its frames and image assignment run on the main queue. Cached feed and hide reads, and like, save, follow and comment completions that touch views, are delivered on the main queue too. ImageIO thumbnails stay off the main queue; only `UIImageView.image` is set on it.
