@@ -6,4 +6,4 @@
 
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "Impossibile inviare il commento. Il testo è ancora qui.";
-"Moments_Audience_Kept" = "Impossibile aggiornare chi può vedere. La scelta è rimasta.";
+"Moments_Audience_Kept" = "Impossibile modificare il pubblico. La scelta è rimasta.";

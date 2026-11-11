@@ -6,4 +6,4 @@
 
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "Yorum gönderilemedi. Metniniz hâlâ burada.";
-"Moments_Audience_Kept" = "Bunu kimlerin görebileceği güncellenemedi. Seçiminiz korundu.";
+"Moments_Audience_Kept" = "Kitle değiştirilemedi. Seçiminiz korundu.";

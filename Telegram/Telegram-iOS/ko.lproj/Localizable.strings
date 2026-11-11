@@ -6,4 +6,4 @@
 
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "댓글을 보내지 못했습니다. 내용은 그대로입니다.";
-"Moments_Audience_Kept" = "공개 대상을 바꾸지 못했습니다. 선택한 사람은 그대로입니다.";
+"Moments_Audience_Kept" = "공개 범위를 바꾸지 못했습니다. 선택하신 내용은 그대로입니다.";
