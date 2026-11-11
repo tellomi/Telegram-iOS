@@ -237,3 +237,9 @@
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "留言沒有送出，內容還在。";
 "Moments_Audience_Kept" = "沒能更新誰可以看。你的選擇還在。";
+
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "有新的當機紀錄";
+"CrashReport.Prompt.Text" = "應用程式意外關閉了。\n\n要把當機紀錄傳給我們，幫我們修好這個問題嗎？";
+"CrashReport.Prompt.NotNow" = "暫時不要";
+"CrashReport.Prompt.Send" = "傳送紀錄";
