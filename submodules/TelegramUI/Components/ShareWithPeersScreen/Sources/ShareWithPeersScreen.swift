@@ -3526,10 +3526,9 @@ public class ShareWithPeersScreen: ViewControllerComponentContainer {
                 actionTitle: selectedContactsSubtitle
             ))
             if stateContext.momentsAudience {
-                let mutualTitle = presentationData.strings.primaryComponent.languageCode.lowercased().hasPrefix("zh") || presentationData.strings.baseLanguageCode.lowercased().hasPrefix("zh") ? "互关好友" : presentationData.strings.Story_Privacy_CategoryMutualFollowers
                 categoryItems.append(ShareWithPeersScreenComponent.CategoryItem(
                     id: .mutualFollowers,
-                    title: mutualTitle,
+                    title: presentationData.strings.Story_Privacy_CategoryMutualFollowers,
                     icon: "Media Editor/Privacy/Contacts",
                     iconColor: .purple,
                     actionTitle: nil

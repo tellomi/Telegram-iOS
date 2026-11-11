@@ -585,7 +585,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
     }
 
     private func deleteComment(_ target: MomentsCommentTarget) {
-        let _ = self.context.engine.moments.deleteComment(id: target.id).start(error: { [weak self] error in
+        let _ = self.context.engine.moments.deleteComment(postId: self.card.id, commentId: target.id).start(error: { [weak self] error in
             self?.showCommentError(error)
         }, completed: { [weak self] in
             guard let self else { return }
