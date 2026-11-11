@@ -360,7 +360,8 @@ public final class TabBarComponent: Component {
     public let axis: Axis
     /// Icons without labels, on either axis. A regular-width or vertical bar.
     public let isCompact: Bool
-    /// Phone bar labels. False hides the titles and shortens the bar. Compact bars ignore this.
+    /// Phone bar labels. False hides the titles and shortens the bar. The phone bar's width follows the
+    /// visible tabs either way. Compact bars ignore this.
     public let showsItemTitles: Bool
     
     public init(
@@ -737,10 +738,16 @@ public final class TabBarComponent: Component {
                 availableLength -= barHeight + 8.0
             }
             var itemsLayout = tabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, unboundItemWidths: unboundItemWidths, availableLength: availableLength)
-            if component.axis == .horizontal && !component.isCompact && !showsItemTitles {
-                itemsLayout.size.height = barHeight
-                for index in itemsLayout.itemFrames.indices {
-                    itemsLayout.itemFrames[index].size.height = barHeight - innerInset * 2.0
+            // On a phone the capsule hugs the tabs that are on the bar. It takes the full length when
+            // the leftover would be under 60pt.
+            if component.axis == .horizontal && !component.isCompact {
+                if let hugged = tellomiPhoneTabBarHugLayout(showsItemTitles: showsItemTitles, unboundItemWidths: unboundItemWidths, availableLength: availableLength) {
+                    itemsLayout = hugged
+                } else if !showsItemTitles {
+                    itemsLayout.size.height = barHeight
+                    for index in itemsLayout.itemFrames.indices {
+                        itemsLayout.itemFrames[index].size.height = barHeight - innerInset * 2.0
+                    }
                 }
             }
             let tabsSize = itemsLayout.size
