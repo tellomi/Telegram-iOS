@@ -274,7 +274,8 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.titleLabel.font = Font.semibold(17)
         self.pill.isHidden = true
         self.pill.layer.cornerRadius = 14
-        self.disposable.add(context.engine.moments.cachedHides().start(next: { [weak self] hides in
+        self.disposable.add((context.engine.moments.cachedHides() |> deliverOnMainQueue).start(next: { [weak self] hides in
+            assert(Queue.mainQueue().isCurrent())
             self?.hides = hides
             self?.render(self?.selected ?? .recommend, resetScroll: false)
         }))
@@ -528,7 +529,8 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         let cursor = refresh ? nil : model.cursor
         let bag = DisposableSet()
         if !model.loaded {
-            bag.add(self.context.engine.moments.cachedPage(kind).start(next: { [weak self] page in
+            bag.add((self.context.engine.moments.cachedPage(kind) |> deliverOnMainQueue).start(next: { [weak self] page in
+                assert(Queue.mainQueue().isCurrent())
                 guard let self, self.loadEpoch[kind] == epoch, let page, self.models[kind]?.items.isEmpty == true else { return }
                 self.models[kind]?.items = page.items
                 self.render(kind, resetScroll: false)
@@ -565,6 +567,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 
     private func render(_ kind: MomentsFeedKind, resetScroll: Bool, updateInsets: Bool = true) {
+        assert(Queue.mainQueue().isCurrent())
         guard let list = self.lists[kind], let model = self.models[kind], list.bounds.width > 0 else { return }
         let strings = self.presentationData.strings
         let theme = self.presentationData.theme
@@ -796,6 +799,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 
     private func updateVisiblePlayback() {
+        assert(Queue.mainQueue().isCurrent())
         guard !self.resolvingPlayback, let list = self.lists[self.selected] else { return }
         let next: MomentsPlaybackRequest
         if !self.autoplayAllowed() {

@@ -61,6 +61,7 @@ final class MomentsRemoteImageSlot {
     private var generation = 0
 
     func bind(url: String?, imageView: UIImageView, context: AccountContext, maxSide: CGFloat) {
+        assert(Queue.mainQueue().isCurrent())
         self.generation += 1
         let generation = self.generation
         self.imageView = imageView
@@ -91,12 +92,14 @@ final class MomentsRemoteImageSlot {
         |> take(1)
         |> deliverOn(Queue.concurrentDefaultQueue())
         |> map { resourceData -> UIImage? in
+            // ImageIO thumbnail. UIImage is created here, off the main queue, and assigned below.
             return momentsDownsampleImage(path: resourceData.path, maxPixel: maxPixel, scale: scale)
         }
         |> deliverOnMainQueue
         let bag = DisposableSet()
         bag.add(fetch.start())
         bag.add(data.start(next: { [weak self] image in
+            assert(Queue.mainQueue().isCurrent())
             guard let self, self.generation == generation, self.url == url, let image else {
                 return
             }
@@ -107,6 +110,7 @@ final class MomentsRemoteImageSlot {
     }
 
     func cancel() {
+        assert(Queue.mainQueue().isCurrent())
         self.generation += 1
         self.url = nil
         self.image = nil
