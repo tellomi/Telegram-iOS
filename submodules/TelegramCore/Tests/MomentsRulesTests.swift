@@ -112,9 +112,16 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(limits.textLimit, 500)
         XCTAssertEqual(limits.imageLimit, 10)
         XCTAssertEqual(limits.videoMaxDuration, 30)
-        XCTAssertEqual(MomentsLimits.standard.voiceMaxDuration, 60)
-        XCTAssertEqual(limits.voiceMaxDuration, 60)
-        XCTAssertEqual(MomentsLimits.standard.applying(config: MomentsRemoteConfig(voiceMaxDuration: 45)).voiceMaxDuration, 45)
+        XCTAssertEqual(MomentsLimits.standard.voicePostMaxDuration, 60)
+        XCTAssertEqual(MomentsLimits.standard.voiceCommentMaxDuration, 60)
+        XCTAssertEqual(limits.voicePostMaxDuration, 60)
+        XCTAssertEqual(limits.voiceCommentMaxDuration, 60)
+        let voiced = MomentsLimits.standard.applying(config: MomentsRemoteConfig(voicePostMaxDuration: 45, voiceCommentMaxDuration: 12))
+        XCTAssertEqual(voiced.voicePostMaxDuration, 45)
+        XCTAssertEqual(voiced.voiceCommentMaxDuration, 12)
+        XCTAssertEqual(MomentsLimits.standard.applying(config: MomentsRemoteConfig(textLimit: 0, voicePostMaxDuration: -3, pageSize: 0)).textLimit, 500)
+        XCTAssertEqual(MomentsLimits.standard.applying(config: MomentsRemoteConfig(textLimit: 0, voicePostMaxDuration: -3, pageSize: 0)).voicePostMaxDuration, 60)
+        XCTAssertEqual(MomentsLimits.standard.applying(config: MomentsRemoteConfig(textLimit: 0, voicePostMaxDuration: -3, pageSize: 0)).pageSize, 20)
         XCTAssertTrue(limits.newsStaysOff)
         XCTAssertTrue(limits.tabEnabled)
         XCTAssertFalse(MomentsFeedKind.recommend.probesForNewPosts)
@@ -503,7 +510,120 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertFalse(grant.needsRefresh(now: 1_000 - MomentsCredential.refreshMargin - 1))
         XCTAssertTrue(grant.needsRefresh(now: 1_000 - MomentsCredential.refreshMargin))
     }
+
+    func testServerFeedConfigUsesNestedLimitKeys() {
+        let config = momentsRemoteConfig(data: Data(momentsServerConfigFixture.utf8))
+        let limits = MomentsLimits.standard.applying(config: config)
+        XCTAssertEqual(limits.textLimit, 420)
+        XCTAssertEqual(limits.imageLimit, 4)
+        XCTAssertEqual(limits.videoLimit, 2)
+        XCTAssertEqual(limits.videoMaxDuration, 45)
+        XCTAssertEqual(limits.voicePostMaxDuration, 30)
+        XCTAssertEqual(limits.voiceCommentMaxDuration, 20)
+        XCTAssertEqual(momentsVoiceMaxDuration(limits, comment: false), 30)
+        XCTAssertEqual(momentsVoiceMaxDuration(limits, comment: true), 20)
+        XCTAssertEqual(limits.commentTextLimit, 80)
+        XCTAssertEqual(limits.pageSize, 15)
+        XCTAssertEqual(limits.mentionLimit, 5)
+        XCTAssertEqual(limits.topicLimit, 2)
+        XCTAssertEqual(limits.newPostsProbeInterval, 30)
+        XCTAssertEqual(limits.notificationRetentionDays, 14)
+        XCTAssertTrue(config.personalizationToggleVisible)
+        XCTAssertEqual(config.mediaBaseURL, "https://media.example/feed")
+        XCTAssertEqual(config.tabs, ["recommend", "following", "friends", "nearby"])
+        XCTAssertNotEqual(limits.textLimit, 900)
+        XCTAssertNotEqual(limits.textLimit, 111)
+        XCTAssertNotEqual(limits.commentTextLimit, 222)
+        XCTAssertNotEqual(limits.voicePostMaxDuration, 180)
+        XCTAssertNotEqual(limits.imageLimit, 9)
+        XCTAssertNotEqual(limits.videoLimit, 8)
+        XCTAssertNotEqual(limits.textLimit, 8000)
+
+        let state = MomentsComposerAttachmentState()
+        XCTAssertNil(momentsCanAdd(kind: .voice, to: state, limits: limits, duration: 30, voiceComment: false))
+        XCTAssertEqual(momentsCanAdd(kind: .voice, to: state, limits: limits, duration: 31, voiceComment: false), .voiceTooLong)
+        XCTAssertNil(momentsCanAdd(kind: .voice, to: state, limits: limits, duration: 20, voiceComment: true))
+        XCTAssertEqual(momentsCanAdd(kind: .voice, to: state, limits: limits, duration: 21, voiceComment: true), .voiceTooLong)
+    }
+
+    func testOmittedOrMistypedLimitsKeepDefaults() {
+        let missing = MomentsLimits.standard.applying(config: momentsRemoteConfig(data: Data(#"{"media_base_url":"https://media.example/feed","text_limit":900,"voice_max_seconds":180}"#.utf8)))
+        XCTAssertEqual(missing.textLimit, MomentsLimits.standard.textLimit)
+        XCTAssertEqual(missing.commentTextLimit, MomentsLimits.standard.commentTextLimit)
+        XCTAssertEqual(missing.voicePostMaxDuration, 60)
+        XCTAssertEqual(missing.voiceCommentMaxDuration, 60)
+        XCTAssertFalse(momentsRemoteConfig(data: Data(#"{"media_base_url":"https://media.example/feed"}"#.utf8)).personalizationToggleVisible)
+
+        let hidden = momentsRemoteConfig(data: Data(#"{"personalization_toggle_visible":false,"limits":{"post_text_chars":500}}"#.utf8))
+        XCTAssertFalse(hidden.personalizationToggleVisible)
+        XCTAssertEqual(MomentsLimits.standard.applying(config: hidden).textLimit, 500)
+
+        let shown = momentsRemoteConfig(data: Data(#"{"personalization_toggle_visible":true}"#.utf8))
+        XCTAssertTrue(shown.personalizationToggleVisible)
+        XCTAssertEqual(MomentsLimits.standard.applying(config: shown).textLimit, 500)
+
+        let bad = momentsRemoteConfig(data: Data(#"{"personalization_toggle_visible":"true","limits":{"post_text_chars":"420","comment_text_chars":0,"voice_post_max_seconds":30.5,"voice_comment_max_seconds":-4,"post_images":4,"probe_interval_seconds":0,"notification_days":1.2}}"#.utf8))
+        XCTAssertFalse(bad.personalizationToggleVisible)
+        let badLimits = MomentsLimits.standard.applying(config: bad)
+        XCTAssertEqual(badLimits.textLimit, MomentsLimits.standard.textLimit)
+        XCTAssertEqual(badLimits.commentTextLimit, MomentsLimits.standard.commentTextLimit)
+        XCTAssertEqual(badLimits.voicePostMaxDuration, MomentsLimits.standard.voicePostMaxDuration)
+        XCTAssertEqual(badLimits.voiceCommentMaxDuration, MomentsLimits.standard.voiceCommentMaxDuration)
+        XCTAssertEqual(badLimits.imageLimit, 4)
+        XCTAssertEqual(badLimits.newPostsProbeInterval, MomentsLimits.standard.newPostsProbeInterval)
+        XCTAssertEqual(badLimits.notificationRetentionDays, MomentsLimits.standard.notificationRetentionDays)
+
+        let invented = MomentsLimits.standard.applying(config: momentsRemoteConfig(data: Data(#"{"limits":{"text_limit":100,"image_limit":4,"video_limit":2,"voice_max_seconds":30,"comment_text_limit":80,"page_size":7}}"#.utf8)))
+        XCTAssertEqual(invented.textLimit, MomentsLimits.standard.textLimit)
+        XCTAssertEqual(invented.imageLimit, MomentsLimits.standard.imageLimit)
+        XCTAssertEqual(invented.videoLimit, MomentsLimits.standard.videoLimit)
+        XCTAssertEqual(invented.voicePostMaxDuration, MomentsLimits.standard.voicePostMaxDuration)
+        XCTAssertEqual(invented.commentTextLimit, MomentsLimits.standard.commentTextLimit)
+        XCTAssertEqual(invented.pageSize, MomentsLimits.standard.pageSize)
+
+        XCTAssertFalse(momentsRemoteConfig(data: Data(#"{"personalization_toggle_visible":1}"#.utf8)).personalizationToggleVisible)
+        XCTAssertEqual(MomentsLimits.standard.applying(config: momentsRemoteConfig(data: Data("nope".utf8))).textLimit, 500)
+    }
+
+    func testPreferenceAndRecommendRequestBodies() {
+        let off = momentsPreferenceBody(current: [:], personalized: false)
+        let offData = momentsJSONData(off)!
+        let offObject = try! JSONSerialization.jsonObject(with: offData) as! [String: Any]
+        XCTAssertEqual(offObject.count, 1)
+        XCTAssertEqual(offObject["personalized"] as? Bool, false)
+        XCTAssertFalse(String(data: offData, encoding: .utf8)!.contains("\"personalized\":\""))
+
+        let kept = momentsPreferenceBody(current: ["locale": "zh"], personalized: true)
+        let keptData = momentsJSONData(kept)!
+        let keptObject = try! JSONSerialization.jsonObject(with: keptData) as! [String: Any]
+        XCTAssertEqual(keptObject["locale"] as? String, "zh")
+        XCTAssertEqual(keptObject["personalized"] as? Bool, true)
+        XCTAssertFalse(String(data: keptData, encoding: .utf8)!.contains("\"personalized\":\""))
+
+        XCTAssertNil(momentsPersonalizedFlag(data: Data(#"{"personalized":"false"}"#.utf8)))
+        XCTAssertEqual(momentsPersonalizedFlag(data: Data(#"{"personalized":false}"#.utf8)), false)
+        XCTAssertEqual(momentsPersonalizedFlag(data: Data(#"{"personalized":true,"locale":"zh"}"#.utf8)), true)
+        XCTAssertNil(momentsPersonalizedFlag(data: Data(#"{}"#.utf8)))
+        XCTAssertNil(momentsPersonalizedFlag(data: Data(#"{"personalized":1}"#.utf8)))
+
+        let recommendOff = momentsFeedRequestQuery(kind: .recommend, cursor: nil, city: nil, sort: nil, pageSize: 15, personalized: false)
+        XCTAssertEqual(recommendOff["limit"], "15")
+        XCTAssertEqual(recommendOff["personalized"], "false")
+        XCTAssertNil(recommendOff["cursor"])
+        let recommendOn = momentsFeedRequestQuery(kind: .recommend, cursor: "next", city: nil, sort: nil, pageSize: 15, personalized: true)
+        XCTAssertNil(recommendOn["personalized"])
+        XCTAssertEqual(recommendOn["cursor"], "next")
+        XCTAssertNil(momentsFeedRequestQuery(kind: .following, cursor: nil, city: nil, sort: nil, pageSize: 15, personalized: false)["personalized"])
+        let nearby = momentsFeedRequestQuery(kind: .nearby, cursor: nil, city: "cn:chengdu", sort: nil, pageSize: 15, personalized: false)
+        XCTAssertEqual(nearby["city"], "cn:chengdu")
+        XCTAssertEqual(nearby["sort"], "latest")
+        XCTAssertNil(nearby["personalized"])
+    }
 }
+
+private let momentsServerConfigFixture = """
+{"tabs":["recommend","following","friends","nearby"],"recommend_mode":"personalized","personalization_toggle_visible":true,"hot_enabled":true,"ip_region_visible":true,"sensitive_more_available":false,"media_base_url":"https://media.example/feed","card_ttl_seconds":120,"text_limit":900,"limits":{"post_text_chars":420,"post_images":4,"post_videos":2,"article_chars":8000,"edit_window_seconds":900,"voice_comment_max_seconds":20,"voice_post_max_seconds":30,"video_max_seconds":45,"comment_text_chars":80,"page_size":15,"posts_per_hour":10,"comments_per_hour":40,"max_topics":2,"max_mentions":5,"probe_interval_seconds":30,"notification_days":14,"text_limit":111,"comment_text_limit":222,"voice_max_seconds":180,"image_limit":9,"video_limit":8}}
+"""
 
 private func momentsTestPost(text: String, audience: MomentsAudience = MomentsAudience(kind: .everyone), mediaKeys: [String] = [], allowNearby: Bool = false, city: String? = nil, placeId: String? = nil, quoteOf: String? = nil, nonce: String) -> MomentsPostDraft {
     return MomentsPostDraft(text: text, audience: audience, mediaKeys: mediaKeys, allowNearby: allowNearby, city: city, placeId: placeId, quoteOf: quoteOf, clientNonce: nonce)

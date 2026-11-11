@@ -1,5 +1,34 @@
 # Upstream patches
 
+## Moments feed limits and recommendation switch — 2026-11-11
+
+`GET /v1/feed/config` puts the caps in a nested `limits` object. The client was reading invented names from the top of the document, so every server cap was ignored. The parser now reads only the engine's keys. A missing key, or a value that is not a positive whole number, keeps the client default. `personalization_toggle_visible` is a top-level boolean. Anything else, including `1` and `"true"`, hides the switch.
+
+The recommendation switch is only on the Moments settings screen. Off sends `personalized=false` on recommend and reloads that feed. On leaves the recommend query unchanged. The choice is read again when the Moments tab is created, and an older read cannot overwrite a newer toggle.
+
+| Server key | Client field |
+| --- | --- |
+| `limits.post_text_chars` | `textLimit` (500) |
+| `limits.post_images` | `imageLimit` (10) |
+| `limits.post_videos` | `videoLimit` (3) |
+| `limits.video_max_seconds` | `videoMaxDuration` (60) |
+| `limits.voice_post_max_seconds` | `voicePostMaxDuration` (60), composer |
+| `limits.voice_comment_max_seconds` | `voiceCommentMaxDuration` (60), comment voice |
+| `limits.comment_text_chars` | `commentTextLimit` (1000) |
+| `limits.page_size` | `pageSize` (20) |
+| `limits.max_mentions` | `mentionLimit` (10) |
+| `limits.max_topics` | `topicLimit` (3) |
+| `limits.probe_interval_seconds` | `newPostsProbeInterval` (60) |
+| `limits.notification_days` | `notificationRetentionDays` (90) |
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsLimits.swift` | Nested `limits` parser, preference body, recommend query. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/TelegramEngineMoments.swift` | Applies the config. `GET`/`PUT /v1/feed/me/preferences`. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsSettingsController.swift` | Switch and footer, only when the config flag is true. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsComposerScreen.swift` | Voice posts use `voice_post_max_seconds`. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Recommendations, the switch, and its footer. |
+
 ## Root tab menu (选单设定) — 2026-11-10
 
 A fresh install shows 动态, 聊天, 设置. Contacts, Calls and News stay off until the person turns them on. Chats and Settings cannot be hidden. The choice is per device (`UserDefaults` suite `app.tellomi.chat.tab-bar`), not an account record. Hiding button titles shortens the phone tab bar; an iPad or vertical bar is unchanged. The bar rebuilds when the switches move.
