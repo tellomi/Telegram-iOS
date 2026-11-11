@@ -2705,12 +2705,13 @@ enum GCDAsyncSocketConfig
 	
 	NSAssert(dispatch_get_current_queue() == socketQueue, @"Must be dispatched on socketQueue");
 
-	// A second closeWithError on this stack must not close the file descriptor
-	// again. The stream callbacks do not do that: each one dispatch_asyncs
-	// onto this queue before calling closeWithError. The build 90 abort is
-	// inside one CFStreamClose (CFSocketInvalidate -> ~SocketStream ->
-	// CFSocketInvalidate). That is handled by
-	// TellomiDeferCFSocketContextRelease, below, not by this flag.
+	// A second closeWithError on this stack must not close the file
+	// descriptor again. The stream callbacks dispatch_async onto this queue
+	// before calling closeWithError, so they are not the build 90 abort.
+	// That abort is ~SocketStream inside CFSocketInvalidate. The streams are
+	// retained across CFStreamClose so that CFRelease cannot run the
+	// destructor while the lock is held. flags is cleared at the end of a
+	// finished close, so a later disconnect can close again.
 	int closing = (flags & kClosingWithError) ? 1 : 0;
 	int streamOps[8];
 	int streamOpCount = 0;
@@ -2733,8 +2734,10 @@ enum GCDAsyncSocketConfig
 	#if TARGET_OS_IPHONE
 	{
 		// Clients come off before the run loop, and both come off before either
-		// stream is closed. Closing the write stream first drops it from the
-		// shared CFSocket before the read stream's close.
+		// stream is closed. The SocketStreams are retained first so
+		// CFSocketInvalidate's CFRelease cannot destroy them on this stack.
+		CFTypeRef heldReadStream = NULL;
+		CFTypeRef heldWriteStream = NULL;
 		for (int streamOpIndex = 0; streamOpIndex < streamOpCount; streamOpIndex++)
 		{
 			switch (streamOps[streamOpIndex])
@@ -2767,10 +2770,8 @@ enum GCDAsyncSocketConfig
 				}
 				case GCDAsyncSocketStreamCloseCloseWrite:
 				{
-					// Both streams still exist here. Point the shared CFSocket's
-					// context.release off CFRelease before either CFStreamClose.
-					TellomiDeferCFSocketContextRelease((CFTypeRef)readStream);
-					TellomiDeferCFSocketContextRelease((CFTypeRef)writeStream);
+					heldReadStream = TellomiRetainSocketStream((CFTypeRef)readStream);
+					heldWriteStream = TellomiRetainSocketStream((CFTypeRef)writeStream);
 					if (writeStream)
 					{
 						CFWriteStreamRef stream = writeStream;
@@ -2789,6 +2790,8 @@ enum GCDAsyncSocketConfig
 						CFReadStreamClose(stream);
 						CFRelease(stream);
 					}
+					TellomiReleaseSocketStreamLater(heldReadStream);
+					TellomiReleaseSocketStreamLater(heldWriteStream);
 					break;
 				}
 				default:

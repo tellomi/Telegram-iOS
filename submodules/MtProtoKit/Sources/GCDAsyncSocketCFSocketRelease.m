@@ -1,20 +1,13 @@
 #import "GCDAsyncSocketCFSocketRelease.h"
 
 #import <mach/mach.h>
-#import <sys/socket.h>
-#import <unistd.h>
+
+#if __has_feature(ptrauth_calls)
+#import <ptrauth.h>
+#endif
 
 static int gDeferredCFSocketReleaseCount = 0;
 static dispatch_queue_t gDeferredCFSocketReleaseQueue;
-
-static void TellomiDeferredCFRelease(const void *info) {
-    if (info == NULL) {
-        return;
-    }
-    dispatch_async(gDeferredCFSocketReleaseQueue, ^{
-        CFRelease((CFTypeRef)info);
-    });
-}
 
 static BOOL TellomiBytesReadable(const void *address, size_t size) {
     if (address == NULL || size == 0 || size > 4096) {
@@ -26,25 +19,30 @@ static BOOL TellomiBytesReadable(const void *address, size_t size) {
     return result == KERN_SUCCESS && copied == size;
 }
 
+static BOOL TellomiReleaseIsCFRelease(void (*release)(const void *)) {
+    if (release == NULL) {
+        return NO;
+    }
+#if __has_feature(ptrauth_calls)
+    void *got = ptrauth_strip((void *)release, ptrauth_key_function_pointer);
+    void *want = ptrauth_strip((void *)CFRelease, ptrauth_key_function_pointer);
+    return got == want;
+#else
+    return release == CFRelease;
+#endif
+}
+
+// CFSocketCreate owns the descriptor it allocates. CFRelease is the only
+// close. A socketpair plus CFSocketCreateWithNative would close that
+// descriptor twice when invalidation also closes it.
 static uintptr_t TellomiCFSocketISA(void) {
     static uintptr_t isa = 0;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        int fds[2] = {-1, -1};
-        if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
-            return;
-        }
-        CFSocketContext context = {0, NULL, NULL, NULL, NULL};
-        CFSocketRef socket = CFSocketCreateWithNative(kCFAllocatorDefault, fds[0], 0, NULL, &context);
+        CFSocketRef socket = CFSocketCreate(kCFAllocatorDefault, PF_INET, SOCK_STREAM, IPPROTO_TCP, 0, NULL, NULL);
         if (socket != NULL) {
             memcpy(&isa, socket, sizeof(isa));
             CFRelease(socket);
-        }
-        if (fds[0] >= 0) {
-            close(fds[0]);
-        }
-        if (fds[1] >= 0) {
-            close(fds[1]);
         }
     });
     return isa;
@@ -65,33 +63,7 @@ static BOOL TellomiIsLiveCFSocket(const void *pointer, uintptr_t socketISA) {
     return CFGetTypeID((CFTypeRef)pointer) == CFSocketGetTypeID();
 }
 
-static void TellomiPatchSocket(const void *socket) {
-    const size_t bytes = 512;
-    if (!TellomiBytesReadable(socket, bytes)) {
-        return;
-    }
-    const uint8_t *base = (const uint8_t *)socket;
-    for (size_t offset = 0; offset + sizeof(CFIndex) + 4 * sizeof(void *) <= bytes; offset += sizeof(void *)) {
-        CFIndex version = 0;
-        void *info = NULL;
-        void *release = NULL;
-        memcpy(&version, base + offset, sizeof(version));
-        if (version != 0) {
-            continue;
-        }
-        memcpy(&info, base + offset + sizeof(CFIndex), sizeof(info));
-        memcpy(&release, base + offset + sizeof(CFIndex) + 2 * sizeof(void *), sizeof(release));
-        if (info == NULL || release != (void *)CFRelease) {
-            continue;
-        }
-        void (**releaseSlot)(const void *) = (void (**)(const void *))(base + offset + sizeof(CFIndex) + 2 * sizeof(void *));
-        *releaseSlot = TellomiDeferredCFRelease;
-        gDeferredCFSocketReleaseCount += 1;
-        return;
-    }
-}
-
-static const void *TellomiFindSocket(const void *object, size_t words, uintptr_t socketISA) {
+static CFSocketRef TellomiFindSocket(const void *object, size_t words, uintptr_t socketISA) {
     if (!TellomiBytesReadable(object, words * sizeof(uintptr_t))) {
         return NULL;
     }
@@ -102,10 +74,43 @@ static const void *TellomiFindSocket(const void *object, size_t words, uintptr_t
             continue;
         }
         if (TellomiIsLiveCFSocket((const void *)value, socketISA)) {
-            return (const void *)value;
+            return (CFSocketRef)value;
         }
     }
     return NULL;
+}
+
+static CFSocketRef TellomiSocketInStream(CFTypeRef stream) {
+    uintptr_t socketISA = TellomiCFSocketISA();
+    if (stream == NULL || socketISA == 0) {
+        return NULL;
+    }
+    CFSocketRef socket = TellomiFindSocket(stream, 32, socketISA);
+    if (socket != NULL) {
+        return socket;
+    }
+    if (!TellomiBytesReadable(stream, 16 * sizeof(uintptr_t))) {
+        return NULL;
+    }
+    const uintptr_t *slots = (const uintptr_t *)stream;
+    for (size_t index = 0; index < 16; index++) {
+        uintptr_t value = slots[index];
+        if (value < 0x10000 || !TellomiBytesReadable((const void *)value, 8 * sizeof(uintptr_t))) {
+            continue;
+        }
+        socket = TellomiFindSocket((const void *)value, 48, socketISA);
+        if (socket != NULL) {
+            return socket;
+        }
+    }
+    return NULL;
+}
+
+static void TellomiEnsureReleaseQueue(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        gDeferredCFSocketReleaseQueue = dispatch_queue_create("tellomi.cfsocket.release", DISPATCH_QUEUE_SERIAL);
+    });
 }
 
 int TellomiDeferredCFSocketReleaseCount(void) {
@@ -119,30 +124,33 @@ void TellomiFlushDeferredCFSocketReleases(void) {
     dispatch_sync(gDeferredCFSocketReleaseQueue, ^{});
 }
 
-void TellomiDeferCFSocketContextRelease(CFTypeRef stream) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        gDeferredCFSocketReleaseQueue = dispatch_queue_create("tellomi.cfsocket.release", DISPATCH_QUEUE_SERIAL);
-    });
-    uintptr_t socketISA = TellomiCFSocketISA();
-    if (stream == NULL || socketISA == 0) {
+CFTypeRef TellomiRetainSocketStream(CFTypeRef stream) {
+    TellomiEnsureReleaseQueue();
+    CFSocketRef socket = TellomiSocketInStream(stream);
+    if (socket == NULL) {
+        return NULL;
+    }
+    CFSocketContext context = {0};
+    CFSocketGetContext(socket, &context);
+    if (context.info == NULL || !TellomiReleaseIsCFRelease(context.release)) {
+        if (context.retain != NULL && context.info != NULL && context.release != NULL) {
+            context.release(context.info);
+        }
+        return NULL;
+    }
+    if (context.retain == NULL) {
+        CFRetain((CFTypeRef)context.info);
+    }
+    gDeferredCFSocketReleaseCount += 1;
+    return (CFTypeRef)context.info;
+}
+
+void TellomiReleaseSocketStreamLater(CFTypeRef object) {
+    if (object == NULL) {
         return;
     }
-    const void *socket = TellomiFindSocket(stream, 32, socketISA);
-    if (socket == NULL) {
-        const uintptr_t *slots = (const uintptr_t *)stream;
-        if (!TellomiBytesReadable(stream, 16 * sizeof(uintptr_t))) {
-            return;
-        }
-        for (size_t index = 0; index < 16 && socket == NULL; index++) {
-            uintptr_t value = slots[index];
-            if (value < 0x10000 || !TellomiBytesReadable((const void *)value, 8 * sizeof(uintptr_t))) {
-                continue;
-            }
-            socket = TellomiFindSocket((const void *)value, 48, socketISA);
-        }
-    }
-    if (socket != NULL) {
-        TellomiPatchSocket(socket);
-    }
+    TellomiEnsureReleaseQueue();
+    dispatch_async(gDeferredCFSocketReleaseQueue, ^{
+        CFRelease(object);
+    });
 }

@@ -284,4 +284,41 @@ static const int kClosedSocket = -1;
     XCTAssertEqual([self countOpenDescriptors], openBefore);
 }
 
+- (void)testPairedStreamCloseLeavesTheSocketStreamAlive {
+    int fds[2] = {-1, -1};
+    XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
+    CFReadStreamRef readStream = NULL;
+    CFWriteStreamRef writeStream = NULL;
+    CFStreamCreatePairWithSocket(kCFAllocatorDefault, fds[0], &readStream, &writeStream);
+    XCTAssertTrue(readStream != NULL && writeStream != NULL);
+    CFReadStreamSetProperty(readStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
+    CFWriteStreamSetProperty(writeStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
+    XCTAssertTrue(CFReadStreamOpen(readStream));
+    XCTAssertTrue(CFWriteStreamOpen(writeStream));
+
+    CFTypeRef heldRead = TellomiRetainSocketStream((CFTypeRef)readStream);
+    CFTypeRef heldWrite = TellomiRetainSocketStream((CFTypeRef)writeStream);
+    CFTypeRef held = heldRead != NULL ? heldRead : heldWrite;
+    XCTAssertNotNil(held);
+
+    CFReadStreamClose(readStream);
+    CFWriteStreamClose(writeStream);
+    CFRelease(readStream);
+    CFRelease(writeStream);
+
+    // CFSocketInvalidate CFReleases this object while holding the lock.
+    // The extra retain is why its destructor, and the second
+    // CFSocketInvalidate, cannot run until the later release.
+    XCTAssertGreaterThanOrEqual(CFGetRetainCount(held), 1);
+
+    TellomiReleaseSocketStreamLater(heldRead);
+    TellomiReleaseSocketStreamLater(heldWrite);
+    TellomiFlushDeferredCFSocketReleases();
+
+    XCTAssertEqual(close(fds[0]), 0);
+    XCTAssertEqual(close(fds[0]), -1);
+    XCTAssertEqual(errno, EBADF);
+    XCTAssertEqual(close(fds[1]), 0);
+}
+
 @end

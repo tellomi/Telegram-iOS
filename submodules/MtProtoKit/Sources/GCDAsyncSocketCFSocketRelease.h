@@ -3,29 +3,35 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 
-// How many CFSocket context.release pointers have been pointed at the
-// deferred CFRelease. A test uses this to show the close reached the
-// CFSocket inside the stream pair.
+// How many SocketStreams were retained across a close. The iOS test uses
+// this to show close found the object CFSocketInvalidate would CFRelease.
 int TellomiDeferredCFSocketReleaseCount(void);
 
-// Blocks until releases queued by TellomiDeferCFSocketContextRelease have run.
+// Blocks until TellomiReleaseSocketStreamLater has run.
 void TellomiFlushDeferredCFSocketReleases(void);
 
 // Build 90 died inside one CFStreamClose:
 //   CFSocketInvalidate
 //   SocketStream::~SocketStream
-//   CFSocketInvalidate          <- same os_unfair_lock, same thread
+//   CFSocketInvalidate
 //   SocketStream::close
 //   _CFStreamClose
-// The stream callbacks in GCDAsyncSocket dispatch_async onto the socket
-// queue before they call closeWithError, so they do not re-enter it.
-// CFSocketInvalidate's CFRelease of that SocketStream is the frame between
-// the two locks (CocoaAsyncSocket issue 803; Telegram-iOS issue 2306).
-// This replaces that release with one that runs on another queue, so the
-// destructor's CFSocketInvalidate runs after the outer call unlocks.
-// The iOS 16 write-up hardcodes field offsets. Those are not used here:
-// the socket is recognized by the isa of a live CFSocket, and the context
-// is the slot whose release function is CFRelease.
-void TellomiDeferCFSocketContextRelease(CFTypeRef stream);
+// CFSocketInvalidate CFReleases the SocketStream stored in its context
+// while it still holds the os_unfair_lock. The destructor invalidates that
+// same socket. The stream callbacks only dispatch_async onto the socket
+// queue, so they are not this re-entry. CocoaAsyncSocket issue 803 and
+// Telegram-iOS issue 2306 show the same stack. Rewriting context.release
+// is not used: the crash device is arm64e, and a function pointer stored
+// there is signed.
+//
+// This retains that SocketStream through the public CFSocketGetContext
+// before CFStreamClose, so the CFRelease inside CFSocketInvalidate cannot
+// drop the last retain. The destructor therefore cannot run until the
+// later CFRelease, which is after CFStreamClose has returned. No private
+// function pointer is written.
+CFTypeRef TellomiRetainSocketStream(CFTypeRef stream);
+
+// CFRelease on the queue used to keep the destructor off the close stack.
+void TellomiReleaseSocketStreamLater(CFTypeRef object);
 
 #endif
