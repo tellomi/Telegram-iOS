@@ -608,6 +608,36 @@ final class MomentsRulesTests: XCTestCase {
         try? FileManager.default.removeItem(atPath: source)
         XCTAssertNil(momentsCopyPendingFile(from: source, accountPath: directory, name: "../x"))
     }
+
+    func testReplayOfClientNonceClearsTheOutboxAndShowsThePost() {
+        let data = #"{"id":"post-1","state":"published","version":7}"#.data(using: .utf8)!
+        let json = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let receipt = momentsPublishReceipt(status: 200, json: json)
+        XCTAssertEqual(receipt, MomentsPublishReceipt(id: "post-1", state: "published", version: 7))
+        XCTAssertNil(momentsPublishReceipt(status: 500, json: json))
+        XCTAssertNil(momentsPublishReceipt(status: 200, json: ["state": "published", "version": 1]))
+
+        let nonce = "44444444-4444-4444-8444-444444444444"
+        let other = "55555555-5555-4555-8555-555555555555"
+        let fingerprint = MomentsPostFingerprint(text: "hello", mediaKeys: ["m/a"], audience: MomentsAudience(kind: .everyone), allowNearby: false)
+        let sent = MomentsPendingPost(clientNonce: nonce, fingerprint: fingerprint, text: "hello", audience: fingerprint.audience, media: [MomentsMedia(type: .image, key: "m/a", order: 0)], localMedia: [], allowNearby: false, phase: .sending, submitted: true, nonceLocked: true)
+        var second = sent
+        second.clientNonce = other
+        let remaining = momentsOutboxAfterPosted([sent, second], nonce: nonce)
+        XCTAssertEqual(remaining.map(\.clientNonce), [other])
+
+        let card = momentsPostedCard(receipt: receipt!, text: "hello", media: sent.media)
+        XCTAssertEqual(card.id, "post-1")
+        XCTAssertEqual(card.state, "published")
+        XCTAssertEqual(card.version, 7)
+        XCTAssertEqual(card.text, "hello")
+        XCTAssertEqual(card.media.map(\.key), ["m/a"])
+        XCTAssertFalse(card.isUnavailable)
+        let page = [MomentsCard(id: "older", text: "earlier")]
+        XCTAssertEqual(momentsFeedWithPosted(items: page, posted: card).map(\.id), ["post-1", "older"])
+        let serverPage = [MomentsCard(id: "post-1", version: 7, state: "published", text: "hello")]
+        XCTAssertEqual(momentsFeedWithPosted(items: serverPage, posted: card).map(\.id), ["post-1"])
+    }
 }
 
 private func momentsTestPost(text: String, audience: MomentsAudience = MomentsAudience(kind: .everyone), mediaKeys: [String] = [], allowNearby: Bool = false, city: String? = nil, placeId: String? = nil, quoteOf: String? = nil, nonce: String) -> MomentsPostDraft {

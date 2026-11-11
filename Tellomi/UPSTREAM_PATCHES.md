@@ -6,7 +6,7 @@ Branch `cursor/moments-composer-outbox-5d88`, based on `release/ios`.
 
 The composer keeps one `client_nonce` for a submission and stores that task in the account Postbox (`moments` cache, outbox). A retry sends the same nonce through `momentsEncodePost`. Cancel, the back button and swipe-back share `momentsComposerLeave`. No upstream navigation code was changed: `ViewController.attemptNavigation` already covers the back button and the interactive pop. New strings are keys added to `en.lproj` only.
 
-`tellomi/content-engine` is not readable with this environment's GitHub token (the repository returns 404). The field the audited server accepts and checks with `ids.Parse` is `client_nonce` (`posts.go` around 460–463 at `b41659e`). This client sends that field. It does not add an `Idempotency-Key` header. Whether the server stores the nonce and returns the original post on a duplicate is not visible from here, so a lost response can still create a second post if the server only checks the UUID shape.
+content-engine dedupes `client_nonce`. `posts.go` returns the first post on a retry (`a retry gets the first post back`). `interactions.go` looks the nonce up and falls back to the unique index. `uploads_bind_test.go` asserts a repeated nonce returns the first post and the count stays 1. The HTTP result is 200 with the original `{id, state, version}`. The client treats that body as success: the outbox entry is removed and Following shows that post.
 
 | File | Change |
 | --- | --- |

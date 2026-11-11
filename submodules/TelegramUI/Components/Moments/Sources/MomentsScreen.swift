@@ -186,6 +186,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var pullOffset: [MomentsFeedKind: CGFloat] = [:]
     private var screenVisible = false
     private var offeredPendingSend = false
+    private var postedCard: MomentsCard?
     private var probeEpoch = 0
     private var probeDisposable: Disposable?
     private let prefetch: MomentsPrefetchManager
@@ -548,6 +549,13 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
                 model.newCount = 0
             }
             model.items = merged.items
+            if kind == .following, let posted = self.postedCard {
+                if merged.items.contains(where: { $0.id == posted.id }) {
+                    self.postedCard = nil
+                } else {
+                    model.items = momentsFeedWithPosted(items: merged.items, posted: posted)
+                }
+            }
             self.models[kind] = model
             self.render(kind, resetScroll: refresh)
             self.updatePill()
@@ -875,7 +883,22 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private func presentComposer(quoteId: String?, sendPending: Bool = false) {
         guard let controller = self.controller else { return }
         let composer = MomentsComposerScreen(context: self.context, quoteId: quoteId, sendPending: sendPending)
+        composer.onPosted = { [weak self] card in
+            self?.showPosted(card)
+        }
         (controller.navigationController as? NavigationController)?.pushViewController(composer)
+    }
+
+    /// A 200 from create-post, including a replayed nonce, is this post. It is already off the outbox.
+    private func showPosted(_ card: MomentsCard) {
+        self.postedCard = card
+        if self.models[.following] == nil {
+            self.models[.following] = MomentsFeedModel()
+        }
+        self.models[.following]?.items = momentsFeedWithPosted(items: self.models[.following]?.items ?? [], posted: card)
+        self.render(.following, resetScroll: true)
+        self.select(.following, animated: false)
+        self.load(.following, refresh: true)
     }
 
     private func openURL(_ url: String) {

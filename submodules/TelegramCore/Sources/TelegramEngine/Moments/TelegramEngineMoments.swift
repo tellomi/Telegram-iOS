@@ -482,13 +482,14 @@ public extension TelegramEngine {
             }
         }
 
-        public func publish(_ body: [String: Any]) -> Signal<String, MomentsAPIError> {
+        /// 200 and `{id, state, version}` is the original post. A retry of `client_nonce` gets that post back.
+        public func publish(_ body: [String: Any]) -> Signal<MomentsPublishReceipt, MomentsAPIError> {
             return self.call(method: "POST", path: "/v1/feed/posts", body: body)
             |> mapToSignal { data in
-                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let id = momentsString(json, "id") else {
+                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let receipt = momentsPublishReceipt(status: 200, json: json) else {
                     return .fail(.invalid("post"))
                 }
-                return .single(id)
+                return .single(receipt)
             }
         }
 

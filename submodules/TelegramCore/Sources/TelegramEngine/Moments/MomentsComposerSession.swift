@@ -283,6 +283,45 @@ struct MomentsOutboxBlob: Codable, Equatable {
     var posts: [MomentsPendingPost]
 }
 
+/// `POST /v1/feed/posts` answers 200 with the original post. A repeated `client_nonce` returns that same post, not a second one.
+public struct MomentsPublishReceipt: Equatable {
+    public var id: String
+    public var state: String
+    public var version: Int64
+
+    public init(id: String, state: String, version: Int64) {
+        self.id = id
+        self.state = state
+        self.version = version
+    }
+}
+
+public func momentsPublishReceipt(status: Int, json: [String: Any]) -> MomentsPublishReceipt? {
+    guard status == 200, let id = momentsString(json, "id"), !id.isEmpty else {
+        return nil
+    }
+    return MomentsPublishReceipt(id: id, state: momentsString(json, "state") ?? "", version: momentsInt64(json, "version"))
+}
+
+/// The nonce that just posted is no longer waiting. Any other task stays.
+public func momentsOutboxAfterPosted(_ posts: [MomentsPendingPost], nonce: String) -> [MomentsPendingPost] {
+    return posts.filter { $0.clientNonce != nonce }
+}
+
+/// The row the feed shows for a post the server accepted, including a replay of an earlier nonce.
+public func momentsPostedCard(receipt: MomentsPublishReceipt, text: String, media: [MomentsMedia]) -> MomentsCard {
+    let state = receipt.state.isEmpty ? "published" : receipt.state
+    return MomentsCard(id: receipt.id, version: receipt.version, state: state, text: text, media: media)
+}
+
+/// A refresh that does not yet contain the post still shows it. Once the server page has that id, the server row wins.
+public func momentsFeedWithPosted(items: [MomentsCard], posted: MomentsCard) -> [MomentsCard] {
+    if items.contains(where: { $0.id == posted.id }) {
+        return items
+    }
+    return [posted] + items
+}
+
 func momentsPendingFileName(_ name: String) -> String {
     let base = (name as NSString).lastPathComponent
     let filtered = base.unicodeScalars.filter { scalar in

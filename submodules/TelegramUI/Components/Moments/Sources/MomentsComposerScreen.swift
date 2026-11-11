@@ -47,6 +47,9 @@ public final class MomentsComposerScreen: ViewController {
     private var resumeSendAfterUpload = false
     private var publishing = false
     private var didOfferPending = false
+    private var outboxTask: MomentsPendingPost?
+    /// The feed shows this card after a 200, including when the nonce replayed the first post.
+    public var onPosted: ((MomentsCard) -> Void)?
     private var audienceGrant: (kind: String, userIds: [Int64], grant: MomentsAudienceGrant)?
 
     public init(context: AccountContext, quoteId: String?, sendPending: Bool = false) {
@@ -568,17 +571,25 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     private func sendPost(_ body: [String: Any]) {
-        let _ = (self.context.engine.moments.publish(body) |> deliverOnMainQueue).start(next: { [weak self] _ in
+        let nonce = self.clientNonce ?? ""
+        let text = self.currentFingerprint().text
+        let media = self.media
+        let _ = (self.context.engine.moments.publish(body) |> deliverOnMainQueue).start(next: { [weak self] receipt in
             guard let self else { return }
+            let waiting = self.outboxTask.map { [$0] } ?? []
+            let remaining = momentsOutboxAfterPosted(waiting, nonce: nonce)
+            self.outboxTask = remaining.first
             self.publishing = false
             self.submitted = false
             self.clientNonce = nil
             self.storedFingerprint = nil
             self.nonceLocked = false
-            self.context.engine.moments.storePendingPosts([])
+            self.context.engine.moments.storePendingPosts(remaining)
             self.context.engine.moments.storeDraft(nil)
             momentsRemovePendingFiles(accountPath: self.context.account.basePath)
-            self.navigationController?.popViewController(animated: true)
+            let card = momentsPostedCard(receipt: receipt, text: text, media: media)
+            self.navigationController?.popViewController(animated: false)
+            self.onPosted?(card)
         }, error: { [weak self] _ in
             guard let self else { return }
             self.failSubmission()
@@ -649,6 +660,7 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     private func storePending(_ post: MomentsPendingPost) {
+        self.outboxTask = post
         self.context.engine.moments.storePendingPosts([post])
     }
 
@@ -657,6 +669,7 @@ public final class MomentsComposerScreen: ViewController {
             return
         }
         if self.media.isEmpty && self.localMedia.isEmpty {
+            self.outboxTask = nil
             self.context.engine.moments.storePendingPosts([])
             return
         }
@@ -694,6 +707,7 @@ public final class MomentsComposerScreen: ViewController {
         self.clientNonce = nil
         self.storedFingerprint = nil
         self.nonceLocked = false
+        self.outboxTask = nil
         self.context.engine.moments.storeDraft(nil)
         self.context.engine.moments.storePendingPosts([])
         momentsRemovePendingFiles(accountPath: self.context.account.basePath)
@@ -793,6 +807,7 @@ public final class MomentsComposerScreen: ViewController {
                 self.nonceLocked = false
                 self.clientNonce = nil
                 self.storedFingerprint = nil
+                self.outboxTask = nil
                 self.context.engine.moments.storePendingPosts([])
                 self.refresh()
             }),
