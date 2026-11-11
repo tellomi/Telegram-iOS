@@ -148,6 +148,12 @@ public extension TelegramEngine {
         private let http = MomentsHTTP()
         private let mediaBaseURL = Atomic<String?>(value: nil)
         private let didLoadMediaBase = Atomic<Bool>(value: false)
+        private let appliedLimits = Atomic<MomentsLimits>(value: .standard)
+        private let cachedConfig = Atomic<MomentsRemoteConfig?>(value: nil)
+        private let personalized = Atomic<Bool>(value: true)
+        private let personalizedRecommendationsValue = ValuePromise<Bool>(true, ignoreRepeated: true)
+        private let preferenceGeneration = Atomic<Int>(value: 0)
+        private let preferenceDocument = Atomic<[String: Any]>(value: [:])
 
         init(account: Account) {
             self.account = account
@@ -223,18 +229,9 @@ public extension TelegramEngine {
         }
 
         public func loadFeed(_ kind: MomentsFeedKind, cursor: String?, city: String?, sort: String?) -> Signal<MomentsPage, MomentsAPIError> {
-            var query: [String: String] = ["limit": "\(MomentsLimits.standard.pageSize)"]
-            if let cursor, !cursor.isEmpty {
-                query["cursor"] = cursor
-            }
-            if kind == .nearby {
-                if let city {
-                    query["city"] = city
-                }
-                query["sort"] = sort ?? "latest"
-            }
             return self.prepareMediaBase()
             |> mapToSignal { _ in
+                let query = momentsFeedRequestQuery(kind: kind, cursor: cursor, city: city, sort: sort, pageSize: self.appliedLimits.with { $0.pageSize }, personalized: self.personalized.with { $0 })
                 return self.call(method: "GET", path: "/v1/feed/\(kind.rawValue)", query: query)
             }
             |> mapToSignal { data in
@@ -627,23 +624,111 @@ public extension TelegramEngine {
             ]) |> ignoreValues
         }
 
+        public func currentLimits() -> MomentsLimits {
+            return self.appliedLimits.with { $0 }
+        }
+
+        public func recommendIsPersonalized() -> Bool {
+            return self.personalized.with { $0 }
+        }
+
+        public func personalizedRecommendationsSignal() -> Signal<Bool, NoError> {
+            return self.personalizedRecommendationsValue.get()
+        }
+
+        /// Last value wins. Recommend requests read it, and the feed reloads when it changes.
+        public func setPersonalizedRecommendations(_ value: Bool) {
+            self.applyPersonalized(value, persist: true)
+        }
+
+        private func applyPersonalized(_ value: Bool, persist: Bool) {
+            let _ = self.personalized.swap(value)
+            self.personalizedRecommendationsValue.set(value)
+            guard persist else {
+                return
+            }
+            let payload = value ? "1" : "0"
+            let _ = self.account.postbox.transaction { transaction in
+                momentsWriteBlob(transaction: transaction, id: momentsPreferencesCacheId(), payload: payload)
+            }.start()
+        }
+
+        /// Saved value first, then `GET /v1/feed/me/preferences`. A newer toggle drops the older read.
+        public func reloadPersonalizedRecommendations() -> Signal<Bool, NoError> {
+            return self.account.postbox.transaction { transaction -> Bool? in
+                guard let payload = momentsReadBlob(transaction: transaction, id: momentsPreferencesCacheId()) else {
+                    return nil
+                }
+                return payload != "0"
+            }
+            |> mapToSignal { cached -> Signal<Bool, NoError> in
+                if let cached {
+                    self.applyPersonalized(cached, persist: false)
+                }
+                let generation = self.preferenceGeneration.with { $0 }
+                return self.feedPreferences()
+                |> map { flag -> Bool in
+                    guard generation == self.preferenceGeneration.with({ $0 }) else {
+                        return self.personalized.with { $0 }
+                    }
+                    if let flag {
+                        self.setPersonalizedRecommendations(flag)
+                        return flag
+                    }
+                    return self.personalized.with { $0 }
+                }
+                |> `catch` { _ -> Signal<Bool, NoError> in
+                    return .single(self.personalized.with { $0 })
+                }
+            }
+        }
+
+        public func feedPreferences() -> Signal<Bool?, MomentsAPIError> {
+            let generation = self.preferenceGeneration.with { $0 }
+            return self.call(method: "GET", path: "/v1/feed/me/preferences")
+            |> mapToSignal { data -> Signal<Bool?, MomentsAPIError> in
+                guard generation == self.preferenceGeneration.with({ $0 }) else {
+                    return .complete()
+                }
+                self.rememberPreferenceDocument(data)
+                return .single(momentsPersonalizedFlag(data: data))
+            }
+        }
+
+        public func updatePersonalizedRecommendations(_ personalized: Bool) -> Signal<Never, MomentsAPIError> {
+            let generation = self.preferenceGeneration.modify { $0 + 1 }
+            self.setPersonalizedRecommendations(personalized)
+            let body = momentsPreferenceBody(current: self.preferenceDocument.with { $0 }, personalized: personalized)
+            return self.call(method: "PUT", path: "/v1/feed/me/preferences", body: body)
+            |> map { data -> Void in
+                guard generation == self.preferenceGeneration.with({ $0 }) else {
+                    return
+                }
+                self.rememberPreferenceDocument(data)
+                if let flag = momentsPersonalizedFlag(data: data) {
+                    self.setPersonalizedRecommendations(flag)
+                }
+            }
+            |> ignoreValues
+        }
+
+        private func rememberPreferenceDocument(_ data: Data) {
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return
+            }
+            let _ = self.preferenceDocument.swap(object)
+        }
+
         public func remoteConfig() -> Signal<MomentsRemoteConfig, MomentsAPIError> {
+            if self.didLoadMediaBase.with({ $0 }), let cached = self.cachedConfig.with({ $0 }) {
+                return .single(cached)
+            }
             return self.call(method: "GET", path: "/v1/feed/config")
             |> map { data in
-                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    return MomentsRemoteConfig()
-                }
-                let config = MomentsRemoteConfig(
-                    textLimit: json["text_limit"] == nil ? nil : momentsInt(json, "text_limit"),
-                    imageLimit: json["image_limit"] == nil ? nil : momentsInt(json, "image_limit"),
-                    videoLimit: json["video_limit"] == nil ? nil : momentsInt(json, "video_limit"),
-                    videoMaxDuration: json["video_max_seconds"] == nil ? nil : Double(momentsInt(json, "video_max_seconds")),
-                    voiceMaxDuration: json["voice_max_seconds"] == nil ? nil : Double(momentsInt(json, "voice_max_seconds")),
-                    commentTextLimit: json["comment_text_limit"] == nil ? nil : momentsInt(json, "comment_text_limit"),
-                    pageSize: json["page_size"] == nil ? nil : momentsInt(json, "page_size"),
-                    tabs: json["tabs"] as? [String] ?? [],
-                    mediaBaseURL: momentsConfigMediaBase(data)
-                )
+                let config = momentsRemoteConfig(data: data)
+                let _ = self.appliedLimits.swap(MomentsLimits.standard.applying(config: config))
+                let _ = self.cachedConfig.swap(config)
+                let _ = self.didLoadMediaBase.swap(true)
                 if let mediaBaseURL = config.mediaBaseURL {
                     let _ = self.mediaBaseURL.swap(mediaBaseURL)
                 }

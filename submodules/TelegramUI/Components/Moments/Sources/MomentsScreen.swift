@@ -18,6 +18,7 @@ public final class MomentsScreen: ViewController {
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
     private var networkDisposable: Disposable?
+    private let launchDisposable = DisposableSet()
     private var resetWhenShown = false
     /// A comment sheet covers the list. Dismissing it must not reset the tab or the scroll position.
     var suppressFeedReset = false
@@ -50,6 +51,10 @@ public final class MomentsScreen: ViewController {
         self.networkDisposable = (context.account.networkState |> deliverOnMainQueue).start(next: { [weak self] state in
             self?.nodeIfLoadedIfReady?.setNetworkState(state)
         })
+        self.launchDisposable.add((context.engine.moments.reloadPersonalizedRecommendations() |> deliverOnMainQueue).start(next: { _ in }))
+        self.launchDisposable.add((context.engine.moments.remoteConfig() |> deliverOnMainQueue).start(next: { [weak self] _ in
+            self?.nodeIfLoadedIfReady?.remoteConfigUpdated()
+        }, error: { _ in }))
     }
 
     required init(coder aDecoder: NSCoder) {
@@ -59,6 +64,7 @@ public final class MomentsScreen: ViewController {
     deinit {
         self.presentationDataDisposable?.dispose()
         self.networkDisposable?.dispose()
+        self.launchDisposable.dispose()
     }
 
     private var nodeIfLoadedIfReady: MomentsScreenNode? {
@@ -187,6 +193,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var screenVisible = false
     private var offeredPendingSend = false
     private var postedCard: MomentsCard?
+    private var displayedPersonalized: Bool?
     private var probeEpoch = 0
     private var probeDisposable: Disposable?
     private let prefetch: MomentsPrefetchManager
@@ -258,6 +265,9 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             self?.hides = hides
             self?.render(self?.selected ?? .recommend, resetScroll: false)
         }))
+        self.disposable.add((context.engine.moments.personalizedRecommendationsSignal() |> deliverOnMainQueue).start(next: { [weak self] value in
+            self?.personalizedChanged(value)
+        }))
     }
 
     deinit {
@@ -305,6 +315,22 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.load(.recommend, refresh: true)
         self.updateSelectionChrome()
         self.scheduleProbe()
+    }
+
+    func remoteConfigUpdated() {
+        self.scheduleProbe()
+    }
+
+    private func personalizedChanged(_ value: Bool) {
+        let previous = self.displayedPersonalized
+        self.displayedPersonalized = value
+        guard let previous, previous != value else {
+            return
+        }
+        let model = self.models[.recommend]
+        if model?.loaded == true || model?.loading == true {
+            self.load(.recommend, refresh: true)
+        }
     }
 
     func setScreenVisible(_ visible: Bool) {
@@ -912,7 +938,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         guard momentsFeedShouldProbe(kind: self.selected, screenVisible: self.screenVisible) else {
             return
         }
-        let interval = MomentsLimits.standard.newPostsProbeInterval
+        let interval = self.context.engine.moments.currentLimits().newPostsProbeInterval
         let timer = SwiftSignalKit.Timer(timeout: interval, repeat: true, completion: { [weak self] in
             self?.probeHead()
         }, queue: .mainQueue())

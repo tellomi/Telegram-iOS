@@ -225,6 +225,12 @@ public final class MomentsDetailScreen: ViewController {
 
     /// Comments store the same media object as a post: a tus key, not a Telegram document id.
     private func uploadCommentMedia(file: TelegramMediaFile, type: MomentsMediaType, parentId: String?) {
+        if type == .audio {
+            let duration = file.duration ?? 0
+            if duration > momentsVoiceMaxDuration(self.context.engine.moments.currentLimits(), comment: true) {
+                return
+            }
+        }
         let resource = file.resource
         let resolved = self.commentMediaPath(resource)
         let dimensions = file.dimensions
@@ -310,7 +316,7 @@ func momentsPresentErrorToast(controller: ViewController, presentationData: Pres
 extension MomentsDetailScreen: UITextFieldDelegate {
     public func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         let text = textField.text ?? ""
-        guard !text.isEmpty, text.count <= MomentsLimits.standard.commentTextLimit else { return false }
+        guard !text.isEmpty, text.count <= self.context.engine.moments.currentLimits().commentTextLimit else { return false }
         guard self.card.viewer.canComment, self.card.commentPolicy != .closed else { return false }
         let parent = textField.accessibilityHint
         let draft = momentsCommentComposerForSend(previous: self.commentComposer, text: text, parentId: parent, mediaKey: nil, sticker: false)

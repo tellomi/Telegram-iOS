@@ -17,6 +17,35 @@ content-engine dedupes `client_nonce`. `posts.go` returns the first post on a re
 | `submodules/TelegramUI/Components/Moments/Sources/MomentsScreen.swift` | Offers a restored send. |
 | `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | New Moments draft and outbox keys. |
 
+## Moments feed limits and recommendation switch — 2026-11-11
+
+`GET /v1/feed/config` puts the caps in a nested `limits` object. The client was reading invented names from the top of the document, so every server cap was ignored. The parser now reads only the engine's keys. A missing key, or a value that is not a positive whole number, keeps the client default. Those defaults are the content-engine constants: 2000 characters, 12 images, and 180 seconds for both voice caps. `personalization_toggle_visible` is a top-level boolean. Anything else, including `1` and `"true"`, hides the switch.
+
+The recommendation switch is only on the Moments settings screen. Off sends `personalized=false` on recommend and reloads that feed. On leaves the recommend query unchanged. The choice is read again when the Moments tab is created, and an older read cannot overwrite a newer toggle.
+
+| Server key | Client field |
+| --- | --- |
+| `limits.post_text_chars` | `textLimit` (2000, `posts.go` `MaxPostChars`) |
+| `limits.post_images` | `imageLimit` (12) |
+| `limits.post_videos` | `videoLimit` (3) |
+| `limits.video_max_seconds` | `videoMaxDuration` (60) |
+| `limits.voice_post_max_seconds` | `voicePostMaxDuration` (180, `media/audio.go` `MaxAudioSeconds`), composer |
+| `limits.voice_comment_max_seconds` | `voiceCommentMaxDuration` (180), comment voice |
+| `limits.comment_text_chars` | `commentTextLimit` (1000) |
+| `limits.page_size` | `pageSize` (20) |
+| `limits.max_mentions` | `mentionLimit` (10) |
+| `limits.max_topics` | `topicLimit` (3) |
+| `limits.probe_interval_seconds` | `newPostsProbeInterval` (60) |
+| `limits.notification_days` | `notificationRetentionDays` (90) |
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsLimits.swift` | Nested `limits` parser, preference body, recommend query. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/TelegramEngineMoments.swift` | Applies the config. `GET`/`PUT /v1/feed/me/preferences`. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsSettingsController.swift` | Switch and footer, only when the config flag is true. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsComposerScreen.swift` | Voice posts use `voice_post_max_seconds`. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Recommendations, the switch, and its footer. |
+
 ## Root tab menu (选单设定) — 2026-11-10
 
 A fresh install shows 动态, 聊天, 设置. Contacts, Calls and News stay off until the person turns them on. Chats and Settings cannot be hidden. The choice is shared account-manager data (`ApplicationSpecificSharedDataKeys.tellomiTabBarPreferences`), the same store as `CallListSettings`, not an account postbox record and not `UserDefaults`. A value saved by the first build in the `app.tellomi.chat.tab-bar` suite is copied in once and then removed. Hiding button titles shortens the phone tab bar; an iPad or vertical bar is unchanged. The bar rebuilds when the switches move.
@@ -93,10 +122,10 @@ The feed is new client code. It does not revive the cancelled Discover/Feed work
 - Gallery media goes through `legacyAssetPickerEnqueueMessages` and tus `POST /v1/feed/media/uploads`.
 - A visible video uses `UniversalVideoNode` only when autoplay is on and Reduce Motion is off.
 - Comment stickers and GIFs use `StickerPickerScreen` (`hasGifs`) and are uploaded with tus. Likes and poll votes open an `ItemListPeerItem` list filled from `/v1/feed`.
-- Feed list endpoints return `{items:[{id,reason}],cursor}`. The client hydrates with `POST /v1/feed/cards`. Notifications use `?tab=interactions|follows|system`. Home tabs are always 推荐 / 关注 / 好友 / 同城 (`recommend`, `following`, `friends`, `nearby`). `GET /v1/capabilities` does not hide 好友. `GET /v1/feed/friends` uses the same cursor as following; following list reasons are `self`, `following` and `repost`, and friends items use `reason=friend`. A failed friends request is an in-feed retry, not a hidden tab. The composer stops at 500 characters and 10 images. Image `renditions` (largest first) supply the feed bitmap: 1080 for a single image, 360 for a carousel cell, original only in the gallery. A missing tier uses the original key/url. Video cells show `poster`, then `cover_key`. An absolute `url` is used as-is; a key is `media_base_url` + key. ImageIO still downsamples whatever bytes arrive.
+- Feed list endpoints return `{items:[{id,reason}],cursor}`. The client hydrates with `POST /v1/feed/cards`. Notifications use `?tab=interactions|follows|system`. Home tabs are always 推荐 / 关注 / 好友 / 同城 (`recommend`, `following`, `friends`, `nearby`). `GET /v1/capabilities` does not hide 好友. `GET /v1/feed/friends` uses the same cursor as following; following list reasons are `self`, `following` and `repost`, and friends items use `reason=friend`. A failed friends request is an in-feed retry, not a hidden tab. The composer stops at 2000 characters and 12 images. Image `renditions` (largest first) supply the feed bitmap: 1080 for a single image, 360 for a carousel cell, original only in the gallery. A missing tier uses the original key/url. Video cells show `poster`, then `cover_key`. An absolute `url` is used as-is; a key is `media_base_url` + key. ImageIO still downsamples whatever bytes arrive.
 - `prepareMediaBase()` emits one `Void` so the requests chained after it actually run.
 - There is no city catalog (`/v1/feed/cities` is empty). 同城 is `GET /v1/feed/nearby` with no city picker. A card's city name is shown only when the card includes it.
-- Voice posts are capped at 60 seconds, or `voice_max_seconds` from `GET /v1/feed/config`.
+- Voice posts and voice comments are capped at 180 seconds, unless `limits.voice_post_max_seconds` or `limits.voice_comment_max_seconds` says otherwise.
 - Comment stickers and GIFs are uploaded with tus and sent as `{type,key,...}`. They are not Telegram document ids.
 - Relative media keys use `media_base_url`, or `https://media.tellomi.app/feed` when that is missing. Absolute https URLs (signed R2) are left as returned. Image versus video follows the card `type`, not the HTTP content-type.
 
