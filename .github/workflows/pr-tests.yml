@@ -112,6 +112,7 @@ jobs:
           ios=(
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
             //submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode:PeerInfoPaneNodeTests
+            //submodules/MtProtoKit:MtProtoKitTests
           )
           # Run 42416611063 died before any test: the Bazel registry fetch timed out.
           # .github/bazel_registry_retry.sh retries only that pure fetch failure

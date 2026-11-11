@@ -1288,12 +1288,12 @@ The bundled English fallback, the share sheet, and the widget login line said Te
 
 ## GCDAsyncSocket stream close
 
-Build 90 crashed on the `GCDAsyncSocket` queue with `Trying to recursively lock an os_unfair_lock`. The stack is `CFSocketInvalidate` inside `SocketStream`'s destructor, called from `CFSocketInvalidate` inside `SocketStream::close` / `CFStreamClose`, then MtProtoKit. `closeWithError` used to unschedule the streams and then close each one while its client was still set, so a callback delivered during teardown could enter `closeWithError` again and close the pair a second time.
+Build 90 crashed on the `GCDAsyncSocket` queue: `Trying to recursively lock an os_unfair_lock`. The frames are `CFSocketInvalidate`, `SocketStream::~SocketStream`, `CFSocketInvalidate` again, `SocketStream::close`, `_CFStreamClose`, then MtProtoKit. That is one `CFStreamClose`. The read and write callbacks in `GCDAsyncSocket.m` `dispatch_async` onto the socket queue before they call `closeWithError`, so they do not re-enter it on the same stack. A flag around `closeWithError` does not stop the lock: the second `CFSocketInvalidate` is the `SocketStream` destructor, reached by `CFRelease` from the first `CFSocketInvalidate`. The same stack is CocoaAsyncSocket issue 803 and Telegram-iOS issue 2306. Upstream Telegram has not changed this close.
 
-The close now refuses re-entry (`kClosingWithError`, cleared when that close finishes). It clears both stream clients, leaves the run loop, closes the write stream, then closes the read stream. The native socket is still closed by the dispatch sources, and `kCFStreamPropertyShouldCloseNativeSocket` stays false.
+`kCFStreamPropertyShouldCloseNativeSocket` stays false. The dispatch source still closes the file descriptor, once. Before either stream is closed, the `CFSocket` inside the stream has its `CFSocketContext.release` (the function pointer equal to `CFRelease`) replaced with a release on another queue. The destructor then runs after the outer `CFSocketInvalidate` has unlocked. The iOS 16 field offsets are not used. The socket is the object whose isa matches a live `CFSocket`, and the context is the slot whose release function is `CFRelease`. `kClosingWithError` still makes a second `closeWithError` on the same stack return, so the descriptor is not closed twice. It is cleared when that close finishes, so a later connect can close again.
 
 | File | Change |
 | --- | --- |
-| `submodules/MtProtoKit/Sources/GCDAsyncSocketStreamClose.c` | The step order and the re-entry refusal. |
-| `submodules/MtProtoKit/Sources/GCDAsyncSocket.m` | `closeWithError` runs that plan. |
-| `submodules/MtProtoKit/Tests/GCDAsyncSocketStreamCloseTests.c` | Order, re-entry during every step, and a later close after the flag is cleared. |
+| `submodules/MtProtoKit/Sources/GCDAsyncSocketCFSocketRelease.m` | Defers the `CFSocket` context release that re-enters `CFSocketInvalidate`. |
+| `submodules/MtProtoKit/Sources/GCDAsyncSocket.m` | Calls that before `CFStreamClose`. Keeps the single-close flag. |
+| `submodules/MtProtoKit/Tests/GCDAsyncSocketCloseTests.m` | On iOS: normal disconnect, read error, disconnect twice, reconnect. Each descriptor is closed once and the open-descriptor count returns. The deferral counter moves on the iOS paths. |

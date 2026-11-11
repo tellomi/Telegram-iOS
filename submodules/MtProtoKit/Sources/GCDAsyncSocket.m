@@ -10,6 +10,7 @@
 
 #import "GCDAsyncSocket.h"
 #import "GCDAsyncSocketStreamClose.h"
+#import "GCDAsyncSocketCFSocketRelease.h"
 
 #import <MtProtoKit/MTLogging.h>
 
@@ -2704,11 +2705,12 @@ enum GCDAsyncSocketConfig
 	
 	NSAssert(dispatch_get_current_queue() == socketQueue, @"Must be dispatched on socketQueue");
 
-	// CFStreamClose can invoke the stream client before it returns, and that
-	// client calls back into closeWithError. A second CFStreamClose from that
-	// callback re-enters CFSocketInvalidate on this thread (os_unfair_lock abort
-	// on the GCDAsyncSocket queue). Refuse the re-entry. flags is cleared at
-	// the end of a finished close, so a later disconnect can close again.
+	// A second closeWithError on this stack must not close the file descriptor
+	// again. The stream callbacks do not do that: each one dispatch_asyncs
+	// onto this queue before calling closeWithError. The build 90 abort is
+	// inside one CFStreamClose (CFSocketInvalidate -> ~SocketStream ->
+	// CFSocketInvalidate). That is handled by
+	// TellomiDeferCFSocketContextRelease, below, not by this flag.
 	int closing = (flags & kClosingWithError) ? 1 : 0;
 	int streamOps[8];
 	int streamOpCount = 0;
@@ -2765,6 +2767,10 @@ enum GCDAsyncSocketConfig
 				}
 				case GCDAsyncSocketStreamCloseCloseWrite:
 				{
+					// Both streams still exist here. Point the shared CFSocket's
+					// context.release off CFRelease before either CFStreamClose.
+					TellomiDeferCFSocketContextRelease((CFTypeRef)readStream);
+					TellomiDeferCFSocketContextRelease((CFTypeRef)writeStream);
 					if (writeStream)
 					{
 						CFWriteStreamRef stream = writeStream;
