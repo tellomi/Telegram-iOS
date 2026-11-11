@@ -32,7 +32,7 @@ The app ships only `en.lproj`. Start Messaging used to call `downloadAndApplyLoc
 | --- | --- |
 | `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | `zh-Hans` / `zh-CN` / `zh` map to server langpack `zh-hans`. `zh-Hant` / `zh-TW` / `zh-HK` / `zh-MO` map to `zh-hant`. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | Start downloads that pack instead of `"en"` until the key above is set. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | The login flow downloads the pack before it builds the splash or the phone screen, so a saved English pack from the old Start button is replaced. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | The login flow downloads the pack before it builds the splash or the phone screen, so a saved English pack from the old Start button is replaced. The welcome carousel is no longer installed; see Welcome screen skipped. The same download still runs first. |
 | `submodules/AuthorizationUI/Sources/TellomiIntroCopy.swift` | Welcome pages and the start button. Chinese when the system language is `zh*`, otherwise Tellomi English. Not the bundled Telegram tour. |
 | `submodules/RMIntro/PublicHeaders/RMIntro/RMIntroViewController.h`, `Sources/platform/ios/RMIntroViewController.m`, `RMIntroPageView.m` | `setIntroHeadlines:descriptions:` replaces the six pages, including after the view has loaded. |
 | `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` `tellomiChromeLanguageCode` | Login chrome uses the system language until the automatic pack has been applied. A later choice in Settings is kept. `tellomiLoginCopy`, `tellomiEmailLoginCopy`, and the agreement follow it, so a Chinese device is not stuck on the bundled English pack. |
@@ -1285,6 +1285,25 @@ The bundled English fallback, the share sheet, and the widget login line said Te
 | `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Product name in values. Keys unchanged. |
 | `Telegram/Share/en.lproj/Localizable.strings`, `Telegram/WidgetKitWidget/en.lproj/Localizable.strings` | Login lines. |
 | `Tellomi/check_server_config.py` `check_siri_vocabulary` | Runs from `main`. Requires the five phrases, the explicit srcs, and no Telegram left in those bundle values. |
+
+## Welcome screen skipped
+
+A signed-out launch used to install `AuthorizationSequenceSplashController` while the unauthorized state was `.empty`: the Tellomi mark, the carousel, and Start Messaging. Logout, add account, and switch account all construct the same `AuthorizationSequenceController`, so they took that path whenever no other account was already signed in. Add account with another account present already opened the phone screen.
+
+The carousel is still built by `splashController()` and its copy is unchanged. It is not put on screen. `.empty` is written forward to `.phoneEntry` with `defaultCountryCode()` (86) and an empty number, the same state Start Messaging used to write. `tellomiSkipsWelcomeSplash` is the switch; `false` installs the carousel again. The phone, code, email, QR, and password screens are the existing ones.
+
+Back on the phone screen does not return to `.empty`. With no other account that used to reveal the carousel, and an empty navigation stack is a blank page. The back control is hidden in that case. Email still slides back to the phone field. Add account still shows close, which removes the unauthorized account. A stored phone-entry number is kept. A code the user already left still returns to the phone field.
+
+The language download in `updateState` still runs before any login screen is built. Skipping the carousel does not skip it. Until that pack is applied, login chrome follows the system language, so a Chinese phone is not left on the bundled English strings. A later choice in Settings is the saved pack, as before. Appearance still follows the system light and dark themes on the phone screen.
+
+| File | Change |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/TellomiLoginDecisions.swift` | `tellomiSkipsWelcomeSplash`, the logged-out root, the phone-screen back action, and the chrome language choice with its inputs spelled out. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | `tellomiChromeLanguageCode` reads those inputs. The choice is unchanged. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | `.empty` advances to phone entry. The splash installation remains in the `.welcome` branch. Back does not restore `.empty` while the carousel is skipped. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift` | The root phone screen has no close control when it cannot leave. Email still has Back. |
+| `submodules/AuthorizationUI/Tests/TellomiLoginFlowDecisionsTests.swift` | Phone instead of welcome, back stays, Chinese before the pack, a Settings choice kept. |
+| `.github/workflows/login-auth-ui.yml` | The unsigned simulator step screenshots the phone screen in light and dark. It does not sign or upload. |
 
 ## GCDAsyncSocket stream close
 

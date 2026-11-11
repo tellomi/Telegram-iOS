@@ -155,7 +155,7 @@ jobs:
             --buildNumber="$BUILD_NUMBER"
           test -e bazel-bin/Telegram/Telegram.ipa
 
-      - name: Screenshot the welcome screen
+      - name: Screenshot the phone entry screen
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -177,17 +177,17 @@ jobs:
           xcrun simctl ui "${UDID}" appearance light
           xcrun simctl launch "${UDID}" "${BUNDLE}"
           sleep 8
-          xcrun simctl io "${UDID}" screenshot login-screens/welcome-light.png
+          xcrun simctl io "${UDID}" screenshot login-screens/phone-light.png
           xcrun simctl ui "${UDID}" appearance dark
           xcrun simctl terminate "${UDID}" "${BUNDLE}" || true
           xcrun simctl launch "${UDID}" "${BUNDLE}"
           sleep 8
-          xcrun simctl io "${UDID}" screenshot login-screens/welcome-dark.png
+          xcrun simctl io "${UDID}" screenshot login-screens/phone-dark.png
 
-      - name: Upload welcome screenshots
+      - name: Upload phone entry screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: login-welcome-screens
+          name: login-phone-screens
           path: login-screens
           if-no-files-found: ignore
