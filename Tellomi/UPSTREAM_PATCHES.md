@@ -1,5 +1,14 @@
 # Upstream patches
 
+## Moments tab animation — 2026-11-11
+
+The Moments tab uses the same item contract as Chats, Contacts, Calls and News. The static template icon stays on `image` and `selectedImage`. `TabMoments` is set as `animationName` unless Reduce Motion is on, with the same one-pixel `animationOffset` as Chats and News. A theme, strings or Reduce Motion change sets or clears that name the way `ChatListController.updateThemeAndStrings` does. The asset is a Lottie JSON in `Resources/Animations`, the format of `TabChats` and `TabSettings`. Its last frame is the static feed icon. The settings tab avatar is unchanged: it still appears only when another account is signed in. iMe's public tree (`imemessenger/iMe-iOS`, `master`, pushed 2019-10-31) draws extra tabs as template images and does not play a Lottie.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsScreen.swift` | `TabMoments`, cleared while Reduce Motion is on. |
+| `submodules/TelegramUI/Resources/Animations/TabMoments.json` | Selection animation. Rest frame matches the static icon. |
+
 ## Moments feed main-thread layout — 2026-11-11
 
 Scrolling the feed asked `ListView` to build each new row on a global queue. `MomentsPostItemNode` and `MomentsStatusItemNode` are view-backed (`UIStackView`, labels, image views, content-hugging constraints). Creating them there opened an implicit `CATransaction`. When the GCD worker exited, Core Animation committed it and Auto Layout aborted (`_AssertAutoLayoutOnAllowedThreadsOnly`, TestFlight 14.0.5 (86)). Measurement still runs on that queue. The node, its frames and image assignment run on the main queue. Cached feed and hide reads, and like, save, follow and comment completions that touch views, are delivered on the main queue too. ImageIO thumbnails stay off the main queue; only `UIImageView.image` is set on it.

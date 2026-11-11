@@ -34,16 +34,31 @@ public final class MomentsScreen: ViewController {
         super.init(navigationBarPresentationData: nil)
         self.title = momentsText(self.presentationData.strings, .title)
         self.tabBarItem.title = self.title
-        self.tabBarItem.image = momentsTabIcon()
-        self.tabBarItem.selectedImage = self.tabBarItem.image
+        let icon = momentsTabIcon()
+        self.tabBarItem.image = icon
+        self.tabBarItem.selectedImage = icon
+        if !self.presentationData.reduceMotion {
+            self.tabBarItem.animationName = "TabMoments"
+            self.tabBarItem.animationOffset = CGPoint(x: 0.0, y: UIScreenPixel)
+        }
         self.scrollToTop = { [weak self] in
             self?.nodeIfLoaded.scrollToTop()
         }
         self.presentationDataDisposable = (context.sharedContext.presentationData |> deliverOnMainQueue).start(next: { [weak self] presentationData in
             guard let self else { return }
+            let previousTheme = self.presentationData.theme
+            let previousStrings = self.presentationData.strings
+            let previousReduceMotion = self.presentationData.reduceMotion
             self.presentationData = presentationData
             self.title = momentsText(presentationData.strings, .title)
             self.tabBarItem.title = self.title
+            if previousTheme !== presentationData.theme || previousStrings !== presentationData.strings || previousReduceMotion != presentationData.reduceMotion {
+                if !presentationData.reduceMotion {
+                    self.tabBarItem.animationName = "TabMoments"
+                } else {
+                    self.tabBarItem.animationName = nil
+                }
+            }
             if self.isNodeLoaded {
                 self.nodeIfLoaded.updatePresentationData(presentationData)
             }
