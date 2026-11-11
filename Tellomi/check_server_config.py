@@ -223,15 +223,20 @@ def check_keys(config: dict) -> None:
         fail("Telegram backup discovery must stay disabled for the Teamgram default")
     if config.get("local_docker_seed") != "127.0.0.1":
         fail("local docker seed option is not 127.0.0.1")
-    if config.get("seed_address_a_record") != "8.137.39.82":
-        fail("documented A record is not 8.137.39.82")
+    if config.get("seed_address_a_record") != "8.156.40.105":
+        fail("documented A record is not 8.156.40.105")
+    if "8.137.39.82" in json.dumps(config):
+        fail("retired seed IP 8.137.39.82 is still in the config")
     seed_text = json.dumps(config["seeds"])
-    if "127.0.0.1" in seed_text or "8.137.39.82" in seed_text:
-        fail("the IP literals are documented only and must not be active seeds")
+    if "127.0.0.1" in seed_text:
+        fail("the local docker address must stay a documented option, not an active seed")
+    production = config["seeds"]["production"]["1"]
+    if production != ["8.156.40.105", "api.tellomi.cn"]:
+        fail(f"production seeds are {production}, expected the built-in IP then api.tellomi.cn")
+    testing = config["seeds"]["testing"]["1"]
+    if testing != ["api.tellomi.cn"]:
+        fail(f"testing seeds are {testing}")
     for environment in ("production", "testing"):
-        hosts = config["seeds"][environment]["1"]
-        if hosts != ["api.tellomi.cn"]:
-            fail(f"{environment} seeds are not api.tellomi.cn")
         pems = config["public_keys"][environment]
         check_public_key_list(environment, pems, config)
 

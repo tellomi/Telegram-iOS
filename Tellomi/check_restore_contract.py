@@ -47,15 +47,18 @@ def check_server() -> None:
         fail("443 is not a seed fallback port")
     if config["disable_telegram_backup_discovery"] is not True:
         fail("Telegram backup discovery is not disabled")
-    for environment in ("production", "testing"):
-        if config["seeds"][environment]["1"] != ["api.tellomi.cn"]:
-            fail(f"{environment} seed is not api.tellomi.cn")
+    if config["seeds"]["production"]["1"] != ["8.156.40.105", "api.tellomi.cn"]:
+        fail("production seed is not the built-in IP then api.tellomi.cn")
+    if config["seeds"]["testing"]["1"] != ["api.tellomi.cn"]:
+        fail("testing seed is not api.tellomi.cn")
+    if config.get("seed_address_a_record") != "8.156.40.105":
+        fail("documented A record is not 8.156.40.105")
     fingerprints = [item["little_endian"] for item in config["rsa_fingerprints"]]
     if fingerprints != ["4381149949997195609", "12240908862933197005"]:
         fail(f"RSA fingerprints are {fingerprints}")
     header = read("submodules/MtProtoKit/Sources/TellomiServerConfigJSON.h")
-    if "api.tellomi.cn" not in header or "149.154." in header:
-        fail("generated handshake header does not carry only the Tellomi seed")
+    if "8.156.40.105" not in header or "api.tellomi.cn" not in header or "149.154." in header or "8.137.39.82" in header:
+        fail("generated handshake header does not carry the Tellomi production seed")
     network = read("submodules/TelegramCore/Sources/Network/Network.swift")
     if "TellomiSeedAddressSets" not in network or "149.154.175.50" in network:
         fail("Network.swift is not installing the Tellomi seed")

@@ -106,9 +106,10 @@ NSDictionary<NSNumber *, MTDatacenterAddressSet *> *TellomiSeedAddressSets(bool 
     NSMutableDictionary<NSNumber *, MTDatacenterAddressSet *> *result = [[NSMutableDictionary alloc] init];
     [TellomiSeedAddresses(testingEnvironment) enumerateKeysAndObjectsUsingBlock:^(NSNumber *datacenterId, NSArray<NSString *> *hosts, __unused BOOL *stop) {
         NSMutableArray<MTDatacenterAddress *> *addresses = [[NSMutableArray alloc] init];
-        for (NSString *host in hosts) {
-            // Last address is the preferred port. chooseTransportScheme keeps
-            // the last scheme when no port has failed yet.
+        // Hosts and ports are in dial preference order. chooseTransportScheme
+        // keeps the last address when nothing has failed yet, so both lists
+        // are written in reverse: the first seed's preferred port is last.
+        for (NSString *host in hosts.reverseObjectEnumerator) {
             for (NSNumber *port in ports.reverseObjectEnumerator) {
                 [addresses addObject:[[MTDatacenterAddress alloc] initWithIp:host port:port.unsignedShortValue preferForMedia:false restrictToTcp:false cdn:false preferForProxy:false secret:nil thisPortOnly:true]];
             }

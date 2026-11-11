@@ -1,5 +1,15 @@
 # Upstream patches
 
+## Production MTProto seed IP — 2026-11-11
+
+Production datacenter 1 dials `8.156.40.105` before `api.tellomi.cn`. Port 10443 is still first on that host. After it times out, the next dial is `8.156.40.105` on 443, then the hostname on 10443, then the hostname on 443. `help.getConfig` can add further IP literals later. A saved list that omits a seed endpoint gets it back, and `8.156.40.105:10443` stays last so it remains the first dial. `seed_address_a_record` is `8.156.40.105`, the current A record of `api.tellomi.cn`. That field is still not dialed by itself. The testing seed stays `api.tellomi.cn`. The previous host is no longer a seed.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/tellomi-server.json` | Production seeds are `8.156.40.105`, then `api.tellomi.cn`. `seed_address_a_record` is the new IP. |
+| `submodules/MtProtoKit/Sources/TellomiServerConfig.m` | Seed hosts are written in reverse, like ports, so the first seed is dialed first. |
+| `submodules/MtProtoKit/Tests/MTSeedFallbackTests.m` | Fresh-install order and the merge that keeps the built-in IP on 10443 last. |
+
 ## Root tab menu (选单设定) — 2026-11-10
 
 A fresh install shows 动态, 聊天, 设置. Contacts, Calls and News stay off until the person turns them on. Chats and Settings cannot be hidden. The choice is shared account-manager data (`ApplicationSpecificSharedDataKeys.tellomiTabBarPreferences`), the same store as `CallListSettings`, not an account postbox record and not `UserDefaults`. A value saved by the first build in the `app.tellomi.chat.tab-bar` suite is copied in once and then removed. Hiding button titles shortens the phone tab bar; an iPad or vertical bar is unchanged. The bar rebuilds when the switches move.
