@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   app:
-    if: github.head_ref == 'cursor/moments-comment-api-b405' || github.head_ref == 'cursor/moments-feed-parity-f601' || github.head_ref == 'cursor/ios-batch-tf' || github.head_ref == 'cursor/ios-login-locale-crash-48dd' || github.head_ref == 'cursor/mtproto-port-443-fallback-e2a4' || github.head_ref == 'cursor/moments-feed-f01-f04-7ea6' || github.head_ref == 'cursor/menu-settings-tabs-b921' || github.head_ref == 'cursor/menu-settings-upstream-style-a01b' || github.head_ref == 'cursor/moments-feed-limits-e9b1' || github.head_ref == 'cursor/moments-feed-routes-1963' || github.head_ref == 'cursor/crash-report-prompt-2f65'
+    if: github.head_ref == 'cursor/moments-comment-api-b405' || github.head_ref == 'cursor/moments-feed-parity-f601' || github.head_ref == 'cursor/ios-batch-tf' || github.head_ref == 'cursor/ios-login-locale-crash-48dd' || github.head_ref == 'cursor/mtproto-port-443-fallback-e2a4' || github.head_ref == 'cursor/moments-feed-f01-f04-7ea6' || github.head_ref == 'cursor/menu-settings-tabs-b921' || github.head_ref == 'cursor/menu-settings-upstream-style-a01b' || github.head_ref == 'cursor/moments-feed-limits-e9b1' || github.head_ref == 'cursor/moments-feed-routes-1963' || github.head_ref == 'cursor/crash-report-prompt-2f65' || github.head_ref == 'cursor/moments-feed-main-thread-b824'
     runs-on: xcode-27
     timeout-minutes: 360
     env:
