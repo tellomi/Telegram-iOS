@@ -17,6 +17,30 @@ func momentsString(_ json: [String: Any], _ keys: String...) -> String? {
     return nil
 }
 
+/// A JSON string or number. Booleans are not cursors. `JSONSerialization` boxes numbers as `NSNumber`.
+func momentsJSONText(_ value: Any?) -> String? {
+    if let text = value as? String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+    if let number = value as? NSNumber {
+        if CFGetTypeID(number) == CFBooleanGetTypeID() {
+            return nil
+        }
+        return number.stringValue
+    }
+    return nil
+}
+
+func momentsFeedCursor(_ json: [String: Any]) -> String? {
+    for key in ["cursor", "next_cursor"] {
+        if let text = momentsJSONText(json[key]) {
+            return text
+        }
+    }
+    return nil
+}
+
 func momentsInt64(_ json: [String: Any], _ keys: String...) -> Int64 {
     for key in keys {
         if let value = json[key] as? Int64 {
@@ -308,7 +332,7 @@ public func momentsFeedRefPage(data: Data, kind: MomentsFeedKind? = nil) -> Mome
             return id
         }
     }
-    return MomentsFeedRefPage(ids: ids, cursor: momentsString(root, "cursor", "next_cursor"))
+    return MomentsFeedRefPage(ids: ids, cursor: momentsFeedCursor(root))
 }
 
 func momentsStringList(_ value: Any?) -> [String] {
@@ -492,4 +516,62 @@ func momentsError(data: Data, status: Int) -> MomentsAPIError {
 
 func momentsJSONData(_ object: [String: Any]) -> Data? {
     return try? JSONSerialization.data(withJSONObject: object, options: [])
+}
+
+func momentsPeopleListError(data: Data) -> MomentsAPIError? {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let code = momentsString(root, "error"), !code.isEmpty else {
+        return nil
+    }
+    if code == "list_private" {
+        return .listPrivate
+    }
+    if code == "not_found" {
+        return .notFound
+    }
+    return .invalid(code)
+}
+
+func momentsPeopleAuthor(_ json: [String: Any]) -> MomentsAuthor? {
+    let body = momentsObject(json["author"]) ?? json
+    if let author = momentsAuthor(body) {
+        return author
+    }
+    let userId = momentsInt64(body, "telegram_user_id", "user_id")
+    guard userId != 0 else {
+        return nil
+    }
+    return MomentsAuthor(id: String(userId), telegramUserId: userId, displayName: momentsString(body, "display_name", "name") ?? "")
+}
+
+public func momentsPeoplePage(data: Data) -> MomentsPeoplePage {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return MomentsPeoplePage()
+    }
+    let people = momentsArray(root["items"] ?? root["users"]).compactMap { momentsPeopleAuthor($0) }
+    let cursor = momentsString(root, "next_cursor", "cursor").flatMap { $0.isEmpty ? nil : $0 }
+    let total: Int?
+    if root["total"] != nil {
+        total = momentsInt(root, "total")
+    } else if root["count"] != nil {
+        total = momentsInt(root, "count")
+    } else if cursor == nil {
+        total = people.count
+    } else {
+        total = nil
+    }
+    return MomentsPeoplePage(people: people, nextCursor: cursor, total: total)
+}
+
+public func momentsLoadedPost(data: Data, fallbackId: String, mediaBaseURL: String? = nil) -> MomentsCard {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return MomentsCard(id: fallbackId, state: "unavailable")
+    }
+    var body = root
+    if let wrapped = momentsObject(root["data"]), momentsString(root, "id") == nil {
+        body = wrapped
+    }
+    if let card = momentsCard(json: body, mediaBaseURL: mediaBaseURL) {
+        return card
+    }
+    return MomentsCard(id: fallbackId, state: "unavailable")
 }
