@@ -3,3 +3,7 @@
 "CrashReport.Prompt.Text" = "Праграма нечакана закрылася.\n\nАдправіць журнал збою, каб мы маглі выправіць праблему?";
 "CrashReport.Prompt.NotNow" = "Не зараз";
 "CrashReport.Prompt.Send" = "Адправіць журнал";
+
+/* Moments feed. Native wording for this built-in language. */
+"Moments_Comment_SendFailed" = "Не ўдалося адправіць каментарый. Ваш тэкст застаўся на месцы.";
+"Moments_Audience_Kept" = "Не ўдалося змяніць, хто можа гэта бачыць. Ваш выбар захаваны.";

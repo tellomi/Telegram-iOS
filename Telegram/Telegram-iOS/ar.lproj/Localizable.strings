@@ -3,3 +3,7 @@
 "CrashReport.Prompt.Text" = "أُغلق التطبيق بشكل غير متوقع.\n\nهل تريد إرسال سجل التعطل لمساعدتنا على إصلاح المشكلة؟";
 "CrashReport.Prompt.NotNow" = "ليس الآن";
 "CrashReport.Prompt.Send" = "إرسال السجل";
+
+/* Moments feed. Same wording as the Android values pack for this language. */
+"Moments_Comment_SendFailed" = "تعذّر إرسال التعليق. نصك ما زال هنا.";
+"Moments_Audience_Kept" = "تعذّر تحديث من يمكنه المشاهدة. اختيارك ما زال محفوظًا.";

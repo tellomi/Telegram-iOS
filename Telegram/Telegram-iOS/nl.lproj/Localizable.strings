@@ -3,3 +3,7 @@
 "CrashReport.Prompt.Text" = "De app is onverwacht afgesloten.\n\nWil je een crashlogboek sturen zodat we het probleem kunnen oplossen?";
 "CrashReport.Prompt.NotNow" = "Niet nu";
 "CrashReport.Prompt.Send" = "Logboek sturen";
+
+/* Moments feed. Same wording as the Android values pack for this language. */
+"Moments_Comment_SendFailed" = "Reactie niet verzonden. Je tekst staat er nog.";
+"Moments_Audience_Kept" = "Kon niet wijzigen wie dit mag zien. Je keuze blijft staan.";

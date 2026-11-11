@@ -240,3 +240,7 @@
 "CrashReport.Prompt.NotNow" = "以后再说";
 "CrashReport.Prompt.Send" = "发送日志";
 
+
+/* Moments feed. Same wording as the Android values pack for this language. */
+"Moments_Comment_SendFailed" = "评论没有发出去，内容还在。";
+"Moments_Audience_Kept" = "没能更新谁可以看。你的选择还在。";

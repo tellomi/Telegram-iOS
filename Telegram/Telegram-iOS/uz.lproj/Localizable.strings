@@ -3,3 +3,7 @@
 "CrashReport.Prompt.Text" = "Ilova kutilmaganda yopildi.\n\nMuammoni tuzatishimizga yordam berish uchun nosozlik jurnalini yuborasizmi?";
 "CrashReport.Prompt.NotNow" = "Hozir emas";
 "CrashReport.Prompt.Send" = "Jurnalni yuborish";
+
+/* Moments feed. Native wording for this built-in language. */
+"Moments_Comment_SendFailed" = "Fikr yuborilmadi. Matningiz hali shu yerda.";
+"Moments_Audience_Kept" = "Buni kim oʻra olishi yangilanmadi. Tanlovingiz saqlanib qoldi.";

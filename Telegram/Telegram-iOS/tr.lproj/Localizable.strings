@@ -3,3 +3,7 @@
 "CrashReport.Prompt.Text" = "Uygulama beklenmedik şekilde kapandı.\n\nSorunu düzeltmemize yardımcı olmak için çökme günlüğünü göndermek ister misin?";
 "CrashReport.Prompt.NotNow" = "Şimdi değil";
 "CrashReport.Prompt.Send" = "Günlüğü gönder";
+
+/* Moments feed. Native wording for this built-in language. */
+"Moments_Comment_SendFailed" = "Yorum gönderilemedi. Metniniz hâlâ burada.";
+"Moments_Audience_Kept" = "Bunu kimlerin görebileceği güncellenemedi. Seçiminiz korundu.";

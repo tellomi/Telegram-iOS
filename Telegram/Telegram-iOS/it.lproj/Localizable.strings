@@ -3,3 +3,7 @@
 "CrashReport.Prompt.Text" = "L'app si è chiusa in modo imprevisto.\n\nVuoi inviare un registro di arresto anomalo per aiutarci a risolvere il problema?";
 "CrashReport.Prompt.NotNow" = "Non ora";
 "CrashReport.Prompt.Send" = "Invia registro";
+
+/* Moments feed. Same wording as the Android values pack for this language. */
+"Moments_Comment_SendFailed" = "Impossibile inviare il commento. Il testo è ancora qui.";
+"Moments_Audience_Kept" = "Impossibile aggiornare chi può vedere. La scelta è rimasta.";

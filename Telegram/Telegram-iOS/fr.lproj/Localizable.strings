@@ -3,3 +3,7 @@
 "CrashReport.Prompt.Text" = "L'application s'est fermée de façon inattendue.\n\nSouhaitez-vous envoyer un journal de plantage pour nous aider à corriger le problème ?";
 "CrashReport.Prompt.NotNow" = "Pas maintenant";
 "CrashReport.Prompt.Send" = "Envoyer le journal";
+
+/* Moments feed. Native wording for this built-in language. */
+"Moments_Comment_SendFailed" = "Le commentaire n'a pas pu être envoyé. Votre texte est toujours là.";
+"Moments_Audience_Kept" = "Impossible de modifier qui peut voir ceci. Votre sélection a été conservée.";
