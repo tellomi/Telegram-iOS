@@ -159,7 +159,8 @@ final class MomentsFeedActions {
             }
             return copy
         }
-        let _ = self.context.engine.moments.setLiked(card.id, liked: !card.viewer.liked).start(error: { [weak self] _ in
+        let _ = (self.context.engine.moments.setLiked(card.id, liked: !card.viewer.liked) |> deliverOnMainQueue).start(error: { [weak self] _ in
+            assert(Queue.mainQueue().isCurrent())
             self?.onReplace?(card.id) { _ in card }
         })
     }
@@ -170,7 +171,8 @@ final class MomentsFeedActions {
             copy.viewer.saved.toggle()
             return copy
         }
-        let _ = self.context.engine.moments.setSaved(card.id, saved: !card.viewer.saved).start(error: { [weak self] _ in
+        let _ = (self.context.engine.moments.setSaved(card.id, saved: !card.viewer.saved) |> deliverOnMainQueue).start(error: { [weak self] _ in
+            assert(Queue.mainQueue().isCurrent())
             self?.onReplace?(card.id) { _ in card }
         })
     }
@@ -188,7 +190,8 @@ final class MomentsFeedActions {
             }
             return copy
         }
-        let _ = self.context.engine.moments.setFollow(authorId: author.id, follow: next).start(error: { [weak self] _ in
+        let _ = (self.context.engine.moments.setFollow(authorId: author.id, follow: next) |> deliverOnMainQueue).start(error: { [weak self] _ in
+            assert(Queue.mainQueue().isCurrent())
             self?.onReplace?(card.id) { _ in card }
         })
     }

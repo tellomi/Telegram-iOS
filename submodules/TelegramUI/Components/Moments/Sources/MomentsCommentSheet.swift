@@ -132,6 +132,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
     }
 
     private func applyChrome() {
+        assert(Queue.mainQueue().isCurrent())
         let theme = self.presentationData.theme
         let strings = self.presentationData.strings
         self.closeButton.setTitle(nil, for: .normal)
@@ -268,6 +269,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
     }
 
     private func relayoutComments() {
+        assert(Queue.mainQueue().isCurrent())
         let strings = self.presentationData.strings
         let theme = self.presentationData.theme
         let total = self.total > 0 ? self.total : self.card.counts.comments
@@ -314,6 +316,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
     }
 
     private func addRow(id: String, author: MomentsAuthor?, text: String, created: Int64, likes: Int, liked: Bool, isAuthor: Bool, region: String?, attachment: MomentsMedia?, replyToName: String?, viewerAuthored: Bool, x: CGFloat, y: CGFloat, width: CGFloat, theme: PresentationTheme, strings: PresentationStrings) -> CGFloat {
+        assert(Queue.mainQueue().isCurrent())
         let name = author?.displayName ?? ""
         self.targets[id] = MomentsCommentTarget(id: id, text: text, author: author, name: name, viewerAuthored: viewerAuthored)
         let row = UIView(frame: CGRect(x: x, y: y, width: width, height: 44))
@@ -570,7 +573,8 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
 
     private func report(_ target: MomentsCommentTarget) {
         guard let authorId = target.author?.telegramUserId, authorId != 0 else {
-            let _ = self.context.engine.moments.report(targetType: "content", targetId: target.id, reason: "other", detail: nil).start(error: { [weak self] error in
+            let _ = (self.context.engine.moments.report(targetType: "content", targetId: target.id, reason: "other", detail: nil) |> deliverOnMainQueue).start(error: { [weak self] error in
+                assert(Queue.mainQueue().isCurrent())
                 self?.showCommentError(error)
             })
             return
@@ -578,16 +582,19 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         let peerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(authorId))
         presentPeerReportOptions(context: self.context, parent: self, contextController: nil, subject: .peer(peerId), passthrough: true, completion: { [weak self] reason, _ in
             guard let self, let reason else { return }
-            let _ = self.context.engine.moments.report(targetType: "content", targetId: target.id, reason: momentsReportReasonCode(reason), detail: nil).start(error: { [weak self] error in
+            let _ = (self.context.engine.moments.report(targetType: "content", targetId: target.id, reason: momentsReportReasonCode(reason), detail: nil) |> deliverOnMainQueue).start(error: { [weak self] error in
+                assert(Queue.mainQueue().isCurrent())
                 self?.showCommentError(error)
             })
         })
     }
 
     private func deleteComment(_ target: MomentsCommentTarget) {
-        let _ = self.context.engine.moments.deleteComment(postId: self.card.id, commentId: target.id).start(error: { [weak self] error in
+        let _ = (self.context.engine.moments.deleteComment(postId: self.card.id, commentId: target.id) |> deliverOnMainQueue).start(error: { [weak self] error in
+            assert(Queue.mainQueue().isCurrent())
             self?.showCommentError(error)
         }, completed: { [weak self] in
+            assert(Queue.mainQueue().isCurrent())
             guard let self else { return }
             self.tombstones.insert(target.id)
             self.relayoutComments()
@@ -655,6 +662,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
     }
 
     private func showCommentError(_ error: MomentsAPIError) {
+        assert(Queue.mainQueue().isCurrent())
         let text: String
         switch error {
         case .cancelled:
@@ -702,13 +710,15 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         let sentText = text
         let sentParent = self.replyParent
         let sentMedia = self.pendingMediaKey
-        let _ = self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: self.replyParent, attachment: self.pendingAttachment(), clientNonce: next.clientNonce).start(error: { [weak self] error in
+        let _ = (self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: self.replyParent, attachment: self.pendingAttachment(), clientNonce: next.clientNonce) |> deliverOnMainQueue).start(error: { [weak self] error in
+            assert(Queue.mainQueue().isCurrent())
             guard let self else { return }
             self.sending = false
             self.composer = momentsCommentComposerAfterFailure(next)
             self.applyChrome()
             self.showCommentError(error)
         }, completed: { [weak self] in
+            assert(Queue.mainQueue().isCurrent())
             guard let self else { return }
             self.sending = false
             if self.input.text == sentText {

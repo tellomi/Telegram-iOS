@@ -295,6 +295,7 @@ public final class MomentsDetailScreen: ViewController {
             let _ = self.context.engine.moments.addComment(postId: self.card.id, text: "", parentId: parentId, attachment: attachment).start()
             self.reload()
         }, error: { [weak self] _ in
+            assert(Queue.mainQueue().isCurrent())
             guard let self else { return }
             momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .loadFailed))
         })
@@ -358,11 +359,13 @@ extension MomentsDetailScreen: UITextFieldDelegate {
             return false
         }
         self.commentComposer = draft
-        let _ = self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: parent, clientNonce: draft.clientNonce).start(error: { [weak self] _ in
+        let _ = (self.context.engine.moments.addComment(postId: self.card.id, text: text, parentId: parent, clientNonce: draft.clientNonce) |> deliverOnMainQueue).start(error: { [weak self] _ in
+            assert(Queue.mainQueue().isCurrent())
             guard let self else { return }
             self.commentComposer = momentsCommentComposerAfterFailure(draft)
             momentsPresentErrorToast(controller: self, presentationData: self.presentationData, text: momentsText(self.presentationData.strings, .commentSendFailed))
         }, completed: { [weak self] in
+            assert(Queue.mainQueue().isCurrent())
             guard let self else { return }
             if textField.text == text {
                 textField.text = ""

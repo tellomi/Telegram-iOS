@@ -1,5 +1,6 @@
 import XCTest
 import Postbox
+import SwiftSignalKit
 @testable import TelegramCore
 
 final class MomentsRulesTests: XCTestCase {
@@ -855,6 +856,35 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(nearby["city"], "cn:chengdu")
         XCTAssertEqual(nearby["sort"], "latest")
         XCTAssertNil(nearby["personalized"])
+    }
+
+    /// A Moments row is measured on ListView's global queue and its UIKit node is created afterwards.
+    /// `momentsOnMainQueue` is that hand-off: inline when the caller is already on the main queue,
+    /// otherwise the next turn of the main queue. The feed crash was the node being created on the worker.
+    func testMomentsViewWorkOnTheMainQueueRunsInline() {
+        let exp = expectation(description: "main")
+        Queue.mainQueue().async {
+            var ran = false
+            momentsOnMainQueue {
+                ran = true
+                XCTAssertTrue(Queue.mainQueue().isCurrent())
+            }
+            XCTAssertTrue(ran)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 2)
+    }
+
+    func testMomentsViewWorkFromAWorkerQueueReachesMain() {
+        let exp = expectation(description: "hop")
+        DispatchQueue.global(qos: .userInteractive).async {
+            XCTAssertFalse(Queue.mainQueue().isCurrent())
+            momentsOnMainQueue {
+                XCTAssertTrue(Queue.mainQueue().isCurrent())
+                exp.fulfill()
+            }
+        }
+        wait(for: [exp], timeout: 2)
     }
 }
 
