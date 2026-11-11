@@ -324,33 +324,28 @@ private final class CrashReportActions {
                 switch archive {
                 case let .success(data):
                     let document = crashReportDocument(applicationVersion: report.metadata.applicationVersion, deviceType: report.metadata.deviceType)
-                    let id = Int64.random(in: Int64.min ... Int64.max)
-                    let resource = LocalFileMediaResource(fileId: id, size: Int64(data.count), isSecretRelated: false)
-                    context.engine.resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: data)
-                    let file = TelegramMediaFile(fileId: EngineMedia.Id(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: document.mimeType, size: Int64(data.count), attributes: [.FileName(fileName: document.fileName)], alternativeRepresentations: [])
-                    let message: EnqueueMessage = .message(text: document.caption, attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: threadId, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
-                    self.disposable.set((enqueueMessages(account: context.account, peerId: peerId, messages: [message])
-                    |> mapToSignal { ids -> Signal<Bool, NoError> in
-                        guard let messageId = ids.compactMap({ $0 }).first else {
-                            return .single(false)
-                        }
-                        return crashReportServerAcceptance(account: context.account, messageId: messageId)
-                    }
-                    |> deliverOnMainQueue).start(next: { [weak self] confirmed in
+                    let topicId = threadId.flatMap { Int32(exactly: $0) }
+                    // Completes only after messages.sendMedia returns. An error is a refusal.
+                    // Progress values are not confirmation.
+                    self.disposable.set((standaloneSendMessage(account: context.account, peerId: peerId, text: document.caption, attributes: [], media: .file(data: data, mimeType: document.mimeType, attributes: [.FileName(fileName: document.fileName)]), replyToMessageId: nil, threadId: topicId)
+                    |> deliverOnMainQueue).start(error: { [weak self] _ in
                         guard let self else {
-                            completion(confirmed)
+                            completion(false)
                             return
                         }
                         self.finishSending()
-                        if confirmed {
+                        completion(false)
+                        self.alert("Could Not Send Log", "Please try again. The log remains saved on this device.")
+                    }, completed: { [weak self] in
+                        guard let self else {
                             completion(true)
-                            self.show(UndoOverlayController(presentationData: self.sharedContext.currentPresentationData.with { $0 }, content: .succeed(text: toTelegramTeam ? "Thank you for helping make Telegram better!" : "Log shared", timeout: nil, customUndoText: nil), action: { _ in
-                                return false
-                            }))
-                        } else {
-                            completion(false)
-                            self.alert("Could Not Send Log", "Please try again. The log remains saved on this device.")
+                            return
                         }
+                        self.finishSending()
+                        completion(true)
+                        self.show(UndoOverlayController(presentationData: self.sharedContext.currentPresentationData.with { $0 }, content: .succeed(text: toTelegramTeam ? "Thank you for helping make Telegram better!" : "Log shared", timeout: nil, customUndoText: nil), action: { _ in
+                            return false
+                        }))
                     }))
                 case .failure:
                     self.finishSending()
@@ -573,28 +568,6 @@ private func resolvedCrashReportBot(_ context: AccountContext) -> String {
         return data[crashReportBotConfigKey] as? String
     }
     return crashReportBotUsername(configured: configured)
-}
-
-/// Completes with the server's answer. A message that is still uploading or sending stays open.
-private func crashReportServerAcceptance(account: Account, messageId: MessageId) -> Signal<Bool, NoError> {
-    return account.postbox.messageView(messageId)
-    |> map { view -> CrashReportDelivery in
-        guard let message = view.message else {
-            return .waiting
-        }
-        return crashReportDelivery(failed: message.flags.contains(.Failed), stillSending: message.flags.isSending)
-    }
-    |> mapToSignal { delivery -> Signal<Bool, NoError> in
-        switch delivery {
-        case .waiting:
-            return .complete()
-        case .sent:
-            return .single(true)
-        case .failed:
-            return .single(false)
-        }
-    }
-    |> take(1)
 }
 
 private func crashReportPromptApply(_ effects: [CrashReportPromptEffect], ids: Set<String>) {
