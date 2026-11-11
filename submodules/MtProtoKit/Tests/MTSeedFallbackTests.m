@@ -246,8 +246,10 @@ static NSArray<NSNumber *> *MTSeedPorts(MTDatacenterAddressSet *set) {
     XCTAssertEqual(loaded.lastObject.port, 10443);
     NSDictionary *persisted = [keychain dictionaryForKey:@"datacenterAddressSetById" group:@"persistent"];
     MTDatacenterAddressSet *stored = persisted[@1];
-    XCTAssertEqualObjects(stored.addressList.lastObject.ip, @"8.156.40.105");
-    XCTAssertEqual(stored.addressList.lastObject.port, 10443);
+    // addressList is an untyped NSArray, so lastObject is id until it is named.
+    MTDatacenterAddress *persistedPreferred = stored.addressList.lastObject;
+    XCTAssertEqualObjects(persistedPreferred.ip, @"8.156.40.105");
+    XCTAssertEqual(persistedPreferred.port, 10443);
     XCTAssertEqual(stored.addressList.count, 4u);
 }
 
