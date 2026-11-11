@@ -100,8 +100,8 @@ public final class MomentsScreen: ViewController {
     }
 
     public func refreshBadge() {
-        let _ = (self.context.engine.moments.notifications(tab: "interactions") |> deliverOnMainQueue).start(next: { [weak self] items in
-            let unread = items.contains(where: { !$0.read })
+        let _ = (self.context.engine.moments.notifications(tab: "interactions") |> deliverOnMainQueue).start(next: { [weak self] page in
+            let unread = page.items.contains(where: { !$0.read })
             self?.tabBarItem.badgeValue = unread ? "•" : nil
         }, error: { _ in })
     }
@@ -628,178 +628,49 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 
     private func handlers() -> MomentsPostHandlers {
-        return MomentsPostHandlers(open: { [weak self] card in self?.open(card) }, author: { [weak self] card in self?.openAuthor(card) }, like: { [weak self] card in self?.toggleLike(card) }, comment: { [weak self] card in self?.openComments(card) }, repost: { [weak self] card in self?.repost(card) }, share: { [weak self] card in self?.share(card) }, save: { [weak self] card in self?.toggleSave(card) }, more: { [weak self] card, view in self?.more(card, view) }, follow: { [weak self] card in self?.follow(card) }, undo: { [weak self] id in self?.undo(id) }, fullText: { [weak self] card in self?.expanded.insert(card.id); self?.render(self?.selected ?? .recommend, resetScroll: false, updateInsets: false) }, topic: { _ in }, link: { [weak self] url in self?.openURL(url) }, likers: { [weak self] card in self?.openLikers(card) }, voters: { [weak self] card in self?.openVoters(card) }, openMedia: { [weak self] card, index in self?.openMedia(card, index: index) })
-    }
-
-    /// The post body opens the standalone detail screen. The comment button keeps the sheet over this list.
-    private func open(_ card: MomentsCard) {
-        guard let controller = self.controller, !card.isUnavailable else { return }
-        let detail = MomentsDetailScreen(context: self.context, card: card)
-        detail.openPeer = controller.openPeer
-        (controller.navigationController as? NavigationController)?.pushViewController(detail)
-    }
-
-    private func openComments(_ card: MomentsCard) {
-        guard let controller = self.controller, !card.isUnavailable else { return }
-        let sheet = MomentsCommentSheet(context: self.context, card: card)
-        sheet.openPeer = controller.openPeer
-        controller.suppressFeedReset = true
-        self.setScreenVisible(false)
-        sheet.onDismiss = { [weak self, weak controller] in
-            controller?.suppressFeedReset = false
-            self?.setScreenVisible(true)
+        let actions = MomentsFeedActions(context: self.context, presentationData: self.presentationData)
+        actions.controller = { [weak self] in self?.controller }
+        actions.openPeer = self.controller?.openPeer
+        actions.onReplace = { [weak self] id, transform in
+            self?.mapCard(id, transform)
         }
-        controller.present(sheet, in: .window(.root))
-    }
-
-    private func openMedia(_ card: MomentsCard, index: Int) {
-        guard let controller = self.controller else { return }
-        momentsPresentGallery(context: self.context, card: card, index: index, controller: controller)
-    }
-
-    private func openAuthor(_ card: MomentsCard) {
-        guard let id = card.author?.telegramUserId, id != 0 else { return }
-        let peerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(id))
-        self.controller?.openPeer?(peerId)
-    }
-
-    private func toggleLike(_ card: MomentsCard) {
-        self.mapCard(card.id) { item in
-            var copy = item
-            copy.viewer.liked.toggle()
-            copy.counts.likes += copy.viewer.liked ? 1 : -1
-            if copy.counts.likes < 0 { copy.counts.likes = 0 }
-            return copy
-        }
-        let _ = self.context.engine.moments.setLiked(card.id, liked: !card.viewer.liked).start(error: { [weak self] _ in
-            self?.mapCard(card.id) { _ in card }
-        })
-    }
-
-    private func toggleSave(_ card: MomentsCard) {
-        self.mapCard(card.id) { item in
-            var copy = item
-            copy.viewer.saved.toggle()
-            return copy
-        }
-        let _ = self.context.engine.moments.setSaved(card.id, saved: !card.viewer.saved).start()
-    }
-
-    private func follow(_ card: MomentsCard) {
-        guard let author = card.author else { return }
-        let next = !author.followed
-        self.mapCard(card.id) { item in
-            var copy = item
-            if var author = copy.author { author.followed = next; copy.author = author }
-            return copy
-        }
-        let _ = self.context.engine.moments.setFollow(authorId: author.id, follow: next).start()
-    }
-
-    private func repost(_ card: MomentsCard) {
-        guard let controller = self.controller else { return }
-        guard momentsCanRepostOrQuote(audience: card.audience?.kind) else {
-            controller.present(textAlertController(context: self.context, title: nil, text: self.presentationData.strings.Moments_RepostPublicOnly, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_Cancel, action: {})]), in: .window(.root))
-            return
-        }
-        let sheet = ActionSheetController(theme: ActionSheetControllerTheme(presentationData: self.presentationData))
-        sheet.setItemGroups([
-            ActionSheetItemGroup(items: [
-                ActionSheetButtonItem(title: self.presentationData.strings.Moments_Repost, color: .accent, action: { [weak self, weak sheet] in
-                    sheet?.dismissAnimated()
-                    let _ = self?.context.engine.moments.setRepost(card.id, repost: true).start()
-                }),
-                ActionSheetButtonItem(title: self.presentationData.strings.Moments_Quote, color: .accent, action: { [weak self, weak sheet] in
-                    sheet?.dismissAnimated()
-                    self?.presentComposer(quoteId: card.id)
-                })
-            ]),
-            ActionSheetItemGroup(items: [ActionSheetButtonItem(title: self.presentationData.strings.Common_Cancel, color: .accent, action: { [weak sheet] in sheet?.dismissAnimated() })])
-        ])
-        controller.present(sheet, in: .window(.root))
-    }
-
-    private func share(_ card: MomentsCard) {
-        guard let controller = self.controller else { return }
-        let link = momentsPostLink(id: card.id)
-        let share = self.context.sharedContext.makeShareController(context: self.context, params: ShareControllerParams(subject: .url(link)))
-        controller.present(share, in: .window(.root))
-    }
-
-    private func more(_ card: MomentsCard, _ source: UIView) {
-        guard let controller = self.controller else { return }
-        let strings = self.presentationData.strings
-        let mine = card.author?.telegramUserId == self.context.account.peerId.toInt64()
-        var items: [ContextMenuItem] = []
-        if mine {
-            items.append(.action(ContextMenuActionItem(text: strings.Common_Delete, textColor: .destructive, icon: { _ in nil }, action: { [weak self] _, f in
-                f(.default)
-                let _ = self?.context.engine.moments.deletePost(id: card.id).start()
-            })))
-        } else {
-            items.append(.action(ContextMenuActionItem(text: strings.Moments_NotInterested, icon: { _ in nil }, action: { [weak self] _, f in
-                f(.default)
-                self?.hide(card, notInterested: true)
-            })))
-            items.append(.action(ContextMenuActionItem(text: strings.Moments_HidePost, icon: { _ in nil }, action: { [weak self] _, f in
-                f(.default)
-                self?.hide(card, notInterested: false)
-            })))
-            if let author = card.author {
-                items.append(.action(ContextMenuActionItem(text: strings.Moments_Mute, icon: { _ in nil }, action: { [weak self] _, f in
-                    f(.default)
-                    self?.hides.mutedAuthors.insert(author.id)
-                    self?.context.engine.moments.storeHides(self?.hides ?? MomentsLocalHides())
-                    let _ = self?.context.engine.moments.setMuted(profileId: author.id, muted: true).start()
-                    self?.render(self?.selected ?? .recommend, resetScroll: false)
-                })))
+        actions.onExpand = { [weak self] id in
+            guard let self else {
+                return
             }
-            items.append(.action(ContextMenuActionItem(text: strings.Moments_Report, textColor: .destructive, icon: { _ in nil }, action: { [weak self] _, f in
-                f(.default)
-                self?.report(card)
-            })))
+            self.expanded.insert(id)
+            self.render(self.selected, resetScroll: false, updateInsets: false)
         }
-        items.append(.action(ContextMenuActionItem(text: strings.Moments_CopyLink, icon: { _ in nil }, action: { _, f in
-            f(.default)
-            UIPasteboard.general.string = momentsPostLink(id: card.id)
-        })))
-        let sourceView = source
-        let contextController = makeContextController(presentationData: self.presentationData, source: .reference(MomentsContextSource(controller: controller, sourceView: sourceView)), items: .single(ContextController.Items(content: .list(items))), gesture: nil)
-        controller.presentInGlobalOverlay(contextController)
+        actions.onSheet = { [weak self] visible in
+            self?.controller?.suppressFeedReset = visible
+            self?.setScreenVisible(!visible)
+        }
+        actions.onMutation = { [weak self] mutation in
+            self?.applyFeedMutation(mutation)
+        }
+        return actions.handlers()
     }
 
-    private func hide(_ card: MomentsCard, notInterested: Bool) {
-        self.sessionHidden.insert(card.id)
-        if notInterested {
-            self.hides.notInterested.insert(card.id)
-            let _ = self.context.engine.moments.notInterested(postId: card.id).start()
-        } else {
-            self.hides.hiddenPosts.insert(card.id)
-            let _ = self.context.engine.moments.hide(postId: card.id, undo: false).start()
+    private func applyFeedMutation(_ mutation: MomentsFeedMutation) {
+        switch mutation {
+        case let .notInterested(id):
+            self.sessionHidden.insert(id)
+            self.hides.notInterested.insert(id)
+        case let .hide(id):
+            self.sessionHidden.insert(id)
+            self.hides.hiddenPosts.insert(id)
+        case let .undo(id):
+            self.sessionHidden.remove(id)
+            self.hides.hiddenPosts.remove(id)
+            self.hides.notInterested.remove(id)
+        case let .mute(authorId):
+            self.hides.mutedAuthors.insert(authorId)
+        case let .reported(id):
+            self.hides.reportedPosts.insert(id)
+            self.sessionHidden.insert(id)
         }
         self.context.engine.moments.storeHides(self.hides)
         self.render(self.selected, resetScroll: false)
-    }
-
-    private func undo(_ id: String) {
-        self.sessionHidden.remove(id)
-        self.hides.hiddenPosts.remove(id)
-        self.hides.notInterested.remove(id)
-        self.context.engine.moments.storeHides(self.hides)
-        let _ = self.context.engine.moments.hide(postId: id, undo: true).start()
-        self.render(self.selected, resetScroll: false)
-    }
-
-    private func report(_ card: MomentsCard) {
-        guard let controller = self.controller, let authorId = card.author?.telegramUserId else { return }
-        let peerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(authorId))
-        presentPeerReportOptions(context: self.context, parent: controller, contextController: nil, subject: .peer(peerId), passthrough: true, completion: { [weak self] reason, _ in
-            guard let self, let reason else { return }
-            self.hides.reportedPosts.insert(card.id)
-            self.context.engine.moments.storeHides(self.hides)
-            let _ = self.context.engine.moments.report(targetType: "post", targetId: card.id, reason: momentsReportReasonCode(reason), detail: nil).start()
-            self.render(self.selected, resetScroll: false)
-        })
     }
 
     private func mapCard(_ id: String, _ transform: (MomentsCard) -> MomentsCard) {
@@ -815,10 +686,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     @objc private func composePressed() { self.presentComposer(quoteId: nil) }
     @objc private func heartPressed() {
         guard let controller = self.controller else { return }
-        let screen = MomentsNotificationsScreen(context: self.context)
-        screen.openPeer = controller.openPeer
-        (controller.navigationController as? NavigationController)?.pushViewController(screen)
-        let _ = self.context.engine.moments.markNotificationsRead().start()
+        (controller.navigationController as? NavigationController)?.pushViewController(momentsNotificationsController(context: self.context, openPeer: controller.openPeer))
         controller.tabBarItem.badgeValue = nil
     }
     @objc private func pillPressed() { self.load(self.selected, refresh: true) }
@@ -835,11 +703,6 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         guard let controller = self.controller else { return }
         let composer = MomentsComposerScreen(context: self.context, quoteId: quoteId)
         (controller.navigationController as? NavigationController)?.pushViewController(composer)
-    }
-
-    private func openURL(_ url: String) {
-        guard let controller = self.controller else { return }
-        self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: false, presentationData: self.presentationData, navigationController: controller.navigationController as? NavigationController, dismissInput: {})
     }
 
     private func scheduleProbe() {
@@ -927,20 +790,6 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.resolvingPlayback = false
     }
 
-    private func openLikers(_ card: MomentsCard) {
-        guard let controller = self.controller else { return }
-        (controller.navigationController as? NavigationController)?.pushViewController(momentsPeopleController(context: self.context, title: self.presentationData.strings.Moments_Like, load: self.context.engine.moments.likers(postId: card.id) |> map { authors in
-            [MomentsPeopleSection(title: nil, people: authors)]
-        }))
-    }
-
-    private func openVoters(_ card: MomentsCard) {
-        guard let controller = self.controller, card.poll != nil else { return }
-        (controller.navigationController as? NavigationController)?.pushViewController(momentsPeopleController(context: self.context, title: self.presentationData.strings.Moments_EndPoll, load: self.context.engine.moments.pollVoters(postId: card.id) |> map { options in
-            options.map { MomentsPeopleSection(title: $0.text, people: $0.voters) }
-        }))
-    }
-
     private func pointHitsAlbum(_ point: CGPoint) -> Bool {
         guard let list = self.lists[self.selected] else { return false }
         var hit = false
@@ -953,7 +802,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     }
 }
 
-private final class MomentsContextSource: ContextReferenceContentSource {
+final class MomentsContextSource: ContextReferenceContentSource {
     private let controller: ViewController
     private let sourceView: UIView
     init(controller: ViewController, sourceView: UIView) {

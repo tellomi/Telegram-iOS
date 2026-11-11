@@ -503,6 +503,98 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertFalse(grant.needsRefresh(now: 1_000 - MomentsCredential.refreshMargin - 1))
         XCTAssertTrue(grant.needsRefresh(now: 1_000 - MomentsCredential.refreshMargin))
     }
+
+    func testSearchGenerationDropsAStaleResponse() {
+        var generation = MomentsQueryGeneration()
+        let first = generation.begin()
+        let second = generation.begin()
+        XCTAssertFalse(momentsSearchResultApplies(responseGeneration: first, latestGeneration: generation.current))
+        XCTAssertTrue(generation.accepts(second))
+        XCTAssertFalse(generation.accepts(first))
+        XCTAssertFalse(MomentsQueryGeneration().accepts(0))
+    }
+
+    func testTopicAndNotificationBackRestoreTheList() {
+        let topic = MomentsFeedPlace.topic(name: "City", offset: 240)
+        XCTAssertEqual(momentsFeedPlaceAfterBack([topic, .post(id: "p")]), topic)
+        XCTAssertEqual(momentsFeedPlaceAfterBack([topic, .media(postId: "p", index: 2)]), topic)
+        XCTAssertEqual(momentsFeedPlaceAfterBack([topic, .author(telegramUserId: 7)]), topic)
+        XCTAssertTrue(momentsListAnchorSurvives([topic, .post(id: "p")]))
+        XCTAssertTrue(momentsListAnchorSurvives([topic, .media(postId: "p", index: 1)]))
+        XCTAssertTrue(momentsListAnchorSurvives([topic, .author(telegramUserId: 7)]))
+        XCTAssertTrue(momentsListAnchorSurvives([topic, .topic(name: "Next", offset: 0)]))
+        XCTAssertFalse(momentsListAnchorSurvives([topic]))
+
+        let notices = MomentsFeedPlace.notifications(filter: "interactions", offset: 96)
+        XCTAssertEqual(momentsFeedPlaceAfterBack([notices, .post(id: "p")]), notices)
+        let follows = MomentsFeedPlace.notifications(filter: "follows", offset: 40)
+        XCTAssertEqual(momentsFeedPlaceAfterBack([follows, .author(telegramUserId: 3)]), follows)
+        XCTAssertFalse(momentsListAnchorSurvives([notices, .following(profileId: "1", offset: 0)]))
+    }
+
+    func testNotificationDestinationAndCommentFocus() {
+        let like = MomentsNotification(id: "n", kind: .like, postId: "p", commentId: "c")
+        XCTAssertEqual(momentsNotificationDestination(like), .post(id: "p", commentId: "c"))
+        let gone = MomentsNotification(id: "n2", kind: .comment, postId: "p", unavailable: true)
+        XCTAssertEqual(momentsNotificationDestination(gone), .unavailable)
+        XCTAssertEqual(momentsNotificationDestination(MomentsNotification(id: "n3", kind: .like)), .unavailable)
+        let follow = MomentsNotification(id: "n4", kind: .follow, actors: [MomentsAuthor(id: "a", telegramUserId: 9, displayName: "A")])
+        XCTAssertEqual(momentsNotificationDestination(follow), .peer(telegramUserId: 9))
+        XCTAssertEqual(momentsNotificationDestination(MomentsNotification(id: "n5", kind: .follow)), .unavailable)
+        XCTAssertEqual(momentsTopicName(" #City "), "City")
+        XCTAssertNil(momentsTopicName(" # "))
+
+        let reply = MomentsReply(id: "r1", postId: "p", rootId: "c1", text: "re")
+        let comment = MomentsComment(id: "c1", postId: "p", text: "hi", replies: [reply])
+        XCTAssertEqual(momentsCommentFocus(commentId: "r1", comments: [comment]), .located(id: "r1"))
+        XCTAssertEqual(momentsCommentFocus(commentId: "gone", comments: [comment]), .missing)
+        XCTAssertNil(momentsCommentFocus(commentId: nil, comments: [comment]))
+        XCTAssertEqual(momentsNotificationReadBody(tab: nil), [:])
+        XCTAssertEqual(momentsNotificationReadBody(tab: "follows"), ["tab": "follows"])
+        XCTAssertEqual(momentsNotificationReadBody(tab: "  "), [:])
+    }
+
+    func testPeopleListParsesVisibilityAndCursor() {
+        let hidden = #"{"error":"list_private"}"#.data(using: .utf8)!
+        XCTAssertEqual(momentsPeopleListError(data: hidden), .listPrivate)
+        XCTAssertEqual(momentsListLoadResult(.listPrivate), .hidden)
+        XCTAssertEqual(momentsListLoadResult(.cancelled), .ignore)
+        let page = #"{"items":[{"id":"a","telegram_user_id":3,"display_name":"Ada"}],"total":8,"next_cursor":"n"}"#.data(using: .utf8)!
+        let parsed = momentsPeoplePage(data: page)
+        XCTAssertEqual(parsed.people.first?.displayName, "Ada")
+        XCTAssertEqual(parsed.people.first?.telegramUserId, 3)
+        XCTAssertEqual(parsed.total, 8)
+        XCTAssertEqual(parsed.nextCursor, "n")
+        let missing = #"{"id":"p","state":"deleted"}"#.data(using: .utf8)!
+        XCTAssertTrue(momentsLoadedPost(data: missing, fallbackId: "p").isUnavailable)
+    }
+
+    func testDeleteCommentPathIsTheCommentRoute() {
+        XCTAssertEqual(momentsDeleteCommentPath(postId: "p1", commentId: "c1"), "/v1/feed/posts/p1/comments/c1")
+        XCTAssertNotEqual(momentsDeleteCommentPath(postId: "p1", commentId: "c1"), "/v1/feed/posts/c1")
+        XCTAssertEqual(momentsDeleteCommentPath(postId: "p/1", commentId: "c 2"), "/v1/feed/posts/p%2F1/comments/c%202")
+    }
+
+    func testRecommendPageTwoPutsTheCursorInTheURL() {
+        let first = momentsFeedListQuery(kind: .recommend, cursor: nil, city: nil, sort: nil, pageSize: 20)
+        XCTAssertNil(first["cursor"])
+        XCTAssertEqual(first["limit"], "20")
+        XCTAssertEqual(momentsRequestURL(base: "https://feed.example", path: "/v1/feed/recommend", query: first), "https://feed.example/v1/feed/recommend?limit=20")
+
+        let raw = #"{"items":[{"id":"p1","reason":"recommend"}],"cursor":"c 1+"}"#.data(using: .utf8)!
+        let refs = momentsFeedRefPage(data: raw, kind: .recommend)
+        XCTAssertEqual(refs?.cursor, "c 1+")
+        let merged = momentsMergeFeed(existing: [], pageItems: [MomentsCard(id: "p1")], cursor: refs?.cursor, refreshing: true)
+        XCTAssertEqual(merged.cursor, "c 1+")
+        let second = momentsFeedListQuery(kind: .recommend, cursor: merged.cursor, city: nil, sort: nil, pageSize: 20)
+        XCTAssertEqual(second["cursor"], "c 1+")
+        XCTAssertEqual(momentsRequestURL(base: "https://feed.example/", path: "/v1/feed/recommend", query: second), "https://feed.example/v1/feed/recommend?cursor=c%201%2B&limit=20")
+
+        let numeric = #"{"items":[{"id":"p1","reason":"recommend"}],"cursor":42}"#.data(using: .utf8)!
+        XCTAssertEqual(momentsFeedRefPage(data: numeric, kind: .recommend)?.cursor, "42")
+        let numericQuery = momentsFeedListQuery(kind: .recommend, cursor: momentsFeedRefPage(data: numeric, kind: .recommend)?.cursor, city: nil, sort: nil, pageSize: 20)
+        XCTAssertEqual(momentsRequestURL(base: "https://feed.example", path: "/v1/feed/recommend", query: numericQuery), "https://feed.example/v1/feed/recommend?cursor=42&limit=20")
+    }
 }
 
 private func momentsTestPost(text: String, audience: MomentsAudience = MomentsAudience(kind: .everyone), mediaKeys: [String] = [], allowNearby: Bool = false, city: String? = nil, placeId: String? = nil, quoteOf: String? = nil, nonce: String) -> MomentsPostDraft {

@@ -200,6 +200,62 @@ public func momentsFeedShouldProbe(kind: MomentsFeedKind, screenVisible: Bool) -
     return screenVisible && kind.probesForNewPosts
 }
 
+/// `DELETE /v1/feed/posts/{postId}/comments/{commentId}`. Deleting `/v1/feed/posts/{id}` removes the post.
+public func momentsDeleteCommentPath(postId: String, commentId: String) -> String {
+    return "/v1/feed/posts/\(momentsPathSegment(postId))/comments/\(momentsPathSegment(commentId))"
+}
+
+/// Query for one feed page. Page 2 of recommend is `/v1/feed/recommend` with `cursor` set. The first page omits it.
+public func momentsFeedListQuery(kind: MomentsFeedKind, cursor: String?, city: String?, sort: String?, pageSize: Int) -> [String: String] {
+    var query: [String: String] = ["limit": "\(pageSize)"]
+    if let cursor {
+        let trimmed = cursor.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            query["cursor"] = trimmed
+        }
+    }
+    if kind == .nearby {
+        if let city, !city.isEmpty {
+            query["city"] = city
+        }
+        if let sort, !sort.isEmpty {
+            query["sort"] = sort
+        } else {
+            query["sort"] = "latest"
+        }
+    }
+    return query
+}
+
+public func momentsQueryEscape(_ value: String) -> String {
+    var encoded = ""
+    for byte in value.utf8 {
+        switch byte {
+        case 0x30...0x39, 0x41...0x5A, 0x61...0x7A, 0x2D, 0x2E, 0x5F, 0x7E:
+            encoded.append(Character(UnicodeScalar(byte)))
+        default:
+            encoded += String(format: "%%%02X", byte)
+        }
+    }
+    return encoded
+}
+
+public func momentsQueryString(_ query: [String: String]) -> String {
+    return query.keys.sorted().map { key in
+        "\(momentsQueryEscape(key))=\(momentsQueryEscape(query[key] ?? ""))"
+    }.joined(separator: "&")
+}
+
+/// Absolute request URL. The query string is written here, so a cursor cannot remain only in a dictionary.
+public func momentsRequestURL(base: String, path: String, query: [String: String]) -> String {
+    var root = base
+    while root.hasSuffix("/") {
+        root.removeLast()
+    }
+    let suffix = query.isEmpty ? "" : "?" + momentsQueryString(query)
+    return root + path + suffix
+}
+
 /// Pull-to-refresh always starts at the first page. A finished cursor does not request another page.
 public func momentsShouldLoadFeedPage(loaded: Bool, cursor: String?, refresh: Bool, loading: Bool) -> Bool {
     if loading {
