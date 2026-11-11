@@ -609,10 +609,16 @@ func initializedNetwork(accountId: AccountRecordId, arguments: NetworkInitializa
                 }
             }
             
-            // Hosts, port and the RSA key live in Tellomi/tellomi-server.json.
-            let seedPort = TellomiSeedPort()
-            for (id, ips) in TellomiSeedAddresses(testingEnvironment) {
-                context.setSeedAddressSetForDatacenterWithId(id.intValue, seedAddressSet: MTDatacenterAddressSet(addressList: ips.map { MTDatacenterAddress(ip: $0, port: seedPort, preferForMedia: false, restrictToTcp: false, cdn: false, preferForProxy: false, secret: nil) }))
+            // Hosts, ports and the RSA key live in Tellomi/tellomi-server.json.
+            // The built-in relay is the first seed on datacenters 1 and 2, and
+            // api.tellomi.cn is the DNS fallback, used when no learned address
+            // list exists. A non-empty help.getConfig list replaces it and is
+            // dialed in the order it was saved. The preferred seed port is
+            // last in the seed set, so the first launch dials it first and a
+            // timeout moves to the fallback. thisPortOnly keeps discovery
+            // from adding another port.
+            for (id, addressSet) in TellomiSeedAddressSets(testingEnvironment) {
+                context.setSeedAddressSetForDatacenterWithId(id.intValue, seedAddressSet: addressSet)
             }
             
             context.keychain = keychain

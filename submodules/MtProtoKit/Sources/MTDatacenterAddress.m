@@ -7,6 +7,11 @@
 
 - (instancetype)initWithIp:(NSString *)ip port:(uint16_t)port preferForMedia:(bool)preferForMedia restrictToTcp:(bool)restrictToTcp cdn:(bool)cdn preferForProxy:(bool)preferForProxy secret:(NSData *)secret
 {
+    return [self initWithIp:ip port:port preferForMedia:preferForMedia restrictToTcp:restrictToTcp cdn:cdn preferForProxy:preferForProxy secret:secret thisPortOnly:false];
+}
+
+- (instancetype)initWithIp:(NSString *)ip port:(uint16_t)port preferForMedia:(bool)preferForMedia restrictToTcp:(bool)restrictToTcp cdn:(bool)cdn preferForProxy:(bool)preferForProxy secret:(NSData *)secret thisPortOnly:(bool)thisPortOnly
+{
     self = [super init];
     if (self != nil)
     {
@@ -17,6 +22,7 @@
         _cdn = cdn;
         _preferForProxy = preferForProxy;
         _secret = secret;
+        _thisPortOnly = thisPortOnly;
     }
     return self;
 }
@@ -34,6 +40,7 @@
         _cdn = [aDecoder decodeBoolForKey:@"cdn"];
         _preferForProxy = [aDecoder decodeBoolForKey:@"preferForProxy"];
         _secret = [aDecoder decodeObjectForKey:@"secret"];
+        _thisPortOnly = [aDecoder decodeBoolForKey:@"thisPortOnly"];
     }
     return self;
 }
@@ -48,6 +55,7 @@
     [aCoder encodeBool:_cdn forKey:@"cdn"];
     [aCoder encodeBool:_preferForProxy forKey:@"preferForProxy"];
     [aCoder encodeObject:_secret forKey:@"secret"];
+    [aCoder encodeBool:_thisPortOnly forKey:@"thisPortOnly"];
 }
 
 - (instancetype)copyWithZone:(NSZone *)__unused zone {
@@ -89,6 +97,10 @@
     }
     
     if (_preferForProxy != other.preferForProxy) {
+        return false;
+    }
+
+    if (_thisPortOnly != other->_thisPortOnly) {
         return false;
     }
     

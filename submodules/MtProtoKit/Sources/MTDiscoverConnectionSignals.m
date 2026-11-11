@@ -217,12 +217,13 @@
 
 + (NSArray<NSNumber *> *)alternatePortsForProxySettings:(MTSocksProxySettings *)proxySettings
 {
-    // Ports 80 and 5222 exist to get past local port filtering. A proxy already does that,
-    // and through one they only triple the connections each discovery round opens.
+    // Port 80 exists to get past local port filtering. A proxy already does that,
+    // and through one it only multiplies the connections each discovery round opens.
+    // An address with thisPortOnly, including every Tellomi seed, is not given this port.
     if (proxySettings != nil) {
         return @[];
     }
-    return @[@80, @5222];
+    return @[@80];
 }
 
 + (void)_startBackoffRoundOf:(MTSignal *)signal delay:(NSTimeInterval)delay maxDelay:(NSTimeInterval)maxDelay queue:(MTQueue *)queue subscriber:(MTSubscriber *)subscriber currentDisposable:(MTMetaDisposable *)currentDisposable isDisposed:(MTAtomic *)isDisposed
@@ -299,6 +300,9 @@
             [bestTcp4Signals addObject:signal];
 
             for (NSNumber *nPort in alternatePorts) {
+                if (address.thisPortOnly) {
+                    continue;
+                }
                 NSSet *ipsWithPort = tcpIpsByPort[nPort];
                 if (![ipsWithPort containsObject:address.ip]) {
                     MTDatacenterAddress *portAddress = [[MTDatacenterAddress alloc] initWithIp:address.ip port:[nPort intValue] preferForMedia:address.preferForMedia restrictToTcp:address.restrictToTcp cdn:address.cdn preferForProxy:address.preferForProxy secret:address.secret];

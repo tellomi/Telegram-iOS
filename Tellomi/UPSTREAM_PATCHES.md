@@ -710,9 +710,24 @@ The navigation screen gains 隐藏底栏文字. It hides labels and keeps the ic
 | `ChatMessageBubbleItemNode.swift` | Side translate button, outside the bubble's text measure. |
 | `TellomiTabSettings.swift`, `TellomiNavigationSettingsController.swift`, `TabBarComponent.swift` | Hide tab labels. |
 
+## Production DC relay seeds — 2026-11-11
+
+Shippable seeds match Android #142. Datacenters 1 and 2 each dial `8.137.198.240` on 10443, then 443, then `api.tellomi.cn` on those ports. `8.137.198.240` forwards that TCP. MTProto still terminates behind the relay, so the RSA public keys are unchanged: little-endian fingerprint `4381149949997195609` stays first and Teamgram's `12240908862933197005` stays last.
+
+`chooseTransportScheme` keeps the last address when nothing has failed, so `TellomiSeedAddressSets` writes hosts and ports in reverse. Every seed address is `thisPortOnly`, so discovery does not open another port on those addresses. The old extra discovery port is no longer probed for any address; port 80 remains for an address that is not `thisPortOnly`. A non-empty `help.getConfig` list still replaces the seed and is dialed in the order it was saved. `seed_address_a_record` is the relay, and it is not a separate dial entry. Login still defaults to +86. The welcome carousel stays skipped (`tellomiSkipsWelcomeSplash`).
+
+| File | Change |
+| --- | --- |
+| `Tellomi/tellomi-server.json` | Both environments seed DC 1 and DC 2 with the relay, then `api.tellomi.cn`. Ports are 10443 then 443. |
+| `submodules/MtProtoKit/Sources/TellomiServerConfig.m` | Builds one address set per datacenter, preference order reversed. |
+| `submodules/MtProtoKit/Sources/MTDatacenterAddress.m` | `thisPortOnly` keeps discovery on the declared port. |
+| `submodules/MtProtoKit/Sources/MTDiscoverConnectionSignals.m` | Skips extra ports when `thisPortOnly` is set. The only alternate port left is 80. |
+| `submodules/TelegramCore/Sources/Network/Network.swift` | Installs `TellomiSeedAddressSets`. |
+| `Tellomi/check_server_config.py`, `Tellomi/test_server_config.py` | Requires the eight endpoints and rejects the retired dial literals, including the negative cases. |
+
 ## DC addresses from help.getConfig (M7 / D-33)
 
-`Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. The seed hostname `api.tellomi.cn` is still dialed with `getaddrinfo` when no persistent list exists. It is not written by this filter.
+`Tellomi/tellomi-server.json` is a seed, not a lock. `setSeedAddressSetForDatacenterWithId` writes memory only. The keychain list wins when it is non-empty, and nothing copies the seed back over it. There is no `TELLOMI_LOCK_DC_ADDRESSES` flag. Android #52 turned that flag off and then refused any `dc_options` entry `inet_pton` rejects. iOS already applied `dc_options`, including hostnames. A hostname in the server config would have replaced a saved IP. Both writers now use the Android rule: port 1–65535, and `inet_pton` of the family selected by the IPv6 flag. An empty result does not call `updateAddressSetForDatacenter`, so the seed or the last saved list stays. Login and the session are unchanged. `UnauthorizedAccount` still does not poll `help.getConfig`; the signed-in `Account` does, on launch and then hourly. When no persistent list exists, the built-in seed is dialed. `api.tellomi.cn` in that seed is still resolved with `getaddrinfo`. It is not written by this filter. The seed list itself is the relay list in Production DC relay seeds.
 
 | File | Change |
 | --- | --- |
