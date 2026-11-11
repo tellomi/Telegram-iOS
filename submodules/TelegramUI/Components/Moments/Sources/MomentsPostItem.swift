@@ -77,25 +77,35 @@ final class MomentsPostItem: ListViewItem {
 
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
         async {
-            let node = MomentsPostItemNode()
-            let (layout, apply) = node.asyncLayout()(self, params)
-            node.contentSize = layout.contentSize
-            node.insets = layout.insets
-            Queue.mainQueue().async {
+            let prepared = momentsPostLayout(item: self, params: params)
+            // The node owns UIKit views (a stack view, labels, image views). ListView calls this
+            // block on a global queue while scrolling. Create the node on the main queue.
+            momentsOnMainQueue {
+                assert(Queue.mainQueue().isCurrent())
+                let node = MomentsPostItemNode()
+                node.contentSize = prepared.layout.contentSize
+                node.insets = prepared.layout.insets
                 completion(node, {
-                    return (nil, { _ in apply() })
+                    return (nil, { _ in
+                        node.apply(self, textWidth: prepared.textWidth, side: prepared.side, collapsed: prepared.collapsed, bodyHeight: prepared.bodyHeight)
+                    })
                 })
             }
         }
     }
 
     func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, neighbors: ListViewItemNeighbors, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
-        Queue.mainQueue().async {
-            guard let node = node() as? MomentsPostItemNode else {
-                return
+        async {
+            let prepared = momentsPostLayout(item: self, params: params)
+            momentsOnMainQueue {
+                assert(Queue.mainQueue().isCurrent())
+                guard let node = node() as? MomentsPostItemNode else {
+                    return
+                }
+                completion(prepared.layout, { _ in
+                    node.apply(self, textWidth: prepared.textWidth, side: prepared.side, collapsed: prepared.collapsed, bodyHeight: prepared.bodyHeight)
+                })
             }
-            let (layout, apply) = node.asyncLayout()(self, params)
-            completion(layout, { _ in apply() })
         }
     }
 
@@ -131,6 +141,46 @@ private func momentsSlideHeight(card: MomentsCard, columnWidth: CGFloat) -> CGFl
     return min(360, max(120, columnWidth * ratio))
 }
 
+private struct MomentsPostLayout {
+    let layout: ListViewItemNodeLayout
+    let textWidth: CGFloat
+    let side: CGFloat
+    let collapsed: Bool
+    let bodyHeight: CGFloat
+}
+
+/// Text measurement only. Safe on ListView's background queue: no view, layer or constraint.
+private func momentsPostLayout(item: MomentsPostItem, params: ListViewItemLayoutParams) -> MomentsPostLayout {
+    let width = params.width
+    let contentWidth = min(width, MomentsLimits.standard.maxContentWidth)
+    let side = floor((width - contentWidth) / 2.0)
+    let textWidth = contentWidth - momentsInset * 2.0 - momentsColumn
+    let font = Font.regular(item.fontSize)
+    let text = item.card.isUnavailable ? item.strings.Moments_Unavailable : item.card.text
+    let fullHeight = (text as NSString).boundingRect(with: CGSize(width: textWidth, height: 10000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font], context: nil).height
+    let collapsed = !item.expanded && momentsTextExceedsLineLimit(fullHeight: fullHeight, lineHeight: font.lineHeight, limit: MomentsLimits.standard.collapsedLineCount)
+    let bodyHeight = collapsed ? font.lineHeight * CGFloat(MomentsLimits.standard.collapsedLineCount) : fullHeight
+    var height: CGFloat = 12 + 22 + 8
+    if item.hidden {
+        height = 64
+    } else if item.card.isUnavailable {
+        height = 56
+    } else {
+        height += bodyHeight + 8
+        if collapsed { height += 22 }
+        let slideHeight = momentsSlideHeight(card: item.card, columnWidth: textWidth)
+        if slideHeight > 0 { height += slideHeight + 8 }
+        if item.card.voice != nil { height += 36 }
+        if item.card.poll != nil { height += 28 + CGFloat(item.card.poll?.options.count ?? 0) * 28 }
+        if item.card.quote != nil { height += 64 }
+        if item.card.visibleLinkPreview != nil { height += 56 }
+        if item.card.location?.cityName != nil || item.card.location?.place != nil { height += 22 }
+        height += 40
+    }
+    let layout = ListViewItemNodeLayout(contentSize: CGSize(width: width, height: ceil(height)), insets: UIEdgeInsets())
+    return MomentsPostLayout(layout: layout, textWidth: textWidth, side: side, collapsed: collapsed, bodyHeight: bodyHeight)
+}
+
 final class MomentsPostItemNode: ListViewItemNode {
     private let avatar = UIImageView()
     private let avatarLetter = UILabel()
@@ -163,6 +213,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     private var albumKey = ""
 
     init() {
+        assert(Queue.mainQueue().isCurrent())
         super.init(layerBacked: false)
         self.avatar.layer.cornerRadius = 20
         self.follow.layer.cornerRadius = 8
@@ -236,42 +287,8 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.album.addGestureRecognizer(mediaTap)
     }
 
-    func asyncLayout() -> (MomentsPostItem, ListViewItemLayoutParams) -> (ListViewItemNodeLayout, () -> Void) {
-        return { [weak self] item, params in
-            let width = params.width
-            let contentWidth = min(width, MomentsLimits.standard.maxContentWidth)
-            let side = floor((width - contentWidth) / 2.0)
-            let textWidth = contentWidth - momentsInset * 2.0 - momentsColumn
-            let font = Font.regular(item.fontSize)
-            let text = item.card.isUnavailable ? item.strings.Moments_Unavailable : item.card.text
-            let fullHeight = (text as NSString).boundingRect(with: CGSize(width: textWidth, height: 10000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font], context: nil).height
-            let collapsed = !item.expanded && momentsTextExceedsLineLimit(fullHeight: fullHeight, lineHeight: font.lineHeight, limit: MomentsLimits.standard.collapsedLineCount)
-            let bodyHeight = collapsed ? font.lineHeight * CGFloat(MomentsLimits.standard.collapsedLineCount) : fullHeight
-            var height: CGFloat = 12 + 22 + 8
-            if item.hidden {
-                height = 64
-            } else if item.card.isUnavailable {
-                height = 56
-            } else {
-                height += bodyHeight + 8
-                if collapsed { height += 22 }
-                let slideHeight = momentsSlideHeight(card: item.card, columnWidth: textWidth)
-                if slideHeight > 0 { height += slideHeight + 8 }
-                if item.card.voice != nil { height += 36 }
-                if item.card.poll != nil { height += 28 + CGFloat(item.card.poll?.options.count ?? 0) * 28 }
-                if item.card.quote != nil { height += 64 }
-                if item.card.visibleLinkPreview != nil { height += 56 }
-                if item.card.location?.cityName != nil || item.card.location?.place != nil { height += 22 }
-                height += 40
-            }
-            let layout = ListViewItemNodeLayout(contentSize: CGSize(width: width, height: ceil(height)), insets: UIEdgeInsets())
-            return (layout, {
-                self?.apply(item, textWidth: textWidth, side: side, collapsed: collapsed, bodyHeight: bodyHeight)
-            })
-        }
-    }
-
-    private func apply(_ item: MomentsPostItem, textWidth: CGFloat, side: CGFloat, collapsed: Bool, bodyHeight: CGFloat) {
+    fileprivate func apply(_ item: MomentsPostItem, textWidth: CGFloat, side: CGFloat, collapsed: Bool, bodyHeight: CGFloat) {
+        assert(Queue.mainQueue().isCurrent())
         self.item = item
         let theme = item.theme
         let strings = item.strings
@@ -448,6 +465,7 @@ final class MomentsPostItemNode: ListViewItemNode {
 
     @discardableResult
     private func layoutAlbum(_ item: MomentsPostItem, x: CGFloat, y: CGFloat, width: CGFloat) -> CGFloat {
+        assert(Queue.mainQueue().isCurrent())
         let slides = item.card.media.filter { momentsPresentsAsImage($0.type) || momentsPresentsAsVideo($0.type) }
         let albumHeight = momentsSlideHeight(card: item.card, columnWidth: width)
         let gap: CGFloat = slides.count > 1 ? 8 : 0
@@ -526,6 +544,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     }
 
     private func layoutPoll(_ item: MomentsPostItem, x: CGFloat, y: CGFloat, width: CGFloat) {
+        assert(Queue.mainQueue().isCurrent())
         self.pollHost.subviews.forEach { $0.removeFromSuperview() }
         guard let poll = item.card.poll else {
             self.pollHost.isHidden = true
@@ -547,6 +566,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     }
 
     private func attachVideo(url: String?, type: MomentsMediaType, item: MomentsPostItem, frame: CGRect) {
+        assert(Queue.mainQueue().isCurrent())
         guard let url, let context = item.context, url.hasPrefix("https://") else {
             self.videoNode?.canAttachContent = false
             self.videoNode?.removeFromSupernode()
@@ -571,6 +591,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     }
 
     func autoplayTarget(listView: UIView) -> (String, Int)? {
+        assert(Queue.mainQueue().isCurrent())
         guard let item = self.item, !item.hidden, !self.album.isHidden else {
             return nil
         }
@@ -587,6 +608,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     }
 
     private func bindAvatar(_ item: MomentsPostItem, displayName: String, theme: PresentationTheme) {
+        assert(Queue.mainQueue().isCurrent())
         self.avatarNode.isHidden = true
         self.loadAvatarURL(item, displayName: displayName)
         let peerId: EnginePeer.Id?
@@ -608,6 +630,7 @@ final class MomentsPostItemNode: ListViewItemNode {
         self.avatarPeerDisposable?.dispose()
         self.avatarPeerDisposable = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
         |> deliverOnMainQueue).start(next: { [weak self] peer in
+            assert(Queue.mainQueue().isCurrent())
             guard let self, self.avatarPeerId == peerId, peer != nil else { return }
             self.avatarNode.isHidden = false
             self.avatarLetter.isHidden = true
@@ -616,6 +639,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     }
 
     private func loadAvatarURL(_ item: MomentsPostItem, displayName: String) {
+        assert(Queue.mainQueue().isCurrent())
         let avatarURL = momentsMediaURL(base: momentsPublicMediaBaseURL, key: item.card.author?.avatarKey)
         if let context = item.context, let avatarURL {
             self.avatarLetter.isHidden = true
@@ -632,6 +656,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     }
 
     func setPlaybackActive(_ active: Bool) {
+        assert(Queue.mainQueue().isCurrent())
         guard let item = self.item, !item.hidden, !self.album.isHidden else {
             self.videoNode?.canAttachContent = false
             return
@@ -682,6 +707,7 @@ final class MomentsPostItemNode: ListViewItemNode {
     @objc private func authorPressed() { if let item = self.item { item.handlers.author(item.card) } }
 
     func albumContains(_ point: CGPoint) -> Bool {
+        assert(Queue.mainQueue().isCurrent())
         return !self.album.isHidden && self.album.frame.contains(self.view.convert(point, from: nil))
     }
 }
@@ -766,21 +792,25 @@ final class MomentsStatusItem: ListViewItem {
 
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
         async {
-            let node = MomentsStatusItemNode()
             let layout = ListViewItemNodeLayout(contentSize: CGSize(width: params.width, height: 160), insets: UIEdgeInsets())
-            node.contentSize = layout.contentSize
-            node.insets = layout.insets
-            Queue.mainQueue().async {
+            momentsOnMainQueue {
+                assert(Queue.mainQueue().isCurrent())
+                let node = MomentsStatusItemNode()
+                node.contentSize = layout.contentSize
+                node.insets = layout.insets
                 completion(node, { return (nil, { _ in node.apply(self) }) })
             }
         }
     }
 
     func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, neighbors: ListViewItemNeighbors, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
-        Queue.mainQueue().async {
-            guard let node = node() as? MomentsStatusItemNode else { return }
+        async {
             let layout = ListViewItemNodeLayout(contentSize: CGSize(width: params.width, height: 160), insets: UIEdgeInsets())
-            completion(layout, { _ in node.apply(self) })
+            momentsOnMainQueue {
+                assert(Queue.mainQueue().isCurrent())
+                guard let node = node() as? MomentsStatusItemNode else { return }
+                completion(layout, { _ in node.apply(self) })
+            }
         }
     }
 }
@@ -790,6 +820,7 @@ private final class MomentsStatusItemNode: ListViewItemNode {
     private var action: (() -> Void)?
 
     init() {
+        assert(Queue.mainQueue().isCurrent())
         super.init(layerBacked: false)
         self.label.numberOfLines = 0
         self.label.textAlignment = .center
@@ -800,6 +831,7 @@ private final class MomentsStatusItemNode: ListViewItemNode {
     }
 
     func apply(_ item: MomentsStatusItem) {
+        assert(Queue.mainQueue().isCurrent())
         self.backgroundColor = item.theme.list.plainBackgroundColor
         self.label.textColor = item.theme.list.itemSecondaryTextColor
         self.label.text = item.text
