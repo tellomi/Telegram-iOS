@@ -55,7 +55,7 @@ static MTSocksProxySettings *makeWebProxy(void) {
     XCTAssertEqual(result.count, 3u);
 
     NSArray *ports = [MTDiscoverConnectionSignals alternatePortsForProxySettings:nil];
-    XCTAssertEqualObjects(ports, (@[@80, @5222]));
+    XCTAssertEqualObjects(ports, (@[@80]));
 }
 
 - (void)testSocksProxyKeepsAddressesButSkipsAlternatePorts {

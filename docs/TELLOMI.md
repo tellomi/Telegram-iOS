@@ -19,11 +19,11 @@ python3 Tellomi/check_server_config.py
 
 | Field | Default | Why |
 | --- | --- | --- |
-| `seeds.production` / `seeds.testing` | datacenter `1` → `api.tellomi.cn` | DNS-only name for the Tellomi dev Teamgram server. TCP port stays `10443`. Dev login SMS code is `12345`. The direct seed dial passes this string to `GCDAsyncSocket` `connectToHost:`, which resolves it with `getaddrinfo`. |
-| `seed_address_a_record` | `8.137.39.82` | Not dialed. The address `api.tellomi.cn` currently resolves to. A SOCKS proxy encodes the destination with `inet_aton` (`MTTcpConnection` `requestSocksConnection`) and needs this literal instead of the hostname. |
+| `seeds.production` / `seeds.testing` | datacenters `1` and `2`, each `8.137.198.240` then `api.tellomi.cn` | Same eight endpoints Android ships. On each datacenter the dial order is the relay on `10443`, the relay on `443`, then `api.tellomi.cn` on `10443` and `443`. The IP is passed straight to the socket. The hostname is passed to `GCDAsyncSocket` `connectToHost:`, which resolves it with `getaddrinfo`. Dev login SMS code is `12345`. |
+| `seed_address_a_record` | `8.137.198.240` | Not a separate dial entry. It records the relay already listed in `seeds`. A SOCKS proxy encodes the destination with `inet_aton` (`MTTcpConnection` `requestSocksConnection`) and uses that literal. |
 | `local_docker_seed` | `127.0.0.1` | Not dialed. For Teamgram docker on the same machine, put this host in `seeds` instead and regenerate the header. The iOS Simulator reaches the host at `127.0.0.1`. |
-| `seed_port` | `10443` | gnetway's published TCP port (`docker-compose.yaml` maps `10443:10443`). Not 443. |
-| `default_datacenter_id` | `1` | The first connection, including release builds. Upstream opened datacenter 2 in release; Teamgram does not have that datacenter. |
+| `seed_port` / `seed_fallback_ports` | `10443`, then `443` | `10443` is tried first on each host. `443` is the next dial after that port times out. |
+| `default_datacenter_id` | `1` | The first connection, including release builds. Datacenter 2 is seeded with the same four endpoints so a later move to that id has addresses. Upstream opened datacenter 2 in release; the first Tellomi connection stays on datacenter 1. |
 | `public_keys` | one or two PKCS#1 PEMs, production and testing | The 2026-11 key first, then the public half of Teamgram's development key (`teamgramd/bin/server_pkcs1.key`). The server sends `[new, old]`. The old key will be retired on the server once clients update. |
 | `rsa_fingerprints` | one entry per PEM, same order | Checks, not configuration. Each entry is that key's little-endian and big-endian fingerprint. |
 | `disable_telegram_backup_discovery` | `true` | See below. |
@@ -86,7 +86,7 @@ Settings alternate icons are packaged from `Tellomi/Brand/Alternates`. The upstr
 | Change | Where |
 | --- | --- |
 | Server JSON and the generator / checker | `Tellomi/` |
-| Embedded JSON and the readers (`TellomiSeedAddresses`, `TellomiSeedPort`, `TellomiDefaultDatacenterId`, `TellomiDisablesTelegramBackupDiscovery`, `TellomiServerPublicKeys`) | `submodules/MtProtoKit/Sources/TellomiServerConfig.m`, `PublicHeaders/MtProtoKit/TellomiServerConfig.h`, generated `TellomiServerConfigJSON.h` |
+| Embedded JSON and the readers (`TellomiSeedAddresses`, `TellomiSeedPorts`, `TellomiSeedAddressSets`, `TellomiSeedPort`, `TellomiDefaultDatacenterId`, `TellomiDisablesTelegramBackupDiscovery`, `TellomiServerPublicKeys`) | `submodules/MtProtoKit/Sources/TellomiServerConfig.m`, `PublicHeaders/MtProtoKit/TellomiServerConfig.h`, generated `TellomiServerConfigJSON.h` |
 | Handshake uses those keys and echoes the server's fingerprint | `MTDatacenterAuthMessageService.m` |
 | Seed list and backup-discovery gate | `submodules/TelegramCore/Sources/Network/Network.swift` |
 | First datacenter | `submodules/TelegramCore/Sources/Account/Account.swift` |
@@ -198,7 +198,7 @@ Not in the TestFlight IPA. Create it only when embedding the watch app (`--embed
 - OpenSSL accepts each PEM as an RSA public key.
 - The 2026-11 key's fingerprint is `6458528886358068284` big-endian and `4381149949997195609` little-endian. Teamgram's development key, last in the list, is `14798846482072068265` big-endian and `12240908862933197005` little-endian. Each pair is a byte swap of the other. The little-endian values are the decimals the server sends, new key first.
 - The three configuration JSON files load through `BuildConfiguration` as `app.tellomi.chat` / `Tellomi` / team `CB7KP6GBAR` / the placeholder api id, with Siri and iCloud off.
-- `Network.swift` installs `TellomiSeedAddresses` and no longer contains Telegram's production seed `149.154.175.50`.
+- `Network.swift` installs `TellomiSeedAddressSets` and no longer contains Telegram's production seed `149.154.175.50`. The dial order is the relay on 10443, the relay on 443, then `api.tellomi.cn` on those ports, for datacenters 1 and 2.
 - The first connection uses `TellomiDefaultDatacenterId`.
 - The handshake reads `TellomiServerPublicKeys` and applies the fingerprint byte swap. The check rejects Telegram's production modulus prefix.
 - The Bazel app icon is `//:TellomiAppIcon`, and `Tellomi/Brand/logo.svg` still has the traced path data.

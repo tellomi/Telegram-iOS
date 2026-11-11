@@ -21,6 +21,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  server-config:
+    # Validation only. No signing, no IPA, no TestFlight upload.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Check Tellomi DC seeds
+        run: |
+          python3 Tellomi/check_server_config.py --seeds
+          python3 Tellomi/test_server_config.py
+
   test:
     runs-on: xcode-27
     timeout-minutes: 180
