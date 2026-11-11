@@ -58,6 +58,8 @@ The recommendation switch is only on the Moments settings screen. Off sends `per
 
 A fresh install shows 动态, 聊天, 设置. Contacts, Calls and News stay off until the person turns them on. Chats and Settings cannot be hidden. The choice is shared account-manager data (`ApplicationSpecificSharedDataKeys.tellomiTabBarPreferences`), the same store as `CallListSettings`, not an account postbox record and not `UserDefaults`. A value saved by the first build in the `app.tellomi.chat.tab-bar` suite is copied in once and then removed. Hiding button titles shortens the phone tab bar; an iPad or vertical bar is unchanged. The bar rebuilds when the switches move.
 
+Hidden tabs are left out of the controller list, the same way Calls is. The phone capsule then hugs those tabs: 90pt for a titled tab, 56pt when titles are hidden. Two titled tabs are 188pt. It still takes the whole width when the leftover would be under 60pt. `tabBarItemsLayout` itself is unchanged and still shares the full length in the horizontal regular case; the phone bar replaces that result.
+
 The screen is an `ItemListController`: Settings → a Tools card → 选单设定. Strings are `presentationData.strings` from `en.lproj` (`Tellomi.MenuSettings.*`). Other languages come from the server langpack. `dictFromLocalization` does not fill them. iMe's public iOS tree (only `master`, pushed 2019-10-31, no tags) does not contain this screen. Swiftgram's tab settings (`CallListSettings.showContactsTab`, `SGSimpleSettings.showTabNames`, `addRootControllers`) are the pattern: optional tabs are left out of the controller list, and chats and settings are always appended. Swiftgram asks for a restart to hide titles. This build applies that immediately. No Swiftgram or iMe source was copied.
 
 | File | Change |
@@ -69,7 +71,8 @@ The screen is an `ItemListController`: Settings → a Tools card → 选单设�
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings row that opens the screen. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | Tools card. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift` | Pushes the screen. |
-| `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Hides phone tab titles and shortens the bar. |
+| `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Hides phone tab titles, shortens the bar, and uses the hugged phone capsule. |
+| `submodules/TelegramUI/Components/TabBarLayout/Sources/TellomiTabBarPhoneLayout.swift` | Phone capsule width from the visible tab count. |
 | `submodules/TabBarUI/Sources/TabBarController.swift` | `showsItemTitles`, applied on the next layout. |
 | `submodules/TabBarUI/Sources/TabBarContollerNode.swift` | Passes that flag into the bar. |
 | `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | English keys for the generated string accessors. |
