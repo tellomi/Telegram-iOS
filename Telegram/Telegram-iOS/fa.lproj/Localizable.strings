@@ -1,3 +1,9 @@
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "نظر ارسال نشد. متن شما هنوز اینجاست.";
 "Moments_Audience_Kept" = "نتوانستیم مشخص کنیم چه کسانی این را می‌بینند. انتخاب شما حفظ شد.";
+
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "گزارش خرابی جدید";
+"CrashReport.Prompt.Text" = "برنامه به‌طور غیرمنتظره بسته شد.\n\nمی‌خواهید گزارش خرابی را بفرستید تا این مشکل را رفع کنیم؟";
+"CrashReport.Prompt.NotNow" = "الآن نه";
+"CrashReport.Prompt.Send" = "ارسال گزارش";

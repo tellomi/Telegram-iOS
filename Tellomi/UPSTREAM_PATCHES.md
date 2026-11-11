@@ -14,6 +14,21 @@ Scrolling the feed asked `ListView` to build each new row on a global queue. `Mo
 | `submodules/TelegramUI/Components/Moments/Sources/MomentsCommentSheet.swift` | Comment send, delete and report errors update the sheet on the main queue. |
 | `submodules/TelegramUI/Components/Moments/Sources/MomentsDetailScreen.swift` | Comment send updates the field on the main queue. |
 
+## Crash log prompt — 2026-11-11
+
+The prompt after an unexpected quit used four English sentences, and it marked every pending report presented as soon as the alert appeared. Opening Apple's share sheet resigns the app, which dismissed the alert. The presented flag was never cleared, so Send Log did not come back. Send Log also resolved `@iOSCrashReportsBot` and wrapped the zip in an Instant Page, which this server does not collect.
+
+The report stays pending until Not Now, or until the server accepts Send. Resigning active dismisses the alert and shows it again once the app can present. A later update while that alert is already up, or while a send is in flight, does not present a second copy. A refused send leaves the report pending and the prompt can show again. The zip is a normal document (`application/zip`, filename `Tellomi-iOS-<version>-crash.zip`, caption `app=<version> device=<device>`), sent with `messages.sendMedia`. The thank-you toast waits for that RPC to return. A transport acknowledgement is not success, and a refused send leaves the report pending. The bot username is `help.getAppConfig`'s `tellomi_crash_report_bot`, or `TellomiBot` when that value is missing or not a username.
+
+The four sentences are `CrashReport.Prompt.*` in every built-in lproj. `PresentationStrings` is generated from `en.lproj`. The server langpack still wins when it has a translation that is not the English sentence. Until then, the lproj for the active language is used.
+
+| File | Change |
+| --- | --- |
+| `submodules/DebugSettingsUI/Sources/CrashReportPrompt.swift` | Prompt state machine, bot name, document caption. |
+| `submodules/DebugSettingsUI/Sources/CrashReportsController.swift` | Lang-pack prompt. Document send. Server confirmation. |
+| `submodules/DebugSettingsUI/Tests/CrashReportPromptTests.swift` | Show, resign, confirm, failure, decline, document, bot name. |
+| `Telegram/Telegram-iOS/*.lproj/Localizable.strings` | Prompt strings for every built-in language. |
+
 ## Moments feed limits and recommendation switch — 2026-11-11
 
 `GET /v1/feed/config` puts the caps in a nested `limits` object. The client was reading invented names from the top of the document, so every server cap was ignored. The parser now reads only the engine's keys. A missing key, or a value that is not a positive whole number, keeps the client default. Those defaults are the content-engine constants: 2000 characters, 12 images, and 180 seconds for both voice caps. `personalization_toggle_visible` is a top-level boolean. Anything else, including `1` and `"true"`, hides the switch.
