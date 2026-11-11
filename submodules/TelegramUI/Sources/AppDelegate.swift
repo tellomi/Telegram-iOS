@@ -1298,31 +1298,24 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 }
                 return true
             })
-            |> mapToSignal { context -> Signal<(AccountContext, CallListSettings)?, NoError> in
-                return sharedApplicationContext.sharedContext.accountManager.transaction { transaction -> CallListSettings? in
-                    return transaction.getSharedData(ApplicationSpecificSharedDataKeys.callListSettings)?.get(CallListSettings.self)
+            |> mapToSignal { context -> Signal<(AccountContext, TellomiTabBarPreferences)?, NoError> in
+                guard let context else {
+                    return .single(nil)
                 }
-                |> reduceLeft(value: nil) { current, updated -> CallListSettings? in
-                    var result: CallListSettings?
-                    if let updated = updated {
-                        result = updated
-                    } else if let current = current {
-                        result = current
-                    }
-                    return result
+                return sharedApplicationContext.sharedContext.accountManager.transaction { transaction -> TellomiPreparedTabBarPreferences in
+                    return tellomiPrepareTabBarPreferences(transaction: transaction)
                 }
-                |> map { callListSettings -> (AccountContext, CallListSettings)? in
-                    if let context = context {
-                        return (context, callListSettings ?? .defaultSettings)
-                    } else {
-                        return nil
+                |> map { prepared -> (AccountContext, TellomiTabBarPreferences)? in
+                    if prepared.consumedLegacy {
+                        tellomiClearLegacyTabBarPreferences()
                     }
+                    return (context, prepared.preferences)
                 }
             }
             |> deliverOnMainQueue
             |> map { accountAndSettings -> AuthorizedApplicationContext? in
-                return accountAndSettings.flatMap { context, callListSettings in
-                    return AuthorizedApplicationContext(sharedApplicationContext: sharedApplicationContext, mainWindow: self.mainWindow, context: context as! AccountContextImpl, accountManager: sharedApplicationContext.sharedContext.accountManager, showCallsTab: callListSettings.showTab, reinitializedNotificationSettings: {
+                return accountAndSettings.flatMap { context, tabBarPreferences in
+                    return AuthorizedApplicationContext(sharedApplicationContext: sharedApplicationContext, mainWindow: self.mainWindow, context: context as! AccountContextImpl, accountManager: sharedApplicationContext.sharedContext.accountManager, tabBarPreferences: tabBarPreferences, reinitializedNotificationSettings: {
                         let _ = (self.context.get()
                         |> take(1)
                         |> deliverOnMainQueue).start(next: { context in

@@ -1,6 +1,6 @@
 import Foundation
 
-/// A root tab the Tellomi tab bar can show.
+/// A root tab the tab bar can show.
 ///
 /// Chats and Settings stay reachable: their switches are locked on, and a saved
 /// value that tries to hide them is ignored.
@@ -72,6 +72,45 @@ public struct TellomiTabBarPreferences: Equatable {
     }
 }
 
+extension TellomiTabBarPreferences: Codable {
+    private struct Key: CodingKey {
+        var stringValue: String
+        init(_ stringValue: String) {
+            self.stringValue = stringValue
+        }
+        init?(stringValue: String) {
+            self.stringValue = stringValue
+        }
+        var intValue: Int? {
+            return nil
+        }
+        init?(intValue: Int) {
+            return nil
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Key.self)
+        self.hideButtonTitles = (try container.decodeIfPresent(Int32.self, forKey: Key("hideButtonTitles")) ?? 0) != 0
+        let raw = try container.decodeIfPresent([String].self, forKey: Key("shownTabs")) ?? []
+        var shown = Set<TellomiRootTab>()
+        for value in raw {
+            if let tab = TellomiRootTab(rawValue: value) {
+                shown.insert(tab)
+            }
+        }
+        self.shown = shown
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: Key.self)
+        let normalized = self.normalized()
+        try container.encode((normalized.hideButtonTitles ? 1 : 0) as Int32, forKey: Key("hideButtonTitles"))
+        let shown = TellomiRootTab.displayOrder.filter { normalized.shown.contains($0) }.map { $0.rawValue }
+        try container.encode(shown, forKey: Key("shownTabs"))
+    }
+}
+
 /// What the existing Calls "show tab" preference said the first time this menu was opened.
 public struct TellomiCallsTabMigration: Equatable {
     public var showTab: Bool
@@ -105,70 +144,101 @@ public func tellomiVisibleRootTabs(preferences: TellomiTabBarPreferences, availa
     }
 }
 
-enum TellomiTabBarPreferencesKeys {
-    static let saved = "saved"
-    static let hideButtonTitles = "hideButtonTitles"
-    static let shownTabs = "shownTabs"
-    static let callsMigrationApplied = "callsMigrationApplied"
+/// The `UserDefaults` suite written by the first menu-settings build, before this moved into shared account data.
+public let tellomiTabBarPreferencesLegacySuiteName = "app.tellomi.chat.tab-bar"
+
+public enum TellomiLegacyTabBarPreferenceKey {
+    public static let saved = "saved"
+    public static let hideButtonTitles = "hideButtonTitles"
+    public static let shownTabs = "shownTabs"
 }
 
-/// Per-device tab bar choices. The suite is not iCloud and not an account record.
-public final class TellomiTabBarPreferencesStore {
-    public static let shared = TellomiTabBarPreferencesStore()
-    public static let didChangeNotification = Notification.Name("TellomiTabBarPreferencesDidChange")
-    public static let suiteName = "app.tellomi.chat.tab-bar"
-
-    public let defaults: UserDefaults
-
-    public init(defaults: UserDefaults) {
-        self.defaults = defaults
+public func tellomiLegacyTabBarPreferences(defaults: UserDefaults) -> TellomiTabBarPreferences? {
+    guard defaults.bool(forKey: TellomiLegacyTabBarPreferenceKey.saved) else {
+        return nil
     }
-
-    public convenience init() {
-        let defaults = UserDefaults(suiteName: TellomiTabBarPreferencesStore.suiteName) ?? .standard
-        self.init(defaults: defaults)
-    }
-
-    public var hasStoredValue: Bool {
-        return self.defaults.bool(forKey: TellomiTabBarPreferencesKeys.saved)
-    }
-
-    public var hasAppliedCallsMigration: Bool {
-        return self.defaults.bool(forKey: TellomiTabBarPreferencesKeys.callsMigrationApplied)
-    }
-
-    public func markCallsMigrationApplied() {
-        self.defaults.set(true, forKey: TellomiTabBarPreferencesKeys.callsMigrationApplied)
-    }
-
-    public func load() -> TellomiTabBarPreferences {
-        guard self.hasStoredValue else {
-            return .freshInstall
+    let hide = defaults.bool(forKey: TellomiLegacyTabBarPreferenceKey.hideButtonTitles)
+    let raw = defaults.stringArray(forKey: TellomiLegacyTabBarPreferenceKey.shownTabs) ?? []
+    var shown = Set<TellomiRootTab>()
+    for value in raw {
+        if let tab = TellomiRootTab(rawValue: value) {
+            shown.insert(tab)
         }
-        let hide = self.defaults.bool(forKey: TellomiTabBarPreferencesKeys.hideButtonTitles)
-        let raw = self.defaults.stringArray(forKey: TellomiTabBarPreferencesKeys.shownTabs) ?? []
-        var shown = Set<TellomiRootTab>()
-        for value in raw {
-            if let tab = TellomiRootTab(rawValue: value) {
-                shown.insert(tab)
+    }
+    return TellomiTabBarPreferences(hideButtonTitles: hide, shown: shown).normalized()
+}
+
+public func tellomiLegacyTabBarPreferencesFromSuite() -> TellomiTabBarPreferences? {
+    guard let defaults = UserDefaults(suiteName: tellomiTabBarPreferencesLegacySuiteName) else {
+        return nil
+    }
+    return tellomiLegacyTabBarPreferences(defaults: defaults)
+}
+
+public func tellomiClearLegacyTabBarPreferences() {
+    guard let defaults = UserDefaults(suiteName: tellomiTabBarPreferencesLegacySuiteName) else {
+        return
+    }
+    defaults.removeObject(forKey: TellomiLegacyTabBarPreferenceKey.saved)
+    defaults.removeObject(forKey: TellomiLegacyTabBarPreferenceKey.hideButtonTitles)
+    defaults.removeObject(forKey: TellomiLegacyTabBarPreferenceKey.shownTabs)
+}
+
+/// One reading of the shared tab-bar record and the Calls "show tab" record.
+public struct TellomiTabBarSnapshot: Equatable {
+    public var preferences: TellomiTabBarPreferences?
+    public var callsShowTab: Bool
+    public var callsExplicit: Bool
+
+    public init(preferences: TellomiTabBarPreferences?, callsShowTab: Bool, callsExplicit: Bool) {
+        self.preferences = preferences
+        self.callsShowTab = callsShowTab
+        self.callsExplicit = callsExplicit
+    }
+}
+
+/// What to show, and which shared records to write, after one snapshot.
+public struct TellomiTabBarStep: Equatable {
+    public var preferences: TellomiTabBarPreferences
+    public var persistPreferences: Bool
+    public var persistCallsShowTab: Bool?
+    public var appliedCallsShowTab: Bool
+
+    public init(preferences: TellomiTabBarPreferences, persistPreferences: Bool, persistCallsShowTab: Bool?, appliedCallsShowTab: Bool) {
+        self.preferences = preferences
+        self.persistPreferences = persistPreferences
+        self.persistCallsShowTab = persistCallsShowTab
+        self.appliedCallsShowTab = appliedCallsShowTab
+    }
+}
+
+/// Resolves the tab bar from the shared records.
+///
+/// A missing record is the first launch: Calls stays hidden unless that switch was already moved.
+/// `legacy` is the previous `UserDefaults` suite, used only when the shared record is missing.
+/// After that, a Calls switch that moved since `appliedCallsShowTab` updates the menu, and a menu
+/// that moved while Calls has not updates the Calls switch. A stale Calls value does not undo a menu change.
+public func tellomiTabBarStep(snapshot: TellomiTabBarSnapshot, appliedCallsShowTab: Bool, legacy: TellomiTabBarPreferences?) -> TellomiTabBarStep {
+    if let stored = snapshot.preferences {
+        var preferences = stored.normalized()
+        var persistPreferences = preferences != stored
+        var persistCalls: Bool?
+        var applied = appliedCallsShowTab
+        if snapshot.callsShowTab != applied {
+            if preferences.isShown(.calls) != snapshot.callsShowTab {
+                preferences = preferences.updating(.calls, shown: snapshot.callsShowTab)
+                persistPreferences = true
             }
+            applied = snapshot.callsShowTab
+        } else if preferences.isShown(.calls) != snapshot.callsShowTab {
+            persistCalls = preferences.isShown(.calls)
+            applied = preferences.isShown(.calls)
         }
-        return TellomiTabBarPreferences(hideButtonTitles: hide, shown: shown).normalized()
+        return TellomiTabBarStep(preferences: preferences, persistPreferences: persistPreferences, persistCallsShowTab: persistCalls, appliedCallsShowTab: applied)
     }
 
-    public func save(_ preferences: TellomiTabBarPreferences) {
-        let normalized = preferences.normalized()
-        if self.hasStoredValue && self.load() == normalized {
-            return
-        }
-        self.defaults.set(true, forKey: TellomiTabBarPreferencesKeys.saved)
-        self.defaults.set(normalized.hideButtonTitles, forKey: TellomiTabBarPreferencesKeys.hideButtonTitles)
-        let shown = TellomiRootTab.displayOrder.filter { normalized.shown.contains($0) }.map { $0.rawValue }
-        self.defaults.set(shown, forKey: TellomiTabBarPreferencesKeys.shownTabs)
-        NotificationCenter.default.post(name: TellomiTabBarPreferencesStore.didChangeNotification, object: self)
-    }
-
-    public func update(_ body: (TellomiTabBarPreferences) -> TellomiTabBarPreferences) {
-        self.save(body(self.load()))
-    }
+    let calls = TellomiCallsTabMigration(showTab: snapshot.callsShowTab, explicit: snapshot.callsExplicit)
+    let preferences = (legacy ?? tellomiPreferencesForFirstLaunch(calls: calls)).normalized()
+    let persistCalls: Bool? = snapshot.callsShowTab == preferences.isShown(.calls) ? nil : preferences.isShown(.calls)
+    return TellomiTabBarStep(preferences: preferences, persistPreferences: true, persistCallsShowTab: persistCalls, appliedCallsShowTab: preferences.isShown(.calls))
 }
