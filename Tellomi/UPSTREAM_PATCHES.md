@@ -1,15 +1,11 @@
 # Upstream patches
 
-## Settings tab photo and Moments tab animation — 2026-11-11
+## Moments tab animation — 2026-11-11
 
-The settings tab draws the signed-in account's photo once that account has one. It no longer waits for a second account. A second account with no photo still draws the letter placeholder, and an account with neither a photo nor another account keeps the gear and `TabSettings`. `animationName` and `ringSelection` are assigned before the image, because those two properties have no setter listener and the bar refreshes from `setImage`.
-
-The Moments tab uses the same item contract as Chats, Contacts, Calls and News: the static template icon stays, `TabMoments` plays once on selection, and Reduce Motion clears the animation name. The asset is a Lottie JSON in `Resources/Animations`, the format of `TabChats` and `TabSettings`. Its last frame is the static feed icon. iMe's public tree (`imemessenger/iMe-iOS`, `master`, pushed 2019-10-31) draws extra tabs as template images tinted with `tabBar.iconColor` / `selectedIconColor` and does not play a Lottie.
+The Moments tab uses the same item contract as Chats, Contacts, Calls and News. The static template icon stays on `image` and `selectedImage`. `TabMoments` is set as `animationName` unless Reduce Motion is on, with the same one-pixel `animationOffset` as Chats and News. A theme, strings or Reduce Motion change sets or clears that name the way `ChatListController.updateThemeAndStrings` does. The asset is a Lottie JSON in `Resources/Animations`, the format of `TabChats` and `TabSettings`. Its last frame is the static feed icon. The settings tab avatar is unchanged: it still appears only when another account is signed in. iMe's public tree (`imemessenger/iMe-iOS`, `master`, pushed 2019-10-31) draws extra tabs as template images and does not play a Lottie.
 
 | File | Change |
 | --- | --- |
-| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Photo without a second account. Image assigned after the animation name. |
-| `submodules/TelegramUIPreferences/Sources/TellomiTabBarPreferences.swift` | `tellomiSettingsTabShowsAccountAvatar`. |
 | `submodules/TelegramUI/Components/Moments/Sources/MomentsScreen.swift` | `TabMoments`, cleared while Reduce Motion is on. |
 | `submodules/TelegramUI/Resources/Animations/TabMoments.json` | Selection animation. Rest frame matches the static icon. |
 

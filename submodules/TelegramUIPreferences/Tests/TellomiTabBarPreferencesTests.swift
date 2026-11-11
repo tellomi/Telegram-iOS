@@ -182,13 +182,6 @@ final class TellomiTabBarPreferencesTests: XCTestCase {
         XCTAssertEqual(step.appliedCallsShowTab, true)
     }
 
-    func testSettingsTabUsesTheAccountPhotoWithoutAnotherAccount() {
-        XCTAssertTrue(tellomiSettingsTabShowsAccountAvatar(hasProfilePhoto: true, hasOtherAccounts: false))
-        XCTAssertTrue(tellomiSettingsTabShowsAccountAvatar(hasProfilePhoto: true, hasOtherAccounts: true))
-        XCTAssertTrue(tellomiSettingsTabShowsAccountAvatar(hasProfilePhoto: false, hasOtherAccounts: true))
-        XCTAssertFalse(tellomiSettingsTabShowsAccountAvatar(hasProfilePhoto: false, hasOtherAccounts: false))
-    }
-
     func testUnchangedSnapshotDoesNotWrite() {
         let preferences = TellomiTabBarPreferences.freshInstall.updating(.contacts, shown: true)
         let step = tellomiTabBarStep(

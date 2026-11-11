@@ -33,15 +33,32 @@ public final class MomentsScreen: ViewController {
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: nil)
         self.title = momentsText(self.presentationData.strings, .title)
-        self.updateTabBarItem()
+        self.tabBarItem.title = self.title
+        let icon = momentsTabIcon()
+        self.tabBarItem.image = icon
+        self.tabBarItem.selectedImage = icon
+        if !self.presentationData.reduceMotion {
+            self.tabBarItem.animationName = "TabMoments"
+            self.tabBarItem.animationOffset = CGPoint(x: 0.0, y: UIScreenPixel)
+        }
         self.scrollToTop = { [weak self] in
             self?.nodeIfLoaded.scrollToTop()
         }
         self.presentationDataDisposable = (context.sharedContext.presentationData |> deliverOnMainQueue).start(next: { [weak self] presentationData in
             guard let self else { return }
+            let previousTheme = self.presentationData.theme
+            let previousStrings = self.presentationData.strings
+            let previousReduceMotion = self.presentationData.reduceMotion
             self.presentationData = presentationData
             self.title = momentsText(presentationData.strings, .title)
-            self.updateTabBarItem()
+            self.tabBarItem.title = self.title
+            if previousTheme !== presentationData.theme || previousStrings !== presentationData.strings || previousReduceMotion != presentationData.reduceMotion {
+                if !presentationData.reduceMotion {
+                    self.tabBarItem.animationName = "TabMoments"
+                } else {
+                    self.tabBarItem.animationName = nil
+                }
+            }
             if self.isNodeLoaded {
                 self.nodeIfLoaded.updatePresentationData(presentationData)
             }
@@ -67,24 +84,6 @@ public final class MomentsScreen: ViewController {
 
     private var nodeIfLoadedIfReady: MomentsScreenNode? {
         return self.isNodeLoaded ? self.nodeIfLoaded : nil
-    }
-
-    /// The same tab-item contract as Chats, Contacts, Calls and News.
-    ///
-    /// The static template icon is the fallback. `TabMoments` is the selection animation, and it
-    /// is left unset while Reduce Motion is on. `animationName` has no setter listener, so the
-    /// image is assigned after it: that is the refresh the bar actually observes.
-    private func updateTabBarItem() {
-        self.tabBarItem.title = self.title
-        let icon = momentsTabIcon()
-        if self.presentationData.reduceMotion {
-            self.tabBarItem.animationName = nil
-        } else {
-            self.tabBarItem.animationName = "TabMoments"
-            self.tabBarItem.animationOffset = CGPoint(x: 0.0, y: UIScreenPixel)
-        }
-        self.tabBarItem.image = icon
-        self.tabBarItem.selectedImage = icon
     }
 
     override public func loadDisplayNode() {
