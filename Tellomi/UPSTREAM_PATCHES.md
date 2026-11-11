@@ -1285,3 +1285,15 @@ The bundled English fallback, the share sheet, and the widget login line said Te
 | `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Product name in values. Keys unchanged. |
 | `Telegram/Share/en.lproj/Localizable.strings`, `Telegram/WidgetKitWidget/en.lproj/Localizable.strings` | Login lines. |
 | `Tellomi/check_server_config.py` `check_siri_vocabulary` | Runs from `main`. Requires the five phrases, the explicit srcs, and no Telegram left in those bundle values. |
+
+## GCDAsyncSocket stream close
+
+Build 90 crashed on the `GCDAsyncSocket` queue with `Trying to recursively lock an os_unfair_lock`. The stack is `CFSocketInvalidate` inside `SocketStream`'s destructor, called from `CFSocketInvalidate` inside `SocketStream::close` / `CFStreamClose`, then MtProtoKit. `closeWithError` used to unschedule the streams and then close each one while its client was still set, so a callback delivered during teardown could enter `closeWithError` again and close the pair a second time.
+
+The close now refuses re-entry (`kClosingWithError`, cleared when that close finishes). It clears both stream clients, leaves the run loop, closes the write stream, then closes the read stream. The native socket is still closed by the dispatch sources, and `kCFStreamPropertyShouldCloseNativeSocket` stays false.
+
+| File | Change |
+| --- | --- |
+| `submodules/MtProtoKit/Sources/GCDAsyncSocketStreamClose.c` | The step order and the re-entry refusal. |
+| `submodules/MtProtoKit/Sources/GCDAsyncSocket.m` | `closeWithError` runs that plan. |
+| `submodules/MtProtoKit/Tests/GCDAsyncSocketStreamCloseTests.c` | Order, re-entry during every step, and a later close after the flag is cleared. |

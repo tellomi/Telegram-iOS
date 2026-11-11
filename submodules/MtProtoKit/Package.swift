@@ -33,6 +33,7 @@ let package = Package(
             name: "MtProtoKitTests",
             dependencies: ["MtProtoKit"],
             path: "Tests",
+            exclude: ["GCDAsyncSocketStreamCloseTests.c"],
             cSettings: [
                 .headerSearchPath("../Sources"),
             ]),

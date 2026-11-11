@@ -9,6 +9,7 @@
 //
 
 #import "GCDAsyncSocket.h"
+#import "GCDAsyncSocketStreamClose.h"
 
 #import <MtProtoKit/MTLogging.h>
 
@@ -173,6 +174,7 @@ enum GCDAsyncSocketFlags
 	kUsingCFStreamForTLS           = 1 << 17,  // If set, we're forced to use CFStream instead of SecureTransport
 	kSecureSocketHasBytesAvailable = 1 << 18,  // If set, CFReadStream has notified us of bytes available
 #endif
+	kClosingWithError              = 1 << 19,  // If set, closeWithError is already on the stack
 };
 
 enum GCDAsyncSocketConfig
@@ -2701,6 +2703,19 @@ enum GCDAsyncSocketConfig
 	LogTrace();
 	
 	NSAssert(dispatch_get_current_queue() == socketQueue, @"Must be dispatched on socketQueue");
+
+	// CFStreamClose can invoke the stream client before it returns, and that
+	// client calls back into closeWithError. A second CFStreamClose from that
+	// callback re-enters CFSocketInvalidate on this thread (os_unfair_lock abort
+	// on the GCDAsyncSocket queue). Refuse the re-entry. flags is cleared at
+	// the end of a finished close, so a later disconnect can close again.
+	int closing = (flags & kClosingWithError) ? 1 : 0;
+	int streamOps[8];
+	int streamOpCount = 0;
+	if (!GCDAsyncSocketPlanStreamClose(&closing, streamOps, 8, &streamOpCount)) {
+		return;
+	}
+	flags |= kClosingWithError;
 	
 	
 	[self endConnectTimeout];
@@ -2715,26 +2730,69 @@ enum GCDAsyncSocketConfig
 	
 	#if TARGET_OS_IPHONE
 	{
-		if (readStream || writeStream)
+		// Clients come off before the run loop, and both come off before either
+		// stream is closed. Closing the write stream first drops it from the
+		// shared CFSocket before the read stream's close.
+		for (int streamOpIndex = 0; streamOpIndex < streamOpCount; streamOpIndex++)
 		{
-			[self removeStreamsFromRunLoop];
-			
-			if (readStream)
+			switch (streamOps[streamOpIndex])
 			{
-				CFReadStreamSetClient(readStream, kCFStreamEventNone, NULL, NULL);
-				CFReadStreamClose(readStream);
-				CFRelease(readStream);
-				readStream = NULL;
-			}
-			if (writeStream)
-			{
-				CFWriteStreamSetClient(writeStream, kCFStreamEventNone, NULL, NULL);
-				CFWriteStreamClose(writeStream);
-				CFRelease(writeStream);
-				writeStream = NULL;
+				case GCDAsyncSocketStreamCloseClearReadClient:
+				{
+					if (readStream)
+					{
+						CFReadStreamSetClient(readStream, kCFStreamEventNone, NULL, NULL);
+						CFReadStreamSetProperty(readStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
+					}
+					break;
+				}
+				case GCDAsyncSocketStreamCloseClearWriteClient:
+				{
+					if (writeStream)
+					{
+						CFWriteStreamSetClient(writeStream, kCFStreamEventNone, NULL, NULL);
+						CFWriteStreamSetProperty(writeStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
+					}
+					break;
+				}
+				case GCDAsyncSocketStreamCloseRemoveFromRunLoop:
+				{
+					if (readStream && writeStream)
+					{
+						[self removeStreamsFromRunLoop];
+					}
+					break;
+				}
+				case GCDAsyncSocketStreamCloseCloseWrite:
+				{
+					if (writeStream)
+					{
+						CFWriteStreamRef stream = writeStream;
+						writeStream = NULL;
+						CFWriteStreamClose(stream);
+						CFRelease(stream);
+					}
+					break;
+				}
+				case GCDAsyncSocketStreamCloseCloseRead:
+				{
+					if (readStream)
+					{
+						CFReadStreamRef stream = readStream;
+						readStream = NULL;
+						CFReadStreamClose(stream);
+						CFRelease(stream);
+					}
+					break;
+				}
+				default:
+					break;
 			}
 		}
 	}
+	#else
+	(void)streamOps;
+	(void)streamOpCount;
 	#endif
 	#if SECURE_TRANSPORT_MAYBE_AVAILABLE
 	{

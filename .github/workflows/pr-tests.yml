@@ -107,6 +107,7 @@ jobs:
             //submodules/TelegramCore:TellomiNativeBatchTests
             //submodules/OpenInExternalAppUI:TellomiMapOpenInTests
             //submodules/TellomiDiscover:TellomiFeedChromeMotionTests
+            //submodules/MtProtoKit:GCDAsyncSocketStreamCloseTests
           )
           ios=(
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
