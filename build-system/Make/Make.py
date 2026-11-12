@@ -22,10 +22,12 @@ import ChatListSwipeCheck
 
 
 class ResolvedCodesigningData:
-    def __init__(self, aps_environment, use_xcode_managed_codesigning, communication_notifications):
+    def __init__(self, aps_environment, use_xcode_managed_codesigning, communication_notifications, siri_entitlement, siri_extension_entitlement):
         self.aps_environment = aps_environment
         self.use_xcode_managed_codesigning = use_xcode_managed_codesigning
         self.communication_notifications = communication_notifications
+        self.siri_entitlement = siri_entitlement
+        self.siri_extension_entitlement = siri_extension_entitlement
 
 
 class BazelCommandLine:
@@ -453,7 +455,9 @@ def resolve_codesigning(arguments, base_path, build_configuration, provisioning_
     return ResolvedCodesigningData(
         aps_environment=profile_source.resolve_aps_environment(),
         use_xcode_managed_codesigning=profile_source.use_xcode_managed_codesigning(),
-        communication_notifications=profile_source.resolve_communication_notifications()
+        communication_notifications=profile_source.resolve_communication_notifications(),
+        siri_entitlement=profile_source.resolve_siri_entitlement(),
+        siri_extension_entitlement=profile_source.resolve_siri_extension_entitlement()
     )
 
 
@@ -489,8 +493,16 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
     # may request it only when the profile grants it.
     if getattr(arguments, 'disableProvisioningProfiles', False):
         communication_notifications = True
+        enable_siri = True
+        siri_extension_entitlement = True
     else:
         communication_notifications = codesigning_data.communication_notifications is True
+        # JSON enable_siri stays false. The signed bit follows the profile, the
+        # same way communication notifications do: a profile without the key
+        # must not make codesign fail, and a profile that grants it is what
+        # stops the SiriIntents process from being killed on launch.
+        enable_siri = codesigning_data.siri_entitlement is True
+        siri_extension_entitlement = codesigning_data.siri_extension_entitlement is True
     if codesigning_data.aps_environment is None:
         # build-system/fake-codesigning is the upstream Telegram team
         # (C67CF9S4VU / ph.telegra.Telegraph). A fork whose configuration
@@ -511,8 +523,18 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
     elif build_configuration.bundle_id == 'app.tellomi.chat':
         print('Communication notifications entitlement included.')
 
+    if build_configuration.bundle_id == 'app.tellomi.chat':
+        if enable_siri:
+            print('Siri entitlement included on the app.')
+        else:
+            print('Siri entitlement omitted on the app: the provisioning profile has no com.apple.developer.siri key.')
+        if siri_extension_entitlement:
+            print('Siri entitlement included on the SiriIntents extension.')
+        else:
+            print('Siri entitlement omitted on the SiriIntents extension: its provisioning profile has no com.apple.developer.siri key. iOS kills that process on launch until the profile grants the key.')
+
     if bazel_command_line is not None:
-        build_configuration.write_to_variables_file(bazel_path=bazel_command_line.bazel, use_xcode_managed_codesigning=codesigning_data.use_xcode_managed_codesigning, aps_environment=codesigning_data.aps_environment, path=configuration_repository_path + '/variables.bzl', communication_notifications=communication_notifications)
+        build_configuration.write_to_variables_file(bazel_path=bazel_command_line.bazel, use_xcode_managed_codesigning=codesigning_data.use_xcode_managed_codesigning, aps_environment=codesigning_data.aps_environment, path=configuration_repository_path + '/variables.bzl', communication_notifications=communication_notifications, enable_siri=enable_siri, siri_extension_entitlement=siri_extension_entitlement)
 
     provisioning_profile_files = []
     for file_name in os.listdir(provisioning_path):

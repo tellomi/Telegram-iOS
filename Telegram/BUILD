@@ -61,6 +61,7 @@ load(
     "telegram_team_id",
     "telegram_enable_icloud",
     "telegram_enable_siri",
+    "telegram_siri_extension_entitlement",
     "telegram_suffix_share",
     "telegram_suffix_notification_content",
     "telegram_suffix_notification_service",
@@ -569,6 +570,15 @@ associated_domains_fragment = """
 """
 
 siri_fragment = "" if not telegram_enable_siri else """
+<key>com.apple.developer.siri</key>
+<true/>
+"""
+
+# The intents extension is a separate process. Its profile is the one created
+# for app.tellomi.chat.SiriIntents, which has SiriKit. The other extensions
+# keep the app-group entitlements only; their profiles do not grant Siri, and
+# requesting the key there would fail codesign.
+intents_siri_fragment = "" if not telegram_siri_extension_entitlement else """
 <key>com.apple.developer.siri</key>
 <true/>
 """
@@ -1537,9 +1547,23 @@ ios_unit_test(
     ]
 )'''
 
+# Same app group as the other extensions, plus com.apple.developer.siri when
+# the SiriIntents profile grants it. The shared fragment stays on the five
+# extensions whose profiles do not include Siri.
+plist_fragment(
+    name = "IntentsExtensionEntitlements",
+    extension = "entitlements",
+    template = """
+<key>com.apple.security.application-groups</key>
+<array>
+    <string>group.{telegram_bundle_id}</string>
+</array>
+""".format(telegram_bundle_id = telegram_bundle_id) + intents_siri_fragment,
+)
+
 ios_extension(
     name = "IntentsExtension",
-    entitlements = ":ExtensionAppGroupEntitlements.entitlements",
+    entitlements = ":IntentsExtensionEntitlements.entitlements",
     bundle_id = extension_bundle_id_siri_intents,
     families = [
         "iphone",
