@@ -14,7 +14,7 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
     private let peerId: EnginePeer.Id
     private let profileId: String
     private let list = ListViewImpl()
-    private let ready = Promise<Bool>(false)
+    private let ready = Promise<Bool>(momentsProfilePaneReadyAtInit())
     private let actions: MomentsFeedActions
     private var items: [MomentsCard] = []
     private var cursor: String?
@@ -215,7 +215,15 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
         self.appendLink(&entries, ids: &ids, prints: &prints, stable: "followers", title: strings.Moments_Followers, count: self.followersCount, hidden: self.followersHidden) { [weak self] in
             self?.openPeople(followers: true)
         }
-        if self.items.isEmpty && (self.failed || self.loaded) {
+        switch momentsProfilePostsState(itemCount: self.items.count, loading: self.loading, loaded: self.loaded, failed: self.failed) {
+        case .posts:
+            break
+        case .loading:
+            let text = strings.Moments_Loading
+            entries.append(MomentsStatusItem(text: text, theme: theme, action: {}))
+            ids.append("status")
+            prints.append(text)
+        case .failed, .empty:
             let text = self.failed ? strings.Moments_LoadFailed : strings.Moments_Profile_Posts
             entries.append(MomentsStatusItem(text: text, theme: theme, action: { [weak self] in
                 guard let self else {

@@ -7,3 +7,4 @@
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "No s'ha pogut enviar el comentari. El vostre text encara és aquí.";
 "Moments_Audience_Kept" = "No s'ha pogut canviar l'audiència. La vostra selecció s'ha conservat.";
+"Moments.Loading" = "Loading…";

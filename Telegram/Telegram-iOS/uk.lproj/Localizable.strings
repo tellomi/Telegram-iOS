@@ -7,3 +7,4 @@
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "Не вдалося надіслати коментар. Текст залишився.";
 "Moments_Audience_Kept" = "Не вдалося змінити аудиторію. Ваш вибір збережено.";
+"Moments.Loading" = "Loading…";

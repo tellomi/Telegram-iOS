@@ -1,5 +1,18 @@
 # Upstream patches
 
+## Profile Moments tab no longer blocks the page — 2026-11-12
+
+`MomentsProfilePaneNode` started with `ready = false` and only set it after `GET /v1/feed/profiles/{id}/posts` returned. Telegram's existing `PeerInfoScreen` waits for the current pane's `isReady` before showing the profile, so a slow posts response (tellomi1, many media keys) froze the whole page for several seconds. Other users with an empty Moments list returned immediately.
+
+The pane now reports ready at init. The shell appears at once. The Moments area shows loading, an error with retry, or the empty-list copy on its own. Following and follower rows were already independent. No upstream `PeerInfoScreen` file is modified. This change is on `release/ios`, where the Moments profile pane lives; `master` does not contain that file.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsRequests.swift` | Ready-at-init and the posts-area state helper. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsProfilePaneNode.swift` | Ready at init; loading / error / retry in the Moments area. |
+| `submodules/TelegramCore/Tests/MomentsRulesTests.swift` | Ready-at-init and state cases. |
+| `Telegram/Telegram-iOS/*.lproj/Localizable.strings` | `Moments.Loading`. |
+
 ## Moments gallery uses the chat media viewer — 2026-11-11
 
 Tapping a photo in the feed pushed `GalleryController` onto the navigation stack. That controller is an overlay: its back button, swipe-down and the end of the transition all call `presentingViewController?.dismiss`, which the navigation overlay installs and a push does not. The swipe still ran the dismiss animation (`animateOut` leaves the background clear and the content off-screen) and then did not remove the controller. `disablesInteractiveTransitionGestureRecognizer` also blocked the navigation edge swipe, so there was no way back. The open had no `GalleryControllerPresentationArguments`, so the thumbnail transition never ran. A missing `width`/`height` was stored as 1×1, and the viewer draws into the representation size, so the bitmap was a single pixel.

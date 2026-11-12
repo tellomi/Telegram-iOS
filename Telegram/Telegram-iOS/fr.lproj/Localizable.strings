@@ -7,3 +7,4 @@
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "Le commentaire n'a pas pu être envoyé. Votre texte est toujours là.";
 "Moments_Audience_Kept" = "Impossible de modifier l'audience. Votre sélection a été conservée.";
+"Moments.Loading" = "Loading…";

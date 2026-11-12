@@ -243,4 +243,5 @@
 
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "评论没有发出去，内容还在。";
+"Moments.Loading" = "加载中…";
 "Moments_Audience_Kept" = "没能修改可见范围，你的选择还在。";
