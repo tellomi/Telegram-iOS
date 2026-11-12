@@ -52,7 +52,7 @@ iOS and Android use this file. The list is the Threads layout. Post comments are
 
 ## Strings
 
-iOS keys live in `Localizable.strings` as `Moments.*`. The wording matches Android `Feed*`. If the active language code starts with `zh` and the langpack still has the English source, the Chinese string is used.
+iOS keys live in `Localizable.strings` as `Moments.*`. The wording matches Android `Feed*`. The screen reads `presentationData.strings`. Other languages come from the server langpack.
 
 ## Engine fields still unused
 
