@@ -54,6 +54,7 @@ jobs:
         run: |
           bash .github/bazel_registry_retry_test.sh
           bash .github/download_retry_test.sh
+          python3 Tellomi/collect_dsyms_test.py
 
       - name: Record this runner
         run: |
