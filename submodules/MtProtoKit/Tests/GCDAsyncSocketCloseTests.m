@@ -150,26 +150,30 @@ static const int kClosedSocket = -1;
     }
 }
 
-// The first CFStream connection and the isa probe open descriptors that live
-// for the process. Count them before the assertion. The equality stays exact,
-// so a descriptor leaked by this test still fails.
+- (void)discardOneConnection {
+    [self armConnectionExpectations];
+    uint16_t port = 0;
+    int listenFD = [self listenOnLoopback:&port];
+    GCDAsyncSocketFDProbe *socket = [self connectToPort:port];
+    int accepted = [self acceptFrom:listenFD];
+    int fd = self.connectedFD;
+    [socket disconnect];
+    [self waitForExpectations:@[self.disconnected] timeout:5];
+    [self waitUntilDescriptorClosed:fd];
+    close(accepted);
+    close(listenFD);
+    socket = nil;
+    TellomiFlushDeferredCFSocketReleases();
+}
+
+// The first CFStream connection closes one process descriptor on the next
+// connection. Do that before the count. The equality stays exact.
 - (void)primeDescriptorBaseline {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         @autoreleasepool {
-            [self armConnectionExpectations];
-            uint16_t port = 0;
-            int listenFD = [self listenOnLoopback:&port];
-            GCDAsyncSocketFDProbe *socket = [self connectToPort:port];
-            int accepted = [self acceptFrom:listenFD];
-            int fd = self.connectedFD;
-            [socket disconnect];
-            [self waitForExpectations:@[self.disconnected] timeout:5];
-            [self waitUntilDescriptorClosed:fd];
-            close(accepted);
-            close(listenFD);
-            socket = nil;
-            TellomiFlushDeferredCFSocketReleases();
+            [self discardOneConnection];
+            [self discardOneConnection];
         }
     });
 }
