@@ -1332,3 +1332,15 @@ TestFlight 构建 91（14.0.5，提交 `e1ae313a1de4ade26714830ed4d387cdca46689a
 | `submodules/TelegramCallsUI/Sources/CallKitIntegration.swift` | `request` 和 `reportNewIncomingCall` 的 completion 都走上面的切换。Provider 委托队列写明主队列。 |
 | `submodules/TelegramCallsUI/Sources/PresentationCallManager.swift` | 失败提示框在主队列上创建。 |
 | `submodules/TelegramCallsUI/Tests/CallKitCompletionThreadTests.swift` | 后台队列回到主线程；语音和视频的四种拒绝都走失败分支。 |
+
+## TestFlight dSYM artifact
+
+`release_arm64` already passes `--apple_generate_dsym`. The TestFlight workflow built the IPA and left the dSYMs on the runner. Build 91's `TelegramUIFramework` UUID `1575DE22-0975-3591-A160-CCF1A2EA97F1` could not be symbolicated.
+
+After the IPA exists, including when `altool` fails, the bundles are copied to `dsym-<buildNumber>` as `<buildNumber>-<UUID>.dSYM` plus `manifest.tsv`. GitHub Actions keeps that artifact for 90 days. It is not uploaded to App Store Connect or anywhere else. The workflow permission stays `contents: read`. Signing, the `altool` step, and the `release/ios` trigger are unchanged. A pull request does not run this workflow.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/collect_dsyms.py` | Names each bundle by build number and arm64 UUID. Leaves the IPA out. |
+| `Tellomi/collect_dsyms_test.py` | Parser, two bundles, and a missing directory. |
+| `.github/workflows/testflight.yml` | Stores the directory after the build, including when the upload fails. |
