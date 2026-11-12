@@ -4,6 +4,7 @@
 #import <netinet/in.h>
 #import <stdatomic.h>
 #import <sys/socket.h>
+#import <unistd.h>
 
 #if __has_feature(ptrauth_calls)
 #import <ptrauth.h>
@@ -49,7 +50,13 @@ static uintptr_t TellomiCFSocketISA(void) {
         CFSocketRef socket = CFSocketCreate(kCFAllocatorDefault, PF_INET, SOCK_STREAM, IPPROTO_TCP, 0, NULL, NULL);
         if (socket != NULL) {
             memcpy(&isa, socket, sizeof(isa));
+            CFSocketNativeHandle native = CFSocketGetNative(socket);
             CFRelease(socket);
+            // CFSocketCreate does not set close-on-invalidate, so CFRelease
+            // leaves the descriptor open.
+            if (native >= 0) {
+                close(native);
+            }
         }
     });
     return isa;
@@ -162,13 +169,10 @@ CFTypeRef TellomiRetainSocketStream(CFTypeRef stream) {
     }
     CFSocketContext context = {0};
     CFSocketGetContext(socket, &context);
-    // GetContext retains when the retain callback is CFRetain. That retain
-    // is not the one released later. Leaving it kept the descriptor open
-    // after the deferred CFRelease. Drop it with CFRelease. A different
-    // retain or release callback is not called.
-    if (context.info != NULL && TellomiFunctionIs((void *)context.retain, (void *)CFRetain)) {
-        CFRelease((CFTypeRef)context.info);
-    }
+    // Do not CFRelease context.info here. GetContext does not leave an
+    // extra retain on this OS, and releasing the stream's object before
+    // CFStreamClose is a bus error. A release callback other than
+    // CFRelease is not called.
     return TellomiRetainIfCFRelease(context.info, context.release);
 #endif
 }
