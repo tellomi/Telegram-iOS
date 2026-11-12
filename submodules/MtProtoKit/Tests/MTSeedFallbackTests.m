@@ -155,8 +155,9 @@ static MTDatacenterAddress *MTSeedAddress(NSString *ip, uint16_t port, bool this
     [context updateAddressSetForDatacenterWithId:2 addressSet:[[MTDatacenterAddressSet alloc] initWithAddressList:@[MTSeedAddress(@"203.0.113.10", 443, false)]] forceUpdateSchemes:false];
 
     MTDatacenterAddressSet *effective = [context addressSetForDatacenterWithId:1];
-    XCTAssertEqual(effective.addressList.lastObject.port, 10443);
-    XCTAssertEqualObjects(effective.addressList.lastObject.ip, @"8.137.198.240");
+    MTDatacenterAddress *preferred = effective.addressList.lastObject;
+    XCTAssertEqual(preferred.port, 10443);
+    XCTAssertEqualObjects(preferred.ip, @"8.137.198.240");
     XCTAssertEqual([context addressSetForDatacenterWithId:2].addressList.count, 1u);
 
     NSArray<MTTransportScheme *> *schemes = [context transportSchemesForDatacenterWithId:1 media:false enforceMedia:false isProxy:false];
@@ -199,12 +200,14 @@ static MTDatacenterAddress *MTSeedAddress(NSString *ip, uint16_t port, bool this
     context.keychain = keychain;
 
     MTDatacenterAddressSet *effective = [context addressSetForDatacenterWithId:1];
-    XCTAssertEqual(effective.addressList.lastObject.port, 10443);
-    XCTAssertEqualObjects(effective.addressList.lastObject.ip, @"8.137.198.240");
+    MTDatacenterAddress *preferred = effective.addressList.lastObject;
+    XCTAssertEqual(preferred.port, 10443);
+    XCTAssertEqualObjects(preferred.ip, @"8.137.198.240");
     NSDictionary *persisted = [keychain dictionaryForKey:@"datacenterAddressSetById" group:@"persistent"];
     MTDatacenterAddressSet *stored = persisted[@1];
-    XCTAssertEqual(stored.addressList.lastObject.port, 10443);
-    XCTAssertEqualObjects(stored.addressList.lastObject.ip, @"8.137.198.240");
+    MTDatacenterAddress *storedPreferred = stored.addressList.lastObject;
+    XCTAssertEqual(storedPreferred.port, 10443);
+    XCTAssertEqualObjects(storedPreferred.ip, @"8.137.198.240");
 }
 
 @end
