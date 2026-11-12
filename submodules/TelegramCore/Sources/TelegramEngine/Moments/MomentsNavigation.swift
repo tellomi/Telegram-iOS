@@ -131,18 +131,43 @@ public enum MomentsListLoadResult: Equatable {
     case ignore
 }
 
-/// User profiles keep native Stories and add Moments in front. Stories are not
-/// removed: Tellomi still calls that tab 快拍, and Moments is 动态. Channels and
-/// groups are left as they are. `nil` stays `nil` while the pane list is loading.
-public func momentsProfileTabs<Tab: Equatable>(_ tabs: [Tab]?, isUserProfile: Bool, moments: Tab) -> [Tab]? {
+/// Whether `GET /v1/feed/profiles/{id}/posts` has any post. `unknown` is the value
+/// emitted before that request returns, so the rest of the profile can appear.
+public enum MomentsProfilePostsPresence: Equatable {
+    case unknown
+    case empty
+    case present
+}
+
+/// A non-empty posts page shows the Moments pane. An empty page does not.
+public func momentsProfilePostsPresence(itemCount: Int) -> MomentsProfilePostsPresence {
+    return itemCount > 0 ? .present : .empty
+}
+
+/// User profiles keep native Stories. Moments is added only when the profile has
+/// posts, immediately after Stories, the same way a native pane sits in a fixed
+/// slot once its content exists. Stories are not removed. Channels and groups are
+/// left as they are. A `nil` list is still loading and stays `nil`.
+public func momentsProfileTabs<Tab: Equatable>(_ tabs: [Tab]?, isUserProfile: Bool, posts: MomentsProfilePostsPresence, isStories: (Tab) -> Bool, moments: Tab) -> [Tab]? {
     guard isUserProfile, var tabs else {
         return tabs
     }
-    if tabs.first != moments {
-        tabs.removeAll { $0 == moments }
+    tabs.removeAll { $0 == moments }
+    guard posts == .present else {
+        return tabs
+    }
+    if let storiesIndex = tabs.firstIndex(where: isStories) {
+        tabs.insert(moments, at: storiesIndex + 1)
+    } else {
         tabs.insert(moments, at: 0)
     }
     return tabs
+}
+
+/// The profile pane reports ready as soon as it is created. The posts request
+/// updates the list inside the pane and does not hold the profile shell.
+public func momentsProfilePaneReadyAtInit() -> Bool {
+    return true
 }
 
 /// The profile Stories tab. Official Simplified Chinese for `PeerInfo.PaneStories` is 动态, the same word as Moments.

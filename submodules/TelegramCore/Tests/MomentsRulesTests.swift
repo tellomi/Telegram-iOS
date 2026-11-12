@@ -787,18 +787,19 @@ final class MomentsRulesTests: XCTestCase {
     }
 
     func testUserProfileKeepsStoriesAndNamesTheChineseTab() {
+        let isStories: (String) -> Bool = { $0 == "stories" }
         let user: [String] = ["stories", "gifts", "media", "storyArchive"]
-        let shown = momentsProfileTabs(user, isUserProfile: true, moments: "moments")
-        XCTAssertEqual(shown, ["moments", "stories", "gifts", "media", "storyArchive"])
+        let shown = momentsProfileTabs(user, isUserProfile: true, posts: .present, isStories: isStories, moments: "moments")
+        XCTAssertEqual(shown, ["stories", "moments", "gifts", "media", "storyArchive"])
 
         let channel: [String] = ["stories", "media"]
-        XCTAssertEqual(momentsProfileTabs(channel, isUserProfile: false, moments: "moments"), channel)
+        XCTAssertEqual(momentsProfileTabs(channel, isUserProfile: false, posts: .present, isStories: isStories, moments: "moments"), channel)
 
         let loading: [String]? = nil
-        XCTAssertNil(momentsProfileTabs(loading, isUserProfile: true, moments: "moments"))
+        XCTAssertNil(momentsProfileTabs(loading, isUserProfile: true, posts: .present, isStories: isStories, moments: "moments"))
 
-        let duplicate = momentsProfileTabs(["media", "moments", "stories"], isUserProfile: true, moments: "moments")
-        XCTAssertEqual(duplicate, ["moments", "media", "stories"])
+        let duplicate = momentsProfileTabs(["media", "moments", "stories"], isUserProfile: true, posts: .present, isStories: isStories, moments: "moments")
+        XCTAssertEqual(duplicate, ["media", "stories", "moments"])
 
         XCTAssertEqual(momentsProfileStoriesTabTitle(resolved: "动态", languageCodes: ["zh-hans"]), "快拍")
         XCTAssertEqual(momentsProfileStoriesTabTitle(resolved: "Stories", languageCodes: ["zh-Hans-US"]), "快拍")
@@ -812,6 +813,31 @@ final class MomentsRulesTests: XCTestCase {
         let collapsed = momentsProfileListInsets(topInset: 40, bottomInset: 83)
         XCTAssertEqual(collapsed.top, 40)
         XCTAssertEqual(collapsed.bottom, 83)
+    }
+
+    func testMomentsPaneFollowsWhetherTheProfileHasPosts() {
+        let isStories: (String) -> Bool = { $0 == "stories" }
+        let base = ["stories", "media"]
+        XCTAssertEqual(momentsProfilePostsPresence(itemCount: 0), .empty)
+        XCTAssertEqual(momentsProfilePostsPresence(itemCount: 3), .present)
+        XCTAssertEqual(momentsProfileTabs(base, isUserProfile: true, posts: .empty, isStories: isStories, moments: "moments"), base)
+        XCTAssertEqual(momentsProfileTabs(base, isUserProfile: true, posts: .unknown, isStories: isStories, moments: "moments"), base)
+        let present = momentsProfileTabs(base, isUserProfile: true, posts: .present, isStories: isStories, moments: "moments")
+        XCTAssertEqual(present, ["stories", "moments", "media"])
+        let labels = (present ?? []).map { pane -> String in
+            if pane == "stories" {
+                return momentsProfileStoriesTabTitle(resolved: "动态", languageCodes: ["zh-hans"])
+            }
+            if pane == "moments" {
+                return "动态"
+            }
+            return pane
+        }
+        XCTAssertEqual(labels.filter { $0 == "动态" }, ["动态"])
+        XCTAssertEqual(labels.filter { $0 == "快拍" }, ["快拍"])
+        XCTAssertEqual(Array(labels.prefix(2)), ["快拍", "动态"])
+        XCTAssertEqual(momentsProfileTabs(["media"], isUserProfile: true, posts: .present, isStories: isStories, moments: "moments"), ["moments", "media"])
+        XCTAssertTrue(momentsProfilePaneReadyAtInit())
     }
 }
 

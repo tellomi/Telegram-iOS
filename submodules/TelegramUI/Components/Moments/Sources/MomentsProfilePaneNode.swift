@@ -14,7 +14,7 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
     private let peerId: EnginePeer.Id
     private let profileId: String
     private let list = ListViewImpl()
-    private let ready = Promise<Bool>(false)
+    private let ready = Promise<Bool>(momentsProfilePaneReadyAtInit())
     private let actions: MomentsFeedActions
     private var items: [MomentsCard] = []
     private var cursor: String?
