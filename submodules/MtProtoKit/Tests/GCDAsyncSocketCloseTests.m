@@ -38,10 +38,15 @@ static const int kClosedSocket = -1;
 
 - (void)setUp {
     [super setUp];
-    self.connected = [self expectationWithDescription:@"connected"];
-    self.disconnected = [self expectationWithDescription:@"disconnected"];
+    self.connected = nil;
+    self.disconnected = nil;
     self.disconnectError = nil;
     self.connectedFD = kClosedSocket;
+}
+
+- (void)armConnectionExpectations {
+    self.connected = [self expectationWithDescription:@"connected"];
+    self.disconnected = [self expectationWithDescription:@"disconnected"];
 }
 
 - (void)socket:(GCDAsyncSocket *)sock didConnectToHost:(NSString *)host port:(uint16_t)port {
@@ -146,6 +151,7 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testNormalDisconnectClosesTheDescriptorOnce {
+    [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     int deferredBefore = TellomiDeferredCFSocketReleaseCount();
     uint16_t port = 0;
@@ -180,6 +186,7 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testReadErrorClosesTheDescriptorOnce {
+    [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     int deferredBefore = TellomiDeferredCFSocketReleaseCount();
     uint16_t port = 0;
@@ -213,6 +220,7 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testDisconnectTwiceDoesNotCloseAReusedDescriptor {
+    [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     uint16_t port = 0;
     int listenFD = [self listenOnLoopback:&port];
@@ -240,6 +248,7 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testReconnectAfterCloseUsesANewConnection {
+    [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     int deferredBefore = TellomiDeferredCFSocketReleaseCount();
     uint16_t port = 0;

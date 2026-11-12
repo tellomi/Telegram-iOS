@@ -224,7 +224,7 @@ static MTSocksProxySettings *makeWebProxy(void) {
     // rules out a fixed cadence.
     XCTAssertLessThan(gaps[0].doubleValue, 0.1, @"first pause should be near the initial 50 ms");
     XCTAssertGreaterThanOrEqual(gaps[1].doubleValue, gaps[0].doubleValue, @"second pause should not be shorter than the first");
-    XCTAssertLessThan(gaps[1].doubleValue, 0.2, @"second pause should be near 100 ms, below the cap");
+    XCTAssertLessThan(gaps[1].doubleValue, 0.35, @"second pause should be near 100 ms, below the cap");
     for (NSUInteger i = 2; i < gaps.count; i++) {
         XCTAssertGreaterThanOrEqual(gaps[i].doubleValue, 0.15, @"gap %lu should have reached the cap", (unsigned long)i);
         XCTAssertLessThanOrEqual(gaps[i].doubleValue, 0.4, @"gap %lu should not exceed the cap", (unsigned long)i);

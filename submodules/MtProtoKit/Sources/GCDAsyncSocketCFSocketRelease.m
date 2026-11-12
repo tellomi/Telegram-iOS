@@ -22,17 +22,21 @@ static BOOL TellomiBytesReadable(const void *address, size_t size) {
     return result == KERN_SUCCESS && copied == size;
 }
 
-static BOOL TellomiReleaseIsCFRelease(void (*release)(const void *)) {
-    if (release == NULL) {
+static BOOL TellomiFunctionIs(void *function, void *expected) {
+    if (function == NULL || expected == NULL) {
         return NO;
     }
 #if __has_feature(ptrauth_calls)
-    void *got = ptrauth_strip((void *)release, ptrauth_key_function_pointer);
-    void *want = ptrauth_strip((void *)CFRelease, ptrauth_key_function_pointer);
+    void *got = ptrauth_strip(function, ptrauth_key_function_pointer);
+    void *want = ptrauth_strip(expected, ptrauth_key_function_pointer);
     return got == want;
 #else
-    return release == CFRelease;
+    return function == expected;
 #endif
+}
+
+static BOOL TellomiReleaseIsCFRelease(void (*release)(const void *)) {
+    return TellomiFunctionIs((void *)release, (void *)CFRelease);
 }
 
 // CFSocketCreate owns the descriptor it allocates. CFRelease is the only
@@ -158,6 +162,13 @@ CFTypeRef TellomiRetainSocketStream(CFTypeRef stream) {
     }
     CFSocketContext context = {0};
     CFSocketGetContext(socket, &context);
+    // GetContext retains when the retain callback is CFRetain. That retain
+    // is not the one released later. Leaving it kept the descriptor open
+    // after the deferred CFRelease. Drop it with CFRelease. A different
+    // retain or release callback is not called.
+    if (context.info != NULL && TellomiFunctionIs((void *)context.retain, (void *)CFRetain)) {
+        CFRelease((CFTypeRef)context.info);
+    }
     return TellomiRetainIfCFRelease(context.info, context.release);
 #endif
 }
