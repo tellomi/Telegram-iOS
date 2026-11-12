@@ -65,13 +65,13 @@ The seed is the first connection only. A logged-in client replaces it with the `
 | `appstore_id` | `0` | No App Store listing yet. |
 | `app_specific_url_scheme` | `tellomi` | Also registered next to `telegram://` and `tg://`. |
 | `premium_iap_product_id` | `app.tellomi.chat.premium.monthly` | No App Store product exists for this id. |
-| `enable_siri` / `enable_icloud` | `false` | Those entitlements need a real provisioning profile. |
+| `enable_siri` / `enable_icloud` | `false` | JSON defaults. iCloud stays off. Siri is signed only when the downloaded profile contains `com.apple.developer.siri` (see SiriIntents below). |
 
 Teamgram's server does not check `api_id` or `api_hash` ([teamgram-server#120](https://github.com/teamgram/teamgram-server/issues/120)). They are still sent on `initConnection`. Replace the placeholders if a later server build starts checking them.
 
 The legacy Xcode configs `Telegram/Telegram-iOS/Config-AppStoreLLC.xcconfig` and `Config-Fork.xcconfig` carry the same name, bundle id and placeholders. Bazel is the build that ships.
 
-Because the bundle id is not `ph.telegra.Telegraph`, `Telegram/BUILD` drops the entitlements that exist only for the official client: CarPlay, Apple Pay merchant ids, unrestricted VoIP, Sign in with Apple, and the continued-processing GPU entitlement. Communication notifications stay. That entitlement (`com.apple.developer.usernotifications.communication`) is what makes iOS draw the sender avatar on the lock screen instead of the app icon. A signed build includes it when the provisioning profile contains the key. `prepare_appstore_signing.py` enables the App ID capability `USERNOTIFICATIONS_COMMUNICATION` before it creates the profile. An unsigned simulator build (`--disableProvisioningProfiles`) includes it as well. A profile created before the capability was enabled does not, and that build keeps the app icon so codesign can succeed. Siri and iCloud are off via the flags above. Associated domains are `applinks:tell.cc` and `webcredentials:tell.cc` (see Public links).
+Because the bundle id is not `ph.telegra.Telegraph`, `Telegram/BUILD` drops the entitlements that exist only for the official client: CarPlay, Apple Pay merchant ids, unrestricted VoIP, Sign in with Apple, and the continued-processing GPU entitlement. Communication notifications stay. That entitlement (`com.apple.developer.usernotifications.communication`) is what makes iOS draw the sender avatar on the lock screen instead of the app icon. A signed build includes it when the provisioning profile contains the key. `prepare_appstore_signing.py` enables the App ID capability `USERNOTIFICATIONS_COMMUNICATION` before it creates the profile. An unsigned simulator build (`--disableProvisioningProfiles`) includes it as well. A profile created before the capability was enabled does not, and that build keeps the app icon so codesign can succeed. iCloud stays off. Siri is signed when the profile grants it (see SiriIntents below). Associated domains are `applinks:tell.cc` and `webcredentials:tell.cc` (see Public links).
 
 System permission prompts (the `InfoPlist.strings` files, plus the English strings in the plist) say Tellomi, including the Arabic, Persian and Korean product names that override the home-screen title. That was a name swap in those files only.
 
@@ -116,7 +116,7 @@ Do not commit certificates, `.p12` files, `.mobileprovision` files, or `TELEGRAM
 
 `team_id` in the configuration JSON is `CB7KP6GBAR`. Change that field if the Apple team changes. Extension suffixes live in `Tellomi/extension-suffixes.json`. `prepare_appstore_signing.py` registers those bundle ids, and `BuildConfiguration.py` maps each suffix onto the profile file name Bazel expects (`.Share` → `Share.mobileprovision`, `.SiriIntents` → `Intents.mobileprovision`, and so on). `.watchkitapp` is in that file and is not registered unless the watch app is embedded.
 
-Turn `enable_siri` and `enable_icloud` on only after the profiles contain those entitlements. Push notifications need an APNs key configured on the Teamgram server. The client already registers its device token over MTProto; it does not talk to a Telegram push gateway.
+`enable_icloud` stays off until a profile contains that entitlement. `enable_siri` in the JSON stays false; `Make.py` turns the signed Siri bit on only when the profile for that target contains `com.apple.developer.siri`. Push notifications need an APNs key configured on the Teamgram server. The client already registers its device token over MTProto; it does not talk to a Telegram push gateway.
 
 `Make.py` writes `build-input/configuration-repository/variables.bzl` from the JSON, including the extension suffix variables from `Tellomi/extension-suffixes.json`. That directory is local build state, not a source file. The checked-in copy is `build-system/example-configuration/variables.bzl`.
 
@@ -136,7 +136,7 @@ To ship the current master: `git push origin master:release/ios`. That push is t
 
 The workflow calls `Tellomi/prepare_appstore_signing.py`, which uses the App Store Connect API key to register the bundle ids below, turn on the capabilities the signed entitlements require, and download App Store profiles. The distribution certificate is the PKCS#12 in `APPLE_DIST_CERT_P12_BASE64` (password `APPLE_DIST_CERT_P12_PASSWORD`). Each profile must include that certificate's serial. How ops creates the certificate is [`Tellomi/README.md`](../Tellomi/README.md). Certificates and profiles are not committed. `Make.py` then does a Bazel `release_arm64` build. `xcrun altool` uploads `bazel-bin/Telegram/Telegram.ipa`. The build number is one higher than the highest build already on TestFlight for this app, and at least `github.run_number`.
 
-Enabling a capability sends an empty `settings` list. `APP_GROUPS` in particular must not name the group in that request; the API rejects it. The script still checks that each downloaded profile contains `group.app.tellomi.chat`. SiriIntents is registered with SiriKit enabled. The signed binary does not include `com.apple.developer.siri`, because `enable_siri` is false.
+Enabling a capability sends an empty `settings` list. `APP_GROUPS` in particular must not name the group in that request; the API rejects it. The script still checks that each downloaded profile contains `group.app.tellomi.chat`. The main app and SiriIntents are registered with SiriKit. `Make.py` puts `com.apple.developer.siri` on the app and on the SiriIntents extension only when that target's profile contains the key. The other extensions do not request it. A profile without the key leaves the entitlement out so codesign still succeeds; that SiriIntents process is the one iOS kills on launch.
 
 Repository secrets, none of which are printed:
 
@@ -158,11 +158,11 @@ These seven ids are what `Make.py build --configuration=release_arm64` signs. Th
 
 | Bundle id | Signed entitlements | App Group | Capabilities on the App ID |
 | --- | --- | --- | --- |
-| `app.tellomi.chat` | `aps-environment` = `production` (Make.py copies this out of the profile and refuses to build if it is missing), `com.apple.developer.usernotifications.communication` when the profile contains that key, `com.apple.security.application-groups` = `group.app.tellomi.chat`, `application-identifier` = `{TEAMID}.app.tellomi.chat`, associated domains `applinks:tell.cc` and `webcredentials:tell.cc` | `group.app.tellomi.chat` | Push Notifications, App Groups, Associated Domains, Communication Notifications (`USERNOTIFICATIONS_COMMUNICATION`) |
+| `app.tellomi.chat` | `aps-environment` = `production` (Make.py copies this out of the profile and refuses to build if it is missing), `com.apple.developer.usernotifications.communication` when the profile contains that key, `com.apple.developer.siri` when the profile contains that key, `com.apple.security.application-groups` = `group.app.tellomi.chat`, `application-identifier` = `{TEAMID}.app.tellomi.chat`, associated domains `applinks:tell.cc` and `webcredentials:tell.cc` | `group.app.tellomi.chat` | Push Notifications, App Groups, Associated Domains, Communication Notifications (`USERNOTIFICATIONS_COMMUNICATION`), SiriKit |
 | `app.tellomi.chat.Share` | App Group only | `group.app.tellomi.chat` | App Groups |
 | `app.tellomi.chat.NotificationContent` | App Group only | `group.app.tellomi.chat` | App Groups |
 | `app.tellomi.chat.NotificationService` | App Group only | `group.app.tellomi.chat` | App Groups |
-| `app.tellomi.chat.SiriIntents` | App Group only | `group.app.tellomi.chat` | App Groups, SiriKit (the extension point is an Intents extension; the signed entitlements do not include `com.apple.developer.siri`, because `enable_siri` is false) |
+| `app.tellomi.chat.SiriIntents` | App Group, plus `com.apple.developer.siri` when the profile contains that key | `group.app.tellomi.chat` | App Groups, SiriKit |
 | `app.tellomi.chat.Widget` | App Group only | `group.app.tellomi.chat` | App Groups |
 | `app.tellomi.chat.BroadcastUpload` | App Group only | `group.app.tellomi.chat` | App Groups |
 
@@ -172,7 +172,7 @@ Keychain group used by `BuildConfig.keychainAccessGroup`: `{TEAMID}.app.tellomi.
 
 iCloud container: none. `enable_icloud` is false, so `TelegramEntitlements` does not contain `com.apple.developer.icloud-container-identifiers`. Turning the flag on would add container `iCloud.app.tellomi.chat` and ubiquity key-value store `{TEAMID}.app.tellomi.chat`.
 
-Also absent with this bundle id and these flags: Siri on the main app, Sign in with Apple, Apple Pay, CarPlay, unrestricted VoIP, notification filtering, and the continued-processing GPU entitlement. Those fragments in `Telegram/BUILD` are empty unless the bundle id is an official Telegram id or the JSON flag is turned on. Communication notifications are the exception: the fragment is included for an official Telegram id, and for Tellomi when `telegram_communication_notifications` is true. Associated domains are present and name `tell.cc` only.
+Also absent with this bundle id and these flags: Sign in with Apple, Apple Pay, CarPlay, unrestricted VoIP, notification filtering, and the continued-processing GPU entitlement. Those fragments in `Telegram/BUILD` are empty unless the bundle id is an official Telegram id. Communication notifications and Siri are the exceptions: each is included for Tellomi when the matching profile flag is true (`telegram_communication_notifications`, `telegram_enable_siri` on the app, `telegram_siri_extension_entitlement` on SiriIntents only). Associated domains are present and name `tell.cc` only.
 
 The main app's Info.plist background modes, which are not separate App IDs, are `audio`, `fetch`, `location`, `remote-notification`, `voip`, and `processing`.
 
@@ -197,7 +197,7 @@ Not in the TestFlight IPA. Create it only when embedding the watch app (`--embed
 - The JSON and the generated header are the same document.
 - OpenSSL accepts each PEM as an RSA public key.
 - The 2026-11 key's fingerprint is `6458528886358068284` big-endian and `4381149949997195609` little-endian. Teamgram's development key, last in the list, is `14798846482072068265` big-endian and `12240908862933197005` little-endian. Each pair is a byte swap of the other. The little-endian values are the decimals the server sends, new key first.
-- The three configuration JSON files load through `BuildConfiguration` as `app.tellomi.chat` / `Tellomi` / team `CB7KP6GBAR` / the placeholder api id, with Siri and iCloud off.
+- The three configuration JSON files load through `BuildConfiguration` as `app.tellomi.chat` / `Tellomi` / team `CB7KP6GBAR` / the placeholder api id. The JSON leaves Siri and iCloud off. A signed build adds `com.apple.developer.siri` only when that target's profile contains the key.
 - `Network.swift` installs `TellomiSeedAddressSets` and no longer contains Telegram's production seed `149.154.175.50`. The dial order is the relay on 10443, the relay on 443, then `api.tellomi.cn` on those ports, for datacenters 1 and 2.
 - The first connection uses `TellomiDefaultDatacenterId`.
 - The handshake reads `TellomiServerPublicKeys` and applies the fingerprint byte swap. The check rejects Telegram's production modulus prefix.
