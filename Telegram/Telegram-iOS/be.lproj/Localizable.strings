@@ -1,6 +1,12 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Новы журнал збою";
+"CrashReport.Prompt.Text" = "Праграма нечакана закрылася.\n\nАдправіць журнал збою, каб мы маглі выправіць праблему?";
+"CrashReport.Prompt.NotNow" = "Не зараз";
+"CrashReport.Prompt.Send" = "Адправіць журнал";
+
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "Не ўдалося адправіць каментарый. Ваш тэкст застаўся на месцы.";
-"Moments_Audience_Kept" = "Не ўдалося змяніць, хто можа гэта бачыць. Ваш выбар захаваны.";
+"Moments_Audience_Kept" = "Не ўдалося змяніць аўдыторыю. Ваш выбар захаваны.";
 
 "Moments.Draft.Message" = "Захаваць гэты допіс як чарнавік ці адкінуць?";
 "Moments.Outbox.Title" = "Допіс не адпраўлены";
@@ -8,9 +14,3 @@
 "Moments.Outbox.Retry" = "Паспрабаваць яшчэ раз";
 "Moments.Outbox.Later" = "Не зараз";
 "Moments.Outbox.Incomplete" = "Няма ўкладання, таму допіс не адпраўлены.";
-
-/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
-"CrashReport.Prompt.Title" = "Новы журнал збою";
-"CrashReport.Prompt.Text" = "Праграма нечакана закрылася.\n\nАдправіць журнал збою, каб мы маглі выправіць праблему?";
-"CrashReport.Prompt.NotNow" = "Не зараз";
-"CrashReport.Prompt.Send" = "Адправіць журнал";

@@ -1,6 +1,12 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Yeni çökme günlüğü";
+"CrashReport.Prompt.Text" = "Uygulama beklenmedik şekilde kapandı.\n\nSorunu düzeltmemize yardımcı olmak için çökme günlüğünü göndermek ister misin?";
+"CrashReport.Prompt.NotNow" = "Şimdi değil";
+"CrashReport.Prompt.Send" = "Günlüğü gönder";
+
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "Yorum gönderilemedi. Metniniz hâlâ burada.";
-"Moments_Audience_Kept" = "Bunu kimlerin görebileceği güncellenemedi. Seçiminiz korundu.";
+"Moments_Audience_Kept" = "Kitle değiştirilemedi. Seçiminiz korundu.";
 
 "Moments.Draft.Message" = "Bu gönderi taslak olarak kaydedilsin mi, yoksa silinsin mi?";
 "Moments.Outbox.Title" = "Gönderi gönderilmedi";
@@ -8,9 +14,3 @@
 "Moments.Outbox.Retry" = "Yeniden dene";
 "Moments.Outbox.Later" = "Şimdi değil";
 "Moments.Outbox.Incomplete" = "Bir ek eksik, bu yüzden bu gönderi gönderilmedi.";
-
-/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
-"CrashReport.Prompt.Title" = "Yeni çökme günlüğü";
-"CrashReport.Prompt.Text" = "Uygulama beklenmedik şekilde kapandı.\n\nSorunu düzeltmemize yardımcı olmak için çökme günlüğünü göndermek ister misin?";
-"CrashReport.Prompt.NotNow" = "Şimdi değil";
-"CrashReport.Prompt.Send" = "Günlüğü gönder";

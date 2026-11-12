@@ -1,6 +1,12 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Nowy dziennik awarii";
+"CrashReport.Prompt.Text" = "Aplikacja została nieoczekiwanie zamknięta.\n\nCzy chcesz wysłać dziennik awarii, żebyśmy mogli usunąć ten problem?";
+"CrashReport.Prompt.NotNow" = "Nie teraz";
+"CrashReport.Prompt.Send" = "Wyślij dziennik";
+
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "Nie udało się wysłać komentarza. Twój tekst nadal tu jest.";
-"Moments_Audience_Kept" = "Nie udało się zmienić, kto może to zobaczyć. Twój wybór został zachowany.";
+"Moments_Audience_Kept" = "Nie udało się zmienić odbiorców. Twój wybór został zachowany.";
 
 "Moments.Draft.Message" = "Zapisać ten post jako szkic, czy go odrzucić?";
 "Moments.Outbox.Title" = "Post nie został wysłany";
@@ -8,9 +14,3 @@
 "Moments.Outbox.Retry" = "Spróbuj ponownie";
 "Moments.Outbox.Later" = "Nie teraz";
 "Moments.Outbox.Incomplete" = "Brakuje załącznika, więc ten post nie został wysłany.";
-
-/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
-"CrashReport.Prompt.Title" = "Nowy dziennik awarii";
-"CrashReport.Prompt.Text" = "Aplikacja została nieoczekiwanie zamknięta.\n\nCzy chcesz wysłać dziennik awarii, żebyśmy mogli usunąć ten problem?";
-"CrashReport.Prompt.NotNow" = "Nie teraz";
-"CrashReport.Prompt.Send" = "Wyślij dziennik";

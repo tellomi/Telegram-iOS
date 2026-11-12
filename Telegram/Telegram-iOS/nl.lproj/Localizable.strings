@@ -1,6 +1,12 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Nieuw crashlogboek";
+"CrashReport.Prompt.Text" = "De app is onverwacht afgesloten.\n\nWil je een crashlogboek sturen zodat we het probleem kunnen oplossen?";
+"CrashReport.Prompt.NotNow" = "Niet nu";
+"CrashReport.Prompt.Send" = "Logboek sturen";
+
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "Reactie niet verzonden. Je tekst staat er nog.";
-"Moments_Audience_Kept" = "Kon niet wijzigen wie dit mag zien. Je keuze blijft staan.";
+"Moments_Audience_Kept" = "Kon het publiek niet wijzigen. Je keuze blijft staan.";
 
 "Moments.Draft.Message" = "Dit bericht als concept bewaren of weggooien?";
 "Moments.Outbox.Title" = "Bericht niet verzonden";
@@ -8,9 +14,3 @@
 "Moments.Outbox.Retry" = "Opnieuw proberen";
 "Moments.Outbox.Later" = "Niet nu";
 "Moments.Outbox.Incomplete" = "Een bijlage ontbreekt, dus dit bericht is niet verzonden.";
-
-/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
-"CrashReport.Prompt.Title" = "Nieuw crashlogboek";
-"CrashReport.Prompt.Text" = "De app is onverwacht afgesloten.\n\nWil je een crashlogboek sturen zodat we het probleem kunnen oplossen?";
-"CrashReport.Prompt.NotNow" = "Niet nu";
-"CrashReport.Prompt.Send" = "Logboek sturen";

@@ -1,6 +1,12 @@
+/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
+"CrashReport.Prompt.Title" = "Новый журнал сбоя";
+"CrashReport.Prompt.Text" = "Приложение неожиданно закрылось.\n\nОтправить журнал сбоя, чтобы мы могли исправить проблему?";
+"CrashReport.Prompt.NotNow" = "Не сейчас";
+"CrashReport.Prompt.Send" = "Отправить журнал";
+
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "Не удалось отправить комментарий. Текст на месте.";
-"Moments_Audience_Kept" = "Не удалось обновить, кто может видеть. Ваш выбор сохранён.";
+"Moments_Audience_Kept" = "Не удалось изменить аудиторию. Ваш выбор сохранён.";
 
 "Moments.Draft.Message" = "Сохранить эту запись как черновик или удалить?";
 "Moments.Outbox.Title" = "Запись не отправлена";
@@ -8,9 +14,3 @@
 "Moments.Outbox.Retry" = "Повторить";
 "Moments.Outbox.Later" = "Не сейчас";
 "Moments.Outbox.Incomplete" = "Вложения нет, поэтому запись не отправлена.";
-
-/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
-"CrashReport.Prompt.Title" = "Новый журнал сбоя";
-"CrashReport.Prompt.Text" = "Приложение неожиданно закрылось.\n\nОтправить журнал сбоя, чтобы мы могли исправить проблему?";
-"CrashReport.Prompt.NotNow" = "Не сейчас";
-"CrashReport.Prompt.Send" = "Отправить журнал";

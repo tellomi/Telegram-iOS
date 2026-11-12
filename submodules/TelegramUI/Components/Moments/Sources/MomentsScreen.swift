@@ -32,7 +32,7 @@ public final class MomentsScreen: ViewController {
         self.context = context
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: nil)
-        self.title = momentsText(self.presentationData.strings, .title)
+        self.title = self.presentationData.strings.Moments_Title
         self.tabBarItem.title = self.title
         self.tabBarItem.image = momentsTabIcon()
         self.tabBarItem.selectedImage = self.tabBarItem.image
@@ -42,7 +42,7 @@ public final class MomentsScreen: ViewController {
         self.presentationDataDisposable = (context.sharedContext.presentationData |> deliverOnMainQueue).start(next: { [weak self] presentationData in
             guard let self else { return }
             self.presentationData = presentationData
-            self.title = momentsText(presentationData.strings, .title)
+            self.title = presentationData.strings.Moments_Title
             self.tabBarItem.title = self.title
             if self.isNodeLoaded {
                 self.nodeIfLoaded.updatePresentationData(presentationData)
@@ -295,7 +295,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         case .updating:
             self.titleLabel.text = strings.State_Updating
         case .online:
-            self.titleLabel.text = momentsText(strings, .title)
+            self.titleLabel.text = strings.Moments_Title
         }
     }
 
@@ -387,18 +387,18 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.backgroundColor = self.presentationData.theme.list.plainBackgroundColor
         self.titleLabel.textColor = self.presentationData.theme.list.itemPrimaryTextColor
         if self.titleLabel.text == nil {
-            self.titleLabel.text = momentsText(self.presentationData.strings, .title)
+            self.titleLabel.text = self.presentationData.strings.Moments_Title
         }
         self.titleLabel.frame = CGRect(x: 16, y: top, width: width - 140, height: 44)
         self.heart.frame = CGRect(x: width - 52, y: top + 6, width: 40, height: 32)
         let iconColor = self.presentationData.theme.list.itemPrimaryTextColor
         self.heart.setTitle(nil, for: .normal)
         self.heart.setImage(generateTintedImage(image: UIImage(bundleImageName: "Stories/InputLikeOff"), color: iconColor), for: .normal)
-        self.heart.accessibilityLabel = momentsText(self.presentationData.strings, .notifications)
+        self.heart.accessibilityLabel = self.presentationData.strings.Moments_Notifications
         let accent = self.presentationData.theme.list.itemAccentColor
         self.composeFab.backgroundColor = accent
-        self.composeFab.setImage(momentsTintedIcon("Chat List/ComposeIcon", .white), for: .normal)
-        self.composeFab.accessibilityLabel = momentsText(self.presentationData.strings, .compose)
+        self.composeFab.setImage(momentsTintedIcon("Chat List/ComposeIcon", self.presentationData.theme.list.itemCheckColors.foregroundColor), for: .normal)
+        self.composeFab.accessibilityLabel = self.presentationData.strings.Moments_Compose
         let fabFrame: CGFloat = 56
         let fabCircle: CGFloat = 48
         let fabInset = (fabFrame - fabCircle) / 2
@@ -415,7 +415,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         let pillY = top + 88
         self.pill.frame = CGRect(x: (width - 140) / 2, y: pillY, width: 140, height: 28)
         self.sortControl.isHidden = self.selected != .nearby
-        self.sortControl.setTitle(momentsText(self.presentationData.strings, self.nearbySort == "latest" ? .nearbyLatest : .nearbyMixed), for: .normal)
+        self.sortControl.setTitle((self.nearbySort == "latest" ? self.presentationData.strings.Moments_Nearby_Latest : self.presentationData.strings.Moments_Nearby_Mixed), for: .normal)
         self.sortControl.frame = CGRect(x: width - 92, y: pillY, width: 80, height: 28)
         let listTop = pillY + 8
         let listHeight = layout.size.height - listTop - layout.intrinsicInsets.bottom
@@ -439,13 +439,13 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         let titles = self.visibleTabs.map { kind -> String in
             switch kind {
             case .recommend:
-                return momentsText(strings, .recommend)
+                return strings.Moments_Segment_Recommend
             case .following:
-                return momentsText(strings, .following)
+                return strings.Moments_Segment_Following
             case .friends:
-                return momentsText(strings, .friends)
+                return strings.Moments_Segment_Friends
             case .nearby:
-                return momentsText(strings, .nearby)
+                return strings.Moments_Segment_Nearby
             }
         }
         let selectedIndex = self.visibleTabs.firstIndex(of: self.selected) ?? 0
@@ -616,13 +616,13 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             let text: String
             let failed = model.failed && model.items.isEmpty
             if failed {
-                text = model.loaded ? momentsText(strings, .loadFailed) : momentsText(strings, .credentialMissing)
+                text = model.loaded ? strings.Moments_LoadFailed : strings.Moments_CredentialMissing
             } else {
                 switch kind {
-                case .recommend: text = momentsText(strings, .emptyRecommend)
-                case .following: text = momentsText(strings, .emptyFollowing)
-                case .friends: text = momentsText(strings, .emptyFriends) + "\n" + momentsText(strings, .findPeople)
-                case .nearby: text = momentsText(strings, .emptyNearby)
+                case .recommend: text = strings.Moments_Empty_Recommend
+                case .following: text = strings.Moments_Empty_Following
+                case .friends: text = strings.Moments_Empty_Friends + "\n" + strings.Moments_FindPeople
+                case .nearby: text = strings.Moments_Empty_Nearby
                 }
             }
             entries = [MomentsStatusItem(text: text, theme: theme, action: { [weak self] in
@@ -641,7 +641,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
             }
             if model.failed {
                 let retryRefresh = model.failedRefresh
-                entries.append(MomentsStatusItem(text: momentsText(strings, .loadFailed), theme: theme, action: { [weak self] in self?.load(kind, refresh: retryRefresh) }))
+                entries.append(MomentsStatusItem(text: strings.Moments_LoadFailed, theme: theme, action: { [weak self] in self?.load(kind, refresh: retryRefresh) }))
             }
         }
         let rows = entries.map { item -> (stable: String, print: String) in
@@ -841,7 +841,7 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
 
     private func updatePill() {
         let count = self.models[self.selected]?.newCount ?? 0
-        self.pill.setTitle(momentsText(self.presentationData.strings, .newPosts), for: .normal)
+        self.pill.setTitle(self.presentationData.strings.Moments_NewPosts, for: .normal)
         self.pill.isHidden = !self.selected.probesForNewPosts || count == 0
     }
 

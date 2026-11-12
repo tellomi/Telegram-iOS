@@ -191,8 +191,9 @@ empty_languages = [
     "uz",
 ]
 
-# Every built-in language ships its own wording for the two Moments failure strings.
-moments_string_languages = [
+# Bundled UI strings besides English. Moments copy is the server langpack. These files are the
+# welcome tour (zh), notification loc-keys, and the crash-log prompt.
+bundled_string_languages = [
     "ar",
     "be",
     "ca",
@@ -221,13 +222,13 @@ moments_string_languages = [
         srcs = ["Telegram-iOS/{}.lproj/Localizable.strings".format(language)],
         outs = ["{}.lproj/Localizable.strings".format(language)],
         cmd = "cp $(location Telegram-iOS/{}.lproj/Localizable.strings) $(OUTS)".format(language),
-    ) for language in moments_string_languages
+    ) for language in bundled_string_languages
 ] + [
     genrule(
         name = "Localizable_{}.strings".format(language),
         outs = ["{}.lproj/Localizable.strings".format(language)],
         cmd = "touch $(OUTS)",
-    ) for language in empty_languages if language not in moments_string_languages
+    ) for language in empty_languages if language not in bundled_string_languages
 ]
 
 objc_library(
@@ -309,7 +310,7 @@ filegroup(
     ] + [
         "{}.lproj/Localizable.strings".format(language) for language in empty_languages
     ] + [
-        "{}.lproj/Localizable.strings".format(language) for language in moments_string_languages if language not in empty_languages
+        "{}.lproj/Localizable.strings".format(language) for language in bundled_string_languages if language not in empty_languages
     ],
     # //Tests/ComposerHarness bundles these. `defaultPresentationStrings` FORCE-UNWRAPS
     # `getAppBundle().path(forResource: "Localizable" …)`, so any standalone app that builds a
