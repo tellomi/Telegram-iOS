@@ -1344,3 +1344,23 @@ After the IPA exists, including when `altool` fails, the bundles are copied to `
 | `Tellomi/collect_dsyms.py` | Names each bundle by build number and arm64 UUID. Leaves the IPA out. |
 | `Tellomi/collect_dsyms_test.py` | Parser, two bundles, and a missing directory. |
 | `.github/workflows/testflight.yml` | Stores the directory after the build, including when the upload fails. |
+
+## SiriIntents launch crash
+
+Siri launches `IntentsExtension` (`app.tellomi.chat.SiriIntents`). TestFlight run `43142054783` enables `SIRIKIT` on that App ID and writes `tellomi-ios-siri`. The signed entitlements did not request `com.apple.developer.siri`: `enable_siri` is false, and `siri_fragment` is only concatenated into the main app's entitlements. The extension signs `ExtensionAppGroupEntitlements`, which is the app group alone. iOS then kills the intents process on launch.
+
+The host bundle id is not the mismatch. `IntentHandler` drops the last component of `app.tellomi.chat.SiriIntents`, which is `app.tellomi.chat`, and opens `group.app.tellomi.chat`. That is the group in both entitlement fragments. The other five extensions stay on the shared fragment. Their profiles do not grant Siri, so putting the key there would fail codesign.
+
+`enable_siri` in the JSON stays false. `Make.py` sets `telegram_enable_siri` and `telegram_siri_extension_entitlement` only when that target's profile contains the key, and on `--disableProvisioningProfiles`. An unsigned simulator build ad-hoc signs, so the key can be present. A signed build that requests a key the profile does not allow is rejected by codesign, which is why a missing key is omitted and reported.
+
+The main App ID now requests `SIRIKIT` as well. Upstream puts the entitlement on the app. Without it, Siri does not launch the extension. The extension's own profile is the one that already had SiriKit; the extension now signs the key when that profile still contains it.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/extension-suffixes.json` | The main App ID requests `SIRIKIT`. SiriIntents already did. |
+| `Tellomi/siri_entitlements.py` | Profile gate, and the host bundle id the extension derives. |
+| `build-system/Make/BuildConfiguration.py`, `Make.py` | Read `com.apple.developer.siri` from the main profile and from the `.SiriIntents` profile. |
+| `Telegram/BUILD` | `IntentsExtensionEntitlements` is the app group plus the gated Siri key. The other extensions keep `ExtensionAppGroupEntitlements`. |
+| `Tellomi/prepare_appstore_signing.py` | Prints whether the main and SiriIntents profiles contain the key. |
+| `Tellomi/check_server_config.py`, `Tellomi/test_siri_entitlements.py` | The gate, the host id, and the BUILD split. |
+| `docs/TELLOMI.md` | The signed Siri key follows the profile. |

@@ -285,6 +285,20 @@ def profile_includes_communication_notifications(entitlements):
     return entitlements.get(COMMUNICATION_NOTIFICATIONS_ENTITLEMENT) is True
 
 
+def note_siri_entitlement(identifier, destination):
+    from siri_entitlements import profile_grants_siri
+
+    entitlements = profile_plist(destination).get("Entitlements") or {}
+    if profile_grants_siri(entitlements):
+        print("siri entitlement present on {}".format(identifier))
+        return
+    print(
+        "warning: {} has no com.apple.developer.siri. "
+        "The SiriIntents process is killed on launch until this profile grants the key.".format(identifier),
+        file=sys.stderr,
+    )
+
+
 def ensure_capability(client, bundle_resource_id, capability, group, optional=False):
     settings = capability_settings(capability, group)
     body = {
@@ -800,6 +814,8 @@ def prepare(args):
             create_profile(client, profile_name, ids[identifier], certificate_id, destination)
             require_app_group(destination, group)
             require_profile_certificate(destination, profile_serial)
+            if identifier == bundle_id or identifier.endswith(".SiriIntents"):
+                note_siri_entitlement(identifier, destination)
             if identifier == bundle_id:
                 main_profile = destination
                 if profile_includes_communication_notifications(profile_plist(destination).get("Entitlements") or {}):
@@ -852,6 +868,13 @@ def self_test():
         main = [item for item in signing_targets() if item[0] == ""]
         if len(main) != 1 or COMMUNICATION_NOTIFICATIONS_CAPABILITY not in main[0][3]:
             raise SystemExit("main app must enable USERNOTIFICATIONS_COMMUNICATION")
+        if len(main) != 1 or "SIRIKIT" not in main[0][3]:
+            raise SystemExit("main app must enable SIRIKIT")
+        from siri_entitlements import profile_grants_siri
+        if not profile_grants_siri({"com.apple.developer.siri": True}):
+            raise SystemExit("siri entitlement check failed")
+        if profile_grants_siri({}) or profile_grants_siri({"com.apple.developer.siri": False}):
+            raise SystemExit("missing siri entitlement was accepted")
         if not profile_includes_communication_notifications({COMMUNICATION_NOTIFICATIONS_ENTITLEMENT: True}):
             raise SystemExit("communication entitlement check failed")
         if profile_includes_communication_notifications({}):
