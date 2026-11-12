@@ -15,6 +15,7 @@ swift_library(
         "//submodules/AccountContext",
         "//submodules/SSignalKit/SwiftSignalKit",
         "//submodules/WalletContext",
+        "//submodules/TellomiLinks",
         "//submodules/Markdown",
         "//submodules/TelegramPresentationData",
         "//submodules/TelegramStringFormatting",
