@@ -7,3 +7,10 @@
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "Der Kommentar wurde nicht gesendet. Dein Text ist noch da.";
 "Moments_Audience_Kept" = "Die Zielgruppe konnte nicht geändert werden. Deine Auswahl bleibt.";
+
+"Moments.Draft.Message" = "Diesen Beitrag als Entwurf speichern oder verwerfen?";
+"Moments.Outbox.Title" = "Beitrag nicht gesendet";
+"Moments.Outbox.Text" = "Ein Beitrag wartet noch auf den Versand.";
+"Moments.Outbox.Retry" = "Erneut versuchen";
+"Moments.Outbox.Later" = "Nicht jetzt";
+"Moments.Outbox.Incomplete" = "Ein Anhang fehlt, deshalb wurde dieser Beitrag nicht gesendet.";

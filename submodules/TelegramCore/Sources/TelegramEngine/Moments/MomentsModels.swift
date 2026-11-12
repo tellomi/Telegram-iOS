@@ -244,6 +244,33 @@ public struct MomentsPollOption: Codable, Equatable {
     }
 }
 
+/// A file copied beside the draft. It is not on the post until upload returns a key.
+public struct MomentsComposerLocalMedia: Codable, Equatable {
+    public var path: String
+    public var filename: String
+    public var mimeType: String
+    public var type: MomentsMediaType
+    public var width: Int
+    public var height: Int
+    public var durationMs: Int
+    public var order: Int
+
+    public init(path: String, filename: String, mimeType: String, type: MomentsMediaType, width: Int, height: Int, durationMs: Int, order: Int) {
+        self.path = path
+        self.filename = filename
+        self.mimeType = mimeType
+        self.type = type
+        self.width = width
+        self.height = height
+        self.durationMs = durationMs
+        self.order = order
+    }
+
+    public func uploadFile() -> MomentsUploadFile {
+        return MomentsUploadFile(path: self.path, filename: self.filename, mimeType: self.mimeType, type: self.type, width: self.width, height: self.height, durationMs: self.durationMs, order: self.order)
+    }
+}
+
 public struct MomentsComposerDraft: Codable, Equatable {
     public var text: String
     public var privacyBase: Int32
@@ -251,14 +278,59 @@ public struct MomentsComposerDraft: Codable, Equatable {
     public var allowNearby: Bool
     public var quoteId: String?
     public var media: [MomentsMedia]
+    /// Drafts written before this field were put back on screen as an already chosen audience.
+    public var audienceChosen: Bool
+    public var clientNonce: String?
+    public var localMedia: [MomentsComposerLocalMedia]
 
-    public init(text: String, privacyBase: Int32, peerIds: [Int64], allowNearby: Bool, quoteId: String?, media: [MomentsMedia]) {
+    public init(text: String, privacyBase: Int32, peerIds: [Int64], allowNearby: Bool, quoteId: String?, media: [MomentsMedia], audienceChosen: Bool = true, clientNonce: String? = nil, localMedia: [MomentsComposerLocalMedia] = []) {
         self.text = text
         self.privacyBase = privacyBase
         self.peerIds = peerIds
         self.allowNearby = allowNearby
         self.quoteId = quoteId
         self.media = media
+        self.audienceChosen = audienceChosen
+        self.clientNonce = clientNonce
+        self.localMedia = localMedia
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case text
+        case privacyBase
+        case peerIds
+        case allowNearby
+        case quoteId
+        case media
+        case audienceChosen
+        case clientNonce
+        case localMedia
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+        self.privacyBase = try container.decodeIfPresent(Int32.self, forKey: .privacyBase) ?? EngineStoryPrivacy.Base.everyone.rawValue
+        self.peerIds = try container.decodeIfPresent([Int64].self, forKey: .peerIds) ?? []
+        self.allowNearby = try container.decodeIfPresent(Bool.self, forKey: .allowNearby) ?? false
+        self.quoteId = try container.decodeIfPresent(String.self, forKey: .quoteId)
+        self.media = try container.decodeIfPresent([MomentsMedia].self, forKey: .media) ?? []
+        self.audienceChosen = try container.decodeIfPresent(Bool.self, forKey: .audienceChosen) ?? true
+        self.clientNonce = try container.decodeIfPresent(String.self, forKey: .clientNonce)
+        self.localMedia = try container.decodeIfPresent([MomentsComposerLocalMedia].self, forKey: .localMedia) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.text, forKey: .text)
+        try container.encode(self.privacyBase, forKey: .privacyBase)
+        try container.encode(self.peerIds, forKey: .peerIds)
+        try container.encode(self.allowNearby, forKey: .allowNearby)
+        try container.encodeIfPresent(self.quoteId, forKey: .quoteId)
+        try container.encode(self.media, forKey: .media)
+        try container.encode(self.audienceChosen, forKey: .audienceChosen)
+        try container.encodeIfPresent(self.clientNonce, forKey: .clientNonce)
+        try container.encode(self.localMedia, forKey: .localMedia)
     }
 }
 

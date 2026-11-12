@@ -406,6 +406,30 @@ public extension TelegramEngine {
             }.start()
         }
 
+        /// Pending sends survive the process. The post body is built again with `momentsEncodePost` and the stored nonce.
+        public func storedPendingPosts() -> Signal<[MomentsPendingPost], NoError> {
+            return self.account.postbox.transaction { transaction -> [MomentsPendingPost] in
+                guard let payload = momentsReadBlob(transaction: transaction, id: momentsOutboxCacheId()), let data = payload.data(using: .utf8), let blob = try? JSONDecoder().decode(MomentsOutboxBlob.self, from: data) else {
+                    return []
+                }
+                return blob.posts
+            }
+        }
+
+        public func storePendingPosts(_ posts: [MomentsPendingPost]) {
+            let payload: String?
+            if posts.isEmpty {
+                payload = nil
+            } else if let data = try? JSONEncoder().encode(MomentsOutboxBlob(posts: posts)), let text = String(data: data, encoding: .utf8) {
+                payload = text
+            } else {
+                payload = nil
+            }
+            let _ = self.account.postbox.transaction { transaction in
+                momentsWriteBlob(transaction: transaction, id: momentsOutboxCacheId(), payload: payload)
+            }.start()
+        }
+
         public func storeAudience(_ privacy: EngineStoryPrivacy) {
             let stored = MomentsStoredAudience(base: privacy.base.rawValue, peers: privacy.additionallyIncludePeers.map { $0.toInt64() })
             guard let data = try? JSONEncoder().encode(stored), let payload = String(data: data, encoding: .utf8) else {
@@ -448,13 +472,14 @@ public extension TelegramEngine {
             }
         }
 
-        public func publish(_ body: [String: Any]) -> Signal<String, MomentsAPIError> {
+        /// 200 and `{id, state, version}` is the original post. A retry of `client_nonce` gets that post back.
+        public func publish(_ body: [String: Any]) -> Signal<MomentsPublishReceipt, MomentsAPIError> {
             return self.call(method: "POST", path: "/v1/feed/posts", body: body)
             |> mapToSignal { data in
-                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let id = momentsString(json, "id") else {
+                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let receipt = momentsPublishReceipt(status: 200, json: json) else {
                     return .fail(.invalid("post"))
                 }
-                return .single(id)
+                return .single(receipt)
             }
         }
 

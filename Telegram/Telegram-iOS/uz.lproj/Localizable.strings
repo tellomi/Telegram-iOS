@@ -7,3 +7,10 @@
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "Fikr yuborilmadi. Matningiz hali shu yerda.";
 "Moments_Audience_Kept" = "Auditoriyani o‘zgartirib bo‘lmadi. Tanlovingiz saqlanib qoldi.";
+
+"Moments.Draft.Message" = "Bu post qoralama sifatida saqlansinmi yoki tashlab yuborilsinmi?";
+"Moments.Outbox.Title" = "Post yuborilmadi";
+"Moments.Outbox.Text" = "Bir post hali yuborilishini kutmoqda.";
+"Moments.Outbox.Retry" = "Qayta urinish";
+"Moments.Outbox.Later" = "Hozir emas";
+"Moments.Outbox.Incomplete" = "Ilova yo‘q, shu sabab bu post yuborilmadi.";

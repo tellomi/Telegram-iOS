@@ -30,6 +30,7 @@ final class MomentsFeedActions {
     var onSheet: ((Bool) -> Void)?
     var onMutation: ((MomentsFeedMutation) -> Void)?
     var beforeOpen: ((MomentsFeedPlace) -> Void)?
+    var onPosted: ((MomentsCard) -> Void)?
 
     init(context: AccountContext, presentationData: PresentationData) {
         self.context = context
@@ -295,6 +296,9 @@ final class MomentsFeedActions {
             return
         }
         let composer = MomentsComposerScreen(context: self.context, quoteId: quoteId)
+        composer.onPosted = { [weak self] card in
+            self?.onPosted?(card)
+        }
         (controller.navigationController as? NavigationController)?.pushViewController(composer)
     }
 

@@ -191,6 +191,8 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
     private var loadDisposables: [MomentsFeedKind: Disposable] = [:]
     private var pullOffset: [MomentsFeedKind: CGFloat] = [:]
     private var screenVisible = false
+    private var offeredPendingSend = false
+    private var postedCard: MomentsCard?
     private var displayedPersonalized: Bool?
     private var probeEpoch = 0
     private var probeDisposable: Disposable?
@@ -336,6 +338,46 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         guard visible != self.screenVisible else { return }
         self.screenVisible = visible
         self.scheduleProbe()
+        if visible {
+            self.offerPendingSend()
+        }
+    }
+
+    /// A killed app left a post in the outbox. Offer that one task; do not send it until asked.
+    private func offerPendingSend() {
+        guard !self.offeredPendingSend, let controller = self.controller else {
+            return
+        }
+        if controller.navigationController?.viewControllers.contains(where: { $0 is MomentsComposerScreen }) == true {
+            return
+        }
+        let _ = (self.context.engine.moments.storedPendingPosts()
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { [weak self] posts in
+            guard let self, let controller = self.controller, let post = momentsSelectPendingPost(posts) else {
+                return
+            }
+            if controller.navigationController?.viewControllers.contains(where: { $0 is MomentsComposerScreen }) == true {
+                return
+            }
+            guard momentsPendingDisposition(post, fileExists: { FileManager.default.fileExists(atPath: $0) }) == .offerRetry else {
+                return
+            }
+            guard !self.offeredPendingSend else {
+                return
+            }
+            self.offeredPendingSend = true
+            let strings = self.presentationData.strings
+            controller.present(textAlertController(context: self.context, title: strings.Moments_Outbox_Title, text: strings.Moments_Outbox_Text, actions: [
+                TextAlertAction(type: .defaultAction, title: strings.Moments_Outbox_Retry, action: { [weak self] in
+                    self?.presentComposer(quoteId: nil, sendPending: true)
+                }),
+                TextAlertAction(type: .destructiveAction, title: strings.Moments_Draft_Discard, action: { [weak self] in
+                    self?.context.engine.moments.storePendingPosts([])
+                }),
+                TextAlertAction(type: .genericAction, title: strings.Moments_Outbox_Later, action: {})
+            ], actionLayout: .vertical), in: .window(.root))
+        })
     }
 
     func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
@@ -535,6 +577,13 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
                 model.newCount = 0
             }
             model.items = merged.items
+            if kind == .following, let posted = self.postedCard {
+                if merged.items.contains(where: { $0.id == posted.id }) {
+                    self.postedCard = nil
+                } else {
+                    model.items = momentsFeedWithPosted(items: merged.items, posted: posted)
+                }
+            }
             self.models[kind] = model
             self.render(kind, resetScroll: refresh)
             self.updatePill()
@@ -677,6 +726,9 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         actions.onMutation = { [weak self] mutation in
             self?.applyFeedMutation(mutation)
         }
+        actions.onPosted = { [weak self] card in
+            self?.showPosted(card)
+        }
         return actions.handlers()
     }
 
@@ -728,10 +780,25 @@ final class MomentsScreenNode: ASDisplayNode, UIScrollViewDelegate {
         self.scheduleProbe()
     }
 
-    private func presentComposer(quoteId: String?) {
+    private func presentComposer(quoteId: String?, sendPending: Bool = false) {
         guard let controller = self.controller else { return }
-        let composer = MomentsComposerScreen(context: self.context, quoteId: quoteId)
+        let composer = MomentsComposerScreen(context: self.context, quoteId: quoteId, sendPending: sendPending)
+        composer.onPosted = { [weak self] card in
+            self?.showPosted(card)
+        }
         (controller.navigationController as? NavigationController)?.pushViewController(composer)
+    }
+
+    /// A 200 from create-post, including a replayed nonce, is this post. It is already off the outbox.
+    private func showPosted(_ card: MomentsCard) {
+        self.postedCard = card
+        if self.models[.following] == nil {
+            self.models[.following] = MomentsFeedModel()
+        }
+        self.models[.following]?.items = momentsFeedWithPosted(items: self.models[.following]?.items ?? [], posted: card)
+        self.render(.following, resetScroll: true)
+        self.select(.following, animated: false)
+        self.load(.following, refresh: true)
     }
 
     private func scheduleProbe() {

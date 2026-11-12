@@ -244,3 +244,10 @@
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "留言沒有送出，內容還在。";
 "Moments_Audience_Kept" = "沒能修改可見範圍，你的選擇還在。";
+
+"Moments.Draft.Message" = "要把這則動態存成草稿，還是放棄？";
+"Moments.Outbox.Title" = "動態沒有送出";
+"Moments.Outbox.Text" = "還有一則動態在等著傳送。";
+"Moments.Outbox.Retry" = "再試一次";
+"Moments.Outbox.Later" = "暫時不要";
+"Moments.Outbox.Incomplete" = "附件不見了，所以這則動態沒有送出。";

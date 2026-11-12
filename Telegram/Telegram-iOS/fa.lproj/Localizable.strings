@@ -7,3 +7,10 @@
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "نظر ارسال نشد. متن شما هنوز اینجاست.";
 "Moments_Audience_Kept" = "نتوانستیم مخاطبان را تغییر دهیم. انتخاب شما حفظ شد.";
+
+"Moments.Draft.Message" = "این پست را پیش‌نویس ذخیره کنم یا کنار بگذارم؟";
+"Moments.Outbox.Title" = "پست ارسال نشد";
+"Moments.Outbox.Text" = "یک پست هنوز منتظر ارسال است.";
+"Moments.Outbox.Retry" = "دوباره تلاش کن";
+"Moments.Outbox.Later" = "حالا نه";
+"Moments.Outbox.Incomplete" = "یک پیوست نیست، پس این پست ارسال نشد.";

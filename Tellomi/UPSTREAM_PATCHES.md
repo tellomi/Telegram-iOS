@@ -1,5 +1,22 @@
 # Upstream patches
 
+## Moments composer send task — 2026-11-11
+
+Branch `cursor/moments-composer-outbox-5d88`, based on `release/ios`.
+
+The composer keeps one `client_nonce` for a submission and stores that task in the account Postbox (`moments` cache, outbox). A retry sends the same nonce through `momentsEncodePost`. Cancel, the back button and swipe-back share `momentsComposerLeave`. No upstream navigation code was changed: `ViewController.attemptNavigation` already covers the back button and the interactive pop. New strings are `presentationData.strings` keys in every built-in lproj that already has Moments copy.
+
+content-engine dedupes `client_nonce`. `posts.go` returns the first post on a retry (`a retry gets the first post back`). `interactions.go` looks the nonce up and falls back to the unique index. `uploads_bind_test.go` asserts a repeated nonce returns the first post and the count stays 1. The HTTP result is 200 with the original `{id, state, version}`. The client treats that body as success: the outbox entry is removed and Following shows that post.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsComposerSession.swift` | Publish gate, nonce, draft restore, pending-send disposition. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsModels.swift` | Draft keeps audience, quote, local files and the nonce. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/TelegramEngineMoments.swift` | Outbox read and write. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsComposerScreen.swift` | Gate, shared leave, persisted send. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsScreen.swift` | Offers a restored send. |
+| `Telegram/Telegram-iOS/*.lproj/Localizable.strings` | New Moments draft and outbox keys in every built-in language that already has Moments copy. |
+
 ## Moments gallery uses the chat media viewer — 2026-11-11
 
 Tapping a photo in the feed pushed `GalleryController` onto the navigation stack. That controller is an overlay: its back button, swipe-down and the end of the transition all call `presentingViewController?.dismiss`, which the navigation overlay installs and a push does not. The swipe still ran the dismiss animation (`animateOut` leaves the background clear and the content off-screen) and then did not remove the controller. `disablesInteractiveTransitionGestureRecognizer` also blocked the navigation edge swipe, so there was no way back. The open had no `GalleryControllerPresentationArguments`, so the thumbnail transition never ran. A missing `width`/`height` was stored as 1×1, and the viewer draws into the representation size, so the bitmap was a single pixel.

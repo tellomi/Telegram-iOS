@@ -7,3 +7,10 @@
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "Не вдалося надіслати коментар. Текст залишився.";
 "Moments_Audience_Kept" = "Не вдалося змінити аудиторію. Ваш вибір збережено.";
+
+"Moments.Draft.Message" = "Зберегти цей допис як чернетку чи відкинути?";
+"Moments.Outbox.Title" = "Допис не надіслано";
+"Moments.Outbox.Text" = "Допис досі чекає на надсилання.";
+"Moments.Outbox.Retry" = "Спробувати ще раз";
+"Moments.Outbox.Later" = "Не зараз";
+"Moments.Outbox.Incomplete" = "Бракує вкладення, тож цей допис не надіслано.";

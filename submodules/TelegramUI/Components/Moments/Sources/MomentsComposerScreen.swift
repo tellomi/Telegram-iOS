@@ -13,7 +13,8 @@ import PresentationDataUtils
 
 public final class MomentsComposerScreen: ViewController {
     private let context: AccountContext
-    private let quoteId: String?
+    private var quoteId: String?
+    private let sendPending: Bool
     private var presentationData: PresentationData
     private let textView = UITextView()
     private let audienceButton = UIButton(type: .system)
@@ -34,19 +35,38 @@ public final class MomentsComposerScreen: ViewController {
     private var voiceStateDisposable: Disposable?
     private var isRecordingVoice = false
     private var isFinishingVoice = false
-    /// One UUID for this draft. Retries send the same value; a new composer mints a new one.
-    private let clientNonce = UUID().uuidString
+    private var voiceUploadInFlight = false
+    private var pendingUploadCount = 0
+    private var uploadGeneration = 0
+    private var localMedia: [MomentsComposerLocalMedia] = []
+    private var mediaBlocked = false
+    private var clientNonce: String?
+    private var storedFingerprint: MomentsPostFingerprint?
+    private var submitted = false
+    private var nonceLocked = false
+    private var resumeSendAfterUpload = false
     private var publishing = false
+    private var didOfferPending = false
+    private var outboxTask: MomentsPendingPost?
+    /// The feed shows this card after a 200, including when the nonce replayed the first post.
+    public var onPosted: ((MomentsCard) -> Void)?
     private var audienceGrant: (kind: String, userIds: [Int64], grant: MomentsAudienceGrant)?
 
-    public init(context: AccountContext, quoteId: String?) {
+    public init(context: AccountContext, quoteId: String?, sendPending: Bool = false) {
         self.context = context
         self.quoteId = quoteId
+        self.sendPending = sendPending
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
         self.title = self.presentationData.strings.Moments_Composer_Title
         self.navigationItem.setLeftBarButton(UIBarButtonItem(title: self.presentationData.strings.Common_Cancel, style: .plain, target: self, action: #selector(self.cancelPressed)), animated: false)
         self.navigationItem.setRightBarButton(UIBarButtonItem(title: self.presentationData.strings.Moments_Publish, style: .done, target: self, action: #selector(self.publishPressed)), animated: false)
+        self.attemptNavigation = { [weak self] complete in
+            guard let self else {
+                return true
+            }
+            return self.requestLeave(complete)
+        }
     }
 
     required init(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -86,17 +106,15 @@ public final class MomentsComposerScreen: ViewController {
             self?.limits = MomentsLimits.standard.applying(config: config)
             self?.refresh()
         })
-        let _ = (self.context.engine.moments.storedDraft() |> deliverOnMainQueue).start(next: { [weak self] draft in
-            guard let self, let draft else { return }
-            self.textView.text = draft.text
-            self.allowNearby = draft.allowNearby
-            self.media = draft.media
-            self.imageCount = draft.media.filter { $0.type == .image }.count
-            self.videoCount = draft.media.filter { $0.type == .video }.count
-            if let base = EngineStoryPrivacy.Base(rawValue: draft.privacyBase) {
-                let peers = draft.peerIds.map { EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value($0)) }
-                self.privacy = EngineStoryPrivacy(base: base, additionallyIncludePeers: peers)
-                self.audienceChosen = true
+        let openedQuote = self.quoteId
+        let _ = (combineLatest(self.context.engine.moments.storedDraft(), self.context.engine.moments.storedPendingPosts())
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { [weak self] draft, posts in
+            guard let self else { return }
+            if let pending = momentsSelectPendingPost(posts) {
+                self.apply(pending)
+            } else if let draft {
+                self.apply(draft, openedQuote: openedQuote)
             }
             self.refresh()
         })
@@ -125,9 +143,7 @@ public final class MomentsComposerScreen: ViewController {
         } else {
             self.audienceButton.setTitle(strings.Moments_Audience_Choose, for: .normal)
         }
-        let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll, hasLinkPreview: !self.linkRemoved && momentsScanText(self.textView.text ?? "", limits: self.limits).firstURL != nil)
-        let hasBody = !(self.textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !state.isEmpty || !self.media.isEmpty
-        let canPublish = hasBody && !self.isRecordingVoice && self.audienceChosen && !self.publishing
+        let canPublish = momentsComposerPublishDenial(self.publishGate()) == nil
         self.navigationItem.rightBarButtonItem?.isEnabled = canPublish
         self.publishButton.isEnabled = canPublish
         self.nearbySwitch.isHidden = !self.audienceChosen || audience.kind != .everyone
@@ -252,20 +268,24 @@ public final class MomentsComposerScreen: ViewController {
         guard !files.isEmpty else { return }
         self.imageCount = nextImages
         self.videoCount = nextVideos
+        self.beginUpload(count: files.count)
+        let generation = self.uploadGeneration
         let _ = (combineLatest(files)
+        |> deliverOnMainQueue
         |> castError(MomentsAPIError.self)
-        |> mapToSignal { [weak self] files -> Signal<[MomentsMedia], MomentsAPIError> in
+        |> mapToSignal { [weak self] resolved -> Signal<[MomentsMedia], MomentsAPIError> in
             guard let self else { return .complete() }
-            return self.uploadSequentially(files)
+            return self.uploadSequentially(resolved.map { self.retained($0) })
         }
         |> deliverOnMainQueue).start(next: { [weak self] uploaded in
-            guard let self else { return }
-            self.media.append(contentsOf: uploaded)
-            self.refresh()
+            guard let self, self.uploadGeneration == generation else { return }
+            self.finishUpload(uploaded, failedCount: 0)
         }, error: { [weak self] _ in
-            self?.imageCount = imageCountBefore
-            self?.videoCount = videoCountBefore
-            self?.presentRejection(.imageLimit)
+            guard let self, self.uploadGeneration == generation else { return }
+            self.imageCount = imageCountBefore
+            self.videoCount = videoCountBefore
+            self.finishUpload([], failedCount: files.count)
+            self.presentRejection(.imageLimit)
         })
     }
 
@@ -331,14 +351,17 @@ public final class MomentsComposerScreen: ViewController {
         self.voiceStateDisposable?.dispose()
         self.voiceStateDisposable = (recorder.takenRecordedData() |> deliverOnMainQueue).start(next: { [weak self] data in
             guard let self else { return }
-            self.isFinishingVoice = false
             guard let data, data.duration >= 0.5, !data.compressedData.isEmpty else {
+                self.isFinishingVoice = false
+                self.refresh()
                 self.presentVoiceFailure()
                 return
             }
             let duration = min(data.duration, momentsVoiceMaxDuration(self.limits, comment: false))
             let state = MomentsComposerAttachmentState(imageCount: self.imageCount, videoCount: self.videoCount, hasVoice: self.hasVoice, hasPoll: self.hasPoll)
             if let rejection = momentsCanAdd(kind: .voice, to: state, limits: self.limits, duration: duration, voiceComment: false) {
+                self.isFinishingVoice = false
+                self.refresh()
                 self.presentRejection(rejection)
                 return
             }
@@ -355,8 +378,11 @@ public final class MomentsComposerScreen: ViewController {
             return
         }
         self.hasVoice = true
-        self.refresh()
-        let file = MomentsUploadFile(
+        self.voiceUploadInFlight = true
+        self.isFinishingVoice = false
+        self.beginUpload(count: 1)
+        let generation = self.uploadGeneration
+        let file = self.retained(MomentsUploadFile(
             path: url.path,
             filename: "voice.ogg",
             mimeType: "audio/ogg",
@@ -364,16 +390,17 @@ public final class MomentsComposerScreen: ViewController {
             width: 0,
             height: 0,
             durationMs: Int(duration * 1000),
-            order: self.media.count
-        )
+            order: self.media.count + self.localMedia.count
+        ))
         let _ = (self.context.engine.moments.uploadFile(file) |> deliverOnMainQueue).start(next: { [weak self] media in
-            guard let self else { return }
-            self.media.append(media)
-            self.refresh()
+            guard let self, self.uploadGeneration == generation else { return }
+            self.voiceUploadInFlight = false
+            self.finishUpload([media], failedCount: 0)
         }, error: { [weak self] _ in
-            guard let self else { return }
+            guard let self, self.uploadGeneration == generation else { return }
+            self.voiceUploadInFlight = false
             self.hasVoice = false
-            self.refresh()
+            self.finishUpload([], failedCount: 1)
             self.presentVoiceFailure()
         })
     }
@@ -402,29 +429,46 @@ public final class MomentsComposerScreen: ViewController {
             peerIds: self.privacy.additionallyIncludePeers.map { $0.toInt64() },
             allowNearby: self.allowNearby,
             quoteId: self.quoteId,
-            media: self.media
+            media: self.media,
+            audienceChosen: self.audienceChosen,
+            clientNonce: self.clientNonce,
+            localMedia: self.localMedia
         )
         self.context.engine.moments.storeDraft(draft)
+        self.persistUnsubmitted()
     }
 
-    @objc private func cancelPressed() {
-        let dirty = !(self.textView.text ?? "").isEmpty || !self.media.isEmpty || self.audienceChosen
-        guard dirty else {
-            self.navigationController?.popViewController(animated: true)
-            return
+    /// Cancel, the navigation back button and swipe-back all come through here.
+    private func requestLeave(_ complete: @escaping () -> Void) -> Bool {
+        let dirty = momentsComposerIsDirty(text: self.textView.text ?? "", mediaCount: self.media.count, localMediaCount: self.localMedia.count, audienceChosen: self.audienceChosen, quoteId: self.quoteId, activity: self.currentActivity(), hasPendingSend: self.submitted)
+        if momentsComposerLeave(source: .cancel, dirty: dirty) == .dismiss {
+            return true
         }
         let strings = self.presentationData.strings
-        self.present(textAlertController(context: self.context, title: strings.Moments_Draft_Title, text: strings.Moments_FriendsHint, actions: [
+        self.present(textAlertController(context: self.context, title: strings.Moments_Draft_Title, text: strings.Moments_Draft_Message, actions: [
             TextAlertAction(type: .defaultAction, title: strings.Moments_Draft_Save, action: { [weak self] in
                 self?.saveDraft()
-                self?.navigationController?.popViewController(animated: true)
+                complete()
             }),
             TextAlertAction(type: .destructiveAction, title: strings.Moments_Draft_Discard, action: { [weak self] in
-                self?.context.engine.moments.storeDraft(nil)
-                self?.navigationController?.popViewController(animated: true)
+                self?.discardComposer()
+                complete()
             }),
             TextAlertAction(type: .genericAction, title: strings.Moments_Draft_Continue, action: {})
         ], actionLayout: .vertical), in: .window(.root))
+        return false
+    }
+
+    @objc private func cancelPressed() {
+        let complete: () -> Void = { [weak self] in
+            guard let self else {
+                return
+            }
+            let _ = self.navigationController?.popViewController(animated: true)
+        }
+        if self.requestLeave(complete) {
+            complete()
+        }
     }
 
     @objc private func nearbyChanged() {
@@ -432,7 +476,7 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     @objc private func publishPressed() {
-        guard self.audienceChosen, !self.publishing else { return }
+        guard momentsComposerPublishDenial(self.publishGate()) == nil else { return }
         let audience = momentsAudience(from: self.privacy)
         let text = self.textView.text ?? ""
         let scan = momentsScanText(text, limits: self.limits)
@@ -449,17 +493,21 @@ public final class MomentsComposerScreen: ViewController {
         }
     }
 
-    private func currentDraft() -> MomentsPostDraft {
+    private func currentFingerprint() -> MomentsPostFingerprint {
         let audience = momentsAudience(from: self.privacy)
         let nearby = self.allowNearby && audience.kind == .everyone && audience.exclude.isEmpty && audience.include.isEmpty
-        return MomentsPostDraft(
+        return MomentsPostFingerprint(
             text: (self.textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
-            audience: audience,
             mediaKeys: self.media.sorted { $0.order < $1.order }.map(\.key).filter { !$0.isEmpty },
+            audience: audience,
             allowNearby: nearby,
-            quoteOf: self.quoteId,
-            clientNonce: self.clientNonce
+            quoteOf: self.quoteId
         )
+    }
+
+    private func currentDraft(nonce: String) -> MomentsPostDraft {
+        let fingerprint = self.currentFingerprint()
+        return MomentsPostDraft(text: fingerprint.text, audience: fingerprint.audience, mediaKeys: fingerprint.mediaKeys, allowNearby: fingerprint.allowNearby, city: fingerprint.city, placeId: fingerprint.placeId, quoteOf: fingerprint.quoteOf, clientNonce: nonce)
     }
 
     private func reusableAudienceToken(kind: String, userIds: [Int64]) -> String? {
@@ -474,8 +522,17 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     private func submitPost() {
-        guard self.audienceChosen, !self.publishing else { return }
-        let draft = self.currentDraft()
+        guard momentsComposerPublishDenial(self.publishGate()) == nil else { return }
+        let fingerprint = self.currentFingerprint()
+        let nonce = momentsClientNonceForSubmission(storedNonce: self.clientNonce, storedFingerprint: self.storedFingerprint, current: fingerprint, nonceLocked: self.nonceLocked, make: { UUID().uuidString })
+        self.clientNonce = nonce
+        self.storedFingerprint = fingerprint
+        self.nonceLocked = true
+        self.submitted = true
+        self.publishing = true
+        self.refresh()
+        self.storePending(self.makePending(nonce: nonce, fingerprint: fingerprint, phase: .sending, submitted: true))
+        let draft = self.currentDraft(nonce: nonce)
         let tokenKind = momentsEncodePost(draft, audienceToken: nil)
         let token: String?
         if case let .success(.needsAudienceToken(kind, userIds)) = tokenKind {
@@ -487,8 +544,10 @@ public final class MomentsComposerScreen: ViewController {
         case let .success(.needsAudienceToken(kind, userIds)):
             self.fetchAudienceToken(kind: kind, userIds: userIds, draft: draft)
         case .failure(.audienceTokenRequired), .failure(.audienceNotRepresentable):
+            self.failSubmission()
             self.presentAudienceKept()
         case .failure(.invalidClientNonce):
+            self.failSubmission()
             self.presentPublishError()
         case let .success(.ready(body)):
             self.sendPost(body)
@@ -496,42 +555,276 @@ public final class MomentsComposerScreen: ViewController {
     }
 
     private func fetchAudienceToken(kind: String, userIds: [Int64], draft: MomentsPostDraft) {
-        self.publishing = true
-        self.refresh()
         let _ = (self.context.engine.moments.audienceToken(kind: kind, userIds: userIds) |> deliverOnMainQueue).start(next: { [weak self] grant in
             guard let self else { return }
-            self.publishing = false
-            self.refresh()
             self.audienceGrant = (kind: kind, userIds: userIds, grant: grant)
+            if let nonce = self.clientNonce, let fingerprint = self.storedFingerprint {
+                self.storePending(self.makePending(nonce: nonce, fingerprint: fingerprint, phase: .sending, submitted: true))
+            }
             switch momentsEncodePost(draft, audienceToken: grant.token) {
             case let .success(.ready(body)):
                 self.sendPost(body)
             case .success(.needsAudienceToken(_, _)), .failure(_):
+                self.failSubmission()
                 self.presentAudienceKept()
             }
         }, error: { [weak self] _ in
             guard let self else { return }
-            self.publishing = false
-            self.refresh()
+            self.failSubmission()
             self.presentAudienceKept()
         })
     }
 
     private func sendPost(_ body: [String: Any]) {
-        guard !self.publishing else { return }
-        self.publishing = true
-        self.refresh()
-        let _ = (self.context.engine.moments.publish(body) |> deliverOnMainQueue).start(next: { [weak self] _ in
+        let nonce = self.clientNonce ?? ""
+        let text = self.currentFingerprint().text
+        let media = self.media
+        let _ = (self.context.engine.moments.publish(body) |> deliverOnMainQueue).start(next: { [weak self] receipt in
             guard let self else { return }
+            let waiting = self.outboxTask.map { [$0] } ?? []
+            let remaining = momentsOutboxAfterPosted(waiting, nonce: nonce)
+            self.outboxTask = remaining.first
             self.publishing = false
+            self.submitted = false
+            self.clientNonce = nil
+            self.storedFingerprint = nil
+            self.nonceLocked = false
+            self.context.engine.moments.storePendingPosts(remaining)
             self.context.engine.moments.storeDraft(nil)
-            self.navigationController?.popViewController(animated: true)
+            momentsRemovePendingFiles(accountPath: self.context.account.basePath)
+            let card = momentsPostedCard(receipt: receipt, text: text, media: media)
+            let _ = self.navigationController?.popViewController(animated: false)
+            self.onPosted?(card)
         }, error: { [weak self] _ in
             guard let self else { return }
-            self.publishing = false
-            self.refresh()
+            self.failSubmission()
             self.presentPublishError()
         })
+    }
+
+    private func publishGate() -> MomentsComposerPublishGate {
+        return MomentsComposerPublishGate(trimmedText: (self.textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines), completedMediaCount: self.media.filter { !$0.key.isEmpty }.count, activity: self.currentActivity(), audienceChosen: self.audienceChosen, submitting: self.publishing, mediaBlocked: self.mediaBlocked)
+    }
+
+    private func currentActivity() -> MomentsComposerActivity {
+        if self.isRecordingVoice {
+            return .recordingVoice
+        }
+        if self.isFinishingVoice || self.voiceUploadInFlight {
+            return .finishingVoice
+        }
+        let unfinished = self.unfinishedLocalCount()
+        if self.pendingUploadCount > 0 || unfinished > 0 {
+            return .uploadingMedia(count: max(self.pendingUploadCount, unfinished))
+        }
+        return .idle
+    }
+
+    private func unfinishedLocalCount() -> Int {
+        let done = Set(self.media.map(\.order))
+        return self.localMedia.filter { !$0.path.isEmpty && !done.contains($0.order) }.count
+    }
+
+    private func beginUpload(count: Int) {
+        self.pendingUploadCount += count
+        self.refresh()
+    }
+
+    private func finishUpload(_ uploaded: [MomentsMedia], failedCount: Int) {
+        let finished = uploaded.count + failedCount
+        self.pendingUploadCount = max(0, self.pendingUploadCount - finished)
+        if !uploaded.isEmpty {
+            let orders = Set(uploaded.map(\.order))
+            self.localMedia.removeAll { orders.contains($0.order) }
+            self.media.append(contentsOf: uploaded)
+            self.mediaBlocked = false
+        }
+        if failedCount > 0 && self.pendingUploadCount == 0 {
+            let done = Set(self.media.map(\.order))
+            self.localMedia.removeAll { !done.contains($0.order) }
+        }
+        self.persistUnsubmitted()
+        self.refresh()
+        self.finishResumeSendIfNeeded()
+    }
+
+    private func retained(_ file: MomentsUploadFile) -> MomentsUploadFile {
+        let name = "\(file.order)-\(UUID().uuidString)-\(file.filename)"
+        let path = momentsCopyPendingFile(from: file.path, accountPath: self.context.account.basePath, name: name) ?? file.path
+        let local = MomentsComposerLocalMedia(path: path, filename: file.filename, mimeType: file.mimeType, type: file.type, width: file.width, height: file.height, durationMs: file.durationMs, order: file.order)
+        self.localMedia.removeAll { $0.order == file.order }
+        self.localMedia.append(local)
+        self.persistUnsubmitted()
+        var copy = file
+        copy.path = path
+        return copy
+    }
+
+    private func makePending(nonce: String, fingerprint: MomentsPostFingerprint, phase: MomentsPendingPostPhase, submitted: Bool) -> MomentsPendingPost {
+        return MomentsPendingPost(clientNonce: nonce, fingerprint: fingerprint, text: fingerprint.text, audience: fingerprint.audience, media: self.media, localMedia: self.localMedia, allowNearby: fingerprint.allowNearby, city: fingerprint.city, placeId: fingerprint.placeId, quoteOf: fingerprint.quoteOf, phase: phase, submitted: submitted, nonceLocked: self.nonceLocked, audienceToken: self.audienceGrant?.grant.token, audienceTokenExpiresAt: self.audienceGrant?.grant.expiresAt, audienceTokenKind: self.audienceGrant?.kind, audienceTokenUserIds: self.audienceGrant?.userIds ?? [])
+    }
+
+    private func storePending(_ post: MomentsPendingPost) {
+        self.outboxTask = post
+        self.context.engine.moments.storePendingPosts([post])
+    }
+
+    private func persistUnsubmitted() {
+        guard !self.submitted else {
+            return
+        }
+        if self.media.isEmpty && self.localMedia.isEmpty {
+            self.outboxTask = nil
+            self.context.engine.moments.storePendingPosts([])
+            return
+        }
+        let fingerprint = self.currentFingerprint()
+        let nonce = momentsClientNonceForSubmission(storedNonce: self.clientNonce, storedFingerprint: self.storedFingerprint, current: fingerprint, nonceLocked: false, make: { UUID().uuidString })
+        self.clientNonce = nonce
+        self.storedFingerprint = fingerprint
+        self.storePending(self.makePending(nonce: nonce, fingerprint: fingerprint, phase: .uploading, submitted: false))
+    }
+
+    private func failSubmission() {
+        self.publishing = false
+        if let nonce = self.clientNonce, let fingerprint = self.storedFingerprint {
+            self.storePending(self.makePending(nonce: nonce, fingerprint: fingerprint, phase: .failed, submitted: true))
+        }
+        self.refresh()
+    }
+
+    private func finishResumeSendIfNeeded() {
+        guard self.resumeSendAfterUpload, momentsComposerPublishDenial(self.publishGate()) == nil else {
+            return
+        }
+        self.resumeSendAfterUpload = false
+        self.submitPost()
+    }
+
+    private func discardComposer() {
+        self.uploadGeneration += 1
+        self.submitted = false
+        self.publishing = false
+        self.resumeSendAfterUpload = false
+        self.pendingUploadCount = 0
+        self.voiceUploadInFlight = false
+        self.isFinishingVoice = false
+        self.clientNonce = nil
+        self.storedFingerprint = nil
+        self.nonceLocked = false
+        self.outboxTask = nil
+        self.context.engine.moments.storeDraft(nil)
+        self.context.engine.moments.storePendingPosts([])
+        momentsRemovePendingFiles(accountPath: self.context.account.basePath)
+    }
+
+    private func recount() {
+        self.imageCount = self.media.filter { $0.type == .image }.count + self.localMedia.filter { $0.type == .image }.count
+        self.videoCount = self.media.filter { $0.type == .video }.count + self.localMedia.filter { $0.type == .video }.count
+        self.hasVoice = self.media.contains { $0.type == .audio } || self.localMedia.contains { $0.type == .audio }
+    }
+
+    private func apply(_ post: MomentsPendingPost) {
+        self.textView.text = post.text
+        self.allowNearby = post.allowNearby
+        self.media = post.media
+        self.localMedia = post.localMedia
+        self.clientNonce = post.clientNonce
+        self.storedFingerprint = post.fingerprint
+        self.submitted = post.submitted
+        self.nonceLocked = post.nonceLocked
+        self.quoteId = post.quoteOf
+        self.recount()
+        self.privacy = momentsStoryPrivacy(post.audience)
+        self.audienceChosen = true
+        if let token = post.audienceToken, let kind = post.audienceTokenKind, let expires = post.audienceTokenExpiresAt {
+            self.audienceGrant = (kind: kind, userIds: post.audienceTokenUserIds, grant: MomentsAudienceGrant(token: token, expiresAt: expires))
+        }
+        switch momentsPendingDisposition(post, fileExists: { FileManager.default.fileExists(atPath: $0) }) {
+        case .offerRetry:
+            self.mediaBlocked = false
+            if self.sendPending {
+                self.submitPost()
+            } else if !self.didOfferPending {
+                self.didOfferPending = true
+                self.presentPendingRetry()
+            }
+        case .resumeUpload:
+            self.startLocalUploads(post.localMedia)
+        case .resumeThenSend:
+            self.resumeSendAfterUpload = true
+            self.startLocalUploads(post.localMedia)
+        case .holdIncomplete:
+            self.mediaBlocked = true
+            self.presentIncomplete()
+        case .idle:
+            break
+        }
+    }
+
+    private func apply(_ draft: MomentsComposerDraft, openedQuote: String?) {
+        self.textView.text = draft.text
+        self.allowNearby = draft.allowNearby
+        self.media = draft.media
+        self.localMedia = draft.localMedia
+        self.clientNonce = draft.clientNonce
+        self.quoteId = momentsRestoredQuote(openedWith: openedQuote, stored: draft.quoteId)
+        self.recount()
+        if draft.audienceChosen, let base = EngineStoryPrivacy.Base(rawValue: draft.privacyBase) {
+            let peers = draft.peerIds.map { EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value($0)) }
+            self.privacy = EngineStoryPrivacy(base: base, additionallyIncludePeers: peers)
+            self.audienceChosen = true
+        }
+        if draft.localMedia.contains(where: { !$0.path.isEmpty && !FileManager.default.fileExists(atPath: $0.path) }) {
+            self.mediaBlocked = true
+            self.presentIncomplete()
+        } else {
+            self.startLocalUploads(draft.localMedia)
+        }
+    }
+
+    private func startLocalUploads(_ files: [MomentsComposerLocalMedia]) {
+        let pending = files.filter { !$0.path.isEmpty && FileManager.default.fileExists(atPath: $0.path) }
+        guard !pending.isEmpty else {
+            return
+        }
+        self.beginUpload(count: pending.count)
+        let generation = self.uploadGeneration
+        let _ = (self.uploadSequentially(pending.map { $0.uploadFile() }) |> deliverOnMainQueue).start(next: { [weak self] uploaded in
+            guard let self, self.uploadGeneration == generation else { return }
+            self.finishUpload(uploaded, failedCount: 0)
+        }, error: { [weak self] _ in
+            guard let self, self.uploadGeneration == generation else { return }
+            self.finishUpload([], failedCount: pending.count)
+            self.presentRejection(.imageLimit)
+        })
+    }
+
+    private func presentPendingRetry() {
+        let strings = self.presentationData.strings
+        self.present(textAlertController(context: self.context, title: strings.Moments_Outbox_Title, text: strings.Moments_Outbox_Text, actions: [
+            TextAlertAction(type: .defaultAction, title: strings.Moments_Outbox_Retry, action: { [weak self] in
+                self?.submitPost()
+            }),
+            TextAlertAction(type: .destructiveAction, title: strings.Moments_Draft_Discard, action: { [weak self] in
+                guard let self else { return }
+                self.submitted = false
+                self.nonceLocked = false
+                self.clientNonce = nil
+                self.storedFingerprint = nil
+                self.outboxTask = nil
+                self.context.engine.moments.storePendingPosts([])
+                self.refresh()
+            }),
+            TextAlertAction(type: .genericAction, title: strings.Moments_Outbox_Later, action: {})
+        ], actionLayout: .vertical), in: .window(.root))
+    }
+
+    private func presentIncomplete() {
+        let strings = self.presentationData.strings
+        self.present(textAlertController(context: self.context, title: strings.Moments_Outbox_Title, text: strings.Moments_Outbox_Incomplete, actions: [
+            TextAlertAction(type: .defaultAction, title: strings.Common_OK, action: {})
+        ]), in: .window(.root))
     }
 
     private func presentPublishError() {
@@ -553,6 +846,9 @@ extension MomentsComposerScreen: UITextViewDelegate {
     public func textViewDidChange(_ textView: UITextView) {
         if textView.text.count > self.limits.textLimit {
             textView.text = String(textView.text.prefix(self.limits.textLimit))
+        }
+        if !self.media.isEmpty || !self.localMedia.isEmpty {
+            self.persistUnsubmitted()
         }
         self.refresh()
     }

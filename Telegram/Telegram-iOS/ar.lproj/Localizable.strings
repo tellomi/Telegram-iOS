@@ -7,3 +7,10 @@
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "تعذّر إرسال التعليق. نصك ما زال هنا.";
 "Moments_Audience_Kept" = "تعذّر تغيير الجمهور. اختيارك ما زال محفوظًا.";
+
+"Moments.Draft.Message" = "هل تريد حفظ هذا المنشور كمسودة أم تجاهله؟";
+"Moments.Outbox.Title" = "لم يُرسل المنشور";
+"Moments.Outbox.Text" = "ما زال هناك منشور بانتظار الإرسال.";
+"Moments.Outbox.Retry" = "حاول مرة أخرى";
+"Moments.Outbox.Later" = "ليس الآن";
+"Moments.Outbox.Incomplete" = "أحد المرفقات مفقود، لذا لم يُرسل هذا المنشور.";

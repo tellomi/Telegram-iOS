@@ -244,3 +244,10 @@
 /* Moments feed. Same wording as the Android values pack for this language. */
 "Moments_Comment_SendFailed" = "评论没有发出去，内容还在。";
 "Moments_Audience_Kept" = "没能修改可见范围，你的选择还在。";
+
+"Moments.Draft.Message" = "把这条动态存成草稿，还是放弃？";
+"Moments.Outbox.Title" = "动态没有发出";
+"Moments.Outbox.Text" = "还有一条动态在等着发送。";
+"Moments.Outbox.Retry" = "再试一次";
+"Moments.Outbox.Later" = "以后再说";
+"Moments.Outbox.Incomplete" = "附件不见了，所以这条动态没有发出。";

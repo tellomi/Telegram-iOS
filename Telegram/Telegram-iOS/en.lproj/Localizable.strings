@@ -17367,6 +17367,12 @@ Error: %8$@";
 "Tellomi.MenuSettings.Title" = "Menu settings";
 "Tellomi.MenuSettings.HideButtonTitles" = "Hide button titles";
 "Tellomi.MenuSettings.NavigationButtons" = "Navigation bar buttons";
+"Moments.Draft.Message" = "Save this post as a draft, or discard it?";
+"Moments.Outbox.Title" = "Post not sent";
+"Moments.Outbox.Text" = "A post is still waiting to be sent.";
+"Moments.Outbox.Retry" = "Try again";
+"Moments.Outbox.Later" = "Not now";
+"Moments.Outbox.Incomplete" = "An attachment is missing, so this post was not sent.";
 
 /* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
 "CrashReport.Prompt.Title" = "New Crash Log Available";

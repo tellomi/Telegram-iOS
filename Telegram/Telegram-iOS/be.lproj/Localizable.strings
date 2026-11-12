@@ -7,3 +7,10 @@
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "Не ўдалося адправіць каментарый. Ваш тэкст застаўся на месцы.";
 "Moments_Audience_Kept" = "Не ўдалося змяніць аўдыторыю. Ваш выбар захаваны.";
+
+"Moments.Draft.Message" = "Захаваць гэты допіс як чарнавік ці адкінуць?";
+"Moments.Outbox.Title" = "Допіс не адпраўлены";
+"Moments.Outbox.Text" = "Допіс яшчэ чакае адпраўкі.";
+"Moments.Outbox.Retry" = "Паспрабаваць яшчэ раз";
+"Moments.Outbox.Later" = "Не зараз";
+"Moments.Outbox.Incomplete" = "Няма ўкладання, таму допіс не адпраўлены.";

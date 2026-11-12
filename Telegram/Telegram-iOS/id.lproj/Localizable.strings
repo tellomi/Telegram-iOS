@@ -7,3 +7,10 @@
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "Komentar tidak terkirim. Teks Anda masih di sini.";
 "Moments_Audience_Kept" = "Tidak dapat mengubah audiens. Pilihan Anda tetap tersimpan.";
+
+"Moments.Draft.Message" = "Simpan postingan ini sebagai draf, atau buang?";
+"Moments.Outbox.Title" = "Postingan belum terkirim";
+"Moments.Outbox.Text" = "Ada postingan yang masih menunggu untuk dikirim.";
+"Moments.Outbox.Retry" = "Coba lagi";
+"Moments.Outbox.Later" = "Nanti saja";
+"Moments.Outbox.Incomplete" = "Lampiran hilang, jadi postingan ini tidak terkirim.";

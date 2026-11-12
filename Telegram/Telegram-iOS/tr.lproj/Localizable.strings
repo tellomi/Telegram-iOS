@@ -7,3 +7,10 @@
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "Yorum gönderilemedi. Metniniz hâlâ burada.";
 "Moments_Audience_Kept" = "Kitle değiştirilemedi. Seçiminiz korundu.";
+
+"Moments.Draft.Message" = "Bu gönderi taslak olarak kaydedilsin mi, yoksa silinsin mi?";
+"Moments.Outbox.Title" = "Gönderi gönderilmedi";
+"Moments.Outbox.Text" = "Bir gönderi hâlâ gönderilmeyi bekliyor.";
+"Moments.Outbox.Retry" = "Yeniden dene";
+"Moments.Outbox.Later" = "Şimdi değil";
+"Moments.Outbox.Incomplete" = "Bir ek eksik, bu yüzden bu gönderi gönderilmedi.";
