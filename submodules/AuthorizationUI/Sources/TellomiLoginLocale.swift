@@ -7,6 +7,9 @@ import TelegramPresentationData
 /// Reinstalling the app clears this key together with the saved langpack.
 public let tellomiSystemLangPackDefaultsKey = "TellomiDidApplySystemLangPack"
 
+/// Written by the login language button and by Settings ▸ Language.
+public let tellomiPreferredInterfaceLanguageKey = "TellomiPreferredInterfaceLanguage"
+
 /// Server langpack for a built-in Chinese localization. Nil for English and every other language.
 /// `zh-Hans-US` and `zh-Hans-CN` are `zh-Hans`. `zh-Hant-TW` and `zh-Hant-HK` are `zh-Hant`.
 public func tellomiLangPackCode(preferredLanguages: [String]) -> String? {
