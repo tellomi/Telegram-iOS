@@ -112,7 +112,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         self.input.borderStyle = .none
         self.input.backgroundColor = theme.list.itemBlocksBackgroundColor
         self.input.layer.cornerRadius = 18
-        self.input.placeholder = momentsText(self.presentationData.strings, .commentPrompt)
+        self.input.placeholder = self.presentationData.strings.Moments_CommentHint
         self.input.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 1))
         self.input.leftViewMode = .always
         self.input.returnKeyType = .send
@@ -137,34 +137,34 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         let strings = self.presentationData.strings
         self.closeButton.setTitle(nil, for: .normal)
         self.closeButton.setImage(momentsTintedIcon("Navigation/Close", theme.list.itemPrimaryTextColor), for: .normal)
-        self.closeButton.accessibilityLabel = momentsText(strings, .cancel)
+        self.closeButton.accessibilityLabel = strings.Common_Cancel
         let expandName = self.expandedSheet ? "Media Editor/ZoomOut" : "Chat/Context Menu/Expand"
         self.expandButton.setTitle(nil, for: .normal)
         self.expandButton.setImage(momentsTintedIcon(expandName, theme.list.itemSecondaryTextColor), for: .normal)
-        self.expandButton.accessibilityLabel = momentsText(strings, .fullText)
-        self.hotButton.setTitle(momentsText(strings, .sortHot), for: .normal)
-        self.latestButton.setTitle(momentsText(strings, .sortLatest), for: .normal)
+        self.expandButton.accessibilityLabel = strings.Moments_FullText
+        self.hotButton.setTitle(strings.Moments_Sort_Hot, for: .normal)
+        self.latestButton.setTitle(strings.Moments_Sort_Latest, for: .normal)
         let selectedColor = theme.list.itemAccentColor
         let idleColor = theme.list.itemSecondaryTextColor
         self.hotButton.setTitleColor(self.sort == "hot" ? selectedColor : idleColor, for: .normal)
         self.latestButton.setTitleColor(self.sort == "latest" ? selectedColor : idleColor, for: .normal)
         if self.commentsOpen {
             if let name = self.replyName, !name.isEmpty {
-                self.input.placeholder = momentsReplyTo(strings, name)
+                self.input.placeholder = strings.Moments_ReplyTo(name).string
             } else {
-                self.input.placeholder = momentsText(strings, .commentPrompt)
+                self.input.placeholder = strings.Moments_CommentHint
             }
             self.input.isEnabled = !self.sending
         } else {
-            self.input.placeholder = momentsText(strings, .commentClosed)
+            self.input.placeholder = strings.Moments_Comment_Closed
             self.input.isEnabled = false
         }
         self.replyChip.isHidden = self.replyParent == nil
         if let name = self.replyName, !name.isEmpty {
-            let title = momentsReplyTo(strings, name) + " · " + momentsText(strings, .cancel)
+            let title = strings.Moments_ReplyTo(name).string + " · " + strings.Common_Cancel
             self.replyChip.setTitle(title, for: .normal)
         } else if self.replyParent != nil {
-            self.replyChip.setTitle(momentsText(strings, .cancel), for: .normal)
+            self.replyChip.setTitle(strings.Common_Cancel, for: .normal)
         }
         self.replyChip.setTitleColor(theme.list.itemSecondaryTextColor, for: .normal)
     }
@@ -221,7 +221,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
             guard let self, self.commentEpoch == epoch else { return }
             self.loadingComments = false
             if self.displayedComments.isEmpty {
-                self.errorLabel.text = momentsText(self.presentationData.strings, .loadFailed)
+                self.errorLabel.text = self.presentationData.strings.Moments_LoadFailed
                 self.errorLabel.isHidden = false
                 self.relayoutFrame()
             }
@@ -273,7 +273,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         let strings = self.presentationData.strings
         let theme = self.presentationData.theme
         let total = self.total > 0 ? self.total : self.card.counts.comments
-        self.titleLabel.text = "\(total) \(momentsText(strings, .commentCount))"
+        self.titleLabel.text = "\(total) \(strings.Moments_CommentCount)"
         for slot in self.imageSlots {
             slot.cancel()
         }
@@ -287,18 +287,18 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
             y = self.addRow(id: comment.id, author: comment.author, text: comment.text, created: comment.createdAt, likes: comment.likeCount, liked: comment.liked, isAuthor: comment.isAuthor, region: comment.ipRegionLabel, attachment: comment.attachment, replyToName: nil, viewerAuthored: comment.viewerAuthored, x: 12, y: y, width: width - 24, theme: theme, strings: strings)
             let shown = self.expanded.contains(comment.id)
             if comment.replyCount > 0 && !shown {
-                y = self.addMoreButton(title: "—— " + momentsShowReplies(strings, comment.replyCount), identifier: "expand:" + comment.id, x: 48, y: y, width: width - 72, theme: theme, action: #selector(self.expandReplies(_:)))
+                y = self.addMoreButton(title: "—— " + strings.Moments_ShowReplies(comment.replyCount).string, identifier: "expand:" + comment.id, x: 48, y: y, width: width - 72, theme: theme, action: #selector(self.expandReplies(_:)))
             } else if shown {
                 for reply in self.loadedReplies[comment.id] ?? comment.replies where !reply.disliked {
                     y = self.addRow(id: reply.id, author: reply.author, text: reply.text, created: reply.createdAt, likes: reply.likeCount, liked: reply.liked, isAuthor: reply.isAuthor, region: reply.ipRegionLabel, attachment: reply.attachment, replyToName: reply.replyToName, viewerAuthored: reply.viewerAuthored, x: 48, y: y, width: width - 60, theme: theme, strings: strings)
                 }
                 if self.replyCursor[comment.id]?.isEmpty == false {
-                    y = self.addMoreButton(title: "—— " + momentsShowReplies(strings, max(comment.replyCount - (self.loadedReplies[comment.id]?.count ?? 0), 1)), identifier: "more:" + comment.id, x: 48, y: y, width: width - 72, theme: theme, action: #selector(self.expandReplies(_:)))
+                    y = self.addMoreButton(title: "—— " + strings.Moments_ShowReplies(max(comment.replyCount - (self.loadedReplies[comment.id]?.count ?? 0), 1)).string, identifier: "more:" + comment.id, x: 48, y: y, width: width - 72, theme: theme, action: #selector(self.expandReplies(_:)))
                 }
             }
         }
         if self.cursors.cursor(sort: self.sort) != nil {
-            y = self.addMoreButton(title: momentsText(strings, .more), identifier: "comments", x: 12, y: y, width: width - 24, theme: theme, action: #selector(self.moreCommentsPressed))
+            y = self.addMoreButton(title: strings.Moments_More, identifier: "comments", x: 12, y: y, width: width - 24, theme: theme, action: #selector(self.moreCommentsPressed))
         }
         self.list.contentSize = CGSize(width: width, height: y + 12)
     }
@@ -343,7 +343,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         nameButton.accessibilityLabel = name
         nameButton.addTarget(self, action: #selector(self.authorPressed(_:)), for: .touchUpInside)
         if isAuthor {
-            let tag = momentsText(strings, .authorTag)
+            let tag = strings.Moments_Author
             let prefix = (name + "  ") as NSString
             let marked = NSMutableAttributedString(string: prefix as String + tag, attributes: [.font: Font.regular(13), .foregroundColor: theme.list.itemSecondaryTextColor])
             marked.addAttributes([.foregroundColor: UIColor(rgb: 0xFF2E38)], range: NSRange(location: prefix.length, length: (tag as NSString).length))
@@ -359,11 +359,11 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         body.textColor = theme.list.itemPrimaryTextColor
         body.numberOfLines = 0
         if removed {
-            body.text = momentsText(strings, .unavailable)
+            body.text = strings.Moments_Unavailable
         } else {
             var bodyText = text
             if let replyToName, !replyToName.isEmpty {
-                bodyText = momentsReplyTo(strings, replyToName) + " " + text
+                bodyText = strings.Moments_ReplyTo(replyToName).string + " " + text
             }
             body.text = bodyText
         }
@@ -395,7 +395,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
             let reply = UIButton(type: .system)
             reply.frame = CGRect(x: 40 + meta.sizeThatFits(CGSize(width: width, height: 16)).width + 8, y: meta.frame.minY, width: 72, height: 16)
             reply.contentHorizontalAlignment = .left
-            reply.setTitle(momentsText(strings, .reply), for: .normal)
+            reply.setTitle(strings.Moments_Reply, for: .normal)
             reply.titleLabel?.font = Font.regular(12)
             reply.setTitleColor(theme.list.itemSecondaryTextColor, for: .normal)
             reply.accessibilityIdentifier = id
@@ -410,14 +410,14 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
             like.setTitle(likes > 0 ? " \(likes)" : nil, for: .normal)
             like.setTitleColor(likeColor, for: .normal)
             like.accessibilityIdentifier = id
-            like.accessibilityLabel = momentsText(strings, .like)
+            like.accessibilityLabel = strings.Moments_Like
             like.addTarget(self, action: #selector(self.likePressed(_:)), for: .touchUpInside)
             row.addSubview(like)
             let dislike = UIButton(type: .system)
             dislike.frame = CGRect(x: width - 32, y: 0, width: 32, height: 32)
             dislike.setImage(momentsTintedIcon("Navigation/Close", theme.list.itemSecondaryTextColor), for: .normal)
             dislike.accessibilityIdentifier = id
-            dislike.accessibilityLabel = momentsText(strings, .hidePost)
+            dislike.accessibilityLabel = strings.Moments_HidePost
             dislike.addTarget(self, action: #selector(self.dislikePressed(_:)), for: .touchUpInside)
             row.addSubview(dislike)
         }
@@ -540,25 +540,25 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         }
         var items: [ActionSheetItem] = []
         if self.commentsOpen {
-            items.append(ActionSheetButtonItem(title: momentsText(strings, .reply), color: .accent, action: { [weak self] in
+            items.append(ActionSheetButtonItem(title: strings.Moments_Reply, color: .accent, action: { [weak self] in
                 dismiss()
                 self?.beginReply(target)
             }))
         }
         if !target.text.isEmpty {
-            items.append(ActionSheetButtonItem(title: momentsText(strings, .copyText), color: .accent, action: {
+            items.append(ActionSheetButtonItem(title: strings.Moments_CopyText, color: .accent, action: {
                 dismiss()
                 UIPasteboard.general.string = target.text
             }))
         }
         if self.canReport(target.author) {
-            items.append(ActionSheetButtonItem(title: momentsText(strings, .report), color: .destructive, action: { [weak self] in
+            items.append(ActionSheetButtonItem(title: strings.Moments_Report, color: .destructive, action: { [weak self] in
                 dismiss()
                 self?.report(target)
             }))
         }
         if self.canDelete(target) {
-            items.append(ActionSheetButtonItem(title: momentsText(strings, .delete), color: .destructive, action: { [weak self] in
+            items.append(ActionSheetButtonItem(title: strings.Common_Delete, color: .destructive, action: { [weak self] in
                 dismiss()
                 self?.deleteComment(target)
             }))
@@ -566,7 +566,7 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         guard !items.isEmpty else { return }
         sheet.setItemGroups([
             ActionSheetItemGroup(items: items),
-            ActionSheetItemGroup(items: [ActionSheetButtonItem(title: momentsText(strings, .cancel), color: .accent, action: dismiss)])
+            ActionSheetItemGroup(items: [ActionSheetButtonItem(title: strings.Common_Cancel, color: .accent, action: dismiss)])
         ])
         self.present(sheet, in: .window(.root))
     }
@@ -668,9 +668,9 @@ public final class MomentsCommentSheet: ViewController, UIScrollViewDelegate {
         case .cancelled:
             return
         case let .invalid(code) where code == "comments_closed" || code == "reply_not_allowed" || code == "not_commentable" || code == "harassment_guard":
-            text = momentsText(self.presentationData.strings, .commentClosed)
+            text = self.presentationData.strings.Moments_Comment_Closed
         default:
-            text = momentsText(self.presentationData.strings, .commentSendFailed)
+            text = self.presentationData.strings.Moments_Comment_SendFailed
         }
         self.errorLabel.text = text
         self.errorLabel.isHidden = false

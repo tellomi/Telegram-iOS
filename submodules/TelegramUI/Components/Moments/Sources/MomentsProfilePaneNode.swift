@@ -83,7 +83,7 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
                 self.loadPosts(refresh: false)
             }
         }
-        self.loadPosts(refresh: true)
+        self.loadPosts(refresh: false)
         self.loadCounts()
     }
 
@@ -133,29 +133,62 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
         self.loading = true
         let requestCursor = refresh ? nil : self.cursor
         self.postsDisposable?.dispose()
-        self.postsDisposable = (self.context.engine.moments.profilePosts(id: self.profileId, filter: "posts", cursor: requestCursor) |> deliverOnMainQueue).start(next: { [weak self] page in
-            guard let self, self.query.accepts(generation) else {
-                return
-            }
-            let refreshing = refresh || requestCursor == nil
-            let merged = momentsMergeFeed(existing: refreshing ? [] : self.items, pageItems: page.items, cursor: page.nextCursor, refreshing: refreshing)
-            self.items = merged.items
-            self.cursor = merged.cursor
-            self.loading = false
-            self.loaded = true
-            self.failed = false
-            self.ready.set(.single(true))
-            self.render()
-        }, error: { [weak self] error in
-            guard let self, self.query.accepts(generation), momentsListLoadResult(error) != .ignore else {
-                return
-            }
+        switch momentsProfilePostsFetch(refresh: refresh, cursor: requestCursor) {
+        case .sharedOpening:
+            self.postsDisposable = (self.context.engine.moments.openProfilePosts(id: self.profileId) |> deliverOnMainQueue).start(next: { [weak self] snapshot in
+                guard let self, self.query.accepts(generation) else {
+                    return
+                }
+                self.apply(snapshot)
+            })
+        case let .page(cursor):
+            self.postsDisposable = (self.context.engine.moments.profilePosts(id: self.profileId, filter: "posts", cursor: cursor) |> deliverOnMainQueue).start(next: { [weak self] page in
+                guard let self, self.query.accepts(generation) else {
+                    return
+                }
+                if cursor == nil {
+                    self.context.engine.moments.retainProfilePosts(id: self.profileId, page: page)
+                }
+                let merged = momentsMergeFeed(existing: cursor == nil ? [] : self.items, pageItems: page.items, cursor: page.nextCursor, refreshing: cursor == nil)
+                self.items = merged.items
+                self.cursor = merged.cursor
+                self.loading = false
+                self.loaded = true
+                self.failed = false
+                self.render()
+            }, error: { [weak self] error in
+                guard let self, self.query.accepts(generation), momentsListLoadResult(error) != .ignore else {
+                    return
+                }
+                self.loading = false
+                self.loaded = true
+                self.failed = self.items.isEmpty
+                self.render()
+            })
+        }
+    }
+
+    private func apply(_ snapshot: MomentsProfilePostsSnapshot) {
+        if snapshot.failed && snapshot.items.isEmpty {
             self.loading = false
             self.loaded = true
             self.failed = true
-            self.ready.set(.single(true))
             self.render()
-        })
+            return
+        }
+        self.items = snapshot.items
+        if snapshot.remoteCount != nil || snapshot.failed {
+            self.cursor = snapshot.nextCursor
+            self.loading = false
+            self.loaded = true
+            self.failed = false
+        } else {
+            self.cursor = nil
+            self.loading = true
+            self.loaded = !snapshot.items.isEmpty
+            self.failed = false
+        }
+        self.render()
     }
 
     private func loadCounts() {
@@ -222,8 +255,16 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
         self.appendLink(&entries, ids: &ids, prints: &prints, stable: "followers", title: strings.Moments_Followers, count: self.followersCount, hidden: self.followersHidden) { [weak self] in
             self?.openPeople(followers: true)
         }
-        if self.items.isEmpty && (self.failed || self.loaded) {
-            let text = self.failed ? momentsText(strings, .loadFailed) : momentsText(strings, .profilePosts)
+        switch momentsProfilePostsState(itemCount: self.items.count, loading: self.loading, loaded: self.loaded, failed: self.failed) {
+        case .posts:
+            break
+        case .loading:
+            let text = strings.Moments_Loading
+            entries.append(MomentsStatusItem(text: text, theme: theme, action: {}))
+            ids.append("status")
+            prints.append(text)
+        case .failed, .empty:
+            let text = self.failed ? strings.Moments_LoadFailed : strings.Moments_Profile_Posts
             entries.append(MomentsStatusItem(text: text, theme: theme, action: { [weak self] in
                 guard let self else {
                     return
@@ -383,11 +424,11 @@ public final class MomentsSearchContentNode: ASDisplayNode {
             }))
         }
         for post in self.result.posts {
-            let title = post.isUnavailable ? momentsText(strings, .unavailable) : post.text
+            let title = post.isUnavailable ? strings.Moments_Unavailable : post.text
             rows.append(MomentsStatusItem(text: title, theme: theme, action: { [weak self] in self?.openPost?(post) }))
         }
         if rows.isEmpty {
-            rows = [MomentsStatusItem(text: momentsText(strings, .search), theme: theme, action: {})]
+            rows = [MomentsStatusItem(text: strings.Moments_Search, theme: theme, action: {})]
         }
         let previous = self.rendered
         let count = rows.count

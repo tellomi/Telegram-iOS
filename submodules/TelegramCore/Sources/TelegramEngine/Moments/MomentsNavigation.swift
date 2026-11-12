@@ -131,17 +131,68 @@ public enum MomentsListLoadResult: Equatable {
     case ignore
 }
 
-/// Whether `GET /v1/feed/profiles/{id}/posts` has any post. `unknown` is the value
-/// emitted before that request returns, so the rest of the profile can appear.
+/// Whether the first page of `GET /v1/feed/profiles/{id}/posts` has any post.
+/// `unknown` is before the cache and the network have answered, so the rest of
+/// the profile can appear. A later failure keeps a cached non-empty page.
 public enum MomentsProfilePostsPresence: Equatable {
     case unknown
     case empty
     case present
 }
 
-/// A non-empty posts page shows the Moments pane. An empty page does not.
-public func momentsProfilePostsPresence(itemCount: Int) -> MomentsProfilePostsPresence {
-    return itemCount > 0 ? .present : .empty
+/// Cache is read before the network. A remote page replaces the cache. A failed
+/// request does not hide posts the cache already showed.
+public func momentsProfilePostsPresence(cachedCount: Int?, remoteCount: Int?, failed: Bool) -> MomentsProfilePostsPresence {
+    if let remoteCount {
+        return remoteCount > 0 ? .present : .empty
+    }
+    if failed {
+        if let cachedCount, cachedCount > 0 {
+            return .present
+        }
+        return .empty
+    }
+    if let cachedCount {
+        return cachedCount > 0 ? .present : .empty
+    }
+    return .unknown
+}
+
+/// The first page is one shared opening (cache, then one request). A refresh or a
+/// later page is its own request. The opening and the list must not each fetch.
+public enum MomentsProfilePostsFetch: Equatable {
+    case sharedOpening
+    case page(cursor: String?)
+}
+
+public struct MomentsProfilePostsSnapshot: Equatable {
+    public var items: [MomentsCard]
+    public var nextCursor: String?
+    public var cachedCount: Int?
+    public var remoteCount: Int?
+    public var failed: Bool
+
+    public init(items: [MomentsCard], nextCursor: String?, cachedCount: Int?, remoteCount: Int?, failed: Bool) {
+        self.items = items
+        self.nextCursor = nextCursor
+        self.cachedCount = cachedCount
+        self.remoteCount = remoteCount
+        self.failed = failed
+    }
+
+    public var presence: MomentsProfilePostsPresence {
+        return momentsProfilePostsPresence(cachedCount: self.cachedCount, remoteCount: self.remoteCount, failed: self.failed)
+    }
+}
+
+public func momentsProfilePostsFetch(refresh: Bool, cursor: String?) -> MomentsProfilePostsFetch {
+    if refresh {
+        return .page(cursor: nil)
+    }
+    if let cursor, !cursor.isEmpty {
+        return .page(cursor: cursor)
+    }
+    return .sharedOpening
 }
 
 /// User profiles keep native Stories. Moments is added only when the profile has
@@ -162,12 +213,6 @@ public func momentsProfileTabs<Tab: Equatable>(_ tabs: [Tab]?, isUserProfile: Bo
         tabs.insert(moments, at: 0)
     }
     return tabs
-}
-
-/// The profile pane reports ready as soon as it is created. The posts request
-/// updates the list inside the pane and does not hold the profile shell.
-public func momentsProfilePaneReadyAtInit() -> Bool {
-    return true
 }
 
 /// The profile Stories tab. Official Simplified Chinese for `PeerInfo.PaneStories` is 动态, the same word as Moments.

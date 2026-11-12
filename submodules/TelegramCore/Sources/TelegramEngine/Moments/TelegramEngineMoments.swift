@@ -147,6 +147,10 @@ public extension TelegramEngine {
         private let personalizedRecommendationsValue = ValuePromise<Bool>(true, ignoreRepeated: true)
         private let preferenceGeneration = Atomic<Int>(value: 0)
         private let preferenceDocument = Atomic<[String: Any]>(value: [:])
+        private let profileOpeningLock = NSLock()
+        private var profileOpeningPromises: [String: Promise<MomentsProfilePostsSnapshot>] = [:]
+        private var profileOpeningDisposables: [String: Disposable] = [:]
+        private var profileOpeningLatest: [String: MomentsProfilePostsSnapshot] = [:]
 
         init(account: Account) {
             self.account = account
@@ -484,6 +488,88 @@ public extension TelegramEngine {
 
         public func closePoll(postId: String) -> Signal<Never, MomentsAPIError> {
             return self.call(method: "POST", path: "/v1/feed/posts/\(postId)/poll/close") |> ignoreValues
+        }
+
+        public func latestProfilePosts(id: String) -> MomentsProfilePostsSnapshot? {
+            self.profileOpeningLock.lock()
+            let snapshot = self.profileOpeningLatest[id]
+            self.profileOpeningLock.unlock()
+            return snapshot
+        }
+
+        /// First page of a profile. Reads the extension cache, then one network request.
+        /// A second subscriber, including the profile list, receives the same opening.
+        public func openProfilePosts(id: String) -> Signal<MomentsProfilePostsSnapshot, NoError> {
+            self.profileOpeningLock.lock()
+            if let existing = self.profileOpeningPromises[id] {
+                self.profileOpeningLock.unlock()
+                return existing.get()
+            }
+            let promise = Promise<MomentsProfilePostsSnapshot>()
+            self.profileOpeningPromises[id] = promise
+            self.profileOpeningLock.unlock()
+
+            let disposable = (self.cachedProfilePosts(id: id)
+            |> mapToSignal { cached -> Signal<MomentsProfilePostsSnapshot, NoError> in
+                let cachedCount = cached?.items.count
+                let head: Signal<MomentsProfilePostsSnapshot, NoError>
+                if let cached {
+                    head = .single(MomentsProfilePostsSnapshot(items: cached.items, nextCursor: cached.nextCursor, cachedCount: cachedCount, remoteCount: nil, failed: false))
+                } else {
+                    head = .complete()
+                }
+                let remote = self.profilePosts(id: id, filter: "posts", cursor: nil)
+                |> map { page -> MomentsProfilePostsSnapshot in
+                    self.storeProfilePosts(id: id, page: page)
+                    return MomentsProfilePostsSnapshot(items: page.items, nextCursor: page.nextCursor, cachedCount: cachedCount, remoteCount: page.items.count, failed: false)
+                }
+                |> `catch` { _ -> Signal<MomentsProfilePostsSnapshot, NoError> in
+                    return .single(MomentsProfilePostsSnapshot(items: cached?.items ?? [], nextCursor: cached?.nextCursor, cachedCount: cachedCount, remoteCount: nil, failed: true))
+                }
+                return head |> then(remote)
+            }).start(next: { [weak self] snapshot in
+                self?.retainProfilePosts(id: id, snapshot: snapshot, promise: promise)
+            })
+            self.profileOpeningLock.lock()
+            self.profileOpeningDisposables[id] = disposable
+            self.profileOpeningLock.unlock()
+            return promise.get()
+        }
+
+        /// A refresh succeeded. Keeps the shared opening and the cache on this page.
+        /// A failed refresh does not call this, so a cached non-empty page stays visible.
+        public func retainProfilePosts(id: String, page: MomentsPage) {
+            self.storeProfilePosts(id: id, page: page)
+            let snapshot = MomentsProfilePostsSnapshot(items: page.items, nextCursor: page.nextCursor, cachedCount: page.items.count, remoteCount: page.items.count, failed: false)
+            self.profileOpeningLock.lock()
+            let promise = self.profileOpeningPromises[id]
+            self.profileOpeningLock.unlock()
+            self.retainProfilePosts(id: id, snapshot: snapshot, promise: promise)
+        }
+
+        private func retainProfilePosts(id: String, snapshot: MomentsProfilePostsSnapshot, promise: Promise<MomentsProfilePostsSnapshot>?) {
+            self.profileOpeningLock.lock()
+            self.profileOpeningLatest[id] = snapshot
+            self.profileOpeningLock.unlock()
+            promise?.set(.single(snapshot))
+        }
+
+        private func cachedProfilePosts(id: String) -> Signal<MomentsPage?, NoError> {
+            return self.account.postbox.transaction { transaction -> MomentsPage? in
+                guard let payload = momentsReadBlob(transaction: transaction, id: momentsProfilePostsCacheId(id)), let data = payload.data(using: .utf8) else {
+                    return nil
+                }
+                return momentsProfilePostsPage(data)
+            }
+        }
+
+        private func storeProfilePosts(id: String, page: MomentsPage) {
+            guard let payload = momentsProfilePostsPayload(page) else {
+                return
+            }
+            let _ = self.account.postbox.transaction { transaction in
+                momentsWriteBlob(transaction: transaction, id: momentsProfilePostsCacheId(id), payload: payload)
+            }.start()
         }
 
         public func profilePosts(id: String, filter: String, cursor: String?) -> Signal<MomentsPage, MomentsAPIError> {

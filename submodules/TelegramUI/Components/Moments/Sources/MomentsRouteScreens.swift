@@ -127,7 +127,7 @@ public final class MomentsPostListScreen: ViewController {
         let sortHeight: CGFloat = self.showsSort ? 32 : 0
         if let sortButton = self.displayNode.view.viewWithTag(7) as? UIButton {
             sortButton.frame = CGRect(x: layout.size.width - 120, y: top, width: 108, height: 32)
-            let title = momentsText(self.presentationData.strings, self.sort == "hot" ? .sortHot : .sortLatest)
+            let title = (self.sort == "hot" ? self.presentationData.strings.Moments_Sort_Hot : self.presentationData.strings.Moments_Sort_Latest)
             sortButton.setTitle(title, for: .normal)
         }
         self.list.frame = CGRect(x: 0, y: top + sortHeight, width: layout.size.width, height: max(0, layout.size.height - top - sortHeight))
@@ -191,7 +191,7 @@ public final class MomentsPostListScreen: ViewController {
         let handlers = self.actions.handlers()
         var entries: [ListViewItem] = []
         if self.items.isEmpty {
-            let text = self.failed ? momentsText(strings, .loadFailed) : self.emptyText(strings)
+            let text = self.failed ? strings.Moments_LoadFailed : self.emptyText(strings)
             entries = [MomentsStatusItem(text: text, theme: theme, action: { [weak self] in
                 guard let self else {
                     return
@@ -205,7 +205,7 @@ public final class MomentsPostListScreen: ViewController {
                 entries.append(MomentsPostItem(card: card, strings: strings, theme: theme, fontSize: self.presentationData.listsFontSize.baseDisplaySize, showFollow: false, expanded: self.expanded.contains(card.id), hidden: false, albumIndex: 0, playing: false, context: self.context, handlers: handlers))
             }
             if self.failed {
-                entries.append(MomentsStatusItem(text: momentsText(strings, .loadFailed), theme: theme, action: { [weak self] in
+                entries.append(MomentsStatusItem(text: strings.Moments_LoadFailed, theme: theme, action: { [weak self] in
                     self?.load(refresh: false)
                 }))
             }

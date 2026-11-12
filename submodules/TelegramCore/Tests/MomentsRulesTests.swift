@@ -493,6 +493,12 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertFalse(momentsShouldLoadFeedPage(loaded: false, cursor: nil, refresh: false, loading: true))
         XCTAssertTrue(momentsShouldLoadFeedPage(loaded: true, cursor: nil, refresh: true, loading: false))
         XCTAssertTrue(momentsShouldLoadFeedPage(loaded: true, cursor: "next", refresh: false, loading: false))
+        XCTAssertTrue(momentsProfilePaneReadyAtInit())
+        XCTAssertEqual(momentsProfilePostsState(itemCount: 0, loading: true, loaded: false, failed: false), .loading)
+        XCTAssertEqual(momentsProfilePostsState(itemCount: 0, loading: false, loaded: false, failed: false), .loading)
+        XCTAssertEqual(momentsProfilePostsState(itemCount: 0, loading: false, loaded: true, failed: true), .failed)
+        XCTAssertEqual(momentsProfilePostsState(itemCount: 0, loading: false, loaded: true, failed: false), .empty)
+        XCTAssertEqual(momentsProfilePostsState(itemCount: 2, loading: true, loaded: false, failed: false), .posts)
         XCTAssertFalse(momentsFeedShouldProbe(kind: .recommend, screenVisible: true))
         XCTAssertTrue(momentsFeedShouldProbe(kind: .following, screenVisible: true))
         XCTAssertTrue(momentsFeedShouldProbe(kind: .friends, screenVisible: true))
@@ -818,10 +824,18 @@ final class MomentsRulesTests: XCTestCase {
     func testMomentsPaneFollowsWhetherTheProfileHasPosts() {
         let isStories: (String) -> Bool = { $0 == "stories" }
         let base = ["stories", "media"]
-        XCTAssertEqual(momentsProfilePostsPresence(itemCount: 0), .empty)
-        XCTAssertEqual(momentsProfilePostsPresence(itemCount: 3), .present)
+        XCTAssertEqual(momentsProfilePostsPresence(cachedCount: nil, remoteCount: nil, failed: false), .unknown)
+        XCTAssertEqual(momentsProfilePostsPresence(cachedCount: 0, remoteCount: nil, failed: false), .empty)
+        XCTAssertEqual(momentsProfilePostsPresence(cachedCount: nil, remoteCount: 0, failed: false), .empty)
+        XCTAssertEqual(momentsProfilePostsPresence(cachedCount: nil, remoteCount: 3, failed: false), .present)
+        XCTAssertEqual(momentsProfilePostsPresence(cachedCount: 4, remoteCount: nil, failed: true), .present)
+        XCTAssertEqual(momentsProfilePostsPresence(cachedCount: nil, remoteCount: nil, failed: true), .empty)
+        XCTAssertEqual(momentsProfilePostsPresence(cachedCount: 4, remoteCount: 0, failed: false), .empty)
         XCTAssertEqual(momentsProfileTabs(base, isUserProfile: true, posts: .empty, isStories: isStories, moments: "moments"), base)
         XCTAssertEqual(momentsProfileTabs(base, isUserProfile: true, posts: .unknown, isStories: isStories, moments: "moments"), base)
+        XCTAssertEqual(momentsProfilePostsFetch(refresh: false, cursor: nil), .sharedOpening)
+        XCTAssertEqual(momentsProfilePostsFetch(refresh: true, cursor: nil), .page(cursor: nil))
+        XCTAssertEqual(momentsProfilePostsFetch(refresh: false, cursor: "next"), .page(cursor: "next"))
         let present = momentsProfileTabs(base, isUserProfile: true, posts: .present, isStories: isStories, moments: "moments")
         XCTAssertEqual(present, ["stories", "moments", "media"])
         let labels = (present ?? []).map { pane -> String in
