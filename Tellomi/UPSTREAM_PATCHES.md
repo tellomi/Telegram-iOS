@@ -1,5 +1,16 @@
 # Upstream patches
 
+## Link hosts go through TellomiLinks — 2026-11-12
+
+`GenerateTextEntities` recognized `tell.cc`, `t.me`, and `telegram.me`, and omitted `telegram.dog`. The text-entity host list, the internal-link host list, and the open-link check now use `TellomiLinks.linkHosts` (`tell.cc`, `t.me`, `telegram.me`, `telegram.dog`). Short links use `TellomiLinks.shortLinkHosts`. The site host in that list is `TellomiLinks.siteHost`.
+
+| File | Change |
+| --- | --- |
+| `submodules/TextFormat/Sources/GenerateTextEntities.swift` | Whitelist is `linkHosts` plus the site and the other public hosts. |
+| `submodules/UrlHandling/Sources/UrlHandling.swift` | Internal and short-link hosts come from `TellomiLinks`. |
+| `submodules/TelegramUI/Sources/OpenUrl.swift` | The internet-url host list is `linkHosts`. |
+| `submodules/TelegramUI/Sources/Chat/ChatControllerOpenLinkContextMenu.swift` | A public link host uses `isPublicLinkHost`. |
+
 ## Login splash methods the restored sequence calls — 2026-11-12
 
 The restored splash controller calls `updateAppearanceBackgroundColor` and `tellomiSuppressLivePages` on `RMIntroViewController`. Those two methods were on master and absent after the client-tree restore, so the release IPA did not compile. They are on the intro controller again. `resendLoginCode` is the engine wrapper around the existing `resendAuthorizationCode`; the code-entry resend call had no method to type-check.
