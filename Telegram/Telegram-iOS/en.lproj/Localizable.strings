@@ -719,7 +719,7 @@
 
 // Encryption Key
 "EncryptionKey.Title" = "Encryption Key";
-"EncryptionKey.Description" = "This image and text were derived from the encryption key for this secret chat with %1$@.\n\n If they look the same on %2$@'s device, end-to-end encryption is guaranteed.\n\nLearn more at telegram.org";
+"EncryptionKey.Description" = "This image and text were derived from the encryption key for this secret chat with %1$@.\n\n If they look the same on %2$@'s device, end-to-end encryption is guaranteed.\n\nLearn more at tellomi.cn";
 
 // Conversation media
 "ConversationMedia.Title" = "Media";

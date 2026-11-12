@@ -131,7 +131,11 @@ final class SecretChatKeyControllerNode: ViewControllerTracingNode {
             infoText.addAttributes([.font: Font.semibold(14.0)], range: range.range)
         }
         
-        let linkRange = (infoString.string as NSString).range(of: "telegram.org")
+        let infoTextNSString = infoString.string as NSString
+        var linkRange = infoTextNSString.range(of: TellomiLinks.siteHost)
+        if linkRange.location == NSNotFound {
+            linkRange = infoTextNSString.range(of: "telegram.org")
+        }
         if linkRange.location != NSNotFound {
             infoText.addAttributes([.foregroundColor: self.presentationData.theme.list.itemAccentColor, NSAttributedString.Key(rawValue: TelegramTextAttributes.URL): TellomiLinks.siteURL("help")], range: linkRange)
         }
