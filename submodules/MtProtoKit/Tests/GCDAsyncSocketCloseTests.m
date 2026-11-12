@@ -150,34 +150,6 @@ static const int kClosedSocket = -1;
     }
 }
 
-- (void)discardOneConnection {
-    [self armConnectionExpectations];
-    uint16_t port = 0;
-    int listenFD = [self listenOnLoopback:&port];
-    GCDAsyncSocketFDProbe *socket = [self connectToPort:port];
-    int accepted = [self acceptFrom:listenFD];
-    int fd = self.connectedFD;
-    [socket disconnect];
-    [self waitForExpectations:@[self.disconnected] timeout:5];
-    [self waitUntilDescriptorClosed:fd];
-    close(accepted);
-    close(listenFD);
-    socket = nil;
-    TellomiFlushDeferredCFSocketReleases();
-}
-
-// The first CFStream connection closes one process descriptor on the next
-// connection. Do that before the count. The equality stays exact.
-- (void)primeDescriptorBaseline {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        @autoreleasepool {
-            [self discardOneConnection];
-            [self discardOneConnection];
-        }
-    });
-}
-
 // connectToPort returns an autoreleased socket. Its last retain, and the
 // deferred SocketStream release, drop after this pool drains. A descriptor
 // still open two seconds later is a leak: the equality is unchanged.
@@ -193,7 +165,6 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testNormalDisconnectClosesTheDescriptorOnce {
-    [self primeDescriptorBaseline];
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     @autoreleasepool {
@@ -231,7 +202,6 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testReadErrorClosesTheDescriptorOnce {
-    [self primeDescriptorBaseline];
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     @autoreleasepool {
@@ -268,7 +238,6 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testDisconnectTwiceDoesNotCloseAReusedDescriptor {
-    [self primeDescriptorBaseline];
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     @autoreleasepool {
@@ -299,7 +268,6 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testReconnectAfterCloseUsesANewConnection {
-    [self primeDescriptorBaseline];
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     @autoreleasepool {
