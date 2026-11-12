@@ -13,6 +13,7 @@ import PhoneNumberFormat
 import DebugSettingsUI
 import MessageUI
 import AuthenticationServices
+import UIKitRuntimeUtils
 
 public final class AuthorizationSequencePhoneEntryController: ViewController, MFMailComposeViewControllerDelegate, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
     private var controllerNode: AuthorizationSequencePhoneEntryControllerNode {
@@ -28,12 +29,13 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private let isTestingEnvironment: Bool
     private let otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)])
     private let network: Network
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
     private let openUrl: (String) -> Void
     
     private let back: () -> Void
     
     private var currentData: (Int32, String?, String)?
+    private var pendingEntry: (Int32, String?, String)?
         
     var codeNode: ASDisplayNode {
         return self.controllerNode.codeNode
@@ -61,8 +63,10 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     weak var confirmationController: PhoneConfirmationController?
     
     private let termsDisposable = MetaDisposable()
+    private let tellomiLanguageDownloadDisposable = MetaDisposable()
     
     private let hapticFeedback = HapticFeedback()
+    private var tellomiBindPhone = false
     
     public init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, countriesConfiguration: CountriesConfiguration? = nil, apiId: Int32, apiHash: String, isTestingEnvironment: Bool, otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), network: Network, presentationData: PresentationData, openUrl: @escaping (String) -> Void, back: @escaping () -> Void) {
         self.sharedContext = sharedContext
@@ -73,6 +77,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         self.otherAccountPhoneNumbers = otherAccountPhoneNumbers
         self.network = network
         self.presentationData = presentationData
+        tellomiNoteAppliedPack(presentationData.strings)
         self.openUrl = openUrl
         self.back = back
                 
@@ -93,6 +98,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         if !otherAccountPhoneNumbers.1.isEmpty {
             self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
         }
+        if account != nil {
+            self.navigationItem.rightBarButtonItem = self.tellomiLanguageItem()
+        }
         
         if let countriesConfiguration {
             AuthorizationSequenceCountrySelectionController.setupCountryCodes(countries: countriesConfiguration.countries, codesByPrefix: countriesConfiguration.countriesByPrefix)
@@ -105,12 +113,133 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     deinit {
         self.termsDisposable.dispose()
+        self.tellomiLanguageDownloadDisposable.dispose()
     }
     
     @objc private func cancelPressed() {
         self.back()
     }
     
+    private func tellomiLanguageItem() -> UIBarButtonItem {
+        let code = tellomiInterfaceLanguageCode(self.presentationData.strings)
+        let image = UIImage(systemName: "globe")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 17.0, weight: .regular)).withRenderingMode(.alwaysTemplate)
+        let item: UIBarButtonItem
+        if let image {
+            item = UIBarButtonItem(image: image, style: .plain, target: self, action: #selector(self.languagePressed))
+        } else {
+            item = UIBarButtonItem(title: tellomiLanguageButtonTitle(languageCode: code), style: .plain, target: self, action: #selector(self.languagePressed))
+        }
+        item.accessibilityLabel = tellomiLanguageButtonAccessibilityLabel(languageCode: code)
+        item.accessibilityIdentifier = "Auth.Login.Language"
+        return item
+    }
+
+    @objc private func languagePressed() {
+        self.presentTellomiLanguage()
+    }
+
+    private func presentTellomiLanguage() {
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
+        let current = tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode)
+        var rows: [TellomiChoiceRow] = []
+        for info in tellomiBuiltinInterfaceLanguages() {
+            let checked = tellomiLanguageCodesMatch(info.languageCode, current)
+            let code = info.languageCode
+            rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
+                guard let self, let plan = tellomiLanguageApplyPlan(selectedCode: code, currentCode: current) else {
+                    return
+                }
+                let code = plan.code
+                if let account = self.account {
+                    tellomiStartInterfaceLanguageDownload(account: account, accountManager: self.sharedContext.accountManager, languageCode: code, disposable: self.tellomiLanguageDownloadDisposable, applied: { [weak self] strings in
+                        guard let self else {
+                            return
+                        }
+                        self.presentationData = self.presentationData.withStrings(strings)
+                        if self.isNodeLoaded {
+                            self.controllerNode.updateStrings(strings)
+                        }
+                        self.refreshTellomiLanguage()
+                    })
+                } else {
+                    tellomiRememberInterfaceLanguage(code)
+                }
+                if self.isNodeLoaded {
+                    self.controllerNode.updateStrings(self.presentationData.strings)
+                }
+                self.refreshTellomiLanguage()
+            }))
+        }
+        let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.presentationData.theme.overallDarkAppearance)
+        self.present(prompt, in: .window(.root))
+    }
+
+    private func refreshTellomiLanguage() {
+        self.updateNavigationItems()
+        guard self.isNodeLoaded, let layout = self.validLayout else {
+            return
+        }
+        self.controllerNode.containerLayoutUpdated(layout, navigationBarHeight: self.navigationLayout(layout: layout).navigationFrame.maxY, transition: .immediate)
+    }
+
+    public func setTellomiBindPhone(_ bind: Bool) {
+        self.tellomiBindPhone = bind
+        if self.isNodeLoaded {
+            self.controllerNode.setTellomiBindPhone(bind)
+            self.controllerNode.applyPresentationTheme(self.presentationData.theme)
+        }
+    }
+
+    func applyTellomiPresentationData(_ presentationData: PresentationData) {
+        let stringsChanged = presentationData.strings !== self.presentationData.strings
+        self.applyPresentationTheme(presentationData)
+        if stringsChanged {
+            tellomiNoteAppliedPack(presentationData.strings)
+            if self.isNodeLoaded {
+                self.controllerNode.updateStrings(presentationData.strings)
+            }
+            self.updateNavigationItems()
+        }
+    }
+
+    public func applyPresentationTheme(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        self.statusBar.statusBarStyle = presentationData.theme.intro.statusBarStyle.style
+        if self.isViewLoaded {
+            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        }
+        self.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), strings: NavigationBarStrings(presentationStrings: presentationData.strings)), transition: .immediate)
+        if self.isNodeLoaded {
+            self.controllerNode.applyPresentationTheme(presentationData.theme)
+        }
+    }
+
+    @objc private func tellomiSurfaceBackPressed() {
+        if !self.controllerNode.popTellomiSurface() {
+            self.back()
+        }
+    }
+
+    private func presentTellomiUnsupportedCallingCode() {
+        let text = TellomiCallingCodePolicy.message(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
+        self.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+    }
+
+    private func presentTellomiAgreementPrompt() {
+        let kind: TellomiSignUpAgreement.Kind = self.controllerNode.tellomiSurface.agreementPinnedToBottom ? .phone : .email
+        let prompt = TellomiAgreementPromptController(kind: kind, languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings), dark: self.presentationData.theme.overallDarkAppearance, openUrl: { [weak self] url in
+            self?.tellomiPresentLegalURL(url)
+        })
+        prompt.agreed = { [weak self] in
+            guard let self else {
+                return
+            }
+            self.controllerNode.setTellomiAgreed(true)
+            self.nextPressed()
+        }
+        self.present(prompt, in: .window(.root))
+    }
+
     func updateNavigationItems() {
         if self.account != nil {
             self.navigationItem.rightBarButtonItem = self.tellomiLanguageItem()
@@ -137,9 +266,15 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     }
     
     public func updateData(countryCode: Int32, countryName: String?, number: String) {
-        self.currentData = (countryCode, countryName, number)
+        self.pendingEntry = (countryCode, countryName, number)
+        // The country picker reads currentData. An email must not land in the phone field.
+        if tellomiIsLoginEmail(number) {
+            self.currentData = (countryCode, countryName, "")
+        } else {
+            self.currentData = (countryCode, countryName, number)
+        }
         if self.isNodeLoaded {
-            self.controllerNode.codeAndNumber = (countryCode, countryName, number)
+            self.controllerNode.applyEntry(countryCode: countryCode, countryName: countryName, number: number)
         }
     }
     
@@ -151,6 +286,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         
         if let animationSnapshot = controller.animationSnapshot, let textSnapshot = controller.textSnaphot {
             self.transitionInArguments = (controller.buttonFrame, controller.buttonTitle, animationSnapshot, textSnapshot)
+            controller.suppressLiveIntroPages()
         }
     }
     
@@ -162,6 +298,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             strongSelf.view.endEditing(true)
             self?.present(debugController(sharedContext: strongSelf.sharedContext, context: nil, modal: true), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
         }, hasOtherAccounts: self.otherAccountPhoneNumbers.0 != nil)
+        self.controllerNode.setTellomiBindPhone(self.tellomiBindPhone)
         self.controllerNode.accountUpdated = { [weak self] account in
             guard let strongSelf = self else {
                 return
@@ -176,18 +313,28 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
             self.loadAndPresentPasskey(force: true)
         }
         
-        if let (code, name, number) = self.currentData {
-            self.controllerNode.codeAndNumber = (code, name, number)
+        if let (code, name, number) = self.pendingEntry {
+            self.controllerNode.applyEntry(countryCode: code, countryName: name, number: number)
+        } else if let (code, name, number) = self.currentData {
+            self.controllerNode.applyEntry(countryCode: code, countryName: name, number: number)
         }
         self.displayNodeDidLoad()
         
         self.controllerNode.view.disableAutomaticKeyboardHandling = [.forward, .backward]
         
+        tellomiWarmCountryList(strings: self.presentationData.strings, locale: tellomiCountryLocale(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)))
+
         self.controllerNode.selectCountryCode = { [weak self] in
             if let strongSelf = self {
-                let controller = AuthorizationSequenceCountrySelectionController(strings: strongSelf.presentationData.strings, theme: strongSelf.presentationData.theme, glass: true)
+                let languageCode = tellomiInterfaceLanguageCode(strongSelf.presentationData.strings)
+                let countryChrome = tellomiCountryListChrome(languageCode: languageCode)
+                let controller = AuthorizationSequenceCountrySelectionController(strings: strongSelf.presentationData.strings, theme: strongSelf.presentationData.theme, glass: true, localization: AuthorizationCountryListLocalization(locale: tellomiCountryLocale(languageCode: languageCode), title: countryChrome.title, searchPlaceholder: countryChrome.search), focusSearchOnAppear: false)
                 controller.completeWithCountryCode = { code, name in
                     if let strongSelf = self, let currentData = strongSelf.currentData {
+                        guard TellomiCallingCodePolicy.allows(Int32(code)) else {
+                            strongSelf.presentTellomiUnsupportedCallingCode()
+                            return
+                        }
                         strongSelf.updateData(countryCode: Int32(code), countryName: name, number: currentData.2)
                         strongSelf.controllerNode.activateInput()
                     }
@@ -201,12 +348,42 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         self.controllerNode.checkPhone = { [weak self] in
             self?.nextPressed()
         }
+        self.controllerNode.tellomiOpenUrl = { [weak self] url in
+            self?.tellomiPresentLegalURL(url)
+        }
+        self.controllerNode.tellomiUnsupportedCallingCode = { [weak self] in
+            self?.presentTellomiUnsupportedCallingCode()
+        }
+        self.controllerNode.tellomiSurfaceChanged = { [weak self] in
+            self?.updateNavigationItems()
+        }
         
         if let account = self.account {
             loadServerCountryCodes(accountManager: sharedContext.accountManager, engine: TelegramEngineUnauthorized(account: account), completion: { [weak self] in
                 if let strongSelf = self {
                     strongSelf.controllerNode.updateCountryCode()
+                    tellomiWarmCountryList(strings: strongSelf.presentationData.strings, locale: tellomiCountryLocale(languageCode: tellomiInterfaceLanguageCode(strongSelf.presentationData.strings)))
                 }
+            })
+            let accountManager = self.sharedContext.accountManager
+            let _ = (accountManager.transaction { transaction -> String? in
+                let settings = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self)
+                return tellomiEmptyStoredLanguageCode(settings)
+            }
+            |> deliverOnMainQueue).start(next: { [weak self] code in
+                guard let self, let code else {
+                    return
+                }
+                tellomiStartInterfaceLanguageDownload(account: account, accountManager: accountManager, languageCode: code, disposable: self.tellomiLanguageDownloadDisposable, applied: { [weak self] strings in
+                    guard let self else {
+                        return
+                    }
+                    self.presentationData = self.presentationData.withStrings(strings)
+                    if self.isNodeLoaded {
+                        self.controllerNode.updateStrings(strings)
+                    }
+                    self.refreshTellomiLanguage()
+                })
             })
         } else {
             self.controllerNode.updateCountryCode()
@@ -338,14 +515,26 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private var animatingIn = false
     override public func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        if self.shouldAnimateIn {
+            self.updateNavigationItems()
+        } else {
+            self.refreshTellomiLanguage()
+        }
         
         if self.shouldAnimateIn {
             self.animatingIn = true
             if let (buttonFrame, buttonTitle, animationSnapshot, textSnapshot) = self.transitionInArguments {
                 self.controllerNode.willAnimateIn(buttonFrame: buttonFrame, buttonTitle: buttonTitle, animationSnapshot: animationSnapshot, textSnapshot: textSnapshot)
             }
-            Queue.mainQueue().justDispatch {
+            // Telegram finishes this fade from containerLayoutUpdated once the keyboard's
+            // inputHeight arrives. Login calls activateInput here the same way, but that
+            // call does not focus a field, so the fade is released on this turn instead.
+            Queue.mainQueue().justDispatch { [weak self] in
+                guard let self else {
+                    return
+                }
                 self.controllerNode.activateInput()
+                self.completeIntroTransitionWithoutKeyboard()
             }
         } else {
             self.controllerNode.activateInput()
@@ -358,6 +547,16 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         if !self.animatingIn {
             self.controllerNode.activateInput()
         }
+    }
+
+    /// Login never raises a keyboard on open, so the intro fade cannot wait for inputHeight.
+    /// The keyboard path in containerLayoutUpdated is unchanged for a screen that does focus.
+    private func completeIntroTransitionWithoutKeyboard() {
+        guard self.account != nil, self.shouldAnimateIn, let (buttonFrame, buttonTitle, animationSnapshot, textSnapshot) = self.transitionInArguments else {
+            return
+        }
+        self.shouldAnimateIn = false
+        self.controllerNode.animateIn(buttonFrame: buttonFrame, buttonTitle: buttonTitle, animationSnapshot: animationSnapshot, textSnapshot: textSnapshot)
     }
     
     override public func viewWillDisappear(_ animated: Bool) {
@@ -397,26 +596,49 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         guard self.confirmationController == nil else {
             return
         }
+        if self.account != nil && !self.controllerNode.tellomiAgreement.agreed {
+            self.hapticFeedback.error()
+            self.controllerNode.animateAgreementError()
+            self.presentTellomiAgreementPrompt()
+            return
+        }
+        if self.controllerNode.isEmailLogin {
+            let email = self.controllerNode.emailAddress
+            guard tellomiIsLoginEmail(email) else {
+                self.hapticFeedback.error()
+                self.controllerNode.animateError()
+                return
+            }
+            if self.presentExistingAccountIfNeeded(identifier: email) {
+                return
+            }
+            if self.account != nil {
+                self.loginWithNumber?(email, self.controllerNode.syncContacts)
+                return
+            }
+            let languageCode = tellomiInterfaceLanguageCode(self.presentationData.strings)
+            let copy = tellomiEmailLoginCopy(languageCode: languageCode)
+            let bundled = tellomiBundledChineseLoginCopy(self.presentationData.strings)
+            let editTitle = bundled?.edit ?? self.presentationData.strings.Login_Edit
+            let yesTitle = bundled?.yes ?? self.presentationData.strings.Login_Yes
+            var actions: [TextAlertAction] = []
+            actions.append(TextAlertAction(type: .genericAction, title: editTitle, action: {}))
+            actions.append(TextAlertAction(type: .defaultAction, title: yesTitle, action: { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.loginWithNumber?(email, self.controllerNode.syncContacts)
+            }))
+            self.present(textAlertController(sharedContext: self.sharedContext, title: email, text: copy.confirm, actions: actions), in: .window(.root))
+            return
+        }
         let (_, _, number) = self.controllerNode.codeAndNumber
         if !number.isEmpty {
             let logInNumber = cleanPhoneNumber(self.controllerNode.currentNumber, removePlus: true)
-            var existing: (String, AccountRecordId)?
-            for (number, id, isTestingEnvironment) in self.otherAccountPhoneNumbers.1 {
-                if isTestingEnvironment == self.isTestingEnvironment && cleanPhoneNumber(number, removePlus: true) == logInNumber {
-                    existing = (number, id)
-                }
-            }
-            
-            if let (_, id) = existing {
-                var actions: [TextAlertAction] = []
-                if let (current, _, _) = self.otherAccountPhoneNumbers.0, logInNumber != cleanPhoneNumber(current, removePlus: true) {
-                    actions.append(TextAlertAction(type: .genericAction, title: self.presentationData.strings.Login_PhoneNumberAlreadyAuthorizedSwitch, action: { [weak self] in
-                        self?.sharedContext.switchToAccount(id: id, fromSettingsController: nil, withChatListController: nil)
-                        self?.back()
-                    }))
-                }
-                actions.append(TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {}))
-                self.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: self.presentationData.strings.Login_PhoneNumberAlreadyAuthorized, actions: actions), in: .window(.root))
+            if self.presentExistingAccountIfNeeded(identifier: self.controllerNode.currentNumber) {
+                return
+            } else if self.account != nil {
+                self.loginWithNumber?(self.controllerNode.currentNumber, self.controllerNode.syncContacts)
             } else {
                 if let validLayout = self.validLayout, validLayout.size.width > 320.0 {
                     let (code, formattedNumber) = self.controllerNode.formattedCodeAndNumber
@@ -430,14 +652,18 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
                     (self.navigationController as? NavigationController)?.presentOverlay(controller: confirmationController, inGlobal: true, blockInteraction: true)
                     self.confirmationController = confirmationController
                 } else {
+                    let bundled = tellomiBundledChineseLoginCopy(self.presentationData.strings)
+                    let editTitle = bundled?.edit ?? self.presentationData.strings.Login_Edit
+                    let yesTitle = bundled?.yes ?? self.presentationData.strings.Login_Yes
+                    let confirmText = bundled?.phoneConfirm ?? self.presentationData.strings.Login_PhoneNumberConfirmation
                     var actions: [TextAlertAction] = []
-                    actions.append(TextAlertAction(type: .genericAction, title: self.presentationData.strings.Login_Edit, action: {}))
-                    actions.append(TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Login_Yes, action: { [weak self] in
+                    actions.append(TextAlertAction(type: .genericAction, title: editTitle, action: {}))
+                    actions.append(TextAlertAction(type: .defaultAction, title: yesTitle, action: { [weak self] in
                         if let strongSelf = self {
                             strongSelf.loginWithNumber?(strongSelf.controllerNode.currentNumber, strongSelf.controllerNode.syncContacts)
                         }
                     }))
-                    self.present(textAlertController(sharedContext: self.sharedContext, title: logInNumber, text: self.presentationData.strings.Login_PhoneNumberConfirmation, actions: actions), in: .window(.root))
+                    self.present(textAlertController(sharedContext: self.sharedContext, title: logInNumber, text: confirmText, actions: actions), in: .window(.root))
                 }
             }
         } else {
@@ -446,6 +672,31 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         }
     }
     
+    /// True when this number or address is already signed in on the device. The alert switches to it.
+    private func presentExistingAccountIfNeeded(identifier: String) -> Bool {
+        var existing: AccountRecordId?
+        for (stored, id, isTestingEnvironment) in self.otherAccountPhoneNumbers.1 {
+            if isTestingEnvironment == self.isTestingEnvironment && tellomiLoginIdentifiersMatch(stored, identifier) {
+                existing = id
+            }
+        }
+        guard let id = existing else {
+            return false
+        }
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
+        let text = tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)) ? copy.alreadyAuthorized : self.presentationData.strings.Login_PhoneNumberAlreadyAuthorized
+        let switchTitle = tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)) ? copy.switchToAccount : self.presentationData.strings.Login_PhoneNumberAlreadyAuthorizedSwitch
+        let actions = [
+            TextAlertAction(type: .genericAction, title: switchTitle, action: { [weak self] in
+                self?.sharedContext.switchToAccount(id: id, fromSettingsController: nil, withChatListController: nil)
+                self?.back()
+            }),
+            TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})
+        ]
+        self.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: text, actions: actions), in: .window(.root))
+        return true
+    }
+
     public func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
         controller.dismiss(animated: true, completion: nil)
     }
