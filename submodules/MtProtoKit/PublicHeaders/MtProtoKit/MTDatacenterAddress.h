@@ -13,6 +13,8 @@
 @property (nonatomic, readonly) bool preferForProxy;
 @property (nonatomic, readonly) bool thisPortOnly;
 @property (nonatomic, readonly) NSData * _Nullable secret;
+/// When true, connection discovery does not probe any port other than `port`.
+@property (nonatomic, readonly) bool thisPortOnly;
 
 - (instancetype _Nonnull)initWithIp:(NSString * _Nonnull)ip port:(uint16_t)port preferForMedia:(bool)preferForMedia restrictToTcp:(bool)restrictToTcp cdn:(bool)cdn preferForProxy:(bool)preferForProxy secret:(NSData * _Nullable)secret;
 

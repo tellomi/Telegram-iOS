@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import pathlib
+import re
 import struct
 import subprocess
 import sys
@@ -22,9 +23,13 @@ sys.path.insert(0, str(ROOT / "build-system" / "Make"))
 from generate_server_config import HEADER_PATH, JSON_PATH, header_text  # noqa: E402
 
 
+class TellomiConfigError(SystemExit):
+    """Config check failed. A SystemExit so an uncaught failure still stops the process."""
+
+
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
-    raise SystemExit(1)
+    raise TellomiConfigError(message)
 
 
 def der_len(n: int) -> bytes:
@@ -156,6 +161,36 @@ def check_json_and_header() -> dict:
 # only in the last slot while the server still announces it.
 NEW_KEY_LITTLE_ENDIAN = 4381149949997195609
 OLD_KEY_LITTLE_ENDIAN = 12240908862933197005
+RSA_FINGERPRINT_ORDER = [str(NEW_KEY_LITTLE_ENDIAN), str(OLD_KEY_LITTLE_ENDIAN)]
+# Android PR #142 shippable seed. DC 1 and DC 2 each dial the relay on 10443,
+# then 443, then the DNS name on those ports. The stored address list is the
+# reverse of this order; chooseTransportScheme dials the last entry first.
+RELAY_HOST = "8.137.198.240"
+DNS_HOST = "api.tellomi.cn"
+SEED_HOSTS = [RELAY_HOST, DNS_HOST]
+SEED_PORTS = [10443, 443]
+DATACENTERS = ("1", "2")
+FORBIDDEN_DIAL_IPS = ("8.156.40.105", "8.137.39.82")
+FORBIDDEN_PORT = 5222
+FORBIDDEN_PORT_RE = re.compile(r"(?<!\d)5222(?!\d)")
+EXPECTED_DIAL = [
+    f"{datacenter}:{host}:{port}"
+    for datacenter in DATACENTERS
+    for host in SEED_HOSTS
+    for port in SEED_PORTS
+]
+# Files that decide what this client dials, plus the docs that describe that list.
+DIAL_SURFACE_PATHS = (
+    "Tellomi/tellomi-server.json",
+    "submodules/MtProtoKit/Sources/TellomiServerConfigJSON.h",
+    "submodules/MtProtoKit/Sources/TellomiServerConfig.m",
+    "submodules/MtProtoKit/PublicHeaders/MtProtoKit/TellomiServerConfig.h",
+    "submodules/TelegramCore/Sources/Network/Network.swift",
+    "submodules/MtProtoKit/Sources/MTDiscoverConnectionSignals.m",
+    "submodules/MtProtoKit/Tests/MTDiscoverConnectionSignalsTests.m",
+    "docs/TELLOMI.md",
+    "docs/dc-addresses.md",
+)
 # Prefix of Telegram's production handshake key. check_wiring rejects the
 # same bytes in the handshake source.
 TELEGRAM_PRODUCTION_KEY_PREFIX = "MIIBCgKCAQEA6LszBcC1"
@@ -212,26 +247,108 @@ def check_public_key_list(environment: str, pems, config: dict) -> None:
             fail("Teamgram's development key is allowed only as the last key during the transition")
 
 
-def check_keys(config: dict) -> None:
-    if config["default_datacenter_id"] != 1:
+def forbidden_dial_hits(text: str) -> list[str]:
+    hits = [ip for ip in FORBIDDEN_DIAL_IPS if ip in text]
+    if FORBIDDEN_PORT_RE.search(text):
+        hits.append(str(FORBIDDEN_PORT))
+    return hits
+
+
+def dial_entries(environment_seeds: dict, seed_port: int, fallback_ports: list) -> list[str]:
+    ports = [seed_port, *fallback_ports]
+    entries = []
+    for datacenter in DATACENTERS:
+        hosts = environment_seeds[datacenter]
+        for host in hosts:
+            for port in ports:
+                entries.append(f"{datacenter}:{host}:{port}")
+    return entries
+
+
+def stored_address_list(hosts: list, ports: list) -> list[str]:
+    """Mirror TellomiSeedAddressSets: preference order, written in reverse."""
+    stored = []
+    for host in reversed(list(hosts)):
+        for port in reversed(list(ports)):
+            stored.append(f"{host}:{port}")
+    return stored
+
+
+def check_seed_contract(config: dict) -> None:
+    hits = forbidden_dial_hits(json.dumps(config))
+    if hits:
+        fail("server config contains forbidden dial token(s): " + ", ".join(hits))
+    if config.get("default_datacenter_id") != 1:
         fail("default datacenter is not 1")
-    if config["seed_port"] != 10443:
+    if config.get("seed_port") != SEED_PORTS[0]:
         fail("seed port is not Teamgram's published 10443")
-    if config.get("seed_fallback_ports") != [443]:
-        fail("seed fallback ports must be [443] so a blocked 10443 still connects")
-    if config["disable_telegram_backup_discovery"] is not True:
+    if config.get("seed_fallback_ports") != SEED_PORTS[1:]:
+        fail(f"seed fallback ports are {config.get('seed_fallback_ports')}, expected [443]")
+    if config.get("disable_telegram_backup_discovery") is not True:
         fail("Telegram backup discovery must stay disabled for the Teamgram default")
     if config.get("local_docker_seed") != "127.0.0.1":
         fail("local docker seed option is not 127.0.0.1")
-    if config.get("seed_address_a_record") != "8.137.39.82":
-        fail("documented A record is not 8.137.39.82")
-    seed_text = json.dumps(config["seeds"])
-    if "127.0.0.1" in seed_text or "8.137.39.82" in seed_text:
-        fail("the IP literals are documented only and must not be active seeds")
+    # Documentation of the relay. Not a second dial entry, and not the retired address.
+    if config.get("seed_address_a_record") != RELAY_HOST:
+        fail(f"documented A record is {config.get('seed_address_a_record')}, expected {RELAY_HOST}")
+    seeds = config.get("seeds")
+    if not isinstance(seeds, dict):
+        fail("seeds is not an object")
+    seed_text = json.dumps(seeds)
+    if "127.0.0.1" in seed_text:
+        fail("the local docker address must stay a documented option, not an active seed")
     for environment in ("production", "testing"):
-        hosts = config["seeds"][environment]["1"]
-        if hosts != ["api.tellomi.cn"]:
-            fail(f"{environment} seeds are not api.tellomi.cn")
+        environment_seeds = seeds.get(environment)
+        if not isinstance(environment_seeds, dict):
+            fail(f"{environment} seeds are missing")
+        if tuple(environment_seeds) != DATACENTERS:
+            fail(f"{environment} datacenters are {list(environment_seeds)}, expected DC 1 then DC 2")
+        for datacenter in DATACENTERS:
+            hosts = environment_seeds.get(datacenter)
+            if hosts != SEED_HOSTS:
+                fail(f"{environment} DC {datacenter} hosts are {hosts}, expected {SEED_HOSTS}")
+        entries = dial_entries(environment_seeds, config["seed_port"], config["seed_fallback_ports"])
+        if entries != EXPECTED_DIAL:
+            fail(f"{environment} dial order is {entries}")
+        stored = stored_address_list(SEED_HOSTS, SEED_PORTS)
+        if list(reversed(stored)) != [entry.split(":", 1)[1] for entry in EXPECTED_DIAL if entry.startswith("1:")]:
+            fail("reversed seed storage does not dial the relay on 10443 first")
+
+
+def check_rsa_fingerprint_order(config: dict) -> None:
+    declared = config.get("rsa_fingerprints")
+    if not isinstance(declared, list):
+        fail("rsa_fingerprints is not a list")
+    littles = [item.get("little_endian") if isinstance(item, dict) else None for item in declared]
+    if littles != RSA_FINGERPRINT_ORDER:
+        fail(f"RSA fingerprint order is {littles}, expected {RSA_FINGERPRINT_ORDER}")
+
+
+def check_seed_implementation() -> None:
+    source = (ROOT / "submodules/MtProtoKit/Sources/TellomiServerConfig.m").read_text(encoding="utf-8")
+    if "hosts.reverseObjectEnumerator" not in source or "ports.reverseObjectEnumerator" not in source:
+        fail("seed address list is not stored in reverse preference order")
+    if "thisPortOnly:true" not in source:
+        fail("seed addresses are not limited to their own port")
+    network = (ROOT / "submodules/TelegramCore/Sources/Network/Network.swift").read_text(encoding="utf-8")
+    if "TellomiSeedAddressSets" not in network:
+        fail("Network.swift is not installing Tellomi seed address sets")
+
+
+def check_dial_surfaces() -> None:
+    for relative in DIAL_SURFACE_PATHS:
+        path = ROOT / relative
+        if not path.is_file():
+            fail(f"missing dial surface {relative}")
+        hits = forbidden_dial_hits(path.read_text(encoding="utf-8"))
+        if hits:
+            fail(f"{relative} contains forbidden dial token(s): " + ", ".join(hits))
+
+
+def check_keys(config: dict) -> None:
+    check_seed_contract(config)
+    check_rsa_fingerprint_order(config)
+    for environment in ("production", "testing"):
         pems = config["public_keys"][environment]
         check_public_key_list(environment, pems, config)
 
@@ -277,8 +394,11 @@ def check_public_links() -> None:
     for stale in ("https://t.me", "https://telegram.org/faq", "https://telegram.org/tos", "https://telegram.org/privacy", "https://telegram.org/terms"):
         if stale in strings:
             fail(f"bundled strings still contain {stale}")
-    if "https://tell.cc/" not in strings or "https://tellomi.cn/faq" not in strings or "https://tellomi.cn/privacy" not in strings:
+    if "https://tell.cc/" not in strings or "https://tellomi.cn/help" not in strings or "https://tellomi.cn/legal/privacy/" not in strings or "https://tellomi.cn/legal/terms/" not in strings:
         fail("bundled strings are missing tell.cc or tellomi.cn links")
+    for missing_page in ("https://tellomi.cn/faq", "https://tellomi.cn/tos", "https://tellomi.cn/terms", "https://tellomi.cn/apps", "https://tellomi.cn/privacy-tpa"):
+        if missing_page in strings:
+            fail(f"bundled strings still use a page that 404s: {missing_page}")
     build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
     if "applinks:tell.cc" not in build or "webcredentials:tell.cc" not in build:
         fail("associated domains do not name tell.cc")
@@ -300,7 +420,13 @@ def check_public_links() -> None:
     leftover = []
     for path in (ROOT / "submodules").rglob("*.swift"):
         rel = str(path.relative_to(ROOT))
-        if "/Tests/" in rel or rel.endswith("TellomiLinks.swift"):
+        # These name t.me / telegram.me / telegram.dog so old links still parse
+        # or so langpack text still rewrites. They do not generate those hosts.
+        if "/Tests/" in rel or rel.endswith((
+            "TellomiLinks.swift",
+            "TellomiBrandRewrite.swift",
+            "TellomiChatLinkPreview.swift",
+        )):
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         if "https://t.me" in text or "://t.me/" in text or '"t.me/' in text or '"t.me"' in text or "telegram.me" in text or "telegram.dog" in text:
@@ -834,9 +960,20 @@ def check_marketing_version() -> None:
         fail("VersionInfoPlist does not read Tellomi/version")
 
 
-def main() -> None:
+def check_seeds() -> None:
+    """The DC seed contract. No signing and no packaging."""
     config = check_json_and_header()
     check_keys(config)
+    check_seed_implementation()
+    check_dial_surfaces()
+
+
+def main() -> None:
+    seeds_only = "--seeds" in sys.argv[1:]
+    check_seeds()
+    if seeds_only:
+        print("Tellomi DC seed checks passed")
+        return
     check_build_configuration()
     check_public_links()
     check_wiring()

@@ -8,6 +8,7 @@ private let whitelistedHosts: Set<String> = Set([
     "tell.cc",
     "t.me",
     "telegram.me",
+    "tellomi.cn",
     "telegra.ph",
     "telesco.pe",
     "fragment.com"

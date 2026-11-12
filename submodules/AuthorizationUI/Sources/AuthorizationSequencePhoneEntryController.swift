@@ -112,6 +112,18 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     }
     
     func updateNavigationItems() {
+        if self.account != nil {
+            self.navigationItem.rightBarButtonItem = self.tellomiLanguageItem()
+            if self.isNodeLoaded, self.controllerNode.tellomiSurface != .phoneCode {
+                let backTitle = tellomiLoginPrefersChinese(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings)) ? "返回" : "Back"
+                self.navigationItem.leftBarButtonItem = UIBarButtonItem(backButtonAppearanceWithTitle: backTitle, target: self, action: #selector(self.tellomiSurfaceBackPressed))
+            } else if tellomiPhoneRootShowsDismiss(hasOtherAccounts: !self.otherAccountPhoneNumbers.1.isEmpty, skipsWelcome: tellomiSkipsWelcomeSplash) {
+                self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
+            } else {
+                self.navigationItem.leftBarButtonItem = nil
+            }
+            return
+        }
         guard let layout = self.validLayout, layout.size.width < 360.0 else {
             return
         }

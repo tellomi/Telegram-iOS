@@ -27,6 +27,14 @@
 # two overlapping runs from uploading the same CFBundleVersion: the
 # cancelled run does not finish, and the survivor picks its number only
 # after reading App Store Connect.
+#
+# After the IPA build this job stores the dSYMs as one Actions artifact
+# named dsym-<buildNumber>, kept 90 days. Each bundle inside is
+# <buildNumber>-<UUID>.dSYM. Nothing is sent to App Store Connect, a
+# symbol server, or any other host. upload-artifact uses the runner's
+# runtime token, so this workflow does not add actions: write. Signing
+# and the altool upload are unchanged. The dSYM steps still run when
+# altool fails. A pull request or a master push does not run this workflow.
 
 name: TestFlight
 
@@ -75,6 +83,12 @@ jobs:
 
       - name: Checkout submodules
         run: bash .github/checkout-submodules.sh
+
+      # Before any signing or upload. This step does not sign or upload.
+      - name: Check Tellomi DC seeds
+        run: |
+          python3 Tellomi/check_server_config.py --seeds
+          python3 Tellomi/test_server_config.py
 
       # A v* tag must match Tellomi/version. A master push or a manual
       # dispatch from a branch does not: the marketing version is that file.
@@ -179,6 +193,30 @@ jobs:
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \
             --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
           rm -rf "${HOME}/.private_keys"
+
+      # Still runs when altool fails, so the symbols for that IPA are kept.
+      # It does not decide whether the IPA was signed or uploaded.
+      - name: Collect dSYMs
+        id: dsyms
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 Tellomi/collect_dsyms.py \
+            --search bazel-bin/Telegram \
+            --build-number "${BUILD_NUMBER}" \
+            --out "${RUNNER_TEMP}/dsyms"
+          test -s "${RUNNER_TEMP}/dsyms/manifest.tsv"
+          echo "DSYM_ARTIFACT_NAME=$(tr -d '[:space:]' < "${RUNNER_TEMP}/dsyms/artifact-name.txt")" >> "${GITHUB_ENV}"
+
+      - name: Upload dSYM artifact
+        if: always() && steps.dsyms.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DSYM_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/dsyms
+          retention-days: 90
+          if-no-files-found: error
+          compression-level: 6
 
       - name: Save Bazel cache
         if: always()

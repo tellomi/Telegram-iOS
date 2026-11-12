@@ -183,12 +183,16 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                if !strongSelf.otherAccountPhoneNumbers.1.isEmpty {
+                strongSelf.tellomiAbandonPendingLogin()
+                switch tellomiPhoneRootBack(hasOtherAccounts: !strongSelf.otherAccountPhoneNumbers.1.isEmpty, skipsWelcome: tellomiSkipsWelcomeSplash) {
+                case .dismissAddAccount:
                     let _ = (strongSelf.sharedContext.accountManager.transaction { transaction -> Void in
                         transaction.removeAuth()
                     }).startStandalone()
-                } else {
+                case .showWelcome:
                     let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .empty)).startStandalone()
+                case .stayOnPhone:
+                    break
                 }
             })
             if let splashController = splashController {
@@ -1266,21 +1270,80 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             self.authorizationCompleted()
             return
         }
+        // Download zh-hans / zh-hant before the login screens are built. The old Start
+        // button stored English, and an update keeps that pack. Skipping the welcome
+        // carousel does not skip this gate, so a Chinese system is not left on English.
+        if self.tellomiLanguageGate == 1 {
+            return
+        } else if self.tellomiLanguageGate == 0, let code = tellomiLangPackCodePendingApplication(currentLanguageCode: self.presentationData.strings.primaryComponent.languageCode) {
+            self.tellomiLanguageGate = 1
+            let accountManager = self.sharedContext.accountManager
+            let signal = TelegramEngineUnauthorized(account: self.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: code)
+            |> timeout(12.0, queue: .mainQueue(), alternate: .fail(.generic))
+            self.tellomiLanguageDisposable.set(signal.start(error: { [weak self] _ in
+                Queue.mainQueue().async {
+                    guard let self else {
+                        return
+                    }
+                    self.tellomiLanguageGate = 2
+                    self.updateState(state: self.tellomiLatestState ?? state)
+                }
+            }, completed: { [weak self] in
+                Queue.mainQueue().async {
+                    guard let self else {
+                        return
+                    }
+                    tellomiMarkSystemLangPackApplied()
+                    self.tellomiLanguageStringsDisposable.set((accountManager.transaction { transaction -> PresentationStrings? in
+                        guard let localizationSettings = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self) else {
+                            return nil
+                        }
+                        return PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: dictFromLocalization(localizationSettings.primaryComponent.localization)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: "")
+                    }
+                    |> deliverOnMainQueue).start(next: { [weak self] strings in
+                        guard let self else {
+                            return
+                        }
+                        if let strings {
+                            self.presentationData = self.presentationData.withStrings(strings)
+                        }
+                        self.tellomiLanguageGate = 2
+                        self.updateState(state: self.tellomiLatestState ?? state)
+                    }))
+                }
+            }))
+            return
+        }
         switch state {
         case .authorized:
             self.authorizationCompleted()
         case let .state(state):
             switch state {
                 case .empty:
-                    if let _ = self.viewControllers.last as? AuthorizationSequenceSplashController {
-                    } else {
-                        var controllers: [ViewController] = []
-                        if self.otherAccountPhoneNumbers.1.isEmpty {
-                            controllers.append(self.splashController())
+                    // A temp-key failure can clear the unauthorized state while the code
+                    // screen is up. That used to rebuild the welcome carousel. Keep the
+                    // screen that is already showing until this attempt is abandoned
+                    // (Back) or a real authorization state arrives.
+                    if self.tellomiPendingIdentifier != nil, self.tellomiActiveLoginAttempt.isCurrent() {
+                        break
+                    }
+                    let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+                    switch tellomiLoggedOutRoot(skipsWelcome: tellomiSkipsWelcomeSplash, countryCode: countryCode) {
+                    case .phoneEntry:
+                        // Same write the Start button used. The splash controller stays
+                        // in splashController() and is not installed.
+                        let _ = self.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: self.account.testingEnvironment, masterDatacenterId: self.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
+                    case .welcome:
+                        if let _ = self.viewControllers.last as? AuthorizationSequenceSplashController {
                         } else {
-                            controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: "", splashController: nil))
+                            var controllers: [ViewController] = []
+                            if self.otherAccountPhoneNumbers.1.isEmpty {
+                                controllers.append(self.splashController())
+                            } else {
+                                controllers.append(self.phoneEntryController(countryCode: countryCode, number: "", splashController: nil))
+                            }
+                            self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                         }
-                        self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                     }
                 case let .phoneEntry(countryCode, number):
                     var controllers: [ViewController] = []
@@ -1296,6 +1359,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     }
                 
                     if let validLayout = self.validLayout, case .tablet = validLayout.deviceMetrics.type {
+                        previousSplashController = nil
+                    }
+                    if tellomiSkipsWelcomeSplash {
                         previousSplashController = nil
                     }
                 

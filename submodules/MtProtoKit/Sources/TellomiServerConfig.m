@@ -1,7 +1,6 @@
 #import <MtProtoKit/TellomiServerConfig.h>
 
 #import <MtProtoKit/MTDatacenterAddress.h>
-#import <MtProtoKit/MTDatacenterAddressSet.h>
 #import <MtProtoKit/MTLogging.h>
 
 #import "TellomiServerConfigJSON.h"
@@ -109,6 +108,45 @@ NSDictionary<NSNumber *, MTDatacenterAddressSet *> *TellomiSeedAddressSets(bool 
         for (NSString *host in hosts) {
             // Last address is the preferred port. chooseTransportScheme keeps
             // the last scheme when no port has failed yet.
+            for (NSNumber *port in ports.reverseObjectEnumerator) {
+                [addresses addObject:[[MTDatacenterAddress alloc] initWithIp:host port:port.unsignedShortValue preferForMedia:false restrictToTcp:false cdn:false preferForProxy:false secret:nil thisPortOnly:true]];
+            }
+        }
+        if (addresses.count != 0) {
+            result[datacenterId] = [[MTDatacenterAddressSet alloc] initWithAddressList:addresses];
+        }
+    }];
+    return result;
+}
+
+NSArray<NSNumber *> *TellomiSeedPorts(void) {
+    NSMutableArray<NSNumber *> *ports = [[NSMutableArray alloc] init];
+    uint16_t primary = TellomiSeedPort();
+    [ports addObject:@(primary)];
+    id fallbacks = TellomiParsedConfig()[@"seed_fallback_ports"];
+    if ([fallbacks isKindOfClass:[NSArray class]]) {
+        for (id port in (NSArray *)fallbacks) {
+            if (![port isKindOfClass:[NSNumber class]]) {
+                continue;
+            }
+            NSInteger value = [(NSNumber *)port integerValue];
+            if (value > 0 && value <= 65535 && value != primary) {
+                [ports addObject:@((uint16_t)value)];
+            }
+        }
+    }
+    return ports;
+}
+
+NSDictionary<NSNumber *, MTDatacenterAddressSet *> *TellomiSeedAddressSets(bool testingEnvironment) {
+    NSArray<NSNumber *> *ports = TellomiSeedPorts();
+    NSMutableDictionary<NSNumber *, MTDatacenterAddressSet *> *result = [[NSMutableDictionary alloc] init];
+    [TellomiSeedAddresses(testingEnvironment) enumerateKeysAndObjectsUsingBlock:^(NSNumber *datacenterId, NSArray<NSString *> *hosts, __unused BOOL *stop) {
+        NSMutableArray<MTDatacenterAddress *> *addresses = [[NSMutableArray alloc] init];
+        // Hosts and ports are in dial preference order. chooseTransportScheme
+        // keeps the last address when nothing has failed yet, so both lists
+        // are written in reverse: the first seed's preferred port is last.
+        for (NSString *host in hosts.reverseObjectEnumerator) {
             for (NSNumber *port in ports.reverseObjectEnumerator) {
                 [addresses addObject:[[MTDatacenterAddress alloc] initWithIp:host port:port.unsignedShortValue preferForMedia:false restrictToTcp:false cdn:false preferForProxy:false secret:nil thisPortOnly:true]];
             }

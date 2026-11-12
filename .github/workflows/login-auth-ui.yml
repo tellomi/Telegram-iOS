@@ -1,0 +1,199 @@
+# Login chrome contrast test and an unsigned simulator compile.
+#
+# pull_request on the standard xcode-27 runner. Does not sign for the App
+# Store, does not upload an IPA, and does not call TestFlight.
+# A push to master does not start it.
+
+name: Login auth UI
+
+on:
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: login-auth-ui-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  contrast:
+    runs-on: xcode-27
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
+
+      - name: Select Xcode 27.1
+        run: |
+          set -euo pipefail
+          sw_vers
+          candidate="/Applications/Xcode_27.1.app"
+          if [[ ! -d "${candidate}" ]]; then
+            echo "Xcode 27.1 is not installed. versions.json requires it."
+            exit 1
+          fi
+          sudo xcode-select -s "${candidate}/Contents/Developer"
+          xcodebuild -version > "${RUNNER_TEMP}/xcode.txt"
+          sed -n '1p' "${RUNNER_TEMP}/xcode.txt" | grep -q '^Xcode 27.1'
+
+      - name: Pinned Bazel
+        run: |
+          set -euo pipefail
+          spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
+          version="${spec%%:*}"
+          want="${spec##*:}"
+          name="bazel-${version}-darwin-arm64"
+          dest="${RUNNER_TEMP}/${name}"
+          bash .github/fetch_pinned.sh "https://github.com/bazelbuild/bazel/releases/download/${version}/${name}" "${dest}" "${want}"
+          got="$(shasum -a 256 "${dest}" | awk '{print $1}')"
+          [[ "${got}" == "${want}" ]]
+          chmod +x "${dest}"
+          echo "BAZEL=${dest}" >> "${GITHUB_ENV}"
+          "${dest}" --version
+
+      - name: Write the configuration repository
+        run: |
+          set -euo pipefail
+          python3 .github/proof_configure.py \
+            --bazel "${BAZEL}" \
+            --configuration build-system/appstore-configuration.json \
+            --bazel-user-root /private/var/tmp/_bazel_loginui
+          test -f build-input/configuration-repository/variables.bzl
+
+      - name: Authorization contrast tests
+        run: |
+          set -euo pipefail
+          bash .github/retry_external_fetch.sh -- \
+            "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_loginui test \
+            //submodules/AuthorizationUI:TellomiLoginFieldColorsTests \
+            //submodules/CountrySelectionUI:TellomiCallingCodePolicyTests \
+            --test_output=errors --announce_rc
+
+      - name: Palette sheets
+        run: |
+          set -euo pipefail
+          python3 tools/login_palette_sheet.py "${RUNNER_TEMP}/login-palette"
+          mkdir -p login-palette-sheets
+          cp -R "${RUNNER_TEMP}/login-palette/." login-palette-sheets/
+
+      - name: Upload palette sheets
+        uses: actions/upload-artifact@v4
+        with:
+          name: login-palette-sheets
+          path: login-palette-sheets
+          if-no-files-found: error
+
+  compile:
+    runs-on: xcode-27
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
+
+      # Before the unsigned IPA build. This step does not sign or upload.
+      - name: Check Tellomi DC seeds
+        run: |
+          python3 Tellomi/check_server_config.py --seeds
+          python3 Tellomi/test_server_config.py
+
+      - name: Select Xcode from versions.json
+        run: |
+          set -euo pipefail
+          sw_vers
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [ ! -d "$CANDIDATE" ]; then
+            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
+            ls -1 /Applications | grep -E '^Xcode' || true
+            exit 1
+          fi
+          PLIST_VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "${CANDIDATE}/Contents/Info.plist")"
+          if [ "$PLIST_VERSION" != "$XCODE_VERSION" ]; then
+            echo "Selected Xcode reports ${PLIST_VERSION}, versions.json requires ${XCODE_VERSION}."
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=${CANDIDATE}/Contents/Developer" >> "$GITHUB_ENV"
+          export DEVELOPER_DIR="${CANDIDATE}/Contents/Developer"
+          xcodebuild -version
+          echo "BAZEL_CACHE_DIR=${HOME}/telegram-bazel-cache" >> "$GITHUB_ENV"
+
+      - name: Pin Bazel from versions.json
+        run: |
+          set -euo pipefail
+          spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
+          version="${spec%%:*}"
+          sha="${spec##*:}"
+          name="bazel-${version}-darwin-arm64"
+          url="https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
+          mkdir -p build-input
+          bash .github/fetch_pinned.sh "$url" "build-input/${name}" "${sha}"
+          chmod +x "build-input/${name}"
+
+      - name: Build the unsigned simulator app
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
+          export APP_VERSION=$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')
+          export COMMIT_COUNT=$(git rev-list --count HEAD)
+          export BUILD_NUMBER="$((COMMIT_COUNT + BUILD_NUMBER_OFFSET))"
+          bash .github/retry_external_fetch.sh -- \
+            python3 -u build-system/Make/Make.py \
+            --bazelUserRoot="/private/var/tmp/_bazel_loginui_app" \
+            --cacheDir "$BAZEL_CACHE_DIR" \
+            build \
+            --configurationPath="build-system/appstore-configuration.json" \
+            --xcodeManagedCodesigning \
+            --disableProvisioningProfiles \
+            --configuration=release_sim_arm64 \
+            --buildNumber="$BUILD_NUMBER"
+          test -e bazel-bin/Telegram/Telegram.ipa
+
+      - name: Screenshot the phone entry screen
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 tools/login_palette_sheet.py "${RUNNER_TEMP}/sheets"
+          mkdir -p login-screens
+          cp -R "${RUNNER_TEMP}/sheets/." login-screens/ || true
+          UDID="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone 17/ && /Shutdown|Booted/ { print $2; exit }')"
+          if [ -z "${UDID}" ]; then
+            echo "no iPhone 17 simulator"
+            exit 0
+          fi
+          xcrun simctl boot "${UDID}" || true
+          xcrun simctl bootstatus "${UDID}" -b
+          STAGE="$(mktemp -d)"
+          unzip -q -o bazel-bin/Telegram/Telegram.ipa -d "${STAGE}"
+          APP="$(echo "${STAGE}"/Payload/*.app)"
+          BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${APP}/Info.plist")"
+          xcrun simctl install "${UDID}" "${APP}"
+          xcrun simctl ui "${UDID}" appearance light
+          xcrun simctl launch "${UDID}" "${BUNDLE}"
+          sleep 8
+          xcrun simctl io "${UDID}" screenshot login-screens/phone-light.png
+          xcrun simctl ui "${UDID}" appearance dark
+          xcrun simctl terminate "${UDID}" "${BUNDLE}" || true
+          xcrun simctl launch "${UDID}" "${BUNDLE}"
+          sleep 8
+          xcrun simctl io "${UDID}" screenshot login-screens/phone-dark.png
+
+      - name: Upload phone entry screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: login-phone-screens
+          path: login-screens
+          if-no-files-found: ignore

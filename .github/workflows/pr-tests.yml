@@ -1,0 +1,191 @@
+# Pull-request tests on the standard GitHub-hosted xcode-27 runner.
+#
+# Public repositories are not billed for this runner. It is the 3-core
+# arm64 image (not xcode-27-xlarge). The job prints the live OS, Xcode,
+# memory, disk, and simulators, then runs only the test targets that exist
+# on the pull request. It does not sign, upload an IPA, or call TestFlight.
+# A push to master does not start it. workflow_dispatch is omitted: the
+# integration token cannot create that event (HTTP 403, actions=write).
+
+name: PR tests
+
+on:
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  server-config:
+    # Validation only. No signing, no IPA, no TestFlight upload.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Check Tellomi DC seeds
+        run: |
+          python3 Tellomi/check_server_config.py --seeds
+          python3 Tellomi/test_server_config.py
+
+  test:
+    runs-on: xcode-27
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
+
+      - name: Registry retry script tests
+        run: |
+          bash .github/bazel_registry_retry_test.sh
+          bash .github/download_retry_test.sh
+          python3 Tellomi/collect_dsyms_test.py
+
+      - name: Record this runner
+        run: |
+          set -euo pipefail
+          echo "runner image provisioner follows"
+          sw_vers
+          uname -m
+          sysctl -n hw.memsize hw.ncpu
+          df -h /
+          echo "xcode apps:"
+          ls -1 /Applications | grep -E '^Xcode' || true
+          echo "simulators:"
+          xcrun simctl list devices available || true
+          product="$(sw_vers -productVersion)"
+          [[ "${product%%.*}" == "27" ]]
+          candidate="/Applications/Xcode_27.1.app"
+          if [[ ! -d "${candidate}" ]]; then
+            echo "Xcode 27.1 is not installed. versions.json requires it."
+            exit 1
+          fi
+          sudo xcode-select -s "${candidate}/Contents/Developer"
+          xcodebuild -version > "${RUNNER_TEMP}/xcode-version.txt"
+          grep -q '^Xcode 27.1' "${RUNNER_TEMP}/xcode-version.txt"
+
+      - name: Pinned Bazel
+        run: |
+          set -euo pipefail
+          spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
+          version="${spec%%:*}"
+          want="${spec##*:}"
+          name="bazel-${version}-darwin-arm64"
+          dest="${RUNNER_TEMP}/${name}"
+          bash .github/fetch_pinned.sh "https://github.com/bazelbuild/bazel/releases/download/${version}/${name}" "${dest}" "${want}"
+          got="$(shasum -a 256 "${dest}" | awk '{print $1}')"
+          [[ "${got}" == "${want}" ]]
+          chmod +x "${dest}"
+          echo "BAZEL=${dest}" >> "${GITHUB_ENV}"
+          "${dest}" --version
+
+      - name: Write the configuration repository
+        run: |
+          set -euo pipefail
+          python3 .github/proof_configure.py \
+            --bazel "${BAZEL}" \
+            --configuration build-system/appstore-configuration.json \
+            --bazel-user-root /private/var/tmp/_bazel_prtests
+          test -f build-input/configuration-repository/variables.bzl
+          test -f build-input/configuration-repository/MODULE.bazel
+
+      - name: Run the tests this pull request contains
+        run: |
+          set -euo pipefail
+          # Host swift_test targets, then the simulator unit test. A label
+          # that this commit does not declare is skipped. A declared target
+          # that fails fails the job. Feed proof is not in this list.
+          host=(
+            //submodules/ChatListUI:ChatListScrollAnchorTests
+            //submodules/TellomiWallpapers:TellomiWallpapersTests
+            //submodules/TelegramUIPreferences:TellomiTabNavigationDecisionsTests
+            //submodules/TelegramUI/Components/Chat/ChatMessageInteractiveInstantVideoNode:RoundVideoTranscriptionDecisionTests
+            //submodules/TelegramUIPreferences:TellomiChatPrivacyTests
+            //submodules/Components/ReactionButtonListComponent:ReactionIconMetricsTests
+            //submodules/TellomiDiscover:TellomiChatLinkPreviewTests
+            //submodules/TelegramPresentationData:TellomiBrandRewriteTests
+            //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
+            //submodules/TelegramCore:EphemeralMediaLifecycleTests
+            //submodules/TelegramCore:TellomiNativeBatchTests
+            //submodules/OpenInExternalAppUI:TellomiMapOpenInTests
+            //submodules/TelegramCallsUI:CallKitCompletionThreadTests
+            //submodules/TellomiDiscover:TellomiFeedChromeMotionTests
+          )
+          ios=(
+            //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
+            //submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode:PeerInfoPaneNodeTests
+          )
+          # Run 42416611063 died before any test: the Bazel registry fetch timed out.
+          # .github/bazel_registry_retry.sh retries only that pure fetch failure
+          # and returns the command's own status for every other failure.
+          export BAZEL_RETRY_LOG="${RUNNER_TEMP}/bazel-attempt.log"
+          retry_script="${GITHUB_WORKSPACE}/.github/bazel_registry_retry.sh"
+          bazel_retry() {
+            bash "$retry_script" run -- "$@"
+          }
+          present() {
+            local label="$1" status=0 disposition
+            status=0
+            bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests query "${label}" || status=$?
+            if [[ "$status" -eq 0 ]]; then
+              return 0
+            fi
+            disposition="$(bash "$retry_script" classify "$BAZEL_RETRY_LOG")"
+            if [[ "$disposition" == "skip" ]]; then
+              echo "skip ${label}"
+              return 1
+            fi
+            exit "$status"
+          }
+          run_host=()
+          for label in "${host[@]}"; do
+            if present "${label}"; then
+              run_host+=("${label}")
+            fi
+          done
+          run_ios=()
+          for label in "${ios[@]}"; do
+            if present "${label}"; then
+              run_ios+=("${label}")
+            fi
+          done
+          if (( ${#run_host[@]} == 0 && ${#run_ios[@]} == 0 )); then
+            echo "no test targets were found"
+            exit 1
+          fi
+          fail=0
+          if (( ${#run_host[@]} > 0 )); then
+            for label in "${run_host[@]}"; do
+              status=0
+              bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc || status=$?
+              if [[ "$status" -ne 0 ]]; then
+                fail="$status"
+              fi
+            done
+          fi
+          if (( ${#run_ios[@]} > 0 )); then
+            for label in "${run_ios[@]}"; do
+              status=0
+              bazel_retry "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_prtests test "${label}" --test_output=errors --announce_rc --//Telegram:disableProvisioningProfiles -c dbg --ios_multi_cpus=sim_arm64 || status=$?
+              if [[ "$status" -ne 0 ]]; then
+                fail="$status"
+              fi
+            done
+          fi
+          test ! -f bazel-bin/Telegram/Telegram.ipa
+          exit "$fail"
