@@ -1,5 +1,15 @@
 # Upstream patches
 
+## Login splash methods the restored sequence calls — 2026-11-12
+
+The restored splash controller calls `updateAppearanceBackgroundColor` and `tellomiSuppressLivePages` on `RMIntroViewController`. Those two methods were on master and absent after the client-tree restore, so the release IPA did not compile. They are on the intro controller again. `resendLoginCode` is the engine wrapper around the existing `resendAuthorizationCode`; the code-entry resend call had no method to type-check.
+
+| File | Change |
+| --- | --- |
+| `submodules/RMIntro/PublicHeaders/RMIntro/RMIntroViewController.h` | Declares the two splash methods. |
+| `submodules/RMIntro/Sources/platform/ios/RMIntroViewController.m` | Applies appearance colors and hides the live pages during the snapshot handoff. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Auth/TelegramEngineAuth.swift` | `resendLoginCode` forwards to `resendAuthorizationCode`. |
+
 ## Profile Moments pane — 2026-11-12
 
 Native panes come from `peerInfoAvailableMediaPanes` (`PeerInfoData.swift`). Each tag reads `aroundMessageHistoryViewForLocation`: still loading is skipped, an empty finished view is omitted, a non-empty view is added. The first result is `nil` until every tag has settled. Stories are inserted at index 0 only when `hasStories` is true (`PeerInfoData` around the user-profile branch). `PeerInfoPaneContainerNode.update` rebuilds the tabs from `availablePanes`.
