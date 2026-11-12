@@ -43,7 +43,6 @@
         // 80/5222 fallback. decodeBoolForKey: returns false when the key is missing.
         _thisPortOnly = [aDecoder decodeBoolForKey:@"thisPortOnly"];
         _secret = [aDecoder decodeObjectForKey:@"secret"];
-        _thisPortOnly = [aDecoder decodeBoolForKey:@"thisPortOnly"];
     }
     return self;
 }
@@ -59,7 +58,6 @@
     [aCoder encodeBool:_preferForProxy forKey:@"preferForProxy"];
     [aCoder encodeBool:_thisPortOnly forKey:@"thisPortOnly"];
     [aCoder encodeObject:_secret forKey:@"secret"];
-    [aCoder encodeBool:_thisPortOnly forKey:@"thisPortOnly"];
 }
 
 - (instancetype)copyWithZone:(NSZone *)__unused zone {
