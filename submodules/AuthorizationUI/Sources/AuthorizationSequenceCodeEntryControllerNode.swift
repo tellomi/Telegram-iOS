@@ -18,8 +18,9 @@ import TelegramStringFormatting
 import TextNodeWithEntities
 
 final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextFieldDelegate {
-    private let strings: PresentationStrings
-    private let theme: PresentationTheme
+    private var strings: PresentationStrings
+    private var theme: PresentationTheme
+    var tellomiPrimaryActionTitle: String?
     
     private let animationNode: AnimatedStickerNode
     private let titleNode: ImmediateTextNode
@@ -33,6 +34,8 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     private let nextOptionTitleNode: ImmediateTextNode
     private let nextOptionButtonNode: HighlightableButtonNode
     private let nextOptionArrowNode: ASImageNode
+    private let missingCodeNode: HighlightableButtonNode
+    private let tellomiUseSmsNode: HighlightableButtonNode
     
     private let resetTextNode: ImmediateTextNode
     private let resetNode: HighlightableButtonNode
@@ -43,6 +46,10 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     
     private let textField: TextFieldNode
     private let textSeparatorNode: ASDisplayNode
+    private let tellomiFieldBackground = ASDisplayNode()
+    private let sentToastBackground = ASDisplayNode()
+    private let sentToastText = ImmediateTextNode()
+    private var sentToastShown = false
     private let pasteButton: HighlightableButtonNode
     
     private let codeInputView: CodeInputView
@@ -60,6 +67,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     private var layoutArguments: (ContainerViewLayout, CGFloat)?
     
     private var appleSignInAllowed = false
+    private var tellomiFormScroll: ASScrollNode?
     
     private var previousCodeType: SentAuthorizationCodeType?
     private var isPrevious = false
@@ -78,7 +86,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     
     var currentCode: String {
         switch self.codeType {
-        case .word, .phrase:
+        case .word, .phrase, .email:
             return self.textField.textField.text ?? ""
         default:
             return self.codeInputView.text
@@ -90,6 +98,8 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     var openFragment: ((String) -> Void)?
     var present: (ViewController, Any?) -> Void = { _, _ in }
     
+    var openHelp: (() -> Void)?
+    var requestSmsCode: (() -> Void)?
     var requestNextOption: (() -> Void)?
     var requestAnotherOption: (() -> Void)?
     var requestPreviousOption: (() -> Void)?
@@ -102,7 +112,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             self.codeInputView.alpha = self.inProgress ? 0.6 : 1.0
             
             switch self.codeType {
-            case .word, .phrase:
+            case .word, .phrase, .sms, .email, .firebase, .call:
                 if self.inProgress != oldValue {
                     if self.inProgress {
                         self.proceedNode.transitionToProgress()
@@ -171,6 +181,17 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             self.nextOptionButtonNode.accessibilityTraits = [.button, .notEnabled]
         }
         self.nextOptionButtonNode.addSubnode(self.nextOptionTitleNode)
+
+        self.missingCodeNode = HighlightableButtonNode()
+        self.missingCodeNode.displaysAsynchronously = false
+        self.missingCodeNode.isHidden = true
+        self.missingCodeNode.accessibilityTraits = [.button]
+
+        self.tellomiUseSmsNode = HighlightableButtonNode()
+        self.tellomiUseSmsNode.displaysAsynchronously = false
+        self.tellomiUseSmsNode.isHidden = true
+        self.tellomiUseSmsNode.contentHorizontalAlignment = .left
+        self.tellomiUseSmsNode.accessibilityTraits = [.button]
         
         self.nextOptionArrowNode = ASImageNode()
         self.nextOptionArrowNode.displaysAsynchronously = false
@@ -196,7 +217,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         
         self.textField = TextFieldNode()
         self.textField.textField.font = Font.regular(20.0)
-        self.textField.textField.textColor = self.theme.list.itemPrimaryTextColor
+        self.textField.textField.textColor = TellomiLoginChrome.palette(theme: self.theme).fieldText
         self.textField.textField.textAlignment = .natural
         self.textField.textField.autocorrectionType = .yes
         self.textField.textField.autocorrectionType = .no
@@ -217,6 +238,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.errorTextNode = ImmediateTextNode()
         self.errorTextNode.alpha = 0.0
         self.errorTextNode.displaysAsynchronously = false
+        self.errorTextNode.maximumNumberOfLines = 0
         self.errorTextNode.textAlignment = .center
         self.errorTextNode.isUserInteractionEnabled = false
         
@@ -251,7 +273,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             self.signInWithAppleButton?.isHidden = true
             (self.signInWithAppleButton as? ASAuthorizationAppleIDButton)?.cornerRadius = 11
         }
-        self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: true, height: 50.0, cornerRadius: 50.0 * 0.5)
+        self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: false, height: 50.0, cornerRadius: 25.0)
         self.proceedNode.progressType = .embedded
         self.proceedNode.isHidden = true
         self.proceedNode.iconSpacing = 4.0
@@ -268,9 +290,21 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         
         self.textField.textField.delegate = self
         
+        TellomiLoginChrome.applyField(self.tellomiFieldBackground, theme: self.theme)
+        self.tellomiFieldBackground.isHidden = true
+        self.sentToastBackground.backgroundColor = UIColor(rgb: 0x3A3A3C)
+        self.sentToastBackground.cornerRadius = 18.0
+        self.sentToastBackground.clipsToBounds = true
+        self.sentToastBackground.alpha = 0.0
+        self.sentToastBackground.isUserInteractionEnabled = false
+        self.sentToastText.displaysAsynchronously = false
+
         self.addSubnode(self.codeInputView)
+        self.addSubnode(self.tellomiFieldBackground)
         self.addSubnode(self.textSeparatorNode)
         self.addSubnode(self.textField)
+        self.sentToastBackground.addSubnode(self.sentToastText)
+        self.addSubnode(self.sentToastBackground)
         self.addSubnode(self.pasteButton)
         self.addSubnode(self.titleNode)
         self.addSubnode(self.titleActivateAreaNode)
@@ -279,6 +313,8 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.addSubnode(self.currentOptionActivateAreaNode)
         self.addSubnode(self.currentOptionInfoNode)
         self.addSubnode(self.nextOptionButtonNode)
+        self.addSubnode(self.missingCodeNode)
+        self.addSubnode(self.tellomiUseSmsNode)
         self.nextOptionButtonNode.addSubnode(self.nextOptionArrowNode)
         self.addSubnode(self.animationNode)
         self.addSubnode(self.resetNode)
@@ -289,6 +325,39 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.hintButtonNode.addSubnode(self.hintTextNode)
         self.hintButtonNode.addSubnode(self.hintArrowNode)
         self.addSubnode(self.proceedNode)
+
+        let scroll = TellomiLoginChrome.makeFormScroll()
+        self.tellomiFormScroll = scroll
+        self.addSubnode(scroll)
+        let form: [ASDisplayNode] = [
+            self.codeInputView,
+            self.tellomiFieldBackground,
+            self.textSeparatorNode,
+            self.textField,
+            self.pasteButton,
+            self.titleNode,
+            self.titleActivateAreaNode,
+            self.titleIconNode,
+            self.currentOptionNode,
+            self.currentOptionActivateAreaNode,
+            self.currentOptionInfoNode,
+            self.nextOptionButtonNode,
+            self.missingCodeNode,
+            self.tellomiUseSmsNode,
+            self.animationNode,
+            self.resetNode,
+            self.resetTextNode,
+            self.dividerNode,
+            self.errorTextNode,
+            self.hintButtonNode,
+            self.proceedNode
+        ]
+        for node in form {
+            node.removeFromSupernode()
+            scroll.addSubnode(node)
+        }
+        self.sentToastBackground.removeFromSupernode()
+        self.addSubnode(self.sentToastBackground)
         
         self.codeInputView.updated = { [weak self] in
             guard let strongSelf = self else {
@@ -328,6 +397,8 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         }
         
         self.nextOptionButtonNode.addTarget(self, action: #selector(self.nextOptionNodePressed), forControlEvents: .touchUpInside)
+        self.missingCodeNode.addTarget(self, action: #selector(self.missingCodePressed), forControlEvents: .touchUpInside)
+        self.tellomiUseSmsNode.addTarget(self, action: #selector(self.tellomiUseSmsPressed), forControlEvents: .touchUpInside)
         self.proceedNode.pressed = { [weak self] in
             self?.proceedPressed()
         }
@@ -427,7 +498,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             self.currentOptionInfoNode.attributedText = NSAttributedString(string: self.strings.Login_CodePhonePatternInfoText, font: Font.regular(17.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
             self.currentOptionInfoActivateAreaNode.accessibilityLabel = self.currentOptionInfoNode.attributedText?.string ?? ""
             if self.currentOptionInfoActivateAreaNode.supernode == nil {
-                self.addSubnode(self.currentOptionInfoActivateAreaNode)
+                (self.tellomiFormScroll ?? self).addSubnode(self.currentOptionInfoActivateAreaNode)
             }
         } else {
             self.currentOptionInfoNode.attributedText = NSAttributedString(string: "", font: Font.regular(17.0), textColor: self.theme.list.itemPrimaryTextColor)
@@ -541,10 +612,20 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             case .missedCall:
                 self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterMissingDigits, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
             case .email:
-                self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterCodeEmailTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+                let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                self.titleNode.attributedText = NSAttributedString(string: copy.codeTitleEmail, font: TellomiLoginChrome.scaledFont(size: 22.0, weight: .semibold), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
+                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentEmail(self.email ?? self.phoneNumber), font: TellomiLoginChrome.scaledFont(size: 14.0), textColor: TellomiLoginChrome.palette(theme: self.theme).secondaryText, paragraphAlignment: .left)
                 animationName = "IntroLetter"
             case .sms:
-                self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterCodeSMSTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+                let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                let secondary = TellomiLoginChrome.palette(theme: self.theme).secondaryText
+                self.titleNode.attributedText = NSAttributedString(string: copy.codeTitlePhone, font: TellomiLoginChrome.scaledFont(size: 22.0, weight: .semibold), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
+                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentPhone(self.phoneNumber), font: TellomiLoginChrome.scaledFont(size: 14.0), textColor: secondary, paragraphAlignment: .left)
+            case .otherSession:
+                let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                let secondary = TellomiLoginChrome.palette(theme: self.theme).secondaryText
+                self.titleNode.attributedText = NSAttributedString(string: copy.codeTitlePhone, font: TellomiLoginChrome.scaledFont(size: 22.0, weight: .semibold), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
+                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentApp, font: TellomiLoginChrome.scaledFont(size: 14.0), textColor: secondary, paragraphAlignment: .left)
             case .fragment:
                 self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterCodeFragmentTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
                
@@ -561,6 +642,16 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             case .phrase:
                 self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterPhraseTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
                 textFieldPlaceholder = self.strings.Login_EnterPhrasePlaceholder
+            case .call:
+                let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                let secondary = TellomiLoginChrome.palette(theme: self.theme).secondaryText
+                self.titleNode.attributedText = NSAttributedString(string: copy.codeTitlePhone, font: TellomiLoginChrome.scaledFont(size: 22.0, weight: .semibold), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
+                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentCall(self.phoneNumber), font: TellomiLoginChrome.scaledFont(size: 14.0), textColor: secondary, paragraphAlignment: .left)
+            case .firebase:
+                let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                let secondary = TellomiLoginChrome.palette(theme: self.theme).secondaryText
+                self.titleNode.attributedText = NSAttributedString(string: copy.codeTitlePhone, font: TellomiLoginChrome.scaledFont(size: 22.0, weight: .semibold), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .left)
+                self.currentOptionNode.attributedText = NSAttributedString(string: copy.codeSentPhone(self.phoneNumber), font: TellomiLoginChrome.scaledFont(size: 14.0), textColor: secondary, paragraphAlignment: .left)
             default:
                 self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterCodeTelegramTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
             }
@@ -568,9 +659,10 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_EnterCodeTelegramTitle, font: Font.semibold(40.0), textColor: self.theme.list.itemPrimaryTextColor)
         }
         
-        self.textField.textField.attributedPlaceholder = NSAttributedString(string: textFieldPlaceholder, font: Font.regular(20.0), textColor: self.theme.list.itemPlaceholderTextColor)
+        self.textField.textField.attributedPlaceholder = NSAttributedString(string: textFieldPlaceholder, font: Font.regular(20.0), textColor: TellomiLoginChrome.palette(theme: self.theme).placeholder)
         
         self.titleActivateAreaNode.accessibilityLabel = self.titleNode.attributedText?.string ?? ""
+        self.currentOptionActivateAreaNode.accessibilityLabel = self.currentOptionNode.attributedText?.string ?? ""
         
         if let inputHeight = layout.inputHeight {
             switch self.codeType {
@@ -581,6 +673,12 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             default:
                 insets.bottom = max(inputHeight, layout.standardInputHeight)
             }
+        }
+        if self.tellomiCodeChrome {
+            // The stack is centered in the space above this inset. Dropping the inset
+            // when the keyboard dismisses moved the code field down the page.
+            let reservedKeyboard = max(layout.inputHeight ?? 0.0, layout.standardKeyboardHeight)
+            insets.bottom = max(insets.bottom, reservedKeyboard)
         }
         
         if !self.animationNode.visibility {
@@ -630,23 +728,39 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             codeLength = 6
         }
         
-        let codeFieldSize = self.codeInputView.update(
-            theme: CodeInputView.Theme(
+        let codeTheme: CodeInputView.Theme
+        if self.tellomiCodeChrome {
+            codeTheme = TellomiLoginChrome.codeInputTheme(theme: self.theme, succeed: self.theme.list.itemDisclosureActions.constructive.fillColor)
+        } else {
+            codeTheme = CodeInputView.Theme(
                 inactiveBorder: self.theme.list.itemPlainSeparatorColor.argb,
                 activeBorder: self.theme.list.itemAccentColor.argb,
                 succeedBorder: self.theme.list.itemDisclosureActions.constructive.fillColor.argb,
                 failedBorder: self.theme.list.itemDestructiveColor.argb,
                 foreground: self.theme.list.itemPrimaryTextColor.argb,
                 isDark: self.theme.overallDarkAppearance
-            ),
+            )
+        }
+        let codeFieldSize = self.codeInputView.update(
+            theme: codeTheme,
             prefix: codePrefix,
             count: codeLength,
-            width: maximumWidth - 28.0,
-            compact: layout.size.width <= 320.0 || (layout.size.width <= 375.0 && codeLength > 5)
+            width: self.tellomiCodeChrome ? maximumWidth - 48.0 : maximumWidth - 28.0,
+            compact: layout.size.width <= 320.0 || (layout.size.width <= 375.0 && codeLength > 5),
+            expandItems: self.tellomiCodeChrome
         )
         
         var items: [AuthorizationLayoutItem] = []
-        if layout.size.width > 320.0 {
+        let tellomiCode = self.tellomiCodeChrome
+        self.tellomiUseSmsNode.isHidden = true
+        if tellomiCode {
+            self.animationNode.isHidden = true
+            self.animationNode.visibility = false
+            let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+            self.proceedNode.title = self.tellomiPrimaryActionTitle ?? copy.login
+            self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(theme: self.theme))
+            self.applyTellomiResendLabel()
+        } else if layout.size.width > 320.0 {
             items.append(AuthorizationLayoutItem(node: self.animationNode, size: animationSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 10.0, maxValue: 10.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
             self.animationNode.updateLayout(size: animationSize)
             self.animationNode.isHidden = false
@@ -659,7 +773,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         var additionalBottomInset: CGFloat = 20.0
         if let codeType = self.codeType {
             switch codeType {
-            case .otherSession:
+            case .otherSession where !self.tellomiCodeChrome:
                 items.append(AuthorizationLayoutItem(node: self.titleNode, size: titleSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 18.0, maxValue: 18.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
                 items.append(AuthorizationLayoutItem(node: self.currentOptionNode, size: currentOptionSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 10.0, maxValue: 10.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
                 
@@ -691,8 +805,20 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                 
                 items.append(AuthorizationLayoutItem(node: self.nextOptionButtonNode, size: nextOptionSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 50.0, maxValue: 120.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
             default:
-                items.append(AuthorizationLayoutItem(node: self.titleNode, size: titleSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 18.0, maxValue: 18.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
-                items.append(AuthorizationLayoutItem(node: self.currentOptionNode, size: currentOptionSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 18.0, maxValue: 18.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+                let titleItemSize = tellomiCode ? CGSize(width: maximumWidth - 48.0, height: titleSize.height) : titleSize
+                let optionItemSize = tellomiCode ? CGSize(width: maximumWidth - 48.0, height: currentOptionSize.height) : currentOptionSize
+                items.append(AuthorizationLayoutItem(node: self.titleNode, size: titleItemSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: tellomiCode ? 28.0 : 18.0, maxValue: tellomiCode ? 36.0 : 18.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+                items.append(AuthorizationLayoutItem(node: self.currentOptionNode, size: optionItemSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 8.0, maxValue: 8.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+                if tellomiCode, case .otherSession = codeType {
+                    let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                    self.tellomiUseSmsNode.isHidden = false
+                    self.tellomiUseSmsNode.setTitle(copy.useSms, with: Font.regular(16.0), with: TellomiLoginChrome.palette(theme: self.theme).link, for: [])
+                    self.tellomiUseSmsNode.accessibilityLabel = copy.useSms
+                    let smsSize = self.tellomiUseSmsNode.measure(CGSize(width: maximumWidth - 48.0, height: 36.0))
+                    items.append(AuthorizationLayoutItem(node: self.tellomiUseSmsNode, size: CGSize(width: maximumWidth - 48.0, height: max(28.0, smsSize.height)), spacingBefore: AuthorizationLayoutItemSpacing(weight: 8.0, maxValue: 8.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+                } else {
+                    self.tellomiUseSmsNode.isHidden = true
+                }
                 
                 var canReset = false
                 var pendingDate: Int32?
@@ -709,13 +835,33 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                     self.codeInputView.isHidden = true
                     self.textField.isHidden = false
                     self.textSeparatorNode.isHidden = false
+                    self.tellomiFieldBackground.isHidden = true
                     items.append(AuthorizationLayoutItem(node: self.textField, size: CGSize(width: maximumWidth - 88.0, height: 44.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 18.0, maxValue: 30.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
                     items.append(AuthorizationLayoutItem(node: self.textSeparatorNode, size: CGSize(width: maximumWidth - 48.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+                case .email:
+                    self.codeInputView.isHidden = true
+                    self.textField.isHidden = false
+                    self.textSeparatorNode.isHidden = true
+                    self.tellomiFieldBackground.isHidden = false
+                    let fieldPalette = TellomiLoginChrome.palette(theme: self.theme)
+                    TellomiLoginChrome.applyField(self.tellomiFieldBackground, theme: self.theme)
+                    self.textField.textField.font = Font.regular(17.0)
+                    self.textField.textField.keyboardType = .numberPad
+                    self.textField.textField.textColor = fieldPalette.fieldText
+                    self.textField.textField.tintColor = fieldPalette.accent
+                    self.textField.textField.keyboardAppearance = self.theme.rootController.keyboardColor.keyboardAppearance
+                    if #available(iOSApplicationExtension 12.0, iOS 12.0, *) {
+                        self.textField.textField.textContentType = .oneTimeCode
+                    }
+                    let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+                    self.textField.textField.attributedPlaceholder = NSAttributedString(string: copy.codePlaceholder, font: Font.regular(17.0), textColor: fieldPalette.placeholder)
+                    items.append(AuthorizationLayoutItem(node: self.textField, size: CGSize(width: maximumWidth - 48.0, height: 52.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 28.0, maxValue: 28.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
                 default:
                     self.codeInputView.isHidden = false
                     self.textField.isHidden = true
                     self.textSeparatorNode.isHidden = true
-                    items.append(AuthorizationLayoutItem(node: self.codeInputView, size: codeFieldSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 30.0, maxValue: 30.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: canReset || pendingDate != nil ? 0.0 : 104.0, maxValue: canReset ? 0.0 : 104.0)))
+                    self.tellomiFieldBackground.isHidden = true
+                    items.append(AuthorizationLayoutItem(node: self.codeInputView, size: codeFieldSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 28.0, maxValue: 28.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
                 }
                 
                 if canReset {
@@ -782,6 +928,19 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                     self.dividerNode.isHidden = true
                     
                     switch codeType {
+                    case .email, .sms, .firebase, .call, .otherSession:
+                        self.nextOptionButtonNode.isHidden = false
+                        self.proceedNode.isHidden = false
+                        self.proceedNode.isEnabled = self.tellomiCodeReady
+                        self.applyTellomiResendLabel()
+                        let resendSize = self.nextOptionTitleNode.updateLayout(CGSize(width: maximumWidth - 48.0, height: 40.0))
+                        if self.tellomiErrorVisible {
+                            self.errorTextNode.alpha = 1.0
+                            let errorTextSize = self.errorTextNode.updateLayout(CGSize(width: maximumWidth - 48.0, height: .greatestFiniteMagnitude))
+                            items.append(AuthorizationLayoutItem(node: self.errorTextNode, size: CGSize(width: maximumWidth - 48.0, height: max(18.0, errorTextSize.height)), spacingBefore: AuthorizationLayoutItemSpacing(weight: 8.0, maxValue: 8.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+                        }
+                        items.append(AuthorizationLayoutItem(node: self.proceedNode, size: proceedSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 20.0, maxValue: 20.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+                        items.append(AuthorizationLayoutItem(node: self.nextOptionButtonNode, size: resendSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 12.0, maxValue: 12.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
                     case .word, .phrase:
                         additionalBottomInset = 100.0
                         
@@ -795,9 +954,6 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                         
                         let buttonFrame = CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize)
                         transition.updateFrame(node: self.proceedNode, frame: buttonFrame)
-                    case .email:
-                        self.nextOptionButtonNode.isHidden = true
-                        self.proceedNode.isHidden = true
                     default:
                         self.nextOptionButtonNode.isHidden = false
                         self.proceedNode.isHidden = true
@@ -815,7 +971,20 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             items.append(AuthorizationLayoutItem(node: self.nextOptionButtonNode, size: nextOptionSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 50.0, maxValue: 120.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         }
         
-        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
+        var stackTop = insets.top
+        var stackHeight = layout.size.height - insets.top - insets.bottom - additionalBottomInset
+        if tellomiCode {
+            // Center in the band under the navigation bar. Starting at the status bar let a
+            // keyboard-sized inset pull the title up under Help on a short phone.
+            let pinnedTop = max(insets.top, navigationBarHeight)
+            let visible = max(0.0, layout.size.height - pinnedTop - insets.bottom - additionalBottomInset)
+            let slack = items.reduce(CGFloat(0.0)) { partial, item in
+                partial + item.size.height + item.spacingBefore.maxValue + item.spacingAfter.maxValue
+            }
+            stackTop = pinnedTop
+            stackHeight = max(visible, slack)
+        }
+        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: stackTop), size: CGSize(width: bandWidth, height: stackHeight)), items: items, transition: transition, failIfDoesNotFit: false)
         
         if let codeType = self.codeType {
             let yOffset: CGFloat = layout.size.width > 320.0 ? 18.0 : 5.0
@@ -902,11 +1071,166 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         self.titleActivateAreaNode.frame = self.titleNode.frame
         self.currentOptionActivateAreaNode.frame = self.currentOptionNode.frame
         self.currentOptionInfoActivateAreaNode.frame = self.currentOptionInfoNode.frame
+
+        if !self.tellomiFieldBackground.isHidden {
+            let fieldFrame = self.textField.frame
+            transition.updateFrame(node: self.tellomiFieldBackground, frame: fieldFrame)
+            transition.updateFrame(node: self.textField, frame: fieldFrame.insetBy(dx: 16.0, dy: 0.0))
+        }
+        self.placeTellomiCodeActions(bandMinX: bandMinX, bandWidth: bandWidth, transition: transition)
+        self.showSentToastIfNeeded(layout)
+        // The column reserves a keyboard even while it is hidden, so the scroll inset
+        // follows the real keyboard. Otherwise the page can scroll while nothing covers it.
+        let keyboard = layout.inputHeight ?? 0.0
+        let scrollInset: CGFloat
+        if keyboard > 0.0 {
+            scrollInset = max(keyboard, layout.standardKeyboardHeight)
+        } else {
+            scrollInset = max(layout.safeInsets.bottom, layout.intrinsicInsets.bottom)
+        }
+        self.tellomiUpdateCodeScroll(layout: layout, bottomInset: scrollInset)
+    }
+
+    /// The code column is laid out in screen coordinates inside a full-screen scroll
+    /// view. When a wrapped title or the resend row runs into the keyboard, the
+    /// inset lets that row scroll clear. A column that already fits does not scroll.
+    private func tellomiUpdateCodeScroll(layout: ContainerViewLayout, bottomInset: CGFloat) {
+        guard let scroll = self.tellomiFormScroll else {
+            return
+        }
+        var contentBottom: CGFloat = 0.0
+        for node in scroll.subnodes ?? [] {
+            if node.isHidden || node.alpha < 0.01 {
+                continue
+            }
+            contentBottom = max(contentBottom, node.frame.maxY)
+        }
+        TellomiLoginChrome.applyFormScroll(scroll, layoutSize: layout.size, bottomInset: bottomInset, contentBottom: contentBottom + 16.0)
+    }
+
+    private func placeTellomiCodeActions(bandMinX: CGFloat, bandWidth: CGFloat, transition: ContainedViewLayoutTransition) {
+        guard self.tellomiCodeChrome, !self.proceedNode.isHidden else {
+            self.missingCodeNode.isHidden = true
+            return
+        }
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        let showsMissing: Bool
+        switch self.codeType {
+        case .sms, .call, .firebase, .otherSession:
+            showsMissing = true
+        default:
+            showsMissing = false
+        }
+        self.missingCodeNode.isHidden = !showsMissing
+        let y = self.proceedNode.frame.maxY + 14.0
+        let rowHeight: CGFloat = 28.0
+        if showsMissing {
+            self.missingCodeNode.setTitle(copy.codeNotReceived, with: TellomiLoginChrome.scaledFont(size: 14.0), with: TellomiLoginChrome.palette(theme: self.theme).link, for: [])
+            self.missingCodeNode.accessibilityLabel = copy.codeNotReceived
+            let missingSize = self.missingCodeNode.measure(CGSize(width: bandWidth / 2.0, height: rowHeight))
+            transition.updateFrame(node: self.missingCodeNode, frame: CGRect(x: bandMinX + 24.0, y: y, width: max(missingSize.width, 120.0), height: rowHeight))
+        }
+        let resendSize = self.nextOptionTitleNode.updateLayout(CGSize(width: bandWidth / 2.0, height: rowHeight))
+        let resendWidth = max(resendSize.width, 80.0)
+        transition.updateFrame(node: self.nextOptionButtonNode, frame: CGRect(x: bandMinX + bandWidth - 24.0 - resendWidth, y: y, width: resendWidth, height: rowHeight))
+        self.nextOptionTitleNode.frame = CGRect(x: resendWidth - resendSize.width, y: 0.0, width: resendSize.width, height: resendSize.height)
+    }
+
+    private var tellomiCodeChrome: Bool {
+        switch self.codeType {
+        case .sms, .email, .firebase, .call, .otherSession:
+            return true
+        default:
+            return false
+        }
+    }
+
+    func updateStrings(_ strings: PresentationStrings) {
+        self.strings = strings
+        if let layoutArguments = self.layoutArguments {
+            self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
+        }
+    }
+
+    func applyPresentationTheme(_ theme: PresentationTheme) {
+        self.theme = theme
+        let palette = TellomiLoginChrome.palette(theme: theme)
+        self.backgroundColor = theme.list.plainBackgroundColor
+        self.textField.textField.textColor = palette.fieldText
+        self.textField.textField.tintColor = palette.accent
+        self.textField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        TellomiLoginChrome.applyField(self.tellomiFieldBackground, theme: theme)
+        if self.tellomiCodeChrome {
+            self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(theme: theme))
+        }
+        if let layoutArguments = self.layoutArguments {
+            self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
+        }
+    }
+
+    private var tellomiCodeReady: Bool {
+        switch self.codeType {
+        case .email:
+            return !(self.textField.textField.text ?? "").isEmpty
+        case .sms, .firebase, .call, .otherSession:
+            if let length = self.requiredCodeLength {
+                return self.codeInputView.text.count >= Int(length)
+            }
+            return !self.codeInputView.text.isEmpty
+        default:
+            return false
+        }
+    }
+
+    private func applyTellomiResendLabel() {
+        guard self.tellomiCodeChrome else {
+            return
+        }
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        let timeout = self.currentTimeoutTime ?? 0
+        let active = !self.tellomiResendBlocked && timeout <= 0
+        let label = (active || self.tellomiResendBlocked) ? copy.resend : copy.resendCountdown(Int(timeout))
+        let palette = TellomiLoginChrome.palette(theme: self.theme)
+        let color = active ? palette.link : palette.secondaryText
+        self.nextOptionTitleNode.attributedText = NSAttributedString(string: label, font: TellomiLoginChrome.scaledFont(size: 14.0), textColor: color, paragraphAlignment: .center)
+        self.nextOptionButtonNode.isUserInteractionEnabled = active
+        self.nextOptionButtonNode.accessibilityLabel = label
+        self.nextOptionArrowNode.isHidden = true
+        let traits: UIAccessibilityTraits = active ? [.button] : [.button, .notEnabled]
+        self.nextOptionButtonNode.accessibilityTraits = traits
+    }
+
+    private func showSentToastIfNeeded(_ layout: ContainerViewLayout) {
+        guard self.tellomiCodeChrome, !self.sentToastShown else {
+            return
+        }
+        self.sentToastShown = true
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        self.sentToastText.attributedText = NSAttributedString(string: copy.codeSentToast, font: TellomiLoginChrome.scaledFont(size: 14.0), textColor: .white)
+        let textSize = self.sentToastText.updateLayout(CGSize(width: layout.size.width - 80.0, height: 40.0))
+        let size = CGSize(width: textSize.width + 28.0, height: 36.0)
+        // Above the title, under the status bar. Mid-screen sat on the field and the
+        // Log in button once the keyboard was up. The subtitle already names the address.
+        let topLimit = (layout.statusBarHeight ?? 20.0) + 4.0
+        let aboveTitle = self.titleNode.frame.minY - size.height - 8.0
+        guard aboveTitle >= topLimit else {
+            return
+        }
+        self.sentToastBackground.frame = CGRect(x: floor((layout.size.width - size.width) / 2.0), y: aboveTitle, width: size.width, height: size.height)
+        self.sentToastText.frame = CGRect(x: 14.0, y: floor((size.height - textSize.height) / 2.0), width: textSize.width, height: textSize.height)
+        self.sentToastBackground.alpha = 1.0
+        Queue.mainQueue().after(1.8) { [weak self] in
+            guard let self else {
+                return
+            }
+            self.sentToastBackground.alpha = 0.0
+            self.sentToastBackground.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2)
+        }
     }
     
     func activateInput() {
         switch self.codeType {
-        case .word, .phrase:
+        case .word, .phrase, .email:
             self.textField.textField.becomeFirstResponder()
         default:
             let _ = self.codeInputView.becomeFirstResponder()
@@ -915,7 +1239,7 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     
     func animateError() {
         switch self.codeType {
-        case .word, .phrase:
+        case .word, .phrase, .email:
             self.textField.layer.addShakeAnimation()
         default:
             self.codeInputView.layer.addShakeAnimation()
@@ -937,16 +1261,25 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         }
     }
     
+    private var tellomiStickyError = false
+    private var tellomiErrorVisible = false
+
     func animateError(text: String) {
         let errorOriginY: CGFloat
         let errorOriginOffset: CGFloat
+        let tellomiEmail = self.tellomiCodeChrome && {
+            if case .email = self.codeType {
+                return true
+            }
+            return false
+        }()
         switch self.codeType {
-        case .word, .phrase:
+        case .word, .phrase, .email:
             self.textField.layer.addShakeAnimation()
             
             let transition: ContainedViewLayoutTransition = .animated(duration: 0.15, curve: .easeInOut)
-            transition.updateBackgroundColor(node: self.textSeparatorNode, color: self.theme.list.itemDestructiveColor)
-            errorOriginY = self.textField.frame.maxY
+            transition.updateBackgroundColor(node: self.textSeparatorNode, color: TellomiLoginChrome.palette(theme: self.theme).error)
+            errorOriginY = tellomiEmail ? self.tellomiFieldBackground.frame.maxY : self.textField.frame.maxY
             errorOriginOffset = 5.0
         default:
             self.codeInputView.animateError()
@@ -954,8 +1287,28 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             errorOriginY = self.codeInputView.frame.maxY
             errorOriginOffset = 11.0
         }
-        
-        self.errorTextNode.attributedText = NSAttributedString(string: text, font: Font.regular(13.0), textColor: self.theme.list.itemDestructiveColor, paragraphAlignment: .center)
+
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        let shown: String
+        if self.tellomiCodeChrome {
+            shown = tellomiEmail ? copy.wrongCode : copy.wrongSmsCode
+        } else {
+            shown = text
+        }
+        let alignment: NSTextAlignment = self.tellomiCodeChrome ? .left : .center
+        let errorColor = self.tellomiCodeChrome ? TellomiLoginChrome.palette(theme: self.theme).error : self.theme.list.itemDestructiveColor
+        self.errorTextNode.attributedText = NSAttributedString(string: shown, font: Font.regular(13.0), textColor: errorColor, paragraphAlignment: alignment)
+        self.tellomiStickyError = tellomiEmail
+        if self.tellomiCodeChrome {
+            // Own line between the field and Log in. An absolute frame landed on the title
+            // or was clipped against the button once the keyboard moved the stack.
+            self.tellomiErrorVisible = true
+            self.errorTextNode.alpha = 1.0
+            if let (layout, navigationBarHeight) = self.layoutArguments {
+                self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
+            }
+            return
+        }
         
         if let (layout, _) = self.layoutArguments {
             // iPhone Duo: centered under the field in the band between the side insets, as containerLayoutUpdated lays it out.
@@ -965,7 +1318,13 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             
             let errorTextSize = self.errorTextNode.updateLayout(CGSize(width: bandWidth - 48.0, height: .greatestFiniteMagnitude))
             let yOffset: CGFloat = layout.size.width > 320.0 ? errorOriginOffset + 13.0 : errorOriginOffset
-            self.errorTextNode.frame = CGRect(origin: CGPoint(x: bandMinX + floorToScreenPixels((bandWidth - errorTextSize.width) / 2.0), y: errorOriginY + yOffset), size: errorTextSize)
+            let errorX: CGFloat
+            if self.tellomiStickyError {
+                errorX = self.tellomiFieldBackground.frame.minX
+            } else {
+                errorX = bandMinX + floorToScreenPixels((bandWidth - errorTextSize.width) / 2.0)
+            }
+            self.errorTextNode.frame = CGRect(origin: CGPoint(x: errorX, y: errorOriginY + yOffset), size: errorTextSize)
         }
         self.errorTextNode.alpha = 1.0
         self.errorTextNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.15)
@@ -980,6 +1339,9 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             self.resetNode.layer.animateAlpha(from: previousResetAlpha, to: 0.0, duration: 0.1)
         }
         
+        if self.tellomiStickyError {
+            return
+        }
         Queue.mainQueue().after(1.6) {
             self.errorTextNode.alpha = 0.0
             self.errorTextNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15)
@@ -1006,13 +1368,30 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
             
     @objc private func textDidChange() {
         let text = self.textField.textField.text ?? ""
+        if self.tellomiStickyError || self.tellomiErrorVisible {
+            self.tellomiStickyError = false
+            self.tellomiErrorVisible = false
+            self.errorTextNode.alpha = 0.0
+            if let (layout, navigationBarHeight) = self.layoutArguments {
+                self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
+            }
+        }
         self.proceedNode.isEnabled = !text.isEmpty
         self.updateNextEnabled?(!text.isEmpty)
-        
         self.updatePasteVisibility()
+        if case .email = self.codeType, let length = self.requiredCodeLength, text.count == Int(length) {
+            self.loginWithCode?(text)
+        }
     }
     
     private func codeChanged(text: String) {
+        if self.tellomiErrorVisible {
+            self.tellomiErrorVisible = false
+            self.errorTextNode.alpha = 0.0
+            if let (layout, navigationBarHeight) = self.layoutArguments {
+                self.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: .immediate)
+            }
+        }
         self.updateNextEnabled?(!text.isEmpty)
         if let codeType = self.codeType {
             var codeLength: Int32?
@@ -1034,10 +1413,27 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
                 default:
                     break
             }
+            if self.tellomiCodeChrome, let codeLength = codeLength {
+                self.proceedNode.isEnabled = text.count >= Int(codeLength)
+            }
             if let codeLength = codeLength, text.count == Int(codeLength) {
                 self.loginWithCode?(text)
             }
         }
+    }
+
+    func textFieldDidBeginEditing(_ textField: UITextField) {
+        guard !self.tellomiFieldBackground.isHidden else {
+            return
+        }
+        TellomiLoginChrome.applyField(self.tellomiFieldBackground, theme: self.theme, focused: true)
+    }
+
+    func textFieldDidEndEditing(_ textField: UITextField) {
+        guard !self.tellomiFieldBackground.isHidden else {
+            return
+        }
+        TellomiLoginChrome.applyField(self.tellomiFieldBackground, theme: self.theme, focused: false)
     }
 
     func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
@@ -1090,6 +1486,57 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     @objc func nextOptionNodePressed() {
         self.requestAnotherOption?()
     }
+
+    private var tellomiResendBlocked = false
+
+    var tellomiResendIsActive: Bool {
+        return !self.tellomiResendBlocked && (self.currentTimeoutTime ?? 0) <= 0
+    }
+
+    func tellomiBlockFurtherResends() {
+        self.tellomiResendBlocked = true
+        self.countdownDisposable.set(nil)
+        self.currentTimeoutTime = nil
+        if let layoutArguments = self.layoutArguments {
+            self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
+        }
+    }
+
+    /// `FLOOD_WAIT_X` pauses resend for those seconds, then the button works again.
+    func tellomiPauseResend(seconds: Int32) {
+        guard !self.tellomiResendBlocked else {
+            return
+        }
+        self.currentTimeoutTime = max(1, seconds)
+        let disposable = ((Signal<Int, NoError>.single(1) |> delay(1.0, queue: Queue.mainQueue())) |> restart).startStrict(next: { [weak self] _ in
+            guard let self else {
+                return
+            }
+            guard let remaining = self.currentTimeoutTime, remaining > 0 else {
+                self.countdownDisposable.set(nil)
+                return
+            }
+            self.currentTimeoutTime = remaining - 1
+            if let layoutArguments = self.layoutArguments {
+                self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
+            }
+            if self.currentTimeoutTime == 0 {
+                self.countdownDisposable.set(nil)
+            }
+        })
+        self.countdownDisposable.set(disposable)
+        if let layoutArguments = self.layoutArguments {
+            self.containerLayoutUpdated(layoutArguments.0, navigationBarHeight: layoutArguments.1, transition: .immediate)
+        }
+    }
+
+    @objc private func missingCodePressed() {
+        self.openHelp?()
+    }
+
+    @objc private func tellomiUseSmsPressed() {
+        self.requestSmsCode?()
+    }
     
     @objc func previousOptionNodePressed() {
         self.requestPreviousOption?()
@@ -1099,8 +1546,13 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
         switch self.codeType {
         case let .fragment(url, _):
             self.openFragment?(url)
-        case .word, .phrase:
+        case .word, .phrase, .email:
             if let text = self.textField.textField.text, !text.isEmpty {
+                self.loginWithCode?(text)
+            }
+        case .sms, .call, .firebase:
+            let text = self.codeInputView.text
+            if let length = self.requiredCodeLength, text.count >= Int(length) {
                 self.loginWithCode?(text)
             }
         default:

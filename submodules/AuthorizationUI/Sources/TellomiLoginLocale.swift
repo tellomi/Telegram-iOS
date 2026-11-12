@@ -7,6 +7,9 @@ import TelegramPresentationData
 /// Reinstalling the app clears this key together with the saved langpack.
 public let tellomiSystemLangPackDefaultsKey = "TellomiDidApplySystemLangPack"
 
+/// Written by the login language button and by Settings ▸ Language.
+public let tellomiPreferredInterfaceLanguageKey = "TellomiPreferredInterfaceLanguage"
+
 /// Server langpack for a built-in Chinese localization. Nil for English and every other language.
 /// `zh-Hans-US` and `zh-Hans-CN` are `zh-Hans`. `zh-Hant-TW` and `zh-Hant-HK` are `zh-Hant`.
 public func tellomiLangPackCode(preferredLanguages: [String]) -> String? {
@@ -218,20 +221,7 @@ public func tellomiStartInterfaceLanguageDownload(account: UnauthorizedAccount, 
 /// A choice from the login language button wins immediately. Otherwise a Chinese system shows
 /// Chinese until the automatic pack has been applied, and a later choice in Settings wins.
 public func tellomiChromeLanguageCode(savedLanguageCode: String) -> String {
-    if let stored = UserDefaults.standard.string(forKey: tellomiPreferredInterfaceLanguageKey)?.trimmingCharacters(in: .whitespacesAndNewlines), !stored.isEmpty {
-        return stored
-    }
-    if UserDefaults.standard.bool(forKey: tellomiSystemLangPackDefaultsKey) {
-        return savedLanguageCode
-    }
-    let saved = savedLanguageCode.lowercased()
-    if saved == "zh" || saved.hasPrefix("zh-") {
-        return savedLanguageCode
-    }
-    if let system = tellomiSystemLangPackCode() {
-        return system
-    }
-    return savedLanguageCode
+    return tellomiChromeLanguageCode(savedLanguageCode: savedLanguageCode, preferredInterfaceLanguage: UserDefaults.standard.string(forKey: tellomiPreferredInterfaceLanguageKey), systemPackApplied: UserDefaults.standard.bool(forKey: tellomiSystemLangPackDefaultsKey), systemLangPackCode: tellomiSystemLangPackCode())
 }
 
 /// Langpack to download when the system language is Chinese and this install has not applied it yet.

@@ -4049,7 +4049,7 @@ public final class WebAppController: ViewController, AttachmentContainable {
                         self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: .peer(botPeer)))
                     }
                 } else {
-                    self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: self.presentationData.strings.WebApp_PrivacyPolicy_URL, forceExternal: false, presentationData: self.presentationData, navigationController: self.getNavigationController(), dismissInput: {})
+                    self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: TellomiLinks.localizedSiteURL(self.presentationData.strings.WebApp_PrivacyPolicy_URL, fallback: "legal/privacy/"), forceExternal: false, presentationData: self.presentationData, navigationController: self.getNavigationController(), dismissInput: {})
                 }
             })))
                         

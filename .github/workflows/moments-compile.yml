@@ -9,7 +9,7 @@ name: Moments compile
 
 on:
   pull_request:
-    branches: [release/ios]
+    branches: [release/ios, cursor/release-ios-merge-master-b62c]
     paths-ignore:
       - "**/*.md"
       - "docs/**"

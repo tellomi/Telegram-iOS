@@ -155,7 +155,7 @@ public class UnauthorizedAccount {
                             isSupportUser = true
                         }
                         let state = AuthorizedAccountState(isTestingEnvironment: testingEnvironment, masterDatacenterId: masterDatacenterId, peerId: user.id, state: nil, invalidatedChannels: [])
-                        storeAuthorizedUser(transaction: transaction, user: user)
+                        tellomiStoreAuthorizedUser(transaction: transaction, user: user)
                         initializedAppSettingsAfterLogin(transaction: transaction, appVersion: networkArguments.appVersion, syncContacts: syncContacts)
                         transaction.setState(state)
                         return accountManager.transaction { [weak self] transaction -> SendAuthorizationCodeResult in

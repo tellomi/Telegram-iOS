@@ -17,9 +17,10 @@ public func textAlertController(
     allowInputInset: Bool = true,
     parseMarkdown: Bool = false,
     dismissOnOutsideTap: Bool = true,
-    linkAction: (([NSAttributedString.Key: Any], Int) -> Void)? = nil
+    linkAction: (([NSAttributedString.Key: Any], Int) -> Void)? = nil,
+    accessibilityIdentifier: String? = nil
 ) -> ViewController {
-    return textAlertController(sharedContext: context.sharedContext, updatedPresentationData: updatedPresentationData, forceTheme: forceTheme, title: title, text: text, actions: actions, actionLayout: actionLayout, allowInputInset: allowInputInset, parseMarkdown: parseMarkdown, dismissOnOutsideTap: dismissOnOutsideTap, linkAction: linkAction)
+    return textAlertController(sharedContext: context.sharedContext, updatedPresentationData: updatedPresentationData, forceTheme: forceTheme, title: title, text: text, actions: actions, actionLayout: actionLayout, allowInputInset: allowInputInset, parseMarkdown: parseMarkdown, dismissOnOutsideTap: dismissOnOutsideTap, linkAction: linkAction, accessibilityIdentifier: accessibilityIdentifier)
 }
 
 public func textAlertController(
@@ -33,7 +34,8 @@ public func textAlertController(
     allowInputInset: Bool = true,
     parseMarkdown: Bool = false,
     dismissOnOutsideTap: Bool = true,
-    linkAction: (([NSAttributedString.Key: Any], Int) -> Void)? = nil
+    linkAction: (([NSAttributedString.Key: Any], Int) -> Void)? = nil,
+    accessibilityIdentifier: String? = nil
 ) -> ViewController {
     var presentationData = updatedPresentationData?.initial ?? sharedContext.currentPresentationData.with { $0 }
     if let forceTheme {
@@ -81,6 +83,9 @@ public func textAlertController(
         actions: mappedActions,
         updatedPresentationData: (initial: presentationData, signal: updatedPresentationDataSignal)
     )
+    if let accessibilityIdentifier {
+        controller.view.accessibilityIdentifier = accessibilityIdentifier
+    }
     return controller
 }
 

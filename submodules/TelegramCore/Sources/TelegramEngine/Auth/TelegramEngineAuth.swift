@@ -55,6 +55,11 @@ public extension TelegramEngineUnauthorized {
         public func reportMissingCode(phoneNumber: String, phoneCodeHash: String, mnc: String) -> Signal<Never, ReportMissingCodeError> {
             return _internal_reportMissingCode(network: self.account.network, phoneNumber: phoneNumber, phoneCodeHash: phoneCodeHash, mnc: mnc)
         }
+
+        /// `auth.resendCode` for the login in progress, including an app code whose `next_type` is empty.
+        public func resendLoginCode(accountManager: AccountManager<TelegramAccountManagerTypes>, apiId: Int32, apiHash: String, firebaseSecretStream: Signal<[String: String], NoError>, attempt: TellomiLoginAttempt?) -> Signal<Void, AuthorizationCodeRequestError> {
+            return resendAuthorizationCode(accountManager: accountManager, account: self.account, apiId: apiId, apiHash: apiHash, firebaseSecretStream: firebaseSecretStream, attempt: attempt)
+        }
         
         public func requestPasskeyLoginData(apiId: Int32, apiHash: String) -> Signal<String?, NoError> {
             return _internal_requestPasskeyLoginData(network: self.account.network, apiId: apiId, apiHash: apiHash)
@@ -76,6 +81,18 @@ public extension TelegramEngineUnauthorized {
         public func setState(state: UnauthorizedAccountState) -> Signal<Never, NoError> {
             return self.account.postbox.transaction { transaction -> Void in
                 transaction.setState(state)
+            }
+            |> ignoreValues
+        }
+
+        /// Replaces a stored confirmation-code screen with phone entry. Other stored states stay.
+        public func replaceConfirmationCodeEntryWithPhoneEntry(countryCode: Int32, number: String) -> Signal<Never, NoError> {
+            let account = self.account
+            return account.postbox.transaction { transaction -> Void in
+                guard let state = transaction.getState() as? UnauthorizedAccountState, case .confirmationCodeEntry = state.contents else {
+                    return
+                }
+                transaction.setState(UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: number)))
             }
             |> ignoreValues
         }

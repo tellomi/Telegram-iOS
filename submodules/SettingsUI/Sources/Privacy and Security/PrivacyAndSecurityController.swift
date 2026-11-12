@@ -1641,7 +1641,7 @@ public func privacyAndSecurityController(
         let localWebBrowserSettings = webBrowserData.0.entries[ApplicationSpecificSharedDataKeys.webBrowserSettings]?.get(WebBrowserSettings.self) ?? WebBrowserSettings.defaultSettings
         let accountWebBrowserSettings = webBrowserData.1?.get(AccountWebBrowserSettings.self) ?? AccountWebBrowserSettings.defaultSettings
 
-        let options = availableOpenInOptions(context: context, item: .url(url: "https://telegram.org"))
+        let options = availableOpenInOptions(context: context, item: .url(url: "https://tellomi.cn/"))
         let defaultWebBrowser: String
         if accountWebBrowserSettings.openExternalBrowser {
             var defaultExternalBrowser = localWebBrowserSettings.defaultWebBrowser

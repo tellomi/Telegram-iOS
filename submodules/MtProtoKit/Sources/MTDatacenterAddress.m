@@ -102,7 +102,7 @@
         return false;
     }
 
-    if (_thisPortOnly != other.thisPortOnly) {
+    if (_thisPortOnly != other->_thisPortOnly) {
         return false;
     }
     
