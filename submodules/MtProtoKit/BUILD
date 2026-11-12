@@ -90,7 +90,7 @@ objc_library(
 ios_test_runner(
     name = "MtProtoKitTestRunner",
     device_type = "iPhone 17",
-    os_version = "26.5",
+    os_version = "27.0",
 )
 
 objc_library(

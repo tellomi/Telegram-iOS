@@ -2,13 +2,14 @@
 
 #import <mach/mach.h>
 #import <netinet/in.h>
+#import <stdatomic.h>
 #import <sys/socket.h>
 
 #if __has_feature(ptrauth_calls)
 #import <ptrauth.h>
 #endif
 
-static int gDeferredCFSocketReleaseCount = 0;
+static _Atomic int gDeferredCFSocketReleaseCount = 0;
 static dispatch_queue_t gDeferredCFSocketReleaseQueue;
 
 static BOOL TellomiBytesReadable(const void *address, size_t size) {
@@ -116,7 +117,21 @@ static void TellomiEnsureReleaseQueue(void) {
 }
 
 int TellomiDeferredCFSocketReleaseCount(void) {
-    return gDeferredCFSocketReleaseCount;
+    return atomic_load_explicit(&gDeferredCFSocketReleaseCount, memory_order_relaxed);
+}
+
+CFTypeRef TellomiRetainIfCFRelease(const void *info, void (*release)(const void *)) {
+    // CFSocketGetContext copies the context. It does not leave an extra
+    // retain for us to undo. Calling context.release here dropped the
+    // object's last retain: one release too many. A release function that
+    // is not CFRelease is left untouched, and the caller closes the
+    // streams the way it did before this workaround.
+    if (info == NULL || !TellomiReleaseIsCFRelease(release)) {
+        return NULL;
+    }
+    CFRetain((CFTypeRef)info);
+    atomic_fetch_add_explicit(&gDeferredCFSocketReleaseCount, 1, memory_order_relaxed);
+    return (CFTypeRef)info;
 }
 
 void TellomiFlushDeferredCFSocketReleases(void) {
@@ -127,6 +142,15 @@ void TellomiFlushDeferredCFSocketReleases(void) {
 }
 
 CFTypeRef TellomiRetainSocketStream(CFTypeRef stream) {
+#if defined(__arm64e__)
+    // This workaround reads a CFSocket out of a stream and compares its
+    // release function. No arm64e run has shown that is valid under
+    // pointer authentication. The simulator is arm64 and cannot show it
+    // either. An arm64e build therefore does not retain anything and
+    // closeWithError closes the streams as it did before.
+    (void)stream;
+    return NULL;
+#else
     TellomiEnsureReleaseQueue();
     CFSocketRef socket = TellomiSocketInStream(stream);
     if (socket == NULL) {
@@ -134,17 +158,8 @@ CFTypeRef TellomiRetainSocketStream(CFTypeRef stream) {
     }
     CFSocketContext context = {0};
     CFSocketGetContext(socket, &context);
-    if (context.info == NULL || !TellomiReleaseIsCFRelease(context.release)) {
-        if (context.retain != NULL && context.info != NULL && context.release != NULL) {
-            context.release(context.info);
-        }
-        return NULL;
-    }
-    if (context.retain == NULL) {
-        CFRetain((CFTypeRef)context.info);
-    }
-    gDeferredCFSocketReleaseCount += 1;
-    return (CFTypeRef)context.info;
+    return TellomiRetainIfCFRelease(context.info, context.release);
+#endif
 }
 
 void TellomiReleaseSocketStreamLater(CFTypeRef object) {

@@ -29,6 +29,16 @@ void TellomiFlushDeferredCFSocketReleases(void);
 // drop the last retain. The destructor therefore cannot run until the
 // later CFRelease, which is after CFStreamClose has returned. No private
 // function pointer is written.
+//
+// When release is CFRelease, TellomiRetainIfCFRelease always CFRetains
+// info. Any other release function is not called, and the result is NULL.
+// Calling it was one release too many.
+//
+// An arm64e (pointer-authenticated) build does not do this. Nothing here
+// has been shown to be valid under pointer authentication: the simulator
+// is arm64. TellomiRetainSocketStream returns NULL there, and the streams
+// close as they did before.
+CFTypeRef TellomiRetainIfCFRelease(const void *info, void (*release)(const void *));
 CFTypeRef TellomiRetainSocketStream(CFTypeRef stream);
 
 // CFRelease on the queue used to keep the destructor off the close stack.

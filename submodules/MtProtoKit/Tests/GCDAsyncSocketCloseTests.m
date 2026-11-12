@@ -299,7 +299,7 @@ static const int kClosedSocket = -1;
     CFTypeRef heldRead = TellomiRetainSocketStream((CFTypeRef)readStream);
     CFTypeRef heldWrite = TellomiRetainSocketStream((CFTypeRef)writeStream);
     CFTypeRef held = heldRead != NULL ? heldRead : heldWrite;
-    XCTAssertNotNil(held);
+    XCTAssertTrue(held != NULL);
 
     CFReadStreamClose(readStream);
     CFWriteStreamClose(writeStream);
@@ -319,6 +319,45 @@ static const int kClosedSocket = -1;
     XCTAssertEqual(close(fds[0]), -1);
     XCTAssertEqual(errno, EBADF);
     XCTAssertEqual(close(fds[1]), 0);
+}
+
+static int gForeignReleaseCalls = 0;
+
+static void TellomiForeignRelease(const void *info) {
+    gForeignReleaseCalls += 1;
+    (void)info;
+}
+
+- (void)testForeignReleaseIsNotCalledAndDoesNotDropARetain {
+    CFStringRef info = CFStringCreateWithCString(NULL, "tellomi-socket", kCFStringEncodingUTF8);
+    CFIndex before = CFGetRetainCount(info);
+    int deferredBefore = TellomiDeferredCFSocketReleaseCount();
+    gForeignReleaseCalls = 0;
+
+    CFTypeRef held = TellomiRetainIfCFRelease(info, TellomiForeignRelease);
+
+    XCTAssertTrue(held == NULL);
+    XCTAssertEqual(gForeignReleaseCalls, 0);
+    XCTAssertEqual(CFGetRetainCount(info), before);
+    XCTAssertEqual(TellomiDeferredCFSocketReleaseCount(), deferredBefore);
+    CFRelease(info);
+}
+
+- (void)testCFReleaseContextTakesExactlyOneRetain {
+    CFStringRef info = CFStringCreateWithCString(NULL, "tellomi-socket", kCFStringEncodingUTF8);
+    CFIndex before = CFGetRetainCount(info);
+    int deferredBefore = TellomiDeferredCFSocketReleaseCount();
+
+    CFTypeRef held = TellomiRetainIfCFRelease(info, CFRelease);
+
+    XCTAssertTrue(held == info);
+    XCTAssertEqual(CFGetRetainCount(info), before + 1);
+    XCTAssertEqual(TellomiDeferredCFSocketReleaseCount(), deferredBefore + 1);
+
+    TellomiReleaseSocketStreamLater(held);
+    TellomiFlushDeferredCFSocketReleases();
+    XCTAssertEqual(CFGetRetainCount(info), before);
+    CFRelease(info);
 }
 
 @end
