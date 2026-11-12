@@ -25,11 +25,12 @@ final class AuthorizationSequenceSignUpController: ViewController {
     private let moreButtonNode: MoreButtonNode
     
     private let sharedContext: SharedAccountContext
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
     private let back: () -> Void
     
     var initialName: (String, String) = ("", "")
     private var termsOfService: UnauthorizedAccountTermsOfService?
+    private var tellomiNicknameOnly = false
     
     var signUpWithName: ((String, String, Data?, Any?, TGVideoEditAdjustments?, Bool) -> Void)?
     var openUrl: ((String) -> Void)?
@@ -94,6 +95,18 @@ final class AuthorizationSequenceSignUpController: ViewController {
         fatalError("init(coder:) has not been implemented")
     }
     
+    func applyPresentationTheme(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        self.statusBar.statusBarStyle = presentationData.theme.intro.statusBarStyle.style
+        if self.isViewLoaded {
+            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        }
+        self.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), strings: NavigationBarStrings(presentationStrings: presentationData.strings)), transition: .immediate)
+        if self.isNodeLoaded {
+            self.controllerNode.applyPresentationTheme(presentationData.theme)
+        }
+    }
+
     @objc private func cancelPressed() {
         self.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: self.presentationData.strings.Login_CancelSignUpConfirmation, actions: [TextAlertAction(type: .genericAction, title: self.presentationData.strings.Login_CancelPhoneVerificationContinue, action: {
         }), TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Login_CancelPhoneVerificationStop, action: { [weak self] in
@@ -101,6 +114,28 @@ final class AuthorizationSequenceSignUpController: ViewController {
         })]), in: .window(.root))
     }
     
+    private func presentTellomiLanguage() {
+        let copy = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.presentationData.strings))
+        let current = tellomiChromeLanguageCode(savedLanguageCode: self.presentationData.strings.primaryComponent.languageCode)
+        var rows: [TellomiChoiceRow] = []
+        for info in tellomiBuiltinInterfaceLanguages() {
+            let checked = tellomiLanguageCodesMatch(info.languageCode, current)
+            let code = info.languageCode
+            rows.append(TellomiChoiceRow(title: info.localizedTitle, style: .check(checked), action: { [weak self] in
+                guard let self, let plan = tellomiLanguageApplyPlan(selectedCode: code, currentCode: current) else {
+                    return
+                }
+                let code = plan.code
+                tellomiRememberInterfaceLanguage(code)
+                if self.isNodeLoaded {
+                    self.controllerNode.updateStrings(self.presentationData.strings)
+                }
+            }))
+        }
+        let prompt = TellomiChoicePromptController(promptTitle: copy.chooseLanguage, rows: rows, cancelTitle: copy.cancel, dark: self.presentationData.theme.overallDarkAppearance)
+        self.present(prompt, in: .window(.root))
+    }
+
     @objc private func moreButtonPressed() {
         self.moreButtonNode.buttonPressed()
     }
@@ -113,6 +148,12 @@ final class AuthorizationSequenceSignUpController: ViewController {
         
         let nop: ((ContextMenuActionItem.Action) -> Void)? = nil
         items.append(.action(ContextMenuActionItem(text: presentationData.strings.Login_Announce_Info, textLayout: .multiline, textFont: .small, icon: { _ in return nil }, action: nop)))
+        items.append(.action(ContextMenuActionItem(text: tellomiLanguageButtonTitle(languageCode: tellomiInterfaceLanguageCode(presentationData.strings)), icon: { _ in
+            return nil
+        }, action: { [weak self] _, dismiss in
+            dismiss(.default)
+            self?.presentTellomiLanguage()
+        })))
         items.append(.separator)
         items.append(.action(ContextMenuActionItem(text: presentationData.strings.Login_Announce_Notify, icon: { theme in
             if !announceSignUp {
@@ -179,6 +220,9 @@ final class AuthorizationSequenceSignUpController: ViewController {
         self.controllerNode.signUpWithName = { [weak self] _, _ in
             self?.nextPressed()
         }
+        self.controllerNode.tellomiOpenUrl = { [weak self] url in // Tellomi: agreement links
+            self?.tellomiPresentLegalURL(url)
+        }
         self.controllerNode.openTermsOfService = { [weak self] in
             guard let strongSelf = self, let termsOfService = strongSelf.termsOfService else {
                 return
@@ -212,7 +256,15 @@ final class AuthorizationSequenceSignUpController: ViewController {
             presentAlertImpl()
         }
         
+        self.controllerNode.tellomiNicknameOnly = self.tellomiNicknameOnly
         self.controllerNode.updateData(firstName: self.initialName.0, lastName: self.initialName.1, hasTermsOfService: self.termsOfService != nil)
+    }
+
+    func setTellomiNicknameOnly(_ nicknameOnly: Bool) {
+        self.tellomiNicknameOnly = nicknameOnly
+        if self.isNodeLoaded {
+            self.controllerNode.tellomiNicknameOnly = nicknameOnly
+        }
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -256,12 +308,15 @@ final class AuthorizationSequenceSignUpController: ViewController {
     
     @objc func nextPressed() {
         let firstName = self.controllerNode.currentName.0.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lastName = self.controllerNode.currentName.1.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastName = self.tellomiNicknameOnly ? "" : self.controllerNode.currentName.1.trimmingCharacters(in: .whitespacesAndNewlines)
         
         var name: (String, String)?
         if firstName.isEmpty && lastName.isEmpty {
             self.hapticFeedback.error()
             self.controllerNode.animateError()
+            return
+        } else if !self.controllerNode.tellomiAgreement.agreed { // Tellomi: agreement checkbox required
+            self.hapticFeedback.error()
             return
         } else if firstName.isEmpty && !lastName.isEmpty {
             name = (lastName, "")

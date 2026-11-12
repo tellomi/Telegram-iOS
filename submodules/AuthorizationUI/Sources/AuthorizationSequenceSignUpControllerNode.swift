@@ -23,18 +23,21 @@ private func roundCorners(diameter: CGFloat) -> UIImage {
 }
 
 final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFieldDelegate {
-    private let theme: PresentationTheme
-    private let strings: PresentationStrings
+    private var theme: PresentationTheme
+    private var strings: PresentationStrings
     private let addPhoto: () -> Void
     
     private let titleNode: ASTextNode
     private let currentOptionNode: ASTextNode
     private let termsNode: ImmediateTextNode
+    private let agreementRow: TellomiAgreementRow
     
     private let firstNameField: TextFieldNode
     private let lastNameField: TextFieldNode
     private let firstSeparatorNode: ASDisplayNode
     private let lastSeparatorNode: ASDisplayNode
+    private let tellomiFirstBackground = ASDisplayNode()
+    private let tellomiLastBackground = ASDisplayNode()
     private let currentPhotoNode: ASImageNode
     private let addPhotoButton: HighlightableButtonNode
     private let proceedNode: SolidRoundedButtonNode
@@ -49,25 +52,35 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     
     var currentPhoto: UIImage? = nil {
         didSet {
-            if let currentPhoto = self.currentPhoto, let cgImage = currentPhoto.cgImage {
-                let mask = roundCorners(diameter: 110.0).cgImage
+            if let currentPhoto = self.currentPhoto {
                 self.currentPhotoNode.image = generateImage(CGSize(width: 110.0, height: 110.0), contextGenerator: { size, context in
                     context.clear(CGRect(origin: CGPoint(), size: size))
                     context.setBlendMode(.copy)
-                    context.draw(cgImage, in: CGRect(origin: CGPoint(), size: size))
-                    if let mask {
-                        context.setBlendMode(.destinationOut)
-                        context.draw(mask, in: CGRect(origin: CGPoint(), size: size))
-                    }
+                    context.draw(currentPhoto.cgImage!, in: CGRect(origin: CGPoint(), size: size))
+                    context.setBlendMode(.destinationOut)
+                    context.draw(roundCorners(diameter: size.width).cgImage!, in: CGRect(origin: CGPoint(), size: size))
                 })
             } else {
-                self.currentPhotoNode.image = self.currentPhoto
+                self.currentPhotoNode.image = nil
             }
         }
     }
     
     var signUpWithName: ((String, String) -> Void)?
     var openTermsOfService: (() -> Void)?
+    var tellomiNicknameOnly = false {
+        didSet {
+            if oldValue != self.tellomiNicknameOnly {
+                self.applyTellomiNicknameChrome()
+                if let (layout, navigationHeight) = self.layoutArguments {
+                    self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: .immediate)
+                }
+            }
+        }
+    }
+    // Tellomi: signup agreement checkbox, see TellomiSignUpAgreement.swift.
+    let tellomiAgreement = TellomiSignUpAgreement()
+    var tellomiOpenUrl: ((String) -> Void)?
     
     var inProgress: Bool = false {
         didSet {
@@ -92,21 +105,25 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.titleNode = ASTextNode()
         self.titleNode.isUserInteractionEnabled = false
         self.titleNode.displaysAsynchronously = false
+        self.titleNode.maximumNumberOfLines = 0
         self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_InfoTitle, font: Font.semibold(28.0), textColor: theme.list.itemPrimaryTextColor)
         self.titleNode.accessibilityIdentifier = "Auth.SetName.Title"
 
         self.currentOptionNode = ASTextNode()
         self.currentOptionNode.isUserInteractionEnabled = false
         self.currentOptionNode.displaysAsynchronously = false
+        self.currentOptionNode.maximumNumberOfLines = 0
         self.currentOptionNode.attributedText = NSAttributedString(string: self.strings.Login_InfoHelp, font: Font.regular(16.0), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         
         self.termsNode = ImmediateTextNode()
         self.termsNode.textAlignment = .center
         self.termsNode.maximumNumberOfLines = 0
         self.termsNode.displaysAsynchronously = false
-        let body = MarkdownAttributeSet(font: Font.regular(13.0), textColor: theme.list.itemSecondaryTextColor)
-        let link = MarkdownAttributeSet(font: Font.regular(13.0), textColor: theme.list.itemAccentColor, additionalAttributes: [TelegramTextAttributes.URL: ""])
+        let signupPalette = TellomiLoginChrome.palette(theme: theme)
+        let body = MarkdownAttributeSet(font: Font.regular(13.0), textColor: signupPalette.secondaryText)
+        let link = MarkdownAttributeSet(font: Font.regular(13.0), textColor: signupPalette.link, additionalAttributes: [TelegramTextAttributes.URL: ""])
         self.termsNode.attributedText = parseMarkdownIntoAttributedString(strings.Login_TermsOfServiceLabel.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "]", with: "]()"), attributes: MarkdownAttributes(body: body, bold: body, link: link, linkAttribute: { _ in nil }), textAlignment: .center)
+        self.agreementRow = TellomiAgreementRow(textNode: self.termsNode)
         
         self.firstSeparatorNode = ASDisplayNode()
         self.firstSeparatorNode.isLayerBacked = true
@@ -118,7 +135,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         self.firstNameField = TextFieldNode()
         self.firstNameField.textField.font = Font.regular(20.0)
-        self.firstNameField.textField.textColor = self.theme.list.itemPrimaryTextColor
+        self.firstNameField.textField.textColor = TellomiLoginChrome.palette(theme: self.theme).fieldText
         self.firstNameField.textField.textAlignment = .natural
         self.firstNameField.textField.returnKeyType = .next
         self.firstNameField.textField.attributedPlaceholder = NSAttributedString(string: self.strings.UserInfo_FirstNamePlaceholder, font: self.firstNameField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
@@ -128,12 +145,12 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             self.firstNameField.textField.textContentType = .givenName
         }
         self.firstNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.firstNameField.textField.tintColor = theme.list.itemAccentColor
+        self.firstNameField.textField.tintColor = TellomiLoginChrome.palette(theme: theme).accent
         self.firstNameField.textField.accessibilityIdentifier = "Auth.SetName.FirstNameField"
 
         self.lastNameField = TextFieldNode()
         self.lastNameField.textField.font = Font.regular(20.0)
-        self.lastNameField.textField.textColor = self.theme.list.itemPrimaryTextColor
+        self.lastNameField.textField.textColor = TellomiLoginChrome.palette(theme: self.theme).fieldText
         self.lastNameField.textField.textAlignment = .natural
         self.lastNameField.textField.returnKeyType = .done
         self.lastNameField.textField.attributedPlaceholder = NSAttributedString(string: strings.UserInfo_LastNamePlaceholder, font: self.lastNameField.textField.font, textColor: self.theme.list.itemPlaceholderTextColor)
@@ -143,7 +160,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             self.lastNameField.textField.textContentType = .familyName
         }
         self.lastNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.lastNameField.textField.tintColor = theme.list.itemAccentColor
+        self.lastNameField.textField.tintColor = TellomiLoginChrome.palette(theme: theme).accent
         self.lastNameField.textField.accessibilityIdentifier = "Auth.SetName.LastNameField"
 
         self.currentPhotoNode = ASImageNode()
@@ -152,13 +169,14 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.currentPhotoNode.displayWithoutProcessing = true
         
         self.addPhotoButton = HighlightableButtonNode()
-        self.addPhotoButton.setImage(generateTintedImage(image: UIImage(bundleImageName: "Avatar/EditAvatarIconLarge"), color: self.theme.list.itemAccentColor), for: .normal)
-        self.addPhotoButton.setBackgroundImage(generateFilledCircleImage(diameter: 110.0, color: self.theme.list.itemAccentColor.withAlphaComponent(0.1), strokeColor: nil, strokeWidth: nil, backgroundColor: nil), for: .normal)
+        let avatarInk = TellomiLoginChrome.palette(theme: theme).link
+        self.addPhotoButton.setImage(generateTintedImage(image: UIImage(bundleImageName: "Avatar/EditAvatarIconLarge"), color: avatarInk), for: .normal)
+        self.addPhotoButton.setBackgroundImage(generateFilledCircleImage(diameter: 110.0, color: avatarInk.withAlphaComponent(0.15), strokeColor: avatarInk.withAlphaComponent(0.45), strokeWidth: 1.0, backgroundColor: nil), for: .normal)
                 
         self.addPhotoButton.addSubnode(self.currentPhotoNode)
         self.addPhotoButton.allowsGroupOpacity = true
         
-        self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5)
+        self.proceedNode = SolidRoundedButtonNode(title: tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(strings)).continueAction, theme: TellomiLoginChrome.buttonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 25.0)
         self.proceedNode.progressType = .embedded
         self.proceedNode.accessibilityIdentifier = "Auth.SetName.ContinueButton"
         
@@ -173,20 +191,28 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         self.firstNameField.textField.delegate = self
         self.lastNameField.textField.delegate = self
         
+        TellomiLoginChrome.applyField(self.tellomiFirstBackground, theme: theme)
+        TellomiLoginChrome.applyField(self.tellomiLastBackground, theme: theme)
+        self.firstSeparatorNode.isHidden = true
+        self.lastSeparatorNode.isHidden = true
+
+        self.addSubnode(self.tellomiFirstBackground)
+        self.addSubnode(self.tellomiLastBackground)
         self.addSubnode(self.firstSeparatorNode)
         self.addSubnode(self.lastSeparatorNode)
         self.addSubnode(self.firstNameField)
         self.addSubnode(self.lastNameField)
         self.addSubnode(self.titleNode)
         self.addSubnode(self.currentOptionNode)
-        self.addSubnode(self.termsNode)
-        self.termsNode.isHidden = true
+        self.addSubnode(self.agreementRow)
+        self.agreementRow.isHidden = true
         self.addSubnode(self.addPhotoButton)
         self.addSubnode(self.proceedNode)
         
         self.addPhotoButton.addTarget(self, action: #selector(self.addPhotoPressed), forControlEvents: .touchUpInside)
         
-        self.termsNode.linkHighlightColor = self.theme.list.itemAccentColor.withAlphaComponent(0.2)
+        self.termsNode.linkHighlightColor = signupPalette.link.withAlphaComponent(0.2)
+        self.agreementRow.apply(theme: theme)
         self.termsNode.highlightAttributeAction = { attributes in
             if let _ = attributes[NSAttributedString.Key(rawValue: TelegramTextAttributes.URL)] {
                 return NSAttributedString.Key(rawValue: TelegramTextAttributes.URL)
@@ -206,12 +232,30 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
                 strongSelf.signUpWithName?(name.0, name.1)
             }
         }
+        // Tellomi: replace the terms label with the agreement checkbox; Continue waits for it.
+        self.proceedNode.isEnabled = false
+        self.firstNameField.textField.addTarget(self, action: #selector(self.tellomiNameChanged), for: .editingChanged)
+        self.tellomiAgreement.install(on: self.termsNode, theme: theme, kind: .signUp, languageCode: tellomiInterfaceLanguageCode(strings), openUrl: { [weak self] url in
+            self?.tellomiOpenUrl?(url)
+        }, changed: { [weak self] agreed in
+            self?.agreementRow.setChecked(agreed)
+            self?.tellomiRefreshProceed()
+        })
+        self.agreementRow.onToggle = { [weak self] in
+            guard let self else {
+                return
+            }
+            self.tellomiAgreement.setAgreed(!self.tellomiAgreement.agreed)
+        }
     }
     
     func updateData(firstName: String, lastName: String, hasTermsOfService: Bool) {
-        self.termsNode.isHidden = !hasTermsOfService
-        self.firstNameField.textField.attributedText = NSAttributedString(string: firstName, font: Font.regular(20.0), textColor: self.theme.list.itemPlaceholderTextColor)
-        self.lastNameField.textField.attributedText = NSAttributedString(string: lastName, font: Font.regular(20.0), textColor: self.theme.list.itemPlaceholderTextColor)
+        self.agreementRow.isHidden = false // Tellomi: the agreement checkbox is always shown.
+        let ink = TellomiLoginChrome.palette(theme: self.theme).fieldText
+        self.firstNameField.textField.textColor = ink
+        self.lastNameField.textField.textColor = ink
+        self.firstNameField.textField.attributedText = NSAttributedString(string: firstName, font: Font.regular(20.0), textColor: ink)
+        self.lastNameField.textField.attributedText = NSAttributedString(string: lastName, font: Font.regular(20.0), textColor: ink)
         
         if let (layout, navigationHeight) = self.layoutArguments {
             self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: .immediate)
@@ -248,9 +292,17 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
             insets.bottom = max(inputHeight, layout.standardInputHeight)
         }
         
+        // Upstream reserves the button (or a small gap on a 320-pt phone) so the
+        // column compresses above the keyboard instead of sliding under it.
         let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 90.0 : 10.0
-                
-        self.titleNode.attributedText = NSAttributedString(string: self.strings.Login_InfoTitle, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+        
+        let nicknameCopy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        let bundled = tellomiBundledChineseLoginCopy(self.strings)
+        let title = self.tellomiNicknameOnly ? nicknameCopy.nicknameTitle : (bundled?.signUpTitle ?? self.strings.Login_InfoTitle)
+        let help = self.tellomiNicknameOnly ? nicknameCopy.nicknameHelp : (bundled?.signUpHelp ?? self.strings.Login_InfoHelp)
+        self.titleNode.attributedText = NSAttributedString(string: title, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+        self.currentOptionNode.attributedText = NSAttributedString(string: help, font: Font.regular(16.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+        self.applyTellomiNicknameChrome()
         let titleSize = self.titleNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
         
         let fieldHeight: CGFloat = 54.0
@@ -259,7 +311,7 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         let innerInset: CGFloat = 16.0
         
         let noticeSize = self.currentOptionNode.measure(CGSize(width: maximumWidth - 28.0, height: CGFloat.greatestFiniteMagnitude))
-        let termsSize = self.termsNode.updateLayout(CGSize(width: maximumWidth - 28.0, height: CGFloat.greatestFiniteMagnitude))
+        let termsSize = self.agreementRow.updateLayout(width: maximumWidth - 28.0, centered: true)
         
         let avatarSize: CGSize = CGSize(width: 110.0, height: 110.0)
         var items: [AuthorizationLayoutItem] = []
@@ -271,11 +323,16 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         
         items.append(AuthorizationLayoutItem(node: self.firstNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 32.0, maxValue: 60.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         items.append(AuthorizationLayoutItem(node: self.firstSeparatorNode, size: CGSize(width: bandWidth - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+
+        self.lastNameField.isHidden = self.tellomiNicknameOnly
+        self.lastSeparatorNode.isHidden = true
+        self.firstSeparatorNode.isHidden = true
+        if !self.tellomiNicknameOnly {
+            items.append(AuthorizationLayoutItem(node: self.lastNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+            items.append(AuthorizationLayoutItem(node: self.lastSeparatorNode, size: CGSize(width: bandWidth - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        }
         
-        items.append(AuthorizationLayoutItem(node: self.lastNameField, size: CGSize(width: bandWidth - (sideInset + innerInset) * 2.0, height: fieldHeight), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
-        items.append(AuthorizationLayoutItem(node: self.lastSeparatorNode, size: CGSize(width: bandWidth - sideInset * 2.0, height: UIScreenPixel), spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
-        
-        items.append(AuthorizationLayoutItem(node: self.termsNode, size: termsSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 48.0, maxValue: 100.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
+        items.append(AuthorizationLayoutItem(node: self.agreementRow, size: termsSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 48.0, maxValue: 100.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
         
         if layout.size.width > 320.0 {
             self.proceedNode.isHidden = false
@@ -290,6 +347,28 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         }
         
         let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
+        self.agreementRow.view.superview?.bringSubviewToFront(self.agreementRow.view)
+        self.placeTellomiField(self.tellomiFirstBackground, field: self.firstNameField)
+        self.placeTellomiField(self.tellomiLastBackground, field: self.lastNameField)
+        self.proceedNode.title = tellomiLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings)).continueAction
+    }
+
+    /// Gray field behind the text. The field frame stays where upstream put it.
+    private func placeTellomiField(_ background: ASDisplayNode, field: ASDisplayNode) {
+        background.isHidden = field.isHidden
+        guard !field.isHidden else {
+            return
+        }
+        background.frame = field.frame
+    }
+
+    @objc private func tellomiNameChanged() {
+        self.tellomiRefreshProceed()
+    }
+
+    private func tellomiRefreshProceed() {
+        let hasName = !(self.firstNameField.textField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        self.proceedNode.isEnabled = self.tellomiAgreement.agreed && hasName
     }
     
     func activateInput() {
@@ -302,16 +381,83 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
         }
     }
     
-    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+    func textFieldDidBeginEditing(_ textField: UITextField) {
+        self.tellomiSetNameFocus(textField, focused: true)
+    }
+
+    func textFieldDidEndEditing(_ textField: UITextField) {
+        self.tellomiSetNameFocus(textField, focused: false)
+    }
+
+    private func tellomiSetNameFocus(_ textField: UITextField, focused: Bool) {
         if textField === self.firstNameField.textField {
+            TellomiLoginChrome.applyField(self.tellomiFirstBackground, theme: self.theme, focused: focused)
+        } else if textField === self.lastNameField.textField {
+            TellomiLoginChrome.applyField(self.tellomiLastBackground, theme: self.theme, focused: focused)
+        }
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        if textField === self.firstNameField.textField && !self.tellomiNicknameOnly {
             self.lastNameField.textField.becomeFirstResponder()
         } else {
             let name = self.currentName
-            self.signUpWithName?(name.0, name.1)
+            self.signUpWithName?(name.0, self.tellomiNicknameOnly ? "" : name.1)
         }
         return false
     }
+
+    private func applyTellomiNicknameChrome() {
+        let copy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+        let bundled = tellomiBundledChineseLoginCopy(self.strings)
+        let placeholder = self.tellomiNicknameOnly ? copy.nicknamePlaceholder : (bundled?.firstNamePlaceholder ?? self.strings.UserInfo_FirstNamePlaceholder)
+        let hint = TellomiLoginChrome.palette(theme: self.theme).placeholder
+        self.firstNameField.textField.attributedPlaceholder = NSAttributedString(string: placeholder, font: self.firstNameField.textField.font, textColor: hint)
+        if !self.tellomiNicknameOnly {
+            let lastPlaceholder = bundled?.lastNamePlaceholder ?? self.strings.UserInfo_LastNamePlaceholder
+            self.lastNameField.textField.attributedPlaceholder = NSAttributedString(string: lastPlaceholder, font: self.lastNameField.textField.font, textColor: hint)
+        }
+        self.firstNameField.textField.returnKeyType = self.tellomiNicknameOnly ? .done : .next
+        if #available(iOSApplicationExtension 12.0, iOS 12.0, *) {
+            self.firstNameField.textField.textContentType = self.tellomiNicknameOnly ? .nickname : .givenName
+        }
+    }
     
+    func updateStrings(_ strings: PresentationStrings) {
+        self.strings = strings
+        self.tellomiAgreement.refreshLanguage(languageCode: tellomiInterfaceLanguageCode(strings))
+        if let (layout, navigationHeight) = self.layoutArguments {
+            self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: .immediate)
+        }
+    }
+
+    func applyPresentationTheme(_ theme: PresentationTheme) {
+        self.theme = theme
+        let palette = TellomiLoginChrome.palette(theme: theme)
+        self.backgroundColor = theme.list.plainBackgroundColor
+        TellomiLoginChrome.applyField(self.tellomiFirstBackground, theme: theme)
+        TellomiLoginChrome.applyField(self.tellomiLastBackground, theme: theme)
+        self.firstNameField.textField.textColor = palette.fieldText
+        self.lastNameField.textField.textColor = palette.fieldText
+        self.firstNameField.textField.tintColor = palette.accent
+        self.lastNameField.textField.tintColor = palette.accent
+        self.firstNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        self.lastNameField.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
+        self.proceedNode.updateTheme(TellomiLoginChrome.buttonTheme(theme: theme))
+        self.addPhotoButton.setImage(generateTintedImage(image: UIImage(bundleImageName: "Avatar/EditAvatarIconLarge"), color: palette.link), for: .normal)
+        self.addPhotoButton.setBackgroundImage(generateFilledCircleImage(diameter: 110.0, color: palette.link.withAlphaComponent(0.15), strokeColor: palette.link.withAlphaComponent(0.45), strokeWidth: 1.0, backgroundColor: nil), for: .normal)
+        let first = self.firstNameField.textField.text ?? ""
+        let last = self.lastNameField.textField.text ?? ""
+        self.firstNameField.textField.attributedText = NSAttributedString(string: first, font: Font.regular(20.0), textColor: palette.fieldText)
+        self.lastNameField.textField.attributedText = NSAttributedString(string: last, font: Font.regular(20.0), textColor: palette.fieldText)
+        self.applyTellomiNicknameChrome()
+        self.agreementRow.apply(theme: theme)
+        self.termsNode.linkHighlightColor = palette.link.withAlphaComponent(0.2)
+        if let (layout, navigationHeight) = self.layoutArguments {
+            self.containerLayoutUpdated(layout, navigationBarHeight: navigationHeight, transition: .immediate)
+        }
+    }
+
     @objc private func addPhotoPressed() {
         self.addPhoto()
     }
