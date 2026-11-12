@@ -150,7 +150,30 @@ static const int kClosedSocket = -1;
     }
 }
 
+// The first CFStream connection and the isa probe open descriptors that live
+// for the process. Count them before the assertion. The equality stays exact,
+// so a descriptor leaked by this test still fails.
+- (void)primeDescriptorBaseline {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        [self armConnectionExpectations];
+        uint16_t port = 0;
+        int listenFD = [self listenOnLoopback:&port];
+        GCDAsyncSocketFDProbe *socket = [self connectToPort:port];
+        int accepted = [self acceptFrom:listenFD];
+        int fd = self.connectedFD;
+        [socket disconnect];
+        [self waitForExpectations:@[self.disconnected] timeout:5];
+        [self waitUntilDescriptorClosed:fd];
+        close(accepted);
+        close(listenFD);
+        socket = nil;
+        TellomiFlushDeferredCFSocketReleases();
+    });
+}
+
 - (void)testNormalDisconnectClosesTheDescriptorOnce {
+    [self primeDescriptorBaseline];
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     int deferredBefore = TellomiDeferredCFSocketReleaseCount();
@@ -186,6 +209,7 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testReadErrorClosesTheDescriptorOnce {
+    [self primeDescriptorBaseline];
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     int deferredBefore = TellomiDeferredCFSocketReleaseCount();
@@ -220,6 +244,7 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testDisconnectTwiceDoesNotCloseAReusedDescriptor {
+    [self primeDescriptorBaseline];
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     uint16_t port = 0;
@@ -248,6 +273,7 @@ static const int kClosedSocket = -1;
 }
 
 - (void)testReconnectAfterCloseUsesANewConnection {
+    [self primeDescriptorBaseline];
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     int deferredBefore = TellomiDeferredCFSocketReleaseCount();

@@ -1,8 +1,10 @@
 #import "GCDAsyncSocketCFSocketRelease.h"
 
+#import <fcntl.h>
 #import <mach/mach.h>
 #import <netinet/in.h>
 #import <stdatomic.h>
+#import <stdlib.h>
 #import <sys/socket.h>
 #import <unistd.h>
 
@@ -40,24 +42,43 @@ static BOOL TellomiReleaseIsCFRelease(void (*release)(const void *)) {
     return TellomiFunctionIs((void *)release, (void *)CFRelease);
 }
 
-// CFSocketCreate owns the descriptor it allocates. CFRelease is the only
-// close. A socketpair plus CFSocketCreateWithNative would close that
-// descriptor twice when invalidation also closes it.
+// CFSocketCreate owns the descriptors it allocates. CFRelease is not a
+// close: create does not set close-on-invalidate, and on iOS 27 the socket
+// plus its run-loop descriptors stay open. Closing only CFSocketGetNative
+// left the others. A socketpair plus CFSocketCreateWithNative would close
+// the caller's descriptor twice when invalidation also closes it.
+static void TellomiCloseDescriptorsOpenedSince(const char *openBefore, int limit) {
+    for (int fd = 0; fd < limit; fd++) {
+        if (!openBefore[fd] && fcntl(fd, F_GETFD) >= 0) {
+            close(fd);
+        }
+    }
+}
+
 static uintptr_t TellomiCFSocketISA(void) {
     static uintptr_t isa = 0;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
+        int limit = (int)sysconf(_SC_OPEN_MAX);
+        if (limit < 0 || limit > 4096) {
+            limit = 1024;
+        }
+        char *openBefore = calloc((size_t)limit, 1);
+        if (openBefore == NULL) {
+            return;
+        }
+        for (int fd = 0; fd < limit; fd++) {
+            if (fcntl(fd, F_GETFD) >= 0) {
+                openBefore[fd] = 1;
+            }
+        }
         CFSocketRef socket = CFSocketCreate(kCFAllocatorDefault, PF_INET, SOCK_STREAM, IPPROTO_TCP, 0, NULL, NULL);
         if (socket != NULL) {
             memcpy(&isa, socket, sizeof(isa));
-            CFSocketNativeHandle native = CFSocketGetNative(socket);
             CFRelease(socket);
-            // CFSocketCreate does not set close-on-invalidate, so CFRelease
-            // leaves the descriptor open.
-            if (native >= 0) {
-                close(native);
-            }
         }
+        TellomiCloseDescriptorsOpenedSince(openBefore, limit);
+        free(openBefore);
     });
     return isa;
 }
