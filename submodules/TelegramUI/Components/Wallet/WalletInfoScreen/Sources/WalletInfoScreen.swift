@@ -3,6 +3,7 @@ import LottieSettings
 import UIKit
 import Display
 import AccountContext
+import TellomiLinks
 import SwiftSignalKit
 import WalletContext
 import Markdown
