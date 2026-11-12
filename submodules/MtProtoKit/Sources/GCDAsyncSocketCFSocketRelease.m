@@ -1,6 +1,8 @@
 #import "GCDAsyncSocketCFSocketRelease.h"
 
 #import <mach/mach.h>
+#import <netinet/in.h>
+#import <sys/socket.h>
 
 #if __has_feature(ptrauth_calls)
 #import <ptrauth.h>
