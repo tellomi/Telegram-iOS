@@ -1,5 +1,15 @@
 # Upstream patches
 
+## Login splash methods the restored sequence calls — 2026-11-12
+
+The restored splash controller calls `updateAppearanceBackgroundColor` and `tellomiSuppressLivePages` on `RMIntroViewController`. Those two methods were on master and absent after the client-tree restore, so the release IPA did not compile. They are on the intro controller again. `resendLoginCode` is the engine wrapper around the existing `resendAuthorizationCode`; the code-entry resend call had no method to type-check.
+
+| File | Change |
+| --- | --- |
+| `submodules/RMIntro/PublicHeaders/RMIntro/RMIntroViewController.h` | Declares the two splash methods. |
+| `submodules/RMIntro/Sources/platform/ios/RMIntroViewController.m` | Applies appearance colors and hides the live pages during the snapshot handoff. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Auth/TelegramEngineAuth.swift` | `resendLoginCode` forwards to `resendAuthorizationCode`. |
+
 ## Release line keeps Moments and master — 2026-11-12
 
 `release/ios` is the branch TestFlight builds. It held the Moments commits. `master` did not: those commits were made on `release/ios` after the two lines split at `d5c5d581d9`, and `fc420b8589` restored the client tree only on `release/ios`. This merge brings `master` (`484ef4a8c9`, including #172, #173, #175, and #176) onto `release/ios` (`e1ae313a1d`). Moments sources stay. Master's login, link, datacenter, CallKit, and dSYM changes stay. Where a conflict was a URL, the `tellomi.cn` / `TellomiLinks` side is kept and `tell.cc`, `t.me`, and `telegram.me` stay in the link host list. The seed list stays `8.137.198.240` then `api.tellomi.cn`, with 10443 then 443, and `thisPortOnly` stays. The merge had left `thisPortOnly` declared twice and `TellomiSeedPorts` / `TellomiSeedAddressSets` defined twice. One declaration remains. The address list is still reversed, so the relay's 10443 is dialed first. `TellomiLinks` had been removed by the client-tree restore and was not changed on master after the split, so the merge dropped it while the rewritten call sites stayed. The module, `@_exported import`, the wallet info screen's build dependency, and its `import TellomiLinks` are restored. The merged login controllers called the master login helpers while the helper sources and the `attempt` parameter on `sendAuthorizationCode` had been left on the restored tree. Those login sources are the master copies again, including `TellomiCallingCodePolicy` and `TellomiAccountIdentity`. Privacy, the secret-chat key text, and the link whitelist use `TellomiLinks` (`tellomi.cn`, `linkHosts`, including `telegram.dog`).

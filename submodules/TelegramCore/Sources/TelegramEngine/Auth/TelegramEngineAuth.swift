@@ -55,6 +55,11 @@ public extension TelegramEngineUnauthorized {
         public func reportMissingCode(phoneNumber: String, phoneCodeHash: String, mnc: String) -> Signal<Never, ReportMissingCodeError> {
             return _internal_reportMissingCode(network: self.account.network, phoneNumber: phoneNumber, phoneCodeHash: phoneCodeHash, mnc: mnc)
         }
+
+        /// `auth.resendCode` for the login in progress, including an app code whose `next_type` is empty.
+        public func resendLoginCode(accountManager: AccountManager<TelegramAccountManagerTypes>, apiId: Int32, apiHash: String, firebaseSecretStream: Signal<[String: String], NoError>, attempt: TellomiLoginAttempt?) -> Signal<Void, AuthorizationCodeRequestError> {
+            return resendAuthorizationCode(accountManager: accountManager, account: self.account, apiId: apiId, apiHash: apiHash, firebaseSecretStream: firebaseSecretStream, attempt: attempt)
+        }
         
         public func requestPasskeyLoginData(apiId: Int32, apiHash: String) -> Signal<String?, NoError> {
             return _internal_requestPasskeyLoginData(network: self.account.network, apiId: apiId, apiHash: apiHash)
