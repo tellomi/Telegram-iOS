@@ -35,10 +35,7 @@ public func cachedTermsPage(context: AccountContext) -> Signal<ResolvedUrl, NoEr
 }
 
 public func cachedPrivacyPage(context: AccountContext) -> Signal<ResolvedUrl, NoError> {
-    var privacyUrl = context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_PrivacyPolicy_URL
-    if privacyUrl == "Settings.PrivacyPolicy_URL" || privacyUrl.isEmpty {
-        privacyUrl = "https://telegram.org/privacy"
-    }
+    let privacyUrl = TellomiLinks.localizedSiteURL(context.sharedContext.currentPresentationData.with { $0 }.strings.Settings_PrivacyPolicy_URL, fallback: "privacy")
     return cachedInternalInstantPage(context: context, url: privacyUrl)
 }
 
