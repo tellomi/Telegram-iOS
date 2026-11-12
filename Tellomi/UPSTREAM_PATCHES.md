@@ -2,19 +2,20 @@
 
 ## Profile Moments tab and list inset — 2026-11-12
 
-A user profile showed two tabs whose Chinese title is 动态: the native Stories tab and Moments. `momentsProfileTabs` drops `.stories` on a user profile and puts Moments first. Channels and groups keep Stories. The archived-stories tab stays. The pane list is still nil while it is loading.
+A user profile showed two tabs whose Chinese title is 动态: native Stories (`PeerInfo.PaneStories`) and Moments. Stories stay. They are not merged into Moments. On a Chinese UI the profile tab title is 快拍, which is the name this product uses for native Stories. The iOS tree had no existing 快拍 string for that tab; the official pack says 动态. Other languages keep `PeerInfo.PaneStories`. Moments stays 动态 and is still inserted first on a user profile. Channels and groups are unchanged. The pane list stays nil while it is loading.
 
 The Moments pane ignored the top inset the profile passes in. The pane is shifted up under the username card, so 关注 and 粉丝 drew on top of that card. The list now uses that inset. A zero bottom inset keeps the previous 24pt padding.
 
-`PeerInfoScreen` layout is unchanged. The existing Moments insertion in `PeerInfoData` calls the new helper.
+`PeerInfoScreen` layout is unchanged. The existing Moments insertion in `PeerInfoData` calls the pane helper. The Stories tab title in `PeerInfoPaneContainerNode` calls the title helper.
 
 | File | Change |
 | --- | --- |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsNavigation.swift` | Tab order and list insets. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsProfilePanes.swift` | Maps that order onto `PeerInfoPaneKey`. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsNavigation.swift` | Keeps Stories, puts Moments first, and maps the Chinese profile title to 快拍. List insets. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsProfilePanes.swift` | Maps that order onto `PeerInfoPaneKey` and reads the current language. |
 | `submodules/TelegramUI/Components/Moments/Sources/MomentsProfilePaneNode.swift` | List insets follow the pane's top and bottom inset. |
-| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoData.swift` | The existing Moments insert calls the helper. |
-| `submodules/TelegramCore/Tests/MomentsRulesTests.swift` | User profile drops Stories. Channel keeps it. Insets. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoData.swift` | The existing Moments insert calls the helper. Stories are not removed. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift` | The Stories tab title uses the helper. |
+| `submodules/TelegramCore/Tests/MomentsRulesTests.swift` | Stories stay. Chinese title is 快拍 and is not 动态. English stays Stories. Insets. |
 
 ## Release line keeps Moments and master — 2026-11-12
 

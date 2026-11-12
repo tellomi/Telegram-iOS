@@ -1296,7 +1296,7 @@ final class PeerInfoPaneContainerNode: ASDisplayNode, ASGestureRecognizerDelegat
                     let content: HorizontalTabsComponent.Tab.Content
                     switch paneKey {
                     case .stories:
-                        content = .title(HorizontalTabsComponent.Tab.Title(text: presentationData.strings.PeerInfo_PaneStories, entities: [], enableAnimations: false))
+                        content = .title(HorizontalTabsComponent.Tab.Title(text: momentsProfileStoriesTabTitle(presentationData.strings), entities: [], enableAnimations: false))
                         canReorder = true
                     case .storyArchive:
                         content = .title(HorizontalTabsComponent.Tab.Title(text: presentationData.strings.PeerInfo_PaneArchivedStories, entities: [], enableAnimations: false))

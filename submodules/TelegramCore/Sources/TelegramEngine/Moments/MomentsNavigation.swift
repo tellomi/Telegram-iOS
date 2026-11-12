@@ -131,20 +131,27 @@ public enum MomentsListLoadResult: Equatable {
     case ignore
 }
 
-/// User profiles show Moments and drop the native Stories tab. That tab's bundled
-/// Chinese title is 动态, the same word as Moments, so both tabs read as one.
-/// Channels and groups are left as they are. `nil` stays `nil` while the pane
-/// list is still loading.
-public func momentsProfileTabs<Tab: Equatable>(_ tabs: [Tab]?, isUserProfile: Bool, isStories: (Tab) -> Bool, moments: Tab) -> [Tab]? {
+/// User profiles keep native Stories and add Moments in front. Stories are not
+/// removed: Tellomi still calls that tab 快拍, and Moments is 动态. Channels and
+/// groups are left as they are. `nil` stays `nil` while the pane list is loading.
+public func momentsProfileTabs<Tab: Equatable>(_ tabs: [Tab]?, isUserProfile: Bool, moments: Tab) -> [Tab]? {
     guard isUserProfile, var tabs else {
         return tabs
     }
-    tabs.removeAll(where: isStories)
     if tabs.first != moments {
         tabs.removeAll { $0 == moments }
         tabs.insert(moments, at: 0)
     }
     return tabs
+}
+
+/// The profile Stories tab. Official Simplified Chinese for `PeerInfo.PaneStories` is 动态, the same word as Moments.
+/// A Chinese UI shows 快拍 instead. Every other language keeps the resolved string.
+public func momentsProfileStoriesTabTitle(resolved: String, languageCodes: [String]) -> String {
+    if languageCodes.contains(where: { $0.lowercased().hasPrefix("zh") }) {
+        return "快拍"
+    }
+    return resolved
 }
 
 /// The profile pane is placed under the username card and shifted up by `topInset`.

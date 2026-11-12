@@ -786,19 +786,25 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(smallEntry.pixels, MomentsGalleryPixelSize(width: 2000, height: 1000))
     }
 
-    func testUserProfileDropsTheNativeStoriesTabAndKeepsThePaneInset() {
+    func testUserProfileKeepsStoriesAndNamesTheChineseTab() {
         let user: [String] = ["stories", "gifts", "media", "storyArchive"]
-        let shown = momentsProfileTabs(user, isUserProfile: true, isStories: { $0 == "stories" }, moments: "moments")
-        XCTAssertEqual(shown, ["moments", "gifts", "media", "storyArchive"])
+        let shown = momentsProfileTabs(user, isUserProfile: true, moments: "moments")
+        XCTAssertEqual(shown, ["moments", "stories", "gifts", "media", "storyArchive"])
 
         let channel: [String] = ["stories", "media"]
-        XCTAssertEqual(momentsProfileTabs(channel, isUserProfile: false, isStories: { $0 == "stories" }, moments: "moments"), channel)
+        XCTAssertEqual(momentsProfileTabs(channel, isUserProfile: false, moments: "moments"), channel)
 
         let loading: [String]? = nil
-        XCTAssertNil(momentsProfileTabs(loading, isUserProfile: true, isStories: { $0 == "stories" }, moments: "moments"))
+        XCTAssertNil(momentsProfileTabs(loading, isUserProfile: true, moments: "moments"))
 
-        let duplicate = momentsProfileTabs(["media", "moments", "stories"], isUserProfile: true, isStories: { $0 == "stories" }, moments: "moments")
-        XCTAssertEqual(duplicate, ["moments", "media"])
+        let duplicate = momentsProfileTabs(["media", "moments", "stories"], isUserProfile: true, moments: "moments")
+        XCTAssertEqual(duplicate, ["moments", "media", "stories"])
+
+        XCTAssertEqual(momentsProfileStoriesTabTitle(resolved: "动态", languageCodes: ["zh-hans"]), "快拍")
+        XCTAssertEqual(momentsProfileStoriesTabTitle(resolved: "Stories", languageCodes: ["zh-Hans-US"]), "快拍")
+        XCTAssertEqual(momentsProfileStoriesTabTitle(resolved: "動態", languageCodes: ["zh-Hant"]), "快拍")
+        XCTAssertEqual(momentsProfileStoriesTabTitle(resolved: "Stories", languageCodes: ["en"]), "Stories")
+        XCTAssertNotEqual(momentsProfileStoriesTabTitle(resolved: "动态", languageCodes: ["zh-hans"]), "动态")
 
         let underCard = momentsProfileListInsets(topInset: 180, bottomInset: 0)
         XCTAssertEqual(underCard.top, 180)
