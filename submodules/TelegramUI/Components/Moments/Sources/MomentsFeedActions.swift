@@ -198,22 +198,22 @@ final class MomentsFeedActions {
             return
         }
         guard momentsCanRepostOrQuote(audience: card.audience?.kind) else {
-            controller.present(textAlertController(context: self.context, title: nil, text: momentsText(self.presentationData.strings, .repostPublicOnly), actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .cancel), action: {})]), in: .window(.root))
+            controller.present(textAlertController(context: self.context, title: nil, text: self.presentationData.strings.Moments_RepostPublicOnly, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_Cancel, action: {})]), in: .window(.root))
             return
         }
         let sheet = ActionSheetController(theme: ActionSheetControllerTheme(presentationData: self.presentationData))
         sheet.setItemGroups([
             ActionSheetItemGroup(items: [
-                ActionSheetButtonItem(title: momentsText(self.presentationData.strings, .repost), color: .accent, action: { [weak self, weak sheet] in
+                ActionSheetButtonItem(title: self.presentationData.strings.Moments_Repost, color: .accent, action: { [weak self, weak sheet] in
                     sheet?.dismissAnimated()
                     let _ = self?.context.engine.moments.setRepost(card.id, repost: true).start()
                 }),
-                ActionSheetButtonItem(title: momentsText(self.presentationData.strings, .quote), color: .accent, action: { [weak self, weak sheet] in
+                ActionSheetButtonItem(title: self.presentationData.strings.Moments_Quote, color: .accent, action: { [weak self, weak sheet] in
                     sheet?.dismissAnimated()
                     self?.presentComposer(quoteId: card.id)
                 })
             ]),
-            ActionSheetItemGroup(items: [ActionSheetButtonItem(title: momentsText(self.presentationData.strings, .cancel), color: .accent, action: { [weak sheet] in
+            ActionSheetItemGroup(items: [ActionSheetButtonItem(title: self.presentationData.strings.Common_Cancel, color: .accent, action: { [weak sheet] in
                 sheet?.dismissAnimated()
             })])
         ])
@@ -237,34 +237,34 @@ final class MomentsFeedActions {
         let mine = card.author?.telegramUserId == self.context.account.peerId.toInt64()
         var items: [ContextMenuItem] = []
         if mine {
-            items.append(.action(ContextMenuActionItem(text: momentsText(strings, .delete), textColor: .destructive, icon: { _ in nil }, action: { [weak self] _, f in
+            items.append(.action(ContextMenuActionItem(text: strings.Common_Delete, textColor: .destructive, icon: { _ in nil }, action: { [weak self] _, f in
                 f(.default)
                 let _ = self?.context.engine.moments.deletePost(id: card.id).start()
             })))
         } else {
-            items.append(.action(ContextMenuActionItem(text: momentsText(strings, .notInterested), icon: { _ in nil }, action: { [weak self] _, f in
+            items.append(.action(ContextMenuActionItem(text: strings.Moments_NotInterested, icon: { _ in nil }, action: { [weak self] _, f in
                 f(.default)
                 let _ = self?.context.engine.moments.notInterested(postId: card.id).start()
                 self?.onMutation?(.notInterested(card.id))
             })))
-            items.append(.action(ContextMenuActionItem(text: momentsText(strings, .hidePost), icon: { _ in nil }, action: { [weak self] _, f in
+            items.append(.action(ContextMenuActionItem(text: strings.Moments_HidePost, icon: { _ in nil }, action: { [weak self] _, f in
                 f(.default)
                 let _ = self?.context.engine.moments.hide(postId: card.id, undo: false).start()
                 self?.onMutation?(.hide(card.id))
             })))
             if let author = card.author {
-                items.append(.action(ContextMenuActionItem(text: momentsText(strings, .mute), icon: { _ in nil }, action: { [weak self] _, f in
+                items.append(.action(ContextMenuActionItem(text: strings.Moments_Mute, icon: { _ in nil }, action: { [weak self] _, f in
                     f(.default)
                     let _ = self?.context.engine.moments.setMuted(profileId: author.id, muted: true).start()
                     self?.onMutation?(.mute(author.id))
                 })))
             }
-            items.append(.action(ContextMenuActionItem(text: momentsText(strings, .report), textColor: .destructive, icon: { _ in nil }, action: { [weak self] _, f in
+            items.append(.action(ContextMenuActionItem(text: strings.Moments_Report, textColor: .destructive, icon: { _ in nil }, action: { [weak self] _, f in
                 f(.default)
                 self?.report(card)
             })))
         }
-        items.append(.action(ContextMenuActionItem(text: momentsText(strings, .copyLink), icon: { _ in nil }, action: { _, f in
+        items.append(.action(ContextMenuActionItem(text: strings.Moments_CopyLink, icon: { _ in nil }, action: { _, f in
             f(.default)
             UIPasteboard.general.string = momentsPostLink(id: card.id)
         })))
@@ -309,7 +309,7 @@ final class MomentsFeedActions {
         guard let controller = self.controller() else {
             return
         }
-        (controller.navigationController as? NavigationController)?.pushViewController(momentsPeopleController(context: self.context, title: momentsText(self.presentationData.strings, .like), load: self.context.engine.moments.likers(postId: card.id) |> map { authors in
+        (controller.navigationController as? NavigationController)?.pushViewController(momentsPeopleController(context: self.context, title: self.presentationData.strings.Moments_Like, load: self.context.engine.moments.likers(postId: card.id) |> map { authors in
             [MomentsPeopleSection(title: nil, people: authors)]
         }))
     }
@@ -318,13 +318,13 @@ final class MomentsFeedActions {
         guard let controller = self.controller(), card.poll != nil else {
             return
         }
-        (controller.navigationController as? NavigationController)?.pushViewController(momentsPeopleController(context: self.context, title: momentsText(self.presentationData.strings, .endPoll), load: self.context.engine.moments.pollVoters(postId: card.id) |> map { options in
+        (controller.navigationController as? NavigationController)?.pushViewController(momentsPeopleController(context: self.context, title: self.presentationData.strings.Moments_EndPoll, load: self.context.engine.moments.pollVoters(postId: card.id) |> map { options in
             options.map { MomentsPeopleSection(title: $0.text, people: $0.voters) }
         }))
     }
 
     func presentUnavailable(_ controller: ViewController) {
-        controller.present(textAlertController(context: self.context, title: nil, text: momentsText(self.presentationData.strings, .unavailable), actions: [TextAlertAction(type: .defaultAction, title: momentsText(self.presentationData.strings, .cancel), action: {})]), in: .window(.root))
+        controller.present(textAlertController(context: self.context, title: nil, text: self.presentationData.strings.Moments_Unavailable, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_Cancel, action: {})]), in: .window(.root))
     }
 }
 

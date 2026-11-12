@@ -1,9 +1,9 @@
-/* Moments feed. Native wording for this built-in language. */
-"Moments_Comment_SendFailed" = "Fikr yuborilmadi. Matningiz hali shu yerda.";
-"Moments_Audience_Kept" = "Buni kim oʻra olishi yangilanmadi. Tanlovingiz saqlanib qoldi.";
-
 /* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
 "CrashReport.Prompt.Title" = "Yangi nosozlik jurnali";
 "CrashReport.Prompt.Text" = "Ilova kutilmaganda yopildi.\n\nMuammoni tuzatishimizga yordam berish uchun nosozlik jurnalini yuborasizmi?";
 "CrashReport.Prompt.NotNow" = "Hozir emas";
 "CrashReport.Prompt.Send" = "Jurnalni yuborish";
+
+/* Moments feed. Native wording for this built-in language. */
+"Moments_Comment_SendFailed" = "Fikr yuborilmadi. Matningiz hali shu yerda.";
+"Moments_Audience_Kept" = "Auditoriyani o‘zgartirib bo‘lmadi. Tanlovingiz saqlanib qoldi.";
