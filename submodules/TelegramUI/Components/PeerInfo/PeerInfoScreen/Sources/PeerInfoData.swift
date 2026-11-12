@@ -16,6 +16,7 @@ import PhotoResources
 import PeerInfoPaneNode
 import WebUI
 import WalletContext
+import MomentsUI
 
 enum PeerInfoUpdatingAvatar {
     case none
@@ -1650,9 +1651,7 @@ func peerInfoScreenData(
                     availablePanes = nil
                 }
                 
-                if peerView.peers[peerView.peerId] is TelegramUser || isMyProfile {
-                    availablePanes?.insert(.moments, at: 0)
-                }
+                availablePanes = momentsUserProfilePanes(availablePanes, isUserProfile: peerView.peers[peerView.peerId] is TelegramUser || isMyProfile)
 
                 if var currentAvailablePanes = availablePanes, let cachedData = peerView.cachedData as? CachedUserData, let mainProfileTab = cachedData.mainProfileTab {
                     let mainTabKey = PeerInfoPaneKey(tab: mainProfileTab)

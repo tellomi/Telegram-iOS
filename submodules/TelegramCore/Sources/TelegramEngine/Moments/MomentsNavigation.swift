@@ -131,6 +131,29 @@ public enum MomentsListLoadResult: Equatable {
     case ignore
 }
 
+/// User profiles show Moments and drop the native Stories tab. That tab's bundled
+/// Chinese title is 动态, the same word as Moments, so both tabs read as one.
+/// Channels and groups are left as they are. `nil` stays `nil` while the pane
+/// list is still loading.
+public func momentsProfileTabs<Tab: Equatable>(_ tabs: [Tab]?, isUserProfile: Bool, isStories: (Tab) -> Bool, moments: Tab) -> [Tab]? {
+    guard isUserProfile, var tabs else {
+        return tabs
+    }
+    tabs.removeAll(where: isStories)
+    if tabs.first != moments {
+        tabs.removeAll { $0 == moments }
+        tabs.insert(moments, at: 0)
+    }
+    return tabs
+}
+
+/// The profile pane is placed under the username card and shifted up by `topInset`.
+/// The list uses that inset, so 关注 and 粉丝 start below the card. A missing bottom
+/// inset keeps the previous 24pt tail padding.
+public func momentsProfileListInsets(topInset: CGFloat, bottomInset: CGFloat) -> (top: CGFloat, bottom: CGFloat) {
+    return (topInset, max(bottomInset, 24))
+}
+
 /// Following and followers lists use the same visibility errors as the settings call: `list_private` is hidden, a cancelled request is ignored.
 public func momentsListLoadResult(_ error: MomentsAPIError) -> MomentsListLoadResult {
     switch error {

@@ -1,5 +1,21 @@
 # Upstream patches
 
+## Profile Moments tab and list inset — 2026-11-12
+
+A user profile showed two tabs whose Chinese title is 动态: the native Stories tab and Moments. `momentsProfileTabs` drops `.stories` on a user profile and puts Moments first. Channels and groups keep Stories. The archived-stories tab stays. The pane list is still nil while it is loading.
+
+The Moments pane ignored the top inset the profile passes in. The pane is shifted up under the username card, so 关注 and 粉丝 drew on top of that card. The list now uses that inset. A zero bottom inset keeps the previous 24pt padding.
+
+`PeerInfoScreen` layout is unchanged. The existing Moments insertion in `PeerInfoData` calls the new helper.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsNavigation.swift` | Tab order and list insets. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsProfilePanes.swift` | Maps that order onto `PeerInfoPaneKey`. |
+| `submodules/TelegramUI/Components/Moments/Sources/MomentsProfilePaneNode.swift` | List insets follow the pane's top and bottom inset. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoData.swift` | The existing Moments insert calls the helper. |
+| `submodules/TelegramCore/Tests/MomentsRulesTests.swift` | User profile drops Stories. Channel keeps it. Insets. |
+
 ## Release line keeps Moments and master — 2026-11-12
 
 `release/ios` is the branch TestFlight builds. It held the Moments commits. `master` did not: those commits were made on `release/ios` after the two lines split at `d5c5d581d9`, and `fc420b8589` restored the client tree only on `release/ios`. This merge brings `master` (`484ef4a8c9`, including #172, #173, #175, and #176) onto `release/ios` (`e1ae313a1d`). Moments sources stay. Master's login, link, datacenter, CallKit, and dSYM changes stay. Where a conflict was a URL, the `tellomi.cn` / `TellomiLinks` side is kept and `tell.cc`, `t.me`, and `telegram.me` stay in the link host list. The seed list stays `8.137.198.240` then `api.tellomi.cn`, with 10443 then 443, and `thisPortOnly` stays.

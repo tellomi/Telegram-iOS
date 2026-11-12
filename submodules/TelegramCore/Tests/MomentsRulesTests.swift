@@ -785,6 +785,28 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(smallEntry.url, "https://cdn.example/original.jpg")
         XCTAssertEqual(smallEntry.pixels, MomentsGalleryPixelSize(width: 2000, height: 1000))
     }
+
+    func testUserProfileDropsTheNativeStoriesTabAndKeepsThePaneInset() {
+        let user: [String] = ["stories", "gifts", "media", "storyArchive"]
+        let shown = momentsProfileTabs(user, isUserProfile: true, isStories: { $0 == "stories" }, moments: "moments")
+        XCTAssertEqual(shown, ["moments", "gifts", "media", "storyArchive"])
+
+        let channel: [String] = ["stories", "media"]
+        XCTAssertEqual(momentsProfileTabs(channel, isUserProfile: false, isStories: { $0 == "stories" }, moments: "moments"), channel)
+
+        let loading: [String]? = nil
+        XCTAssertNil(momentsProfileTabs(loading, isUserProfile: true, isStories: { $0 == "stories" }, moments: "moments"))
+
+        let duplicate = momentsProfileTabs(["media", "moments", "stories"], isUserProfile: true, isStories: { $0 == "stories" }, moments: "moments")
+        XCTAssertEqual(duplicate, ["moments", "media"])
+
+        let underCard = momentsProfileListInsets(topInset: 180, bottomInset: 0)
+        XCTAssertEqual(underCard.top, 180)
+        XCTAssertEqual(underCard.bottom, 24)
+        let collapsed = momentsProfileListInsets(topInset: 40, bottomInset: 83)
+        XCTAssertEqual(collapsed.top, 40)
+        XCTAssertEqual(collapsed.bottom, 83)
+    }
 }
 
 private let momentsServerConfigFixture = """

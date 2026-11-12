@@ -32,6 +32,10 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
     private var expanded = Set<String>()
     private var appliedIds: [String] = []
     private var appliedPrints: [String] = []
+    private var listTopInset: CGFloat = 0
+    private var listBottomInset: CGFloat = 0
+    private var appliedListTopInset: CGFloat?
+    private var appliedListBottomInset: CGFloat?
     private var listBusy = false
     private var renderQueued = false
     private var presentationData: PresentationData
@@ -103,6 +107,9 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
 
     public func update(size: CGSize, topInset: CGFloat, sideInset: CGFloat, bottomInset: CGFloat, deviceMetrics: DeviceMetrics, visibleHeight: CGFloat, isScrollingLockedAtTop: Bool, expandProgress: CGFloat, navigationHeight: CGFloat, presentationData: PresentationData, synchronous: Bool, transition: ContainedViewLayoutTransition) {
         self.presentationData = presentationData
+        let insets = momentsProfileListInsets(topInset: topInset, bottomInset: bottomInset)
+        self.listTopInset = insets.top
+        self.listBottomInset = insets.bottom
         let frame = CGRect(x: 0, y: 0, width: size.width, height: size.height)
         transition.updateFrame(node: self.list, frame: frame)
         self.render()
@@ -233,7 +240,11 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
             ids.append(card.id)
             prints.append([String(card.version), card.viewer.liked ? "1" : "0", String(card.counts.likes), String(card.counts.comments), self.expanded.contains(card.id) ? "e" : "c"].joined(separator: ":"))
         }
+        let listInsets = UIEdgeInsets(top: self.listTopInset, left: 0, bottom: self.listBottomInset, right: 0)
         if self.appliedIds == ids && self.appliedPrints == prints {
+            if self.appliedListTopInset != self.listTopInset || self.appliedListBottomInset != self.listBottomInset {
+                self.applyListInsets(listInsets)
+            }
             return
         }
         let edit: (deletes: [Int], inserts: [Int], updates: [Int])
@@ -243,19 +254,32 @@ public final class MomentsProfilePaneNode: ASDisplayNode, PeerInfoPaneNode {
             edit = momentsListEdit(previousIds: self.appliedIds, nextIds: ids)
         }
         self.listBusy = true
-        self.list.transaction(deleteIndices: edit.deletes.map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: edit.inserts.map { ListViewInsertItem(index: $0, previousIndex: nil, item: entries[$0], directionHint: nil) }, updateIndicesAndItems: edit.updates.map { ListViewUpdateItem(index: $0, previousIndex: $0, item: entries[$0], directionHint: nil) }, options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: UIEdgeInsets(top: 0, left: 0, bottom: 24, right: 0), duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { [weak self] _ in
+        let appliedTop = self.listTopInset
+        let appliedBottom = self.listBottomInset
+        self.list.transaction(deleteIndices: edit.deletes.map { ListViewDeleteItem(index: $0, directionHint: nil) }, insertIndicesAndItems: edit.inserts.map { ListViewInsertItem(index: $0, previousIndex: nil, item: entries[$0], directionHint: nil) }, updateIndicesAndItems: edit.updates.map { ListViewUpdateItem(index: $0, previousIndex: $0, item: entries[$0], directionHint: nil) }, options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: listInsets, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { [weak self] _ in
             Queue.mainQueue().async {
                 guard let self else {
                     return
                 }
                 self.appliedIds = ids
                 self.appliedPrints = prints
+                self.appliedListTopInset = appliedTop
+                self.appliedListBottomInset = appliedBottom
                 self.listBusy = false
                 if self.renderQueued {
                     self.renderQueued = false
                     self.render()
                 }
             }
+        })
+    }
+
+    private func applyListInsets(_ insets: UIEdgeInsets) {
+        let top = insets.top
+        let bottom = insets.bottom
+        self.list.transaction(deleteIndices: [], insertIndicesAndItems: [], updateIndicesAndItems: [], options: [.Synchronous], updateSizeAndInsets: ListViewUpdateSizeAndInsets(size: self.list.bounds.size, insets: insets, duration: 0, curve: .Default(duration: nil)), updateOpaqueState: nil, completion: { [weak self] _ in
+            self?.appliedListTopInset = top
+            self?.appliedListBottomInset = bottom
         })
     }
 
