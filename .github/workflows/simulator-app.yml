@@ -1,0 +1,318 @@
+# Unsigned iOS simulator app (arm64) for an arbitrary git ref.
+#
+# workflow_dispatch is listed only for a workflow file on the default branch,
+# so this file lives on master. The job then checks out inputs.ref and builds
+# that tree. Pushing the file to release/ios is not required, and a push there
+# starts TestFlight (testflight.yml). This workflow does not sign for the App
+# Store, does not upload to TestFlight, and does not read secrets.
+#
+# After this file is on master:
+#   gh workflow run simulator-app.yml --repo tellomi/Telegram-iOS --ref master -f ref=release/ios
+# --ref master selects this workflow file. -f ref= is the tree to compile
+# (branch, tag, or full SHA). TestFlight 14.0.5 build 94 is release/ios
+# 21b174f1972f4686cf7fe2a68eec9cfba35efc56.
+#
+# Artifact name: telegram-sim-arm64
+# Files: Telegram.app.zip (ditto archive of Telegram.app; symlinks kept) and BUILD.txt
+# Retention: 7 days.
+
+name: Simulator app
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to compile (branch, tag, or full SHA)
+        required: true
+        default: release/ios
+        type: string
+      build_number:
+        description: CFBundleVersion. Empty uses commit count plus build_number_offset.
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: simulator-app-${{ inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+  simulator:
+    runs-on: xcode-27
+    timeout-minutes: 360
+    env:
+      REQUESTED_REF: ${{ inputs.ref }}
+      REQUESTED_BUILD_NUMBER: ${{ inputs.build_number }}
+    steps:
+      - name: Check the ref input
+        run: |
+          set -euo pipefail
+          if [[ -z "${REQUESTED_REF}" ]]; then
+            echo "ref is empty"
+            exit 1
+          fi
+          case "${REQUESTED_REF}" in
+            -*)
+              echo "ref must not start with a dash"
+              exit 1
+              ;;
+          esac
+          printf 'requested ref: %s\n' "${REQUESTED_REF}"
+
+      - name: Checkout the requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          submodules: false
+
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
+
+      - name: Check Tellomi DC seeds
+        run: |
+          set -euo pipefail
+          python3 Tellomi/check_server_config.py --seeds
+          python3 Tellomi/test_server_config.py
+
+      - name: Select Xcode from versions.json
+        run: |
+          set -euo pipefail
+          sw_vers
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [[ ! -d "${CANDIDATE}" ]]; then
+            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
+            ls -1 /Applications | grep -E '^Xcode' || true
+            exit 1
+          fi
+          PLIST_VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "${CANDIDATE}/Contents/Info.plist")"
+          if [[ "${PLIST_VERSION}" != "${XCODE_VERSION}" ]]; then
+            echo "Selected Xcode reports ${PLIST_VERSION}, versions.json requires ${XCODE_VERSION}."
+            exit 1
+          fi
+          sudo xcode-select -s "${CANDIDATE}/Contents/Developer"
+          echo "DEVELOPER_DIR=${CANDIDATE}/Contents/Developer" >> "${GITHUB_ENV}"
+          export DEVELOPER_DIR="${CANDIDATE}/Contents/Developer"
+          xcode-select -p
+          xcodebuild -version
+          echo "BAZEL_CACHE_DIR=${HOME}/telegram-bazel-cache" >> "${GITHUB_ENV}"
+
+      - name: Pin Bazel from versions.json
+        run: |
+          set -euo pipefail
+          spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
+          version="${spec%%:*}"
+          sha="${spec##*:}"
+          name="bazel-${version}-darwin-arm64"
+          url="https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
+          mkdir -p build-input
+          bash .github/fetch_pinned.sh "$url" "build-input/${name}" "${sha}"
+          chmod +x "build-input/${name}"
+
+      - name: Build the unsigned simulator app
+        run: |
+          set -euo pipefail
+          # Same policy as .github/retry_external_fetch.sh. That file is on
+          # master and is not on release/ios, and this job compiles whatever
+          # ref was requested, so the helper is written here.
+          cat > "${RUNNER_TEMP}/retry_external_fetch.sh" << 'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          hard_stop() {
+            local log="$1"
+            grep -E -q 'FAILED in |XCTAssert|: error:|Checksum was|does not match|GET returned 401|GET returned 403|The requested URL returned error: 40[13]|no such target ' "$log"
+          }
+
+          retryable_download() {
+            local log="$1"
+            grep -E -q 'Read timed out|Connect timed out|GET returned 50[234]|The requested URL returned error: 50[234]|curl: \(56\)|curl: \(28\)|curl: \(52\)|curl: \(18\)' "$log"
+          }
+
+          run_with_retry() {
+            local attempt=1 max="${EXTERNAL_FETCH_ATTEMPTS:-3}" status=0 log delay
+            log="${EXTERNAL_FETCH_LOG:-${RUNNER_TEMP:-/tmp}/external-fetch.log}"
+            mkdir -p "$(dirname "$log")"
+            while [[ "$attempt" -le "$max" ]]; do
+              set +e
+              "$@" >"$log" 2>&1
+              status=$?
+              set -e
+              cat "$log"
+              if [[ "$status" -eq 0 ]]; then
+                return 0
+              fi
+              if [[ "$attempt" -lt "$max" ]] && retryable_download "$log" && ! hard_stop "$log"; then
+                if [[ -n "${EXTERNAL_FETCH_DELAY_SECONDS+x}" ]]; then
+                  delay="$EXTERNAL_FETCH_DELAY_SECONDS"
+                else
+                  delay=$((attempt * 15))
+                fi
+                echo "transient external download failure on attempt ${attempt}; retrying" >&2
+                sleep "$delay"
+                attempt=$((attempt + 1))
+                continue
+              fi
+              return "$status"
+            done
+            return "$status"
+          }
+
+          if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+            [[ "${1:-}" == "--" ]] || { echo "usage: retry_external_fetch.sh -- COMMAND..." >&2; exit 2; }
+            shift
+            [[ $# -ge 1 ]] || { echo "usage: retry_external_fetch.sh -- COMMAND..." >&2; exit 2; }
+            set +e
+            run_with_retry "$@"
+            status=$?
+            set -e
+            exit "$status"
+          fi
+          EOF
+          if [[ -n "${REQUESTED_BUILD_NUMBER}" ]]; then
+            if [[ ! "${REQUESTED_BUILD_NUMBER}" =~ ^[0-9]+$ ]]; then
+              echo "build_number must be a non-negative integer"
+              exit 1
+            fi
+            BUILD_NUMBER="${REQUESTED_BUILD_NUMBER}"
+          else
+            if [[ ! -f build_number_offset ]]; then
+              echo "build_number_offset is missing; pass the build_number input"
+              exit 1
+            fi
+            offset="$(tr -d '[:space:]' < build_number_offset)"
+            if [[ ! "${offset}" =~ ^[0-9]+$ ]]; then
+              echo "build_number_offset is not an integer"
+              exit 1
+            fi
+            count="$(git rev-list --count HEAD)"
+            BUILD_NUMBER="$((count + offset))"
+          fi
+          APP_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')"
+          export APP_VERSION BUILD_NUMBER
+          printf 'APP_VERSION=%s\n' "${APP_VERSION}" >> "${GITHUB_ENV}"
+          printf 'BUILD_NUMBER=%s\n' "${BUILD_NUMBER}" >> "${GITHUB_ENV}"
+          printf 'sha=%s\n' "$(git rev-parse HEAD)"
+          bash "${RUNNER_TEMP}/retry_external_fetch.sh" -- \
+            python3 -u build-system/Make/Make.py \
+            --bazelUserRoot="/private/var/tmp/_bazel_simulator_app" \
+            --cacheDir "${BAZEL_CACHE_DIR}" \
+            build \
+            --configurationPath="build-system/appstore-configuration.json" \
+            --xcodeManagedCodesigning \
+            --disableProvisioningProfiles \
+            --configuration=release_sim_arm64 \
+            --buildNumber="${BUILD_NUMBER}"
+          test -e bazel-bin/Telegram/Telegram.ipa
+
+      - name: Package Telegram.app and print its identity
+        run: |
+          set -euo pipefail
+          stage="$(mktemp -d)"
+          round="$(mktemp -d)"
+          trap 'rm -rf "${stage}" "${round}"' EXIT
+          unzip -q -o bazel-bin/Telegram/Telegram.ipa -d "${stage}"
+          app="${stage}/Payload/Telegram.app"
+          test -d "${app}"
+          plist="${app}/Info.plist"
+          exe="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${plist}")"
+          bin="${app}/${exe}"
+          test -x "${bin}"
+          archs="$(lipo -archs "${bin}")"
+          printf 'archs: %s\n' "${archs}"
+          if [[ "${archs}" != "arm64" ]]; then
+            echo "expected a single arm64 slice"
+            exit 1
+          fi
+          vtool -show-build -arch arm64 "${bin}" | tee "${RUNNER_TEMP}/vtool.txt"
+          if ! grep -q "platform IOSSIMULATOR" "${RUNNER_TEMP}/vtool.txt"; then
+            echo "binary is not an iOS simulator build"
+            exit 1
+          fi
+          if grep -E -q "platform IOS$" "${RUNNER_TEMP}/vtool.txt"; then
+            echo "binary also contains a device IOS slice"
+            exit 1
+          fi
+          set +e
+          codesign -dv --verbose=2 "${app}" > "${RUNNER_TEMP}/codesign.txt" 2>&1
+          set -e
+          cat "${RUNNER_TEMP}/codesign.txt"
+          if grep -q "^Authority=" "${RUNNER_TEMP}/codesign.txt"; then
+            echo "a signing identity is present; this workflow must not sign for distribution"
+            exit 1
+          fi
+          if [[ -f "${app}/embedded.mobileprovision" ]]; then
+            echo "embedded.mobileprovision is present"
+            exit 1
+          fi
+          bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${plist}")"
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${plist}")"
+          build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "${plist}")"
+          if [[ "${version}" != "${APP_VERSION}" ]]; then
+            echo "CFBundleShortVersionString ${version} does not match versions.json ${APP_VERSION}"
+            exit 1
+          fi
+          if [[ "${build}" != "${BUILD_NUMBER}" ]]; then
+            echo "CFBundleVersion ${build} does not match build number ${BUILD_NUMBER}"
+            exit 1
+          fi
+          sha="$(git rev-parse HEAD)"
+          rm -rf sim-dist
+          mkdir -p sim-dist
+          ditto -c -k --keepParent "${app}" sim-dist/Telegram.app.zip
+          ditto -x -k sim-dist/Telegram.app.zip "${round}"
+          test -x "${round}/Telegram.app/${exe}"
+          before_links="$(find "${app}" -type l | wc -l | tr -d '[:space:]')"
+          after_links="$(find "${round}/Telegram.app" -type l | wc -l | tr -d '[:space:]')"
+          if [[ "${before_links}" != "${after_links}" ]]; then
+            echo "symlink count changed in Telegram.app.zip (${before_links} -> ${after_links})"
+            exit 1
+          fi
+          before_sum="$(shasum -a 256 "${bin}" | awk '{print $1}')"
+          after_sum="$(shasum -a 256 "${round}/Telegram.app/${exe}" | awk '{print $1}')"
+          if [[ "${before_sum}" != "${after_sum}" ]]; then
+            echo "executable changed in Telegram.app.zip"
+            exit 1
+          fi
+          {
+            printf 'bundle_id=%s\n' "${bundle}"
+            printf 'version=%s\n' "${version}"
+            printf 'build=%s\n' "${build}"
+            printf 'sha=%s\n' "${sha}"
+            printf 'requested_ref=%s\n' "${REQUESTED_REF}"
+            printf 'platform=IOSSIMULATOR\n'
+            printf 'arch=arm64\n'
+            printf 'artifact=telegram-sim-arm64\n'
+            printf 'path=Telegram.app.zip\n'
+            printf 'install=ditto -x -k Telegram.app.zip . && xcrun simctl install booted Telegram.app\n'
+          } > sim-dist/BUILD.txt
+          echo "===== simulator app ====="
+          cat sim-dist/BUILD.txt
+          echo "===== end ====="
+          {
+            echo "### Simulator app"
+            echo ""
+            echo "- bundle id: \`${bundle}\`"
+            echo "- version: \`${version}\` (\`${build}\`)"
+            echo "- commit: \`${sha}\`"
+            echo "- requested ref: \`${REQUESTED_REF}\`"
+            echo "- platform: \`IOSSIMULATOR\` \`arm64\`"
+            echo "- artifact: \`telegram-sim-arm64\`"
+            echo "- path: \`Telegram.app.zip\` (and \`BUILD.txt\`)"
+            echo "- retention: 7 days"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload the simulator app
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-sim-arm64
+          path: |
+            sim-dist/Telegram.app.zip
+            sim-dist/BUILD.txt
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 1
