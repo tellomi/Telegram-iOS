@@ -80,7 +80,7 @@ public struct TellomiFeatureGate: Equatable {
         }
         // Read the dictionary directly. `JSON.subscript` lives in Utils/JSON.swift and
         // imports TelegramApi, which this file's host test does not compile.
-        if case let .dictionary(fields)? = appConfiguration.data, case let .number(value) = fields[killSwitchKey], value == 1.0 {
+        if case let .dictionary(fields)? = appConfiguration.data, case let .number(value)? = fields[killSwitchKey], value == 1.0 {
             return false
         }
         return true
