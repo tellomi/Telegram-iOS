@@ -16,6 +16,7 @@ import PhotoResources
 import PeerInfoPaneNode
 import WebUI
 import WalletContext
+import MomentsUI
 
 enum PeerInfoUpdatingAvatar {
     case none
@@ -1567,6 +1568,7 @@ func peerInfoScreenData(
             let forcedLinkedCommunityId = Atomic<EnginePeer.Id?>(value: nil)
             
             return combineLatest(
+                combineLatest(
                 context.account.viewTracker.peerView(peerId, updateData: true),
                 peerInfoAvailableMediaPanes(context: context, peerId: peerId, chatLocation: chatLocation, isMyProfile: isMyProfile, chatLocationContextHolder: chatLocationContextHolder, sharedMediaFromForumTopic: sharedMediaFromForumTopic),
                 context.engine.data.subscribe(TelegramEngine.EngineData.Item.NotificationSettings.Global()),
@@ -1589,10 +1591,13 @@ func peerInfoScreenData(
                 webAppPermissions,
                 savedMusicContext.state,
                 combineLatest(businessConnectedBot, walletBalance)
+                ),
+                momentsProfilePostsPresence(context: context, peerId: userPeerId)
             )
-            |> mapToSignal { peerView, availablePanes, globalNotificationSettings, encryptionKeyFingerprint, status, hasStories, hasStoryArchive, recommendedBots, accountIsPremium, savedMessagesPeer, hasSavedMessagesChats, hasSavedMessages, hasSavedMessageTags, hasBotPreviewItems, personalChannel, privacySettings, starsRevenueContextAndState, revenueContextAndState, premiumGiftOptions, webAppPermissions, savedMusicState, businessConnectedBotAndWalletBalance -> Signal<PeerInfoScreenData, NoError> in
+            |> mapToSignal { values, posts -> Signal<PeerInfoScreenData, NoError> in
+                let (peerView, mediaPanes, globalNotificationSettings, encryptionKeyFingerprint, status, hasStories, hasStoryArchive, recommendedBots, accountIsPremium, savedMessagesPeer, hasSavedMessagesChats, hasSavedMessages, hasSavedMessageTags, hasBotPreviewItems, personalChannel, privacySettings, starsRevenueContextAndState, revenueContextAndState, premiumGiftOptions, webAppPermissions, savedMusicState, businessConnectedBotAndWalletBalance) = values
                 let (businessConnectedBot, walletBalance) = businessConnectedBotAndWalletBalance
-                var availablePanes = availablePanes
+                var availablePanes = mediaPanes
                 if isMyProfile {
                     availablePanes?.insert(.stories, at: 0)
                     if availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData {
@@ -1650,9 +1655,7 @@ func peerInfoScreenData(
                     availablePanes = nil
                 }
                 
-                if peerView.peers[peerView.peerId] is TelegramUser || isMyProfile {
-                    availablePanes?.insert(.moments, at: 0)
-                }
+                availablePanes = momentsUserProfilePanes(availablePanes, isUserProfile: peerView.peers[peerView.peerId] is TelegramUser || isMyProfile, posts: posts)
 
                 if var currentAvailablePanes = availablePanes, let cachedData = peerView.cachedData as? CachedUserData, let mainProfileTab = cachedData.mainProfileTab {
                     let mainTabKey = PeerInfoPaneKey(tab: mainProfileTab)

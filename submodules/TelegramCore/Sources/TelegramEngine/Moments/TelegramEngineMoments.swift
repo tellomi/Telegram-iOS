@@ -147,9 +147,28 @@ public extension TelegramEngine {
         private let personalizedRecommendationsValue = ValuePromise<Bool>(true, ignoreRepeated: true)
         private let preferenceGeneration = Atomic<Int>(value: 0)
         private let preferenceDocument = Atomic<[String: Any]>(value: [:])
+        private let profileOpeningLock = NSLock()
+        private let profileOpeningQueue = Queue(name: "moments-profile-opening", qos: .userInitiated)
+        private var profileOpeningStore = MomentsProfileOpeningStore()
+        private var profileOpeningPromises: [String: Promise<MomentsProfilePostsSnapshot>] = [:]
+        private var profileOpeningDisposables: [String: Disposable] = [:]
+        private var profileOpeningRechecks: [String: Disposable] = [:]
+        private var profileNetworkDisposable: Disposable?
+        private var profileNetworkStarted = false
+        private var profileSawWaitingForNetwork = false
 
         init(account: Account) {
             self.account = account
+        }
+
+        deinit {
+            self.profileNetworkDisposable?.dispose()
+            for disposable in self.profileOpeningDisposables.values {
+                disposable.dispose()
+            }
+            for disposable in self.profileOpeningRechecks.values {
+                disposable.dispose()
+            }
         }
 
         public var accountPeerId: Int64 {
@@ -456,6 +475,9 @@ public extension TelegramEngine {
                 }
                 return .single(id)
             }
+            |> afterNext { [weak self] _ in
+                self?.refreshOwnProfileAfterPublish()
+            }
         }
 
         public func editPost(id: String, body: [String: Any]) -> Signal<Never, MomentsAPIError> {
@@ -484,6 +506,242 @@ public extension TelegramEngine {
 
         public func closePoll(postId: String) -> Signal<Never, MomentsAPIError> {
             return self.call(method: "POST", path: "/v1/feed/posts/\(postId)/poll/close") |> ignoreValues
+        }
+
+        public func latestProfilePosts(id: String) -> MomentsProfilePostsSnapshot? {
+            self.profileOpeningLock.lock()
+            let snapshot = self.profileOpeningStore.snapshot(id: id)
+            self.profileOpeningLock.unlock()
+            return snapshot
+        }
+
+        /// First page of a profile. Reads the extension cache, then one network request.
+        /// A second subscriber, including the profile list, receives the same opening
+        /// while that request is in flight or the settled page is still current.
+        /// A failed opening is requested again on a later visit or when the network
+        /// returns. A confirmed-empty opening is requested again on the next visit,
+        /// after `momentsProfileOpeningEmptyTTL`, and when this account publishes.
+        public func openProfilePosts(id: String) -> Signal<MomentsProfilePostsSnapshot, NoError> {
+            return self.refreshProfileOpening(id: id, reason: .profileOpen)
+        }
+
+        /// A refresh succeeded. Keeps the shared opening and the cache on this page.
+        /// A failed refresh does not call this, so a cached non-empty page stays visible.
+        public func retainProfilePosts(id: String, page: MomentsPage) {
+            self.storeProfilePosts(id: id, page: page)
+            let snapshot = MomentsProfilePostsSnapshot(items: page.items, nextCursor: page.nextCursor, cachedCount: page.items.count, remoteCount: page.items.count, failed: false)
+            self.profileOpeningQueue.async { [weak self] in
+                guard let self else {
+                    return
+                }
+                let now = Int64(Date().timeIntervalSince1970)
+                self.profileOpeningLock.lock()
+                let begun = self.profileOpeningStore.retain(id: id, snapshot: snapshot, now: now)
+                let previous = self.profileOpeningDisposables.removeValue(forKey: id)
+                let promise = self.profileOpeningPromise(id: id)
+                self.profileOpeningLock.unlock()
+                previous?.dispose()
+                self.discardProfileOpenings(begun.evicted)
+                promise.set(.single(snapshot))
+                self.scheduleProfileOpeningRecheck(id: id, confirmedEmpty: snapshot.remoteCount == 0)
+            }
+        }
+
+        private func refreshOwnProfileAfterPublish() {
+            let _ = self.refreshProfileOpening(id: String(self.accountPeerId), reason: .viewerPublished)
+        }
+
+        private func refreshProfileOpening(id: String, reason: MomentsProfileOpeningReason) -> Signal<MomentsProfilePostsSnapshot, NoError> {
+            self.startProfileNetworkWatch()
+            let now = Int64(Date().timeIntervalSince1970)
+            self.profileOpeningLock.lock()
+            let decision = self.profileOpeningStore.decision(id: id, now: now, reason: reason)
+            if decision == .reuse, let promise = self.profileOpeningPromises[id] {
+                self.profileOpeningStore.touch(id: id, now: now)
+                self.profileOpeningLock.unlock()
+                return promise.get()
+            }
+            let previousRequest = self.profileOpeningDisposables.removeValue(forKey: id)
+            let previousRecheck = self.profileOpeningRechecks.removeValue(forKey: id)
+            let begun = self.profileOpeningStore.begin(id: id, now: now)
+            let promise = self.profileOpeningPromise(id: id)
+            let generation = begun.generation
+            let evicted = begun.evicted
+            self.profileOpeningLock.unlock()
+            previousRequest?.dispose()
+            previousRecheck?.dispose()
+            self.discardProfileOpenings(evicted)
+
+            let disposable = (self.cachedProfilePosts(id: id)
+            |> mapToSignal { cached -> Signal<MomentsProfilePostsSnapshot, NoError> in
+                let cachedCount = cached?.items.count
+                let head: Signal<MomentsProfilePostsSnapshot, NoError>
+                if let cached {
+                    head = .single(MomentsProfilePostsSnapshot(items: cached.items, nextCursor: cached.nextCursor, cachedCount: cachedCount, remoteCount: nil, failed: false))
+                } else {
+                    head = .complete()
+                }
+                let remote = self.profilePosts(id: id, filter: "posts", cursor: nil)
+                |> map { page -> MomentsProfilePostsSnapshot in
+                    self.storeProfilePosts(id: id, page: page)
+                    return MomentsProfilePostsSnapshot(items: page.items, nextCursor: page.nextCursor, cachedCount: cachedCount, remoteCount: page.items.count, failed: false)
+                }
+                |> `catch` { _ -> Signal<MomentsProfilePostsSnapshot, NoError> in
+                    return .single(MomentsProfilePostsSnapshot(items: cached?.items ?? [], nextCursor: cached?.nextCursor, cachedCount: cachedCount, remoteCount: nil, failed: true))
+                }
+                return head |> then(remote)
+            }).start(next: { [weak self] snapshot in
+                guard let self else {
+                    return
+                }
+                self.profileOpeningQueue.async { [weak self] in
+                    self?.finishProfileOpening(id: id, generation: generation, snapshot: snapshot, promise: promise, reason: reason)
+                }
+            })
+            self.profileOpeningLock.lock()
+            if self.profileOpeningStore.generation(id: id) == generation {
+                self.profileOpeningDisposables[id] = disposable
+            } else {
+                self.profileOpeningLock.unlock()
+                disposable.dispose()
+                return promise.get()
+            }
+            self.profileOpeningLock.unlock()
+            return promise.get()
+        }
+
+        private func finishProfileOpening(id: String, generation: Int, snapshot: MomentsProfilePostsSnapshot, promise: Promise<MomentsProfilePostsSnapshot>, reason: MomentsProfileOpeningReason) {
+            let now = Int64(Date().timeIntervalSince1970)
+            self.profileOpeningLock.lock()
+            let note = self.profileOpeningStore.note(id: id, generation: generation, snapshot: snapshot, now: now)
+            self.profileOpeningLock.unlock()
+            guard note.applied else {
+                return
+            }
+            promise.set(.single(snapshot))
+            // A TTL refresh that is still empty does not schedule another one.
+            // The next profile open does.
+            self.scheduleProfileOpeningRecheck(id: id, confirmedEmpty: note.confirmedEmpty && reason != .ttl)
+            if note.reconnectFollowUp {
+                let _ = self.refreshProfileOpening(id: id, reason: .reconnect)
+            }
+        }
+
+        private func profileOpeningPromise(id: String) -> Promise<MomentsProfilePostsSnapshot> {
+            if let promise = self.profileOpeningPromises[id] {
+                return promise
+            }
+            let promise = Promise<MomentsProfilePostsSnapshot>()
+            self.profileOpeningPromises[id] = promise
+            return promise
+        }
+
+        private func discardProfileOpenings(_ ids: [String]) {
+            guard !ids.isEmpty else {
+                return
+            }
+            self.profileOpeningLock.lock()
+            var disposables: [Disposable] = []
+            for id in ids {
+                if let disposable = self.profileOpeningDisposables.removeValue(forKey: id) {
+                    disposables.append(disposable)
+                }
+                if let recheck = self.profileOpeningRechecks.removeValue(forKey: id) {
+                    disposables.append(recheck)
+                }
+                self.profileOpeningPromises.removeValue(forKey: id)
+            }
+            self.profileOpeningLock.unlock()
+            for disposable in disposables {
+                disposable.dispose()
+            }
+        }
+
+        private func scheduleProfileOpeningRecheck(id: String, confirmedEmpty: Bool) {
+            if !confirmedEmpty {
+                self.profileOpeningLock.lock()
+                let existing = self.profileOpeningRechecks.removeValue(forKey: id)
+                self.profileOpeningLock.unlock()
+                existing?.dispose()
+                return
+            }
+            let recheckId = id
+            let disposable = (Signal<Void, NoError>.single(())
+            |> delay(Double(momentsProfileOpeningEmptyTTL) + 1.0, queue: Queue.mainQueue())
+            ).start(next: { [weak self] _ in
+                let _ = self?.refreshProfileOpening(id: recheckId, reason: .ttl)
+            })
+            self.profileOpeningLock.lock()
+            let existing = self.profileOpeningRechecks.removeValue(forKey: id)
+            self.profileOpeningRechecks[id] = disposable
+            self.profileOpeningLock.unlock()
+            existing?.dispose()
+        }
+
+        private func startProfileNetworkWatch() {
+            self.profileOpeningLock.lock()
+            if self.profileNetworkStarted {
+                self.profileOpeningLock.unlock()
+                return
+            }
+            self.profileNetworkStarted = true
+            self.profileOpeningLock.unlock()
+            self.profileNetworkDisposable = (self.account.networkState
+            |> map { state -> String in
+                switch state {
+                case .waitingForNetwork:
+                    return "waiting"
+                case .online:
+                    return "online"
+                default:
+                    return "other"
+                }
+            }
+            |> distinctUntilChanged
+            |> deliverOnMainQueue).start(next: { [weak self] phase in
+                self?.profileNetworkPhase(phase)
+            })
+        }
+
+        /// Leaving `waitingForNetwork` and reaching `.online` retries failed
+        /// openings. `updating` is still online, so it does not count as a
+        /// reconnect and does not poll.
+        private func profileNetworkPhase(_ phase: String) {
+            switch phase {
+            case "waiting":
+                self.profileOpeningLock.lock()
+                self.profileSawWaitingForNetwork = true
+                self.profileOpeningLock.unlock()
+            case "online":
+                self.profileOpeningLock.lock()
+                let shouldRetry = self.profileSawWaitingForNetwork
+                self.profileSawWaitingForNetwork = false
+                let ids = shouldRetry ? self.profileOpeningStore.grantReconnectBypass() : []
+                self.profileOpeningLock.unlock()
+                for id in ids {
+                    let _ = self.refreshProfileOpening(id: id, reason: .reconnect)
+                }
+            default:
+                break
+            }
+        }
+
+        private func cachedProfilePosts(id: String) -> Signal<MomentsPage?, NoError> {
+            return self.account.postbox.transaction { transaction -> MomentsPage? in
+                guard let payload = momentsReadBlob(transaction: transaction, id: momentsProfilePostsCacheId(id)), let data = payload.data(using: .utf8) else {
+                    return nil
+                }
+                return momentsProfilePostsPage(data)
+            }
+        }
+
+        private func storeProfilePosts(id: String, page: MomentsPage) {
+            guard let payload = momentsProfilePostsPayload(page) else {
+                return
+            }
+            let _ = self.account.postbox.transaction { transaction in
+                momentsWriteBlob(transaction: transaction, id: momentsProfilePostsCacheId(id), payload: payload)
+            }.start()
         }
 
         public func profilePosts(id: String, filter: String, cursor: String?) -> Signal<MomentsPage, MomentsAPIError> {

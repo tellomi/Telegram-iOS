@@ -17264,6 +17264,7 @@ Error: %8$@";
 "Moments.SwitchCity" = "Change city";
 "Moments.Retry" = "Couldn't load. Tap to retry.";
 "Moments.LoadFailed" = "Could not load. Tap to retry.";
+"Moments.Loading" = "Loading…";
 "Moments.Unavailable" = "Content unavailable";
 "Moments.Edited" = "Edited";
 "Moments.FullText" = "Full text";

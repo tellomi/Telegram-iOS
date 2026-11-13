@@ -7,3 +7,4 @@
 /* Moments feed. Native wording for this built-in language. */
 "Moments_Comment_SendFailed" = "Komen tidak dapat dihantar. Teks anda masih di sini.";
 "Moments_Audience_Kept" = "Tidak dapat menukar audiens. Pilihan anda dikekalkan.";
+"Moments.Loading" = "Loading…";
