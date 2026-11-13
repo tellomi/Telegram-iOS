@@ -1333,6 +1333,31 @@ TestFlight 构建 91（14.0.5，提交 `e1ae313a1de4ade26714830ed4d387cdca46689a
 | `submodules/TelegramCallsUI/Sources/PresentationCallManager.swift` | 失败提示框在主队列上创建。 |
 | `submodules/TelegramCallsUI/Tests/CallKitCompletionThreadTests.swift` | 后台队列回到主线程；语音和视频的四种拒绝都走失败分支。 |
 
+## GCDAsyncSocket stream close
+
+Build 90 (MetricKit, iPhone 17 Pro Max, arm64e) aborted on the `GCDAsyncSocket` queue with `Trying to recursively lock an os_unfair_lock`. The frames are `CFSocketInvalidate`, `SocketStream::~SocketStream`, `CFSocketInvalidate` again, `SocketStream::close`, `_CFStreamClose`, then MtProtoKit. One `CFReadStreamClose` / `CFWriteStreamClose` is enough. `CFSocketInvalidate` holds the socket lock and `CFRelease`s `CFSocket` context.info. That object is the C++ `SocketStream`, not the `CFReadStream` / `CFWriteStream` the caller holds. `~SocketStream` calls `CFSocketInvalidate` again and the lock aborts. The read and write callbacks already `dispatch_async` onto the socket queue before `closeWithError`, so a same-stack re-entry flag does not see this path.
+
+This is Apple's CFNetwork / CoreFoundation re-entrancy, reported since iOS 16. CocoaAsyncSocket issue 803 is still open and has no merged fix. Telegram-iOS issue 2306 is still open; upstream `GCDAsyncSocket.m` still closes with `removeStreamsFromRunLoop`, `CFReadStreamSetClient` / `CFWriteStreamSetClient` of `kCFStreamEventNone`, `CFReadStreamClose` / `CFWriteStreamClose`, then `CFRelease`. The reported repro is many connections torn down together (VPN plus airplane mode), on the order of minutes, not every single disconnect. Build 90 recorded one occurrence on one TestFlight phone. A single `disconnect` can hit it, but ordinary disconnects do not.
+
+Public close-order changes do not leave the lock before the nested invalidate:
+
+- Unscheduling the streams (`removeStreamsFromRunLoop`) and clearing the client are already what upstream does, and they run before `CFStreamClose`.
+- `kCFStreamPropertyShouldCloseNativeSocket` is already set false when the streams are created. The dispatch source cancel handler closes the native fd once (`socketFDRefCount` starts at 2). Closing or shutting down that fd first does not stop `SocketStream::close` from calling `CFSocketInvalidate`.
+- Moving `CFStreamClose` onto the CFStream thread or another queue does not help. The recursive lock is inside `CFSocketInvalidate`, not on the GCDAsyncSocket queue.
+- An extra `CFRetain` of the caller's stream wrapper cannot help. `CFStreamClose` already runs while that wrapper is alive. The object released under the lock is context.info.
+
+There is no public API that retains context.info or replaces `CFSocketContext.release` without reading CF private layout or writing a signed function pointer. The earlier scan of the stream object for a `CFSocket` is removed. It was not a public API, it was not an existing Telegram path, a miss fell through to the same `CFStreamClose`, and the probe socket closed every fd that appeared during the probe window. The simulator is `ios_sim_arm64` and never executed an arm64e-only branch, so that scan was not evidence on the crash phone. This client does not ship a private-memory workaround. `GCDAsyncSocket.m`'s iOS close block is the upstream sequence again.
+
+The fd-count tests (normal disconnect, read error, disconnect twice, reconnect) stay. They require the process fd count to return to the baseline taken after the first connection's CFStream thread has settled, and they fail if a descriptor is still open two seconds later. They pass on this restored close. They do not claim the Apple abort is gone. The discover-backoff window stays 1.3 s with a round cap of 9.
+
+Leaving the crash unfixed is the decision. Serializing every disconnect would only reduce how often many streams close at once. It would not remove the abort from one `CFStreamClose`, and it is not in this change.
+
+| File | Change |
+| --- | --- |
+| `submodules/MtProtoKit/Sources/GCDAsyncSocket.m` | iOS close is upstream again: unschedule, clear the client, `CFStreamClose`, `CFRelease`. No context.info retain, no same-stack close flag. |
+| `submodules/MtProtoKit/Tests/GCDAsyncSocketCloseTests.m` | Descriptor is closed once and not closed again if the number is reused. No private `CFSocket` lookup. |
+| `submodules/MtProtoKit/BUILD` | `GCDAsyncSocketCloseTests` stays on the iOS 27 simulator and in the pull-request list. The stream-close planner target is gone. |
+
 ## TestFlight dSYM artifact
 
 `release_arm64` already passes `--apple_generate_dsym`. The TestFlight workflow built the IPA and left the dSYMs on the runner. Build 91's `TelegramUIFramework` UUID `1575DE22-0975-3591-A160-CCF1A2EA97F1` could not be symbolicated.
