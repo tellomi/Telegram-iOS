@@ -42,18 +42,6 @@ load("@build_bazel_rules_apple//apple/testing/default_runner:ios_test_runner.bzl
 
 # Module-private headers, exposed to the tests only, so a test can
 # `#import "MTInternalMessageParser.h"` the way the module's own sources do.
-cc_test(
-    name = "GCDAsyncSocketStreamCloseTests",
-    srcs = [
-        "Sources/GCDAsyncSocketStreamClose.c",
-        "Sources/GCDAsyncSocketStreamClose.h",
-        "Tests/GCDAsyncSocketStreamCloseTests.c",
-    ],
-    includes = [
-        "Sources",
-    ],
-)
-
 objc_library(
     name = "MtProtoKitPrivateHeaders",
     testonly = True,

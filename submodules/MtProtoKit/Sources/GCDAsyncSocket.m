@@ -9,8 +9,6 @@
 //
 
 #import "GCDAsyncSocket.h"
-#import "GCDAsyncSocketStreamClose.h"
-#import "GCDAsyncSocketCFSocketRelease.h"
 
 #import <MtProtoKit/MTLogging.h>
 
@@ -175,7 +173,6 @@ enum GCDAsyncSocketFlags
 	kUsingCFStreamForTLS           = 1 << 17,  // If set, we're forced to use CFStream instead of SecureTransport
 	kSecureSocketHasBytesAvailable = 1 << 18,  // If set, CFReadStream has notified us of bytes available
 #endif
-	kClosingWithError              = 1 << 19,  // If set, closeWithError is already on the stack
 };
 
 enum GCDAsyncSocketConfig
@@ -2704,22 +2701,6 @@ enum GCDAsyncSocketConfig
 	LogTrace();
 	
 	NSAssert(dispatch_get_current_queue() == socketQueue, @"Must be dispatched on socketQueue");
-
-	// A second closeWithError on this stack must not close the file
-	// descriptor again. The stream callbacks dispatch_async onto this queue
-	// before calling closeWithError, so they are not the build 90 abort.
-	// That abort is ~SocketStream inside CFSocketInvalidate. The SocketStream
-	// in the CFSocket context, not the CFReadStream wrapper, is CFRetained
-	// across CFStreamClose on arm64 and arm64e, so that CFRelease cannot
-	// run the destructor while the lock is held. flags is cleared at the
-	// end of a finished close, so a later disconnect can close again.
-	int closing = (flags & kClosingWithError) ? 1 : 0;
-	int streamOps[8];
-	int streamOpCount = 0;
-	if (!GCDAsyncSocketPlanStreamClose(&closing, streamOps, 8, &streamOpCount)) {
-		return;
-	}
-	flags |= kClosingWithError;
 	
 	
 	[self endConnectTimeout];
@@ -2734,75 +2715,26 @@ enum GCDAsyncSocketConfig
 	
 	#if TARGET_OS_IPHONE
 	{
-		// Clients come off before the run loop, and both come off before either
-		// stream is closed. The SocketStreams are retained first so
-		// CFSocketInvalidate's CFRelease cannot destroy them on this stack.
-		CFTypeRef heldReadStream = NULL;
-		CFTypeRef heldWriteStream = NULL;
-		for (int streamOpIndex = 0; streamOpIndex < streamOpCount; streamOpIndex++)
+		if (readStream || writeStream)
 		{
-			switch (streamOps[streamOpIndex])
+			[self removeStreamsFromRunLoop];
+			
+			if (readStream)
 			{
-				case GCDAsyncSocketStreamCloseClearReadClient:
-				{
-					if (readStream)
-					{
-						CFReadStreamSetClient(readStream, kCFStreamEventNone, NULL, NULL);
-						CFReadStreamSetProperty(readStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
-					}
-					break;
-				}
-				case GCDAsyncSocketStreamCloseClearWriteClient:
-				{
-					if (writeStream)
-					{
-						CFWriteStreamSetClient(writeStream, kCFStreamEventNone, NULL, NULL);
-						CFWriteStreamSetProperty(writeStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
-					}
-					break;
-				}
-				case GCDAsyncSocketStreamCloseRemoveFromRunLoop:
-				{
-					if (readStream && writeStream)
-					{
-						[self removeStreamsFromRunLoop];
-					}
-					break;
-				}
-				case GCDAsyncSocketStreamCloseCloseWrite:
-				{
-					heldReadStream = TellomiRetainSocketStream((CFTypeRef)readStream);
-					heldWriteStream = TellomiRetainSocketStream((CFTypeRef)writeStream);
-					if (writeStream)
-					{
-						CFWriteStreamRef stream = writeStream;
-						writeStream = NULL;
-						CFWriteStreamClose(stream);
-						CFRelease(stream);
-					}
-					break;
-				}
-				case GCDAsyncSocketStreamCloseCloseRead:
-				{
-					if (readStream)
-					{
-						CFReadStreamRef stream = readStream;
-						readStream = NULL;
-						CFReadStreamClose(stream);
-						CFRelease(stream);
-					}
-					TellomiReleaseSocketStreamLater(heldReadStream);
-					TellomiReleaseSocketStreamLater(heldWriteStream);
-					break;
-				}
-				default:
-					break;
+				CFReadStreamSetClient(readStream, kCFStreamEventNone, NULL, NULL);
+				CFReadStreamClose(readStream);
+				CFRelease(readStream);
+				readStream = NULL;
+			}
+			if (writeStream)
+			{
+				CFWriteStreamSetClient(writeStream, kCFStreamEventNone, NULL, NULL);
+				CFWriteStreamClose(writeStream);
+				CFRelease(writeStream);
+				writeStream = NULL;
 			}
 		}
 	}
-	#else
-	(void)streamOps;
-	(void)streamOpCount;
 	#endif
 	#if SECURE_TRANSPORT_MAYBE_AVAILABLE
 	{

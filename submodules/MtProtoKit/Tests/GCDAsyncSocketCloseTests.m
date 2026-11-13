@@ -8,7 +8,6 @@
 #import <unistd.h>
 
 #import "GCDAsyncSocket.h"
-#import "GCDAsyncSocketCFSocketRelease.h"
 
 static const int kClosedSocket = -1;
 
@@ -163,7 +162,6 @@ static const int kClosedSocket = -1;
     close(accepted);
     close(listenFD);
     socket = nil;
-    TellomiFlushDeferredCFSocketReleases();
 }
 
 // The first connection starts the CFStream thread and opens descriptors that
@@ -190,9 +188,9 @@ static const int kClosedSocket = -1;
     });
 }
 
-// connectToPort returns an autoreleased socket. Its last retain, and the
-// deferred SocketStream release, drop after this pool drains. A descriptor
-// still open two seconds later is a leak: the equality is unchanged.
+// connectToPort returns an autoreleased socket. Its last retain drops after
+// this pool drains. A descriptor still open two seconds later is a leak:
+// the equality is unchanged.
 - (void)assertNoDescriptorsLeftSince:(int)openBefore {
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2];
     while ([deadline timeIntervalSinceNow] > 0) {
@@ -209,7 +207,6 @@ static const int kClosedSocket = -1;
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     @autoreleasepool {
-    int deferredBefore = TellomiDeferredCFSocketReleaseCount();
     uint16_t port = 0;
     int listenFD = [self listenOnLoopback:&port];
     GCDAsyncSocketFDProbe *socket = [self connectToPort:port];
@@ -219,11 +216,6 @@ static const int kClosedSocket = -1;
     [socket disconnect];
     [self waitForExpectations:@[self.disconnected] timeout:5];
     [self waitUntilDescriptorClosed:fd];
-#if TARGET_OS_IPHONE
-    XCTAssertGreaterThan(TellomiDeferredCFSocketReleaseCount(), deferredBefore);
-#else
-    (void)deferredBefore;
-#endif
 
     int extras[128];
     int extraCount = 0;
@@ -237,7 +229,6 @@ static const int kClosedSocket = -1;
     close(accepted);
     close(listenFD);
     socket = nil;
-    TellomiFlushDeferredCFSocketReleases();
     }
     [self assertNoDescriptorsLeftSince:openBefore];
 }
@@ -247,7 +238,6 @@ static const int kClosedSocket = -1;
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     @autoreleasepool {
-    int deferredBefore = TellomiDeferredCFSocketReleaseCount();
     uint16_t port = 0;
     int listenFD = [self listenOnLoopback:&port];
     GCDAsyncSocketFDProbe *socket = [self connectToPort:port];
@@ -260,11 +250,6 @@ static const int kClosedSocket = -1;
     [self waitForExpectations:@[self.disconnected] timeout:5];
     XCTAssertNotNil(self.disconnectError);
     [self waitUntilDescriptorClosed:fd];
-#if TARGET_OS_IPHONE
-    XCTAssertGreaterThan(TellomiDeferredCFSocketReleaseCount(), deferredBefore);
-#else
-    (void)deferredBefore;
-#endif
 
     int extras[128];
     int extraCount = 0;
@@ -274,7 +259,6 @@ static const int kClosedSocket = -1;
     [self closeExtras:extras count:extraCount];
     close(listenFD);
     socket = nil;
-    TellomiFlushDeferredCFSocketReleases();
     }
     [self assertNoDescriptorsLeftSince:openBefore];
 }
@@ -305,7 +289,6 @@ static const int kClosedSocket = -1;
     close(accepted);
     close(listenFD);
     socket = nil;
-    TellomiFlushDeferredCFSocketReleases();
     }
     [self assertNoDescriptorsLeftSince:openBefore];
 }
@@ -315,7 +298,6 @@ static const int kClosedSocket = -1;
     [self armConnectionExpectations];
     int openBefore = [self countOpenDescriptors];
     @autoreleasepool {
-    int deferredBefore = TellomiDeferredCFSocketReleaseCount();
     uint16_t port = 0;
     int listenFD = [self listenOnLoopback:&port];
 
@@ -339,11 +321,6 @@ static const int kClosedSocket = -1;
     [socket disconnect];
     [self waitForExpectations:@[self.disconnected] timeout:5];
     [self waitUntilDescriptorClosed:secondFD];
-#if TARGET_OS_IPHONE
-    XCTAssertGreaterThanOrEqual(TellomiDeferredCFSocketReleaseCount(), deferredBefore + 2);
-#else
-    (void)deferredBefore;
-#endif
 
     int extras[128];
     int extraCount = 0;
@@ -354,136 +331,8 @@ static const int kClosedSocket = -1;
     close(acceptedAgain);
     close(listenFD);
     socket = nil;
-    TellomiFlushDeferredCFSocketReleases();
     }
     [self assertNoDescriptorsLeftSince:openBefore];
-}
-
-- (void)testPairedStreamCloseLeavesTheSocketStreamAlive {
-    int fds[2] = {-1, -1};
-    XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
-    CFReadStreamRef readStream = NULL;
-    CFWriteStreamRef writeStream = NULL;
-    CFStreamCreatePairWithSocket(kCFAllocatorDefault, fds[0], &readStream, &writeStream);
-    XCTAssertTrue(readStream != NULL && writeStream != NULL);
-    CFReadStreamSetProperty(readStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
-    CFWriteStreamSetProperty(writeStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
-    XCTAssertTrue(CFReadStreamOpen(readStream));
-    XCTAssertTrue(CFWriteStreamOpen(writeStream));
-
-    CFTypeRef readInfo = TellomiSocketStreamContextInfo((CFTypeRef)readStream);
-    CFTypeRef writeInfo = TellomiSocketStreamContextInfo((CFTypeRef)writeStream);
-    XCTAssertTrue(readInfo != NULL && writeInfo != NULL);
-    CFTypeRef heldRead = TellomiRetainSocketStream((CFTypeRef)readStream);
-    CFTypeRef heldWrite = TellomiRetainSocketStream((CFTypeRef)writeStream);
-    // Retaining the CFReadStream wrapper does not touch context.info.
-    // The old close path failed this: held was the wrapper, not info.
-    XCTAssertEqual(heldRead, readInfo);
-    XCTAssertEqual(heldWrite, writeInfo);
-    XCTAssertTrue(heldRead != (CFTypeRef)readStream);
-    CFTypeRef held = heldRead;
-    XCTAssertTrue(held != NULL);
-
-    CFReadStreamClose(readStream);
-    CFWriteStreamClose(writeStream);
-    CFRelease(readStream);
-    CFRelease(writeStream);
-
-    // CFSocketInvalidate CFReleases this object while holding the lock.
-    // The extra retain is why its destructor, and the second
-    // CFSocketInvalidate, cannot run until the later release.
-    XCTAssertGreaterThanOrEqual(CFGetRetainCount(held), 1);
-
-    TellomiReleaseSocketStreamLater(heldRead);
-    TellomiReleaseSocketStreamLater(heldWrite);
-    TellomiFlushDeferredCFSocketReleases();
-
-    XCTAssertEqual(close(fds[0]), 0);
-    XCTAssertEqual(close(fds[0]), -1);
-    XCTAssertEqual(errno, EBADF);
-    XCTAssertEqual(close(fds[1]), 0);
-}
-
-static int gForeignReleaseCalls = 0;
-
-static void TellomiForeignRelease(const void *info) {
-    gForeignReleaseCalls += 1;
-    (void)info;
-}
-
-- (void)testCloseRetainsTheSocketContextInfoNotTheStreamWrapper {
-    int fds[2] = {-1, -1};
-    XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
-    CFReadStreamRef readStream = NULL;
-    CFWriteStreamRef writeStream = NULL;
-    CFStreamCreatePairWithSocket(kCFAllocatorDefault, fds[0], &readStream, &writeStream);
-    XCTAssertTrue(readStream != NULL && writeStream != NULL);
-    CFReadStreamSetProperty(readStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
-    CFWriteStreamSetProperty(writeStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
-    XCTAssertTrue(CFReadStreamOpen(readStream));
-    XCTAssertTrue(CFWriteStreamOpen(writeStream));
-
-    CFTypeRef info = TellomiSocketStreamContextInfo((CFTypeRef)readStream);
-    XCTAssertTrue(info != NULL, @"the stream's CFSocket context must be visible");
-    XCTAssertTrue(info != (CFTypeRef)readStream);
-    XCTAssertTrue(info != (CFTypeRef)writeStream);
-    CFIndex infoBefore = CFGetRetainCount(info);
-    CFIndex streamBefore = CFGetRetainCount(readStream);
-    int deferredBefore = TellomiDeferredCFSocketReleaseCount();
-
-    CFTypeRef held = TellomiRetainSocketStream((CFTypeRef)readStream);
-
-    XCTAssertEqual(held, info);
-    XCTAssertEqual(CFGetRetainCount(info), infoBefore + 1);
-    XCTAssertEqual(CFGetRetainCount(readStream), streamBefore);
-    XCTAssertEqual(TellomiDeferredCFSocketReleaseCount(), deferredBefore + 1);
-    XCTAssertTrue(TellomiRetainSocketStream(NULL) == NULL);
-
-    CFReadStreamClose(readStream);
-    CFWriteStreamClose(writeStream);
-    // Invalidate's CFRelease ran inside the close. info is still alive
-    // only because of the extra retain. Releasing the wrappers must not
-    // be what keeps it alive.
-    CFRelease(readStream);
-    CFRelease(writeStream);
-    XCTAssertGreaterThanOrEqual(CFGetRetainCount(info), 1);
-
-    TellomiReleaseSocketStreamLater(held);
-    TellomiFlushDeferredCFSocketReleases();
-    XCTAssertEqual(close(fds[0]), 0);
-    XCTAssertEqual(close(fds[1]), 0);
-}
-
-- (void)testForeignReleaseIsNotCalledAndDoesNotDropARetain {
-    CFStringRef info = CFStringCreateWithCString(NULL, "tellomi-socket", kCFStringEncodingUTF8);
-    CFIndex before = CFGetRetainCount(info);
-    int deferredBefore = TellomiDeferredCFSocketReleaseCount();
-    gForeignReleaseCalls = 0;
-
-    CFTypeRef held = TellomiRetainIfCFRelease(info, TellomiForeignRelease);
-
-    XCTAssertTrue(held == NULL);
-    XCTAssertEqual(gForeignReleaseCalls, 0);
-    XCTAssertEqual(CFGetRetainCount(info), before);
-    XCTAssertEqual(TellomiDeferredCFSocketReleaseCount(), deferredBefore);
-    CFRelease(info);
-}
-
-- (void)testCFReleaseContextTakesExactlyOneRetain {
-    CFStringRef info = CFStringCreateWithCString(NULL, "tellomi-socket", kCFStringEncodingUTF8);
-    CFIndex before = CFGetRetainCount(info);
-    int deferredBefore = TellomiDeferredCFSocketReleaseCount();
-
-    CFTypeRef held = TellomiRetainIfCFRelease(info, CFRelease);
-
-    XCTAssertTrue(held == info);
-    XCTAssertEqual(CFGetRetainCount(info), before + 1);
-    XCTAssertEqual(TellomiDeferredCFSocketReleaseCount(), deferredBefore + 1);
-
-    TellomiReleaseSocketStreamLater(held);
-    TellomiFlushDeferredCFSocketReleases();
-    XCTAssertEqual(CFGetRetainCount(info), before);
-    CFRelease(info);
 }
 
 @end
