@@ -1,13 +1,12 @@
 import XCTest
 import Postbox
-@testable import TelegramCore
 
 final class TellomiFeatureGateTests: XCTestCase {
     private func configuration(_ fields: [String: JSON]) -> AppConfiguration {
         return AppConfiguration(data: .dictionary(fields), hash: 0)
     }
 
-    func testMissingKeysHideEveryGatedFeature() {
+    func testMissingKeysHidePurchaseAndLeaveSupportedFeaturesOn() {
         let gate = TellomiFeatureGate.with(appConfiguration: AppConfiguration.defaultValue)
         XCTAssertFalse(gate.aiComposeEnabled)
         XCTAssertFalse(gate.translateEnabled)
@@ -17,10 +16,21 @@ final class TellomiFeatureGateTests: XCTestCase {
         XCTAssertFalse(gate.walletEnabled)
         XCTAssertFalse(gate.fragmentEnabled)
         XCTAssertFalse(gate.channelAdsEnabled)
-        XCTAssertFalse(gate.businessEnabled)
-        XCTAssertFalse(gate.boostsEnabled)
-        XCTAssertFalse(gate.passportEnabled)
+        XCTAssertTrue(gate.businessEnabled)
+        XCTAssertTrue(gate.boostsEnabled)
+        XCTAssertTrue(gate.passportEnabled)
         XCTAssertFalse(gate.aiSummaryEnabled)
+    }
+
+    func testServerCanStillHideBusinessPassportAndBoosts() {
+        let hidden = TellomiFeatureGate.with(appConfiguration: configuration([
+            "tellomi_business_enabled": .bool(false),
+            "tellomi_passport_enabled": .string("disabled"),
+            "tellomi_boosts_enabled": .number(0)
+        ]))
+        XCTAssertFalse(hidden.businessEnabled)
+        XCTAssertFalse(hidden.passportEnabled)
+        XCTAssertFalse(hidden.boostsEnabled)
     }
 
     func testOfficialPurchaseFlagsAndTellomiOptIns() {

@@ -122,6 +122,7 @@ jobs:
             //submodules/TelegramPresentationData:TellomiBrandRewriteTests
             //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
             //submodules/TelegramCore:EphemeralMediaLifecycleTests
+            //submodules/TelegramCore:TellomiFeatureGateTests
             //submodules/TelegramCore:TellomiNativeBatchTests
             //submodules/OpenInExternalAppUI:TellomiMapOpenInTests
             //submodules/TelegramCallsUI:CallKitCompletionThreadTests

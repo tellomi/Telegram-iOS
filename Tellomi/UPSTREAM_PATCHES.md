@@ -441,16 +441,20 @@ Stacked on the solid-wallpaper change. Day and dayClassic outgoing bubbles are w
 
 ## Hidden Telegram features
 
-Teamgram does not implement Premium, Stars, gifts, TON, Fragment, channel ads, Business, Boosts, Passport, AI compose, translation/Cocoon, or AI summary. Those entry points stay hidden unless `help.getAppConfig` turns them on. Stories stay. A missing key is off. `premium_purchase_blocked` and `stars_purchase_blocked` keep their official names and default to blocked. The other switches are `tellomi_*_enabled`.
+Premium purchase, Stars, gifts, TON, Fragment, channel ads, AI compose, translation/Cocoon, and AI summary stay hidden unless `help.getAppConfig` turns them on. Stories stay. A missing key for those switches is off. `premium_purchase_blocked` and `stars_purchase_blocked` keep their official names and default to blocked. The other purchase and Fragment switches are `tellomi_*_enabled`.
+
+Native feature audit 2026-11-14, against teamgram-server `625632af5ad64b06e3874109a85996205c75aa01`. Business, Passport, and Boosts default on. The server implements `account.updateBusiness*`, `account.getBusinessChatLinks`, `account.getAuthorizationForm`, and `premium.getBoostsStatus` / `premium.applyBoost` / `premium.getMyBoosts`, and `help.getAppConfig` does not send `tellomi_business_enabled`, `tellomi_passport_enabled`, or `tellomi_boosts_enabled`. A missing key is on. `false` still hides the row. The Settings Business row, the Passport row (when the account has secret values), channel Boost, and boost deep links are the same screens as upstream.
+
+Left off, with the server reason: `messages.getSponsoredMessages` returns an empty list (`sponsoredEmpty`), and `messages.summarizeText` returns empty text. Translation and AI compose stay off until the server sets `tellomi_translate_enabled` / `translations_manual_enabled` and `tellomi_ai_compose_enabled`. Premium purchase, Stars, gifts, wallet/TON, and Fragment stay off.
 
 | File | Change |
 | --- | --- |
-| `submodules/TelegramCore/Sources/TellomiFeatureGate.swift` | The one reader. `aiComposeEnabled` also keeps the secret-chat ban and the `ios_disable_ai_*` kill switch. |
+| `submodules/TelegramCore/Sources/TellomiFeatureGate.swift` | The one reader. `aiComposeEnabled` also keeps the secret-chat ban and the `ios_disable_ai_*` kill switch. 2026-11-14: `tellomi_business_enabled`, `tellomi_passport_enabled`, and `tellomi_boosts_enabled` default to on. |
 | `submodules/AccountContext/Sources/Premium.swift` | Premium and Stars follow that reader. Gift flags stay off unless `tellomi_gifts_enabled` is true and `stargifts_blocked` is false. The built-in default treats Premium as blocked. |
 | `submodules/WalletContext/Sources/WalletContext.swift` | `wallet_available` is not enough. `tellomi_wallet_enabled` must also be true. |
 | Chat composer, attachment panel, legacy input | The four `isAIEnabled = true` sites read `tellomi_ai_compose_enabled`. |
 | `TranslateUI` | `canTranslateText` / `canTranslateChats` return false unless `tellomi_translate_enabled`. That drops the translation header, including Cocoon. |
-| Settings, profiles, attach menu, chat input, search, deep links | Premium, Stars, gifts, wallet/TON, Business, Passport, Boosts, channel revenue, and AI summary rows and links are omitted. Fragment auction, anonymous-number, and ads top-up URLs are not opened unless `tellomi_fragment_enabled`. |
+| Settings, profiles, attach menu, chat input, search, deep links | Premium, Stars, gifts, wallet/TON, channel revenue, and AI summary rows and links stay omitted. Business, Passport, and Boosts follow the defaults above. Fragment auction, anonymous-number, and ads top-up URLs are not opened unless `tellomi_fragment_enabled`. |
 
 ## Welcome art and empty states
 
