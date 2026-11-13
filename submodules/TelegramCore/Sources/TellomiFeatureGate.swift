@@ -78,7 +78,9 @@ public struct TellomiFeatureGate: Equatable {
         guard let peerId, peerId.namespace != Namespaces.Peer.SecretChat else {
             return false
         }
-        if let value = appConfiguration.data?[killSwitchKey] as? Double, value == 1.0 {
+        // Read the dictionary directly. `JSON.subscript` lives in Utils/JSON.swift and
+        // imports TelegramApi, which this file's host test does not compile.
+        if case let .dictionary(fields)? = appConfiguration.data, case let .number(value) = fields[killSwitchKey], value == 1.0 {
             return false
         }
         return true

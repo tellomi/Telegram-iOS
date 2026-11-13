@@ -190,6 +190,9 @@ private final class ReplaceBoostScreenComponent: CombinedComponent {
                         }
                     },
                     tapAction: { _, _ in
+                        guard TellomiFeatureGate.with(appConfiguration: context.component.context.currentAppConfiguration.with { $0 }).giftsEnabled else {
+                            return
+                        }
                         giftPremium()
                     }
                 ),
@@ -880,6 +883,9 @@ public class ReplaceBoostScreen: ViewController {
         
         giftPremiumImpl = { [weak self] in
             guard let self else {
+                return
+            }
+            guard TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).giftsEnabled else {
                 return
             }
             let navigationController = self.navigationController

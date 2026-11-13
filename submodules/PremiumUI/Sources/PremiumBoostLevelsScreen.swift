@@ -980,6 +980,7 @@ private final class PremiumBoostLevelsSheetComponent: CombinedComponent {
             let status = self.status
             let isPremium = context.isPremium
             let premiumConfiguration = PremiumConfiguration.with(appConfiguration: context.currentAppConfiguration.with({ $0 }))
+            let featureGate = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
             let canBoostAgain = premiumConfiguration.boostsPerGiftCount > 0
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let forceDark = self.forceDark
@@ -1133,7 +1134,7 @@ private final class PremiumBoostLevelsSheetComponent: CombinedComponent {
                     }
                 } else {
                     if isPremium {
-                        if !canBoostAgain {
+                        if !canBoostAgain || !featureGate.giftsEnabled {
                             controller.dismissAnimated()
                         } else {
                             let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
@@ -1165,7 +1166,7 @@ private final class PremiumBoostLevelsSheetComponent: CombinedComponent {
                                 controller.present(alertController, in: .window(.root))
                             })
                         }
-                    } else {
+                    } else if featureGate.premiumEnabled {
                         let alertController = textAlertController(
                             sharedContext: context.sharedContext,
                             updatedPresentationData: nil,
@@ -1181,6 +1182,18 @@ private final class PremiumBoostLevelsSheetComponent: CombinedComponent {
                                         navigationController.pushViewController(premiumController, animated: true)
                                     }
                                 })
+                            ],
+                            parseMarkdown: true
+                        )
+                        controller.present(alertController, in: .window(.root))
+                    } else {
+                        let alertController = textAlertController(
+                            sharedContext: context.sharedContext,
+                            updatedPresentationData: nil,
+                            title: presentationData.strings.ChannelBoost_Error_PremiumNeededTitle,
+                            text: isGroup ? presentationData.strings.GroupBoost_Error_PremiumNeededText : presentationData.strings.ChannelBoost_Error_PremiumNeededText,
+                            actions: [
+                                TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
                             ],
                             parseMarkdown: true
                         )

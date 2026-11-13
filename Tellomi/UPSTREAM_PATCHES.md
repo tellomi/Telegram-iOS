@@ -443,7 +443,11 @@ Stacked on the solid-wallpaper change. Day and dayClassic outgoing bubbles are w
 
 Premium purchase, Stars, gifts, TON, Fragment, channel ads, AI compose, translation/Cocoon, and AI summary stay hidden unless `help.getAppConfig` turns them on. Stories stay. A missing key for those switches is off. `premium_purchase_blocked` and `stars_purchase_blocked` keep their official names and default to blocked. The other purchase and Fragment switches are `tellomi_*_enabled`.
 
-Native feature audit 2026-11-14, against teamgram-server `625632af5ad64b06e3874109a85996205c75aa01`. Business, Passport, and Boosts default on. The server implements `account.updateBusiness*`, `account.getBusinessChatLinks`, `account.getAuthorizationForm`, and `premium.getBoostsStatus` / `premium.applyBoost` / `premium.getMyBoosts`, and `help.getAppConfig` does not send `tellomi_business_enabled`, `tellomi_passport_enabled`, or `tellomi_boosts_enabled`. A missing key is on. `false` still hides the row. The Settings Business row, the Passport row (when the account has secret values), channel Boost, and boost deep links are the same screens as upstream.
+Native feature audit 2026-11-14, against teamgram-server `625632af5ad64b06e3874109a85996205c75aa01`. Business, Passport, and Boosts default on. The server implements `account.updateBusiness*`, `account.getBusinessChatLinks`, `account.getAuthorizationForm`, and `premium.getBoostsStatus` / `premium.applyBoost` / `premium.getMyBoosts`, and `help.getAppConfig` does not send `tellomi_business_enabled`, `tellomi_passport_enabled`, or `tellomi_boosts_enabled`. A missing key is on. `false` still hides the row.
+
+Settings and search show Business only when `context.isPremium` is already true (the flag the server sets for `TELLOMI_PREMIUM_EVERYONE`). The screen is `PremiumIntroScreen` in business mode with `forceHasPremium` set from that flag. While `premiumEnabled` is false, that screen does not draw App Store plans, does not show the subscribe or upgrade button, does not open the subscribe demo, and `buy()` is not called. A non-premium account does not open it.
+
+Boost still applies a boost the account already has. If the account is not Premium and purchase is blocked, the prompt is an OK alert and does not push the Premium intro. If gifts are blocked, the "gift for more boosts" alert and the reassign-boost gift link do not open `makePremiumGiftController`. Passport is unchanged: it appears only when the account has secret values.
 
 Left off, with the server reason: `messages.getSponsoredMessages` returns an empty list (`sponsoredEmpty`), and `messages.summarizeText` returns empty text. Translation and AI compose stay off until the server sets `tellomi_translate_enabled` / `translations_manual_enabled` and `tellomi_ai_compose_enabled`. Premium purchase, Stars, gifts, wallet/TON, and Fragment stay off.
 
@@ -454,7 +458,12 @@ Left off, with the server reason: `messages.getSponsoredMessages` returns an emp
 | `submodules/WalletContext/Sources/WalletContext.swift` | `wallet_available` is not enough. `tellomi_wallet_enabled` must also be true. |
 | Chat composer, attachment panel, legacy input | The four `isAIEnabled = true` sites read `tellomi_ai_compose_enabled`. |
 | `TranslateUI` | `canTranslateText` / `canTranslateChats` return false unless `tellomi_translate_enabled`. That drops the translation header, including Cocoon. |
-| Settings, profiles, attach menu, chat input, search, deep links | Premium, Stars, gifts, wallet/TON, channel revenue, and AI summary rows and links stay omitted. Business, Passport, and Boosts follow the defaults above. Fragment auction, anonymous-number, and ads top-up URLs are not opened unless `tellomi_fragment_enabled`. |
+| Settings, profiles, attach menu, chat input, search, deep links | Premium, Stars, gifts, wallet/TON, channel revenue, and AI summary rows and links stay omitted. Business shows only for an account that is already Premium. Passport and Boosts follow the defaults above. Fragment auction, anonymous-number, and ads top-up URLs are not opened unless `tellomi_fragment_enabled`. |
+| `submodules/PremiumUI/Sources/PremiumIntroScreen.swift` | Business mode draws no plans, subscribe button, upgrade button, or subscribe demo while Premium purchase is blocked, and does not call `buy()`. |
+| `submodules/PremiumUI/Sources/PremiumBoostLevelsScreen.swift` | The Premium intro is not pushed when purchase is blocked. The gift screen is not pushed when gifts are blocked. |
+| `submodules/PremiumUI/Sources/ReplaceBoostScreen.swift` | The gift link does not open the gift screen when gifts are blocked. |
+| `submodules/TelegramUI/Sources/SharedAccountContext.swift` | `makeBusinessSetupScreen` sets `forceHasPremium` from `context.isPremium`. |
+| `PeerInfoSettingsItems.swift`, `PeerInfoScreenSettingsActions.swift`, `SettingsSearchableItems.swift` | The Business row and the two Business search rows require `isPremium`. |
 
 ## Welcome art and empty states
 

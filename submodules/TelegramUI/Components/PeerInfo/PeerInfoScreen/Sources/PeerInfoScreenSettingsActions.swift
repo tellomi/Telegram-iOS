@@ -325,6 +325,9 @@ extension PeerInfoScreenNode {
         case .powerSaving:
             push(energySavingSettingsScreen(context: self.context))
         case .businessSetup:
+            guard self.context.isPremium else {
+                return
+            }
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
                 return
             }

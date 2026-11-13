@@ -763,7 +763,10 @@ private func premiumSearchableItems(context: AccountContext) -> [SettingsSearcha
             icon: .business,
             breadcrumbs: [],
             present: { context, _, present in
-                present(.push, PremiumIntroScreen(context: context, mode: .business, source: .settings, modal: false))
+                guard context.isPremium else {
+                    return
+                }
+                present(.push, PremiumIntroScreen(context: context, mode: .business, source: .settings, modal: false, forceHasPremium: true))
             }
         )
     )
@@ -775,7 +778,10 @@ private func premiumSearchableItems(context: AccountContext) -> [SettingsSearcha
             icon: .business,
             breadcrumbs: [strings.Settings_Business],
             present: { context, _, present in
-                present(.push, PremiumIntroScreen(context: context, mode: .business, source: .settings, modal: false, focusOnItemTag: .doNotHideAds))
+                guard context.isPremium else {
+                    return
+                }
+                present(.push, PremiumIntroScreen(context: context, mode: .business, source: .settings, modal: false, forceHasPremium: true, focusOnItemTag: .doNotHideAds))
             }
         )
     )
@@ -4487,7 +4493,7 @@ func settingsSearchableItems(
                 return featureGate.premiumEnabled
             }
             if id.hasPrefix("business") {
-                return featureGate.businessEnabled
+                return featureGate.businessEnabled && context.isPremium
             }
             if id.hasPrefix("stars") {
                 return featureGate.starsEnabled
