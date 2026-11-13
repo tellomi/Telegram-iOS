@@ -199,11 +199,12 @@ static MTSocksProxySettings *makeWebProxy(void) {
     NSLock *lock = [[NSLock alloc] init];
     MTSignal *round = [self roundRecordingInto:starts lock:lock emitAfter:0];
 
-    // Expected starts at roughly 0, .05, .15, .35, .55, .75, .95, 1.15 s. A fixed 50 ms
-    // cadence would produce ~26 rounds in the same window.
+    // Expected starts at roughly 0, .05, .15, .35, .55, .75, .95, 1.15, 1.35, 1.55, 1.75 s.
+    // A loaded iOS 27 simulator recorded only 5 rounds in 1.3 s. Two seconds still
+    // reaches 6 rounds at that pace. A fixed 50 ms cadence would produce ~40 rounds.
     id<MTDisposable> disposable = [[MTDiscoverConnectionSignals repeatSignal:round withBackoffFrom:0.05 upTo:0.2 onQueue:[MTQueue concurrentDefaultQueue]] startWithNext:^(__unused id next) {
     }];
-    [NSThread sleepForTimeInterval:1.3];
+    [NSThread sleepForTimeInterval:2.0];
     [disposable dispose];
 
     [lock lock];
@@ -211,7 +212,7 @@ static MTSocksProxySettings *makeWebProxy(void) {
     [lock unlock];
 
     XCTAssertGreaterThanOrEqual(recorded.count, 6u);
-    XCTAssertLessThanOrEqual(recorded.count, 9u);
+    XCTAssertLessThanOrEqual(recorded.count, 14u);
 
     NSMutableArray<NSNumber *> *gaps = [[NSMutableArray alloc] init];
     for (NSUInteger i = 1; i < recorded.count; i++) {
