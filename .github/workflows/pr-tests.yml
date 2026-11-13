@@ -36,6 +36,7 @@ jobs:
         run: |
           python3 Tellomi/check_server_config.py --seeds
           python3 Tellomi/test_server_config.py
+          python3 Tellomi/test_siri_entitlements.py
 
   test:
     runs-on: xcode-27

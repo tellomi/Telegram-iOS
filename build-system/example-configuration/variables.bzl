@@ -13,6 +13,7 @@ telegram_premium_iap_product_id = "app.tellomi.chat.premium.monthly"
 telegram_aps_environment = "production"
 telegram_communication_notifications = True
 telegram_enable_siri = False
+telegram_siri_extension_entitlement = False
 telegram_enable_icloud = False
 telegram_enable_watch = True
 telegram_suffix_share = ".Share"
