@@ -111,16 +111,7 @@ public func tellomiNoteAppliedPack(_ strings: PresentationStrings) {
     let _ = tellomiAppliedPack.swap((strings.primaryComponent.languageCode, strings))
 }
 
-func tellomiAppliedPackStrings(matching languageCode: String) -> PresentationStrings? {
-    return tellomiAppliedPack.with { noted in
-        guard let noted, tellomiLanguageCodesMatch(noted.code, languageCode) else {
-            return nil
-        }
-        return noted.strings
-    }
-}
-
-func tellomiPresentationStrings(_ settings: LocalizationSettings) -> PresentationStrings {
+private func tellomiPresentationStrings(_ settings: LocalizationSettings) -> PresentationStrings {
     let primary = settings.primaryComponent
     return PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: primary.languageCode, localizedName: primary.localizedName, pluralizationRulesCode: primary.customPluralizationCode, dict: dictFromLocalization(primary.localization)), secondaryComponent: settings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: "")
 }
@@ -321,5 +312,27 @@ public func tellomiBuiltinInterfaceLanguages() -> [LocalizationInfo] {
     return tellomiBundledLanguageOrder.map { item in
         let native = tellomiBundledLanguageNames[item.code] ?? item.english
         return LocalizationInfo(languageCode: item.code, baseLanguageCode: item.code == "en" ? nil : "en", customPluralizationCode: item.plural, title: item.english, localizedTitle: native, isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: "")
+    }
+}
+
+/// Settings rows for the login email and for linking a phone. Not the login screen.
+public func tellomiAccountLabels(languageCode: String) -> (email: String, bindPhone: String, bindAction: String, bindEmail: String) {
+    let copy = tellomiBindAccountCopy(languageCode: languageCode)
+    return (copy.email, copy.bindPhone, copy.bindAction, copy.bindEmail)
+}
+
+public func tellomiBindPhoneCopy(languageCode: String) -> (title: String, notice: String, action: String) {
+    let copy = tellomiBindAccountCopy(languageCode: languageCode)
+    return (copy.bindPhone, copy.bindPhoneNotice, copy.bindAction)
+}
+
+private func tellomiBindAccountCopy(languageCode: String) -> (email: String, bindPhone: String, bindPhoneNotice: String, bindAction: String, bindEmail: String) {
+    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
+    case .hant:
+        return ("郵箱", "綁定手機號", "綁定後可使用手機號登入", "綁定", "綁定郵箱")
+    case .hans:
+        return ("邮箱", "绑定手机号", "绑定后可使用手机号登录", "绑定", "绑定邮箱")
+    case .english:
+        return ("Email", "Link a phone number", "You can sign in with this number after linking it.", "Link", "Link an email")
     }
 }

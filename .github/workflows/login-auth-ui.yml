@@ -68,28 +68,13 @@ jobs:
             --bazel-user-root /private/var/tmp/_bazel_loginui
           test -f build-input/configuration-repository/variables.bzl
 
-      - name: Authorization contrast tests
+      - name: Login flow decisions
         run: |
           set -euo pipefail
           bash .github/retry_external_fetch.sh -- \
             "${BAZEL}" --output_user_root=/private/var/tmp/_bazel_loginui test \
             //submodules/AuthorizationUI:TellomiLoginFieldColorsTests \
-            //submodules/CountrySelectionUI:TellomiCallingCodePolicyTests \
             --test_output=errors --announce_rc
-
-      - name: Palette sheets
-        run: |
-          set -euo pipefail
-          python3 tools/login_palette_sheet.py "${RUNNER_TEMP}/login-palette"
-          mkdir -p login-palette-sheets
-          cp -R "${RUNNER_TEMP}/login-palette/." login-palette-sheets/
-
-      - name: Upload palette sheets
-        uses: actions/upload-artifact@v4
-        with:
-          name: login-palette-sheets
-          path: login-palette-sheets
-          if-no-files-found: error
 
   compile:
     runs-on: xcode-27

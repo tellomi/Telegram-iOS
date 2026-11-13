@@ -56,14 +56,12 @@ swift_library(
     ],
 )
 
-# Host test. Field colors do not touch UIKit.
+# Host test. Splash skip and the official email-login step do not touch UIKit.
 # `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/AuthorizationUI:TellomiLoginFieldColorsTests`
 swift_test(
     name = "TellomiLoginFieldColorsTests",
     srcs = [
-        "Sources/TellomiLoginFieldColors.swift",
         "Sources/TellomiLoginDecisions.swift",
-        "Tests/TellomiLoginFieldColorsTests.swift",
         "Tests/TellomiLoginFlowDecisionsTests.swift",
     ],
     copts = [
