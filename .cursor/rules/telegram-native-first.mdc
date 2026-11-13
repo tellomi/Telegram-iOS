@@ -1,0 +1,28 @@
+---
+description: 永久开发规范（Telegram Native-First）：先读原版、优先复用、能不改原版就不改
+alwaysApply: true
+---
+
+正文以本仓根目录 `AGENTS.md`「永久开发规范」为准（仓库内权威版本）。下面的检查清单必须在开工前回答，并写入 PR 描述。本文件与 `AGENTS.md` 该节保持一致，不要在这里写另一套规则。
+
+## 开工前检查清单（必须写入 PR 描述）
+
+1. 原版有没有类似功能？在哪个模块和文件？准备复用什么？
+2. 为什么原版不够用？（若够用，如何复用，是否没有新写平行实现？）
+3. 服务端能不能解决？若能，为什么还要改客户端？
+4. 本次改了哪些 Telegram 原版文件？未改则写「未改原版」。
+5. 新文件或缓存是否接入了原有存储与自动清理？有没有把大资源打进安装包？
+6. 测试是什么？确认不是桩代码，也不是假 200。
+
+
+## 本仓（iOS）对照入口
+
+下列路径已在本仓树中核实，不要编造新的模块名。增加功能时从这里读起：
+
+- 查看图片和视频：`submodules/GalleryUI`（如 `Sources/GalleryController.swift`、`Sources/Items/ChatImageGalleryItem.swift`）。动态里看图应复用这套 Gallery，而不是另写查看器。
+- 资料页与媒体标签：`submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoData.swift`（`peerInfoAvailableMediaPanes`），以及同目录的 `PeerInfoScreen.swift`、`Panes/`。原生规则是有数据才出现对应标签。
+- 快拍入口：`.../PeerInfoScreen/Sources/PeerInfoScreenOpenStories.swift`。中文必须叫「快拍」，不要与「动态」合并。
+- 媒体缓存与自动清理：`submodules/Postbox/Sources/MediaBox.swift`（及相关 `MediaBoxFile*.swift`）。新下载必须走 MediaBox，禁止自建不受管目录。
+- 动态扩展代码在 `submodules/TelegramUI/Components/Moments/`。注意：这条目录在 `release/ios` 发布线上；当前 `master` 可能没有 Moments 源码，改资料页动态不要只在缺该目录的 `master` 上开工。
+- 原版改动登记：`Tellomi/UPSTREAM_PATCHES.md`。
+- 合入 `release/ios` 会触发 TestFlight，必须攒批、独立复审 PASS、CI 绿后再合，并立刻汇报构建号。本规范的文档 PR 只打到 `master`，不要打到 `release/ios`。
