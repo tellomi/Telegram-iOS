@@ -938,6 +938,8 @@ Shippable seeds match Android #142. Datacenters 1 and 2 each dial `8.137.198.240
 
 `chooseTransportScheme` keeps the last address when nothing has failed, so `TellomiSeedAddressSets` writes hosts and ports in reverse. Every seed address is `thisPortOnly`, so discovery does not open another port on those addresses. The old extra discovery port is no longer probed for any address; port 80 remains for an address that is not `thisPortOnly`. A non-empty `help.getConfig` list still replaces the seed and is dialed in the order it was saved. `seed_address_a_record` is the relay, and it is not a separate dial entry. Login still defaults to +86. The welcome carousel stays skipped (`tellomiSkipsWelcomeSplash`).
 
+`MTDiscoverConnectionSignalsTests` still names port 5222. A locked address must not gain it, and a non-seed media address may use it as its own declared port. An unlocked address's alternate list in that test is port 80 only. The seed checker reads the sources and docs that ship, and it does not read a `Tests` directory.
+
 | File | Change |
 | --- | --- |
 | `Tellomi/tellomi-server.json` | Both environments seed DC 1 and DC 2 with the relay, then `api.tellomi.cn`. Ports are 10443 then 443. |
@@ -945,7 +947,8 @@ Shippable seeds match Android #142. Datacenters 1 and 2 each dial `8.137.198.240
 | `submodules/MtProtoKit/Sources/MTDatacenterAddress.m` | `thisPortOnly` keeps discovery on the declared port. |
 | `submodules/MtProtoKit/Sources/MTDiscoverConnectionSignals.m` | Skips extra ports when `thisPortOnly` is set. The only alternate port left is 80. |
 | `submodules/TelegramCore/Sources/Network/Network.swift` | Installs `TellomiSeedAddressSets`. |
-| `Tellomi/check_server_config.py`, `Tellomi/test_server_config.py` | Requires the eight endpoints and rejects the retired dial literals, including the negative cases. |
+| `Tellomi/check_server_config.py`, `Tellomi/test_server_config.py` | Requires the eight endpoints and rejects the retired dial literals, including the negative cases. The scan is the shipped sources and docs, not `Tests`. |
+| `submodules/MtProtoKit/Tests/MTDiscoverConnectionSignalsTests.m` | A locked address gains no extra port. An unlocked address probes 80 only. A media address that declares port 5222 stays on that port. |
 
 ## DC addresses from help.getConfig (M7 / D-33)
 
