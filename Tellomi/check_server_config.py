@@ -180,6 +180,9 @@ EXPECTED_DIAL = [
     for port in SEED_PORTS
 ]
 # Files that decide what this client dials, plus the docs that describe that list.
+# Unit tests are not listed. MTDiscoverConnectionSignalsTests names port 5222
+# to assert a locked address does not gain it, and uses 5222 as the declared
+# port of a non-seed media address. Those files are not linked into the app.
 DIAL_SURFACE_PATHS = (
     "Tellomi/tellomi-server.json",
     "submodules/MtProtoKit/Sources/TellomiServerConfigJSON.h",
@@ -187,7 +190,6 @@ DIAL_SURFACE_PATHS = (
     "submodules/MtProtoKit/PublicHeaders/MtProtoKit/TellomiServerConfig.h",
     "submodules/TelegramCore/Sources/Network/Network.swift",
     "submodules/MtProtoKit/Sources/MTDiscoverConnectionSignals.m",
-    "submodules/MtProtoKit/Tests/MTDiscoverConnectionSignalsTests.m",
     "docs/TELLOMI.md",
     "docs/dc-addresses.md",
 )
@@ -335,14 +337,35 @@ def check_seed_implementation() -> None:
         fail("Network.swift is not installing Tellomi seed address sets")
 
 
+def is_test_path(relative: str) -> bool:
+    """A unit test. It is not linked into the app, so it may name a retired port."""
+    return "Tests" in pathlib.PurePosixPath(relative).parts
+
+
+def dial_surface_failures(texts: dict[str, str]) -> list[str]:
+    """Forbidden dial tokens in sources that ship. Test paths are ignored."""
+    failures = []
+    for relative, text in texts.items():
+        if is_test_path(relative):
+            continue
+        hits = forbidden_dial_hits(text)
+        if hits:
+            failures.append(f"{relative} contains forbidden dial token(s): " + ", ".join(hits))
+    return failures
+
+
 def check_dial_surfaces() -> None:
+    texts = {}
     for relative in DIAL_SURFACE_PATHS:
+        if is_test_path(relative):
+            continue
         path = ROOT / relative
         if not path.is_file():
             fail(f"missing dial surface {relative}")
-        hits = forbidden_dial_hits(path.read_text(encoding="utf-8"))
-        if hits:
-            fail(f"{relative} contains forbidden dial token(s): " + ", ".join(hits))
+        texts[relative] = path.read_text(encoding="utf-8")
+    failures = dial_surface_failures(texts)
+    if failures:
+        fail(failures[0])
 
 
 def check_keys(config: dict) -> None:

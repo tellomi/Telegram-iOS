@@ -58,6 +58,7 @@ load(
     "telegram_team_id",
     "telegram_enable_icloud",
     "telegram_enable_siri",
+    "telegram_app_specific_url_scheme",
 )
 
 load("@build_bazel_rules_apple//apple:resources.bzl",
@@ -473,6 +474,21 @@ plist_fragment(
     defaults = {"buildNumber": "1"},
 )
 
+# telegram, tg, tonsite, ton and tc are always registered. The app-specific
+# scheme is telegram_app_specific_url_scheme from the build configuration.
+# Official Telegram sets that to tg, already in the list, so that bundle's
+# generated URL types stay as they are.
+app_specific_url_scheme_entry = "" if telegram_app_specific_url_scheme in [
+    "",
+    "telegram",
+    "tg",
+    "tonsite",
+    "ton",
+    "tc",
+] else "                <string>{scheme}</string>\n".format(
+    scheme = telegram_app_specific_url_scheme,
+)
+
 plist_fragment(
     name = "UrlTypesInfoPlist",
     extension = "plist",
@@ -501,11 +517,12 @@ plist_fragment(
                 <string>tonsite</string>
                 <string>ton</string>
                 <string>tc</string>
-            </array>
+{app_specific_url_scheme_entry}            </array>
         </dict>
     </array>
     """.format(
         telegram_bundle_id = telegram_bundle_id,
+        app_specific_url_scheme_entry = app_specific_url_scheme_entry,
     )
 )
 
@@ -583,7 +600,13 @@ icloud_fragment = "" if not telegram_enable_icloud else """
     telegram_icloud_environment="Production" if telegram_aps_environment == "production" else "Development"
 )
 
-associated_domains_fragment = "" if telegram_bundle_id not in official_bundle_ids else """
+# Official Telegram ids keep every host below. app.tellomi.chat is not one
+# of those ids, so it gets its own fragment: applinks:tell.cc and
+# webcredentials:tell.cc. No *.tell.cc entry. www.tell.cc redirects its
+# association file to the apex, Apple does not follow that redirect, and
+# the app does not use subdomains. The host is written here, as the other
+# hosts are: the configuration file has no link-host field.
+official_associated_domains_fragment = """
 <key>com.apple.developer.associated-domains</key>
 <array>
     <string>applinks:tell.cc</string>
@@ -595,6 +618,16 @@ associated_domains_fragment = "" if telegram_bundle_id not in official_bundle_id
     <string>webcredentials:telegram.org</string>
 </array>
 """
+
+tellomi_associated_domains_fragment = """
+<key>com.apple.developer.associated-domains</key>
+<array>
+    <string>applinks:tell.cc</string>
+    <string>webcredentials:tell.cc</string>
+</array>
+"""
+
+associated_domains_fragment = official_associated_domains_fragment if telegram_bundle_id in official_bundle_ids else (tellomi_associated_domains_fragment if telegram_bundle_id == "app.tellomi.chat" else "")
 
 siri_fragment = "" if not telegram_enable_siri else """
 <key>com.apple.developer.siri</key>

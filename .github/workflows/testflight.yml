@@ -163,6 +163,7 @@ jobs:
             --path "${RUNNER_TEMP}/tellomi-signing/certs"
 
       - name: Build release IPA
+        id: ipa
         run: |
           set -euo pipefail
           python3 -u build-system/Make/Make.py \
@@ -196,9 +197,13 @@ jobs:
 
       # Still runs when altool fails, so the symbols for that IPA are kept.
       # It does not decide whether the IPA was signed or uploaded.
+      # Skipped when the IPA step did not succeed. BUILD_NUMBER is written only
+      # after signing preparation, and this step uses set -u, so an earlier
+      # failure would otherwise report an unset BUILD_NUMBER. The upload below
+      # runs only when this step succeeds, so a skip does not upload an empty artifact.
       - name: Collect dSYMs
         id: dsyms
-        if: always()
+        if: always() && steps.ipa.outcome == 'success'
         run: |
           set -euo pipefail
           python3 Tellomi/collect_dsyms.py \
