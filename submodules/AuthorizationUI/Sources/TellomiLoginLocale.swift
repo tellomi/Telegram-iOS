@@ -7,57 +7,18 @@ import TelegramPresentationData
 /// Reinstalling the app clears this key together with the saved langpack.
 public let tellomiSystemLangPackDefaultsKey = "TellomiDidApplySystemLangPack"
 
-/// Written by the login language button and by Settings ▸ Language.
-public let tellomiPreferredInterfaceLanguageKey = "TellomiPreferredInterfaceLanguage"
-
-/// Server langpack for a built-in Chinese localization. Nil for English and every other language.
-/// `zh-Hans-US` and `zh-Hans-CN` are `zh-Hans`. `zh-Hant-TW` and `zh-Hant-HK` are `zh-Hant`.
-public func tellomiLangPackCode(preferredLanguages: [String]) -> String? {
-    let resolved = tellomiResolvedBuiltinLanguage(preferredLanguages: preferredLanguages, explicitChoice: nil)
-    return resolved == "en" ? nil : resolved
+/// The system language list, not the list filtered by the app's `en.lproj`.
+/// An English-only bundle makes `Locale.preferredLanguages` report `en` on a Chinese phone.
+public func tellomiDevicePreferredLanguages() -> [String] {
+    if let global = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String], !global.isEmpty {
+        return global
+    }
+    return Locale.preferredLanguages
 }
 
 /// Server langpack for a Chinese system language. Nil for every other language.
 public func tellomiSystemLangPackCode() -> String? {
     return tellomiLangPackCode(preferredLanguages: tellomiDevicePreferredLanguages())
-}
-
-/// `FLOOD_WAIT_N` as a sentence. A pack that already translated `Login.CodeFloodWait` wins.
-/// Simplified and Traditional stay in this client when the pack is still the English string.
-public func tellomiLocalizedLoginFloodWait(seconds: Int32?, strings: PresentationStrings) -> String {
-    guard let seconds, seconds > 0 else {
-        return tellomiLocalizedLoginFloodFallback(strings: strings)
-    }
-    let count = String(seconds)
-    let pack = strings.Login_CodeFloodWait(count).string
-    let english = "Try again in \(count) seconds."
-    if pack != english && !pack.isEmpty && pack != "Login.CodeFloodWait" {
-        return pack
-    }
-    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: strings.primaryComponent.languageCode)) {
-    case .hans:
-        return "请在 \(count) 秒后重试。"
-    case .hant:
-        return "請在 \(count) 秒後再試。"
-    case .english:
-        return english
-    }
-}
-
-private func tellomiLocalizedLoginFloodFallback(strings: PresentationStrings) -> String {
-    let pack = strings.Login_CodeFloodError
-    let english = "Too many attempts, please try again later."
-    if pack != english && !pack.isEmpty {
-        return pack
-    }
-    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: strings.primaryComponent.languageCode)) {
-    case .hans:
-        return "尝试次数过多，请稍后再试。"
-    case .hant:
-        return "嘗試次數過多，請稍後再試。"
-    case .english:
-        return english
-    }
 }
 
 public func tellomiMarkSystemLangPackApplied() {
@@ -66,6 +27,7 @@ public func tellomiMarkSystemLangPackApplied() {
 
 /// Written by the login language button and by Settings ▸ Language. Login chrome reads this
 /// before the saved pack, so a pre-login choice applies with no network and survives restart.
+public let tellomiPreferredInterfaceLanguageKey = "TellomiPreferredInterfaceLanguage"
 
 public enum TellomiLoginScript: Equatable {
     case hans
@@ -149,16 +111,7 @@ public func tellomiNoteAppliedPack(_ strings: PresentationStrings) {
     let _ = tellomiAppliedPack.swap((strings.primaryComponent.languageCode, strings))
 }
 
-func tellomiAppliedPackStrings(matching languageCode: String) -> PresentationStrings? {
-    return tellomiAppliedPack.with { noted in
-        guard let noted, tellomiLanguageCodesMatch(noted.code, languageCode) else {
-            return nil
-        }
-        return noted.strings
-    }
-}
-
-func tellomiPresentationStrings(_ settings: LocalizationSettings) -> PresentationStrings {
+private func tellomiPresentationStrings(_ settings: LocalizationSettings) -> PresentationStrings {
     let primary = settings.primaryComponent
     return PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: primary.languageCode, localizedName: primary.localizedName, pluralizationRulesCode: primary.customPluralizationCode, dict: dictFromLocalization(primary.localization)), secondaryComponent: settings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: "")
 }
@@ -359,5 +312,27 @@ public func tellomiBuiltinInterfaceLanguages() -> [LocalizationInfo] {
     return tellomiBundledLanguageOrder.map { item in
         let native = tellomiBundledLanguageNames[item.code] ?? item.english
         return LocalizationInfo(languageCode: item.code, baseLanguageCode: item.code == "en" ? nil : "en", customPluralizationCode: item.plural, title: item.english, localizedTitle: native, isOfficial: true, totalStringCount: 0, translatedStringCount: 0, platformUrl: "")
+    }
+}
+
+/// Settings rows for the login email and for linking a phone. Not the login screen.
+public func tellomiAccountLabels(languageCode: String) -> (email: String, bindPhone: String, bindAction: String, bindEmail: String) {
+    let copy = tellomiBindAccountCopy(languageCode: languageCode)
+    return (copy.email, copy.bindPhone, copy.bindAction, copy.bindEmail)
+}
+
+public func tellomiBindPhoneCopy(languageCode: String) -> (title: String, notice: String, action: String) {
+    let copy = tellomiBindAccountCopy(languageCode: languageCode)
+    return (copy.bindPhone, copy.bindPhoneNotice, copy.bindAction)
+}
+
+private func tellomiBindAccountCopy(languageCode: String) -> (email: String, bindPhone: String, bindPhoneNotice: String, bindAction: String, bindEmail: String) {
+    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
+    case .hant:
+        return ("郵箱", "綁定手機號", "綁定後可使用手機號登入", "綁定", "綁定郵箱")
+    case .hans:
+        return ("邮箱", "绑定手机号", "绑定后可使用手机号登录", "绑定", "绑定邮箱")
+    case .english:
+        return ("Email", "Link a phone number", "You can sign in with this number after linking it.", "Link", "Link an email")
     }
 }

@@ -64,13 +64,6 @@
 
 - (instancetype)initWithBackgroundColor:(UIColor *)backgroundColor primaryColor:(UIColor *)primaryColor buttonColor:(UIColor *)buttonColor accentColor:(UIColor *)accentColor regularDotColor:(UIColor *)regularDotColor highlightedDotColor:(UIColor *)highlightedDotColor suggestedLocalizationSignal:(SSignal *)suggestedLocalizationSignal;
 
-/// Same colors as the initializer. Safe before and after the view loads. The OpenGL clear color is reapplied.
-- (void)updateAppearanceBackgroundColor:(UIColor *)backgroundColor primaryColor:(UIColor *)primaryColor buttonColor:(UIColor *)buttonColor accentColor:(UIColor *)accentColor regularDotColor:(UIColor *)regularDotColor highlightedDotColor:(UIColor *)highlightedDotColor;
-
-/// Replaces the six tour pages. Call before the view loads, or after: loaded pages are updated in place.
-/// `headlines` and `descriptions` are already in display order (six each). Descriptions may contain `**bold**`.
-- (void)setIntroHeadlines:(NSArray<NSString *> *)headlines descriptions:(NSArray<NSString *> *)descriptions;
-
 @property (nonatomic, copy) void (^startMessaging)(void);
 @property (nonatomic, copy) void (^startMessagingInAlternativeLanguage)(NSString *);
 
@@ -78,7 +71,6 @@
 
 - (UIView *)createAnimationSnapshot;
 - (UIView *)createTextSnapshot;
-- (void)tellomiSuppressLivePages;
 
 - (void)animateIn;
 

@@ -31,14 +31,3 @@ swift_library(
         "//visibility:public",
     ],
 )
-
-swift_test(
-    name = "TellomiCallingCodePolicyTests",
-    srcs = [
-        "Sources/TellomiCallingCodePolicy.swift",
-        "Tests/TellomiCallingCodePolicyTests.swift",
-    ],
-    copts = [
-        "-warnings-as-errors",
-    ],
-)

@@ -18,9 +18,6 @@ private func tellomiCountryListKey(locale: Locale?, countries: [Country]) -> Str
     hasher.combine(countries.count)
     hasher.combine(countries.first?.id ?? "")
     hasher.combine(countries.last?.id ?? "")
-    for code in TellomiCallingCodePolicy.allowedCallingCodes.sorted() {
-        hasher.combine(code)
-    }
     return String(hasher.finalize())
 }
 
@@ -30,9 +27,9 @@ func tellomiCachedCountryList(locale: Locale?) -> TellomiCountryListSnapshot? {
     return tellomiCountryListCache.with { $0[key] }
 }
 
-/// Builds the picker off the main thread and keeps it. The phone screen calls this
-/// when it appears, so the tap reads the cache. `CFStringTransform` to pinyin for a
-/// Chinese index, done while the controller is being pushed, was the multi-second stall.
+/// Builds the picker off the main thread and keeps it. A caller can warm the cache
+/// before the tap. `CFStringTransform` to pinyin for a Chinese index, done while the
+/// controller is being pushed, was the multi-second stall. Every country code is listed.
 public func tellomiWarmCountryList(strings: PresentationStrings, locale: Locale?) {
     let countries = AuthorizationSequenceCountrySelectionController.countries()
     let key = tellomiCountryListKey(locale: locale, countries: countries)
@@ -80,7 +77,7 @@ func tellomiCountryNamesAndCodes(countries: [Country], locale: Locale) -> [((Str
         if let englishCountryName = usEnglishLocale.localizedString(forRegionCode: country.id), let countryName = locale.localizedString(forRegionCode: country.id) {
             var codes: [Int] = []
             for codeValue in country.countryCodes {
-                if let code = Int(codeValue.code), TellomiCallingCodePolicy.allows(Int32(code)) {
+                if let code = Int(codeValue.code) {
                     codes.append(code)
                 }
             }
