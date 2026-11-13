@@ -373,7 +373,11 @@ static const int kClosedSocket = -1;
 
     CFTypeRef heldRead = TellomiRetainSocketStream((CFTypeRef)readStream);
     CFTypeRef heldWrite = TellomiRetainSocketStream((CFTypeRef)writeStream);
-    CFTypeRef held = heldRead != NULL ? heldRead : heldWrite;
+    // The retain is the stream pointer close already owns, not an object
+    // found by scanning. arm64e runs this same CFRetain.
+    XCTAssertEqual(heldRead, (CFTypeRef)readStream);
+    XCTAssertEqual(heldWrite, (CFTypeRef)writeStream);
+    CFTypeRef held = heldRead;
     XCTAssertTrue(held != NULL);
 
     CFReadStreamClose(readStream);
@@ -401,6 +405,32 @@ static int gForeignReleaseCalls = 0;
 static void TellomiForeignRelease(const void *info) {
     gForeignReleaseCalls += 1;
     (void)info;
+}
+
+- (void)testStreamRetainIsTheStreamItselfOnEveryArchitecture {
+    int fds[2] = {-1, -1};
+    XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
+    CFReadStreamRef readStream = NULL;
+    CFWriteStreamRef writeStream = NULL;
+    CFStreamCreatePairWithSocket(kCFAllocatorDefault, fds[0], &readStream, &writeStream);
+    XCTAssertTrue(readStream != NULL && writeStream != NULL);
+    CFIndex before = CFGetRetainCount(readStream);
+    int deferredBefore = TellomiDeferredCFSocketReleaseCount();
+
+    CFTypeRef held = TellomiRetainSocketStream((CFTypeRef)readStream);
+
+    XCTAssertEqual(held, (CFTypeRef)readStream);
+    XCTAssertEqual(CFGetRetainCount(readStream), before + 1);
+    XCTAssertEqual(TellomiDeferredCFSocketReleaseCount(), deferredBefore + 1);
+    XCTAssertTrue(TellomiRetainSocketStream(NULL) == NULL);
+
+    TellomiReleaseSocketStreamLater(held);
+    TellomiFlushDeferredCFSocketReleases();
+    XCTAssertEqual(CFGetRetainCount(readStream), before);
+    CFRelease(readStream);
+    CFRelease(writeStream);
+    XCTAssertEqual(close(fds[0]), 0);
+    XCTAssertEqual(close(fds[1]), 0);
 }
 
 - (void)testForeignReleaseIsNotCalledAndDoesNotDropARetain {
