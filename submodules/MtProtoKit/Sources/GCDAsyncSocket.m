@@ -2708,11 +2708,11 @@ enum GCDAsyncSocketConfig
 	// A second closeWithError on this stack must not close the file
 	// descriptor again. The stream callbacks dispatch_async onto this queue
 	// before calling closeWithError, so they are not the build 90 abort.
-	// That abort is ~SocketStream inside CFSocketInvalidate. The streams
-	// we already own are CFRetained across CFStreamClose, on arm64 and
-	// arm64e, so that CFRelease cannot run the destructor while the lock
-	// is held. flags is cleared at the end of a finished close, so a later
-	// disconnect can close again.
+	// That abort is ~SocketStream inside CFSocketInvalidate. The SocketStream
+	// in the CFSocket context, not the CFReadStream wrapper, is CFRetained
+	// across CFStreamClose on arm64 and arm64e, so that CFRelease cannot
+	// run the destructor while the lock is held. flags is cleared at the
+	// end of a finished close, so a later disconnect can close again.
 	int closing = (flags & kClosingWithError) ? 1 : 0;
 	int streamOps[8];
 	int streamOpCount = 0;

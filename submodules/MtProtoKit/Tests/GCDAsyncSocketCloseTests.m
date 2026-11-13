@@ -371,12 +371,16 @@ static const int kClosedSocket = -1;
     XCTAssertTrue(CFReadStreamOpen(readStream));
     XCTAssertTrue(CFWriteStreamOpen(writeStream));
 
+    CFTypeRef readInfo = TellomiSocketStreamContextInfo((CFTypeRef)readStream);
+    CFTypeRef writeInfo = TellomiSocketStreamContextInfo((CFTypeRef)writeStream);
+    XCTAssertTrue(readInfo != NULL && writeInfo != NULL);
     CFTypeRef heldRead = TellomiRetainSocketStream((CFTypeRef)readStream);
     CFTypeRef heldWrite = TellomiRetainSocketStream((CFTypeRef)writeStream);
-    // The retain is the stream pointer close already owns, not an object
-    // found by scanning. arm64e runs this same CFRetain.
-    XCTAssertEqual(heldRead, (CFTypeRef)readStream);
-    XCTAssertEqual(heldWrite, (CFTypeRef)writeStream);
+    // Retaining the CFReadStream wrapper does not touch context.info.
+    // The old close path failed this: held was the wrapper, not info.
+    XCTAssertEqual(heldRead, readInfo);
+    XCTAssertEqual(heldWrite, writeInfo);
+    XCTAssertTrue(heldRead != (CFTypeRef)readStream);
     CFTypeRef held = heldRead;
     XCTAssertTrue(held != NULL);
 
@@ -407,28 +411,45 @@ static void TellomiForeignRelease(const void *info) {
     (void)info;
 }
 
-- (void)testStreamRetainIsTheStreamItselfOnEveryArchitecture {
+- (void)testCloseRetainsTheSocketContextInfoNotTheStreamWrapper {
     int fds[2] = {-1, -1};
     XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
     CFReadStreamRef readStream = NULL;
     CFWriteStreamRef writeStream = NULL;
     CFStreamCreatePairWithSocket(kCFAllocatorDefault, fds[0], &readStream, &writeStream);
     XCTAssertTrue(readStream != NULL && writeStream != NULL);
-    CFIndex before = CFGetRetainCount(readStream);
+    CFReadStreamSetProperty(readStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
+    CFWriteStreamSetProperty(writeStream, kCFStreamPropertyShouldCloseNativeSocket, kCFBooleanFalse);
+    XCTAssertTrue(CFReadStreamOpen(readStream));
+    XCTAssertTrue(CFWriteStreamOpen(writeStream));
+
+    CFTypeRef info = TellomiSocketStreamContextInfo((CFTypeRef)readStream);
+    XCTAssertTrue(info != NULL, @"the stream's CFSocket context must be visible");
+    XCTAssertTrue(info != (CFTypeRef)readStream);
+    XCTAssertTrue(info != (CFTypeRef)writeStream);
+    CFIndex infoBefore = CFGetRetainCount(info);
+    CFIndex streamBefore = CFGetRetainCount(readStream);
     int deferredBefore = TellomiDeferredCFSocketReleaseCount();
 
     CFTypeRef held = TellomiRetainSocketStream((CFTypeRef)readStream);
 
-    XCTAssertEqual(held, (CFTypeRef)readStream);
-    XCTAssertEqual(CFGetRetainCount(readStream), before + 1);
+    XCTAssertEqual(held, info);
+    XCTAssertEqual(CFGetRetainCount(info), infoBefore + 1);
+    XCTAssertEqual(CFGetRetainCount(readStream), streamBefore);
     XCTAssertEqual(TellomiDeferredCFSocketReleaseCount(), deferredBefore + 1);
     XCTAssertTrue(TellomiRetainSocketStream(NULL) == NULL);
 
-    TellomiReleaseSocketStreamLater(held);
-    TellomiFlushDeferredCFSocketReleases();
-    XCTAssertEqual(CFGetRetainCount(readStream), before);
+    CFReadStreamClose(readStream);
+    CFWriteStreamClose(writeStream);
+    // Invalidate's CFRelease ran inside the close. info is still alive
+    // only because of the extra retain. Releasing the wrappers must not
+    // be what keeps it alive.
     CFRelease(readStream);
     CFRelease(writeStream);
+    XCTAssertGreaterThanOrEqual(CFGetRetainCount(info), 1);
+
+    TellomiReleaseSocketStreamLater(held);
+    TellomiFlushDeferredCFSocketReleases();
     XCTAssertEqual(close(fds[0]), 0);
     XCTAssertEqual(close(fds[1]), 0);
 }
