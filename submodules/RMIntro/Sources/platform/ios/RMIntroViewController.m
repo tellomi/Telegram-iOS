@@ -159,24 +159,6 @@ typedef enum {
             }
         }
         _englishStrings = englishStrings;
-        NSString *preferredLanguage = [NSLocale preferredLanguages].firstObject.lowercaseString;
-        if (preferredLanguage.length == 0 || [preferredLanguage hasPrefix:@"zh"]) {
-            _englishStrings = @{
-                @"Tour.Title1": @"Tellomi",
-                @"Tour.Text1": @"全球最快的通讯应用。\n**免费**且**安全**。",
-                @"Tour.Title2": @"极速",
-                @"Tour.Text2": @"**Tellomi** 传递消息\n比其他应用更快。",
-                @"Tour.Title3": @"强大",
-                @"Tour.Text3": @"**Tellomi** 对媒体和聊天\n大小没有限制。",
-                @"Tour.Title4": @"安全",
-                @"Tour.Text4": @"**Tellomi** 保护你的消息\n免受攻击。",
-                @"Tour.Title5": @"云端",
-                @"Tour.Text5": @"**Tellomi** 让你在多台设备上\n访问消息。",
-                @"Tour.Title6": @"免费",
-                @"Tour.Text6": @"**Tellomi** 为聊天和媒体\n提供免费的云存储。",
-                @"Tour.StartButton": @"开始聊天"
-            };
-        }
         
         _headlines = @[ _englishStrings[@"Tour.Title1"], _englishStrings[@"Tour.Title2"],  _englishStrings[@"Tour.Title6"], _englishStrings[@"Tour.Title3"], _englishStrings[@"Tour.Title4"], _englishStrings[@"Tour.Title5"]];
         _descriptions = @[_englishStrings[@"Tour.Text1"], _englishStrings[@"Tour.Text2"],  _englishStrings[@"Tour.Text6"], _englishStrings[@"Tour.Text3"], _englishStrings[@"Tour.Text4"], _englishStrings[@"Tour.Text5"]];
@@ -266,9 +248,7 @@ typedef enum {
     
     _glkView.transform = CGAffineTransformMakeScale(0.66, 0.66);
         
-    // Damping must stay in 0...1. 1.2 dropped the spring, then a later layout
-    // played the headline a second time over the login form.
-    [UIView animateWithDuration:0.65 delay:0.15 usingSpringWithDamping:0.9f initialSpringVelocity:0.0 options:kNilOptions animations:^{
+    [UIView animateWithDuration:0.65 delay:0.15 usingSpringWithDamping:1.2f initialSpringVelocity:0.0 options:kNilOptions animations:^{
         _glkView.center = logoTargetPosition;
         firstPage.headerLabel.center = headerTargetPosition;
         firstPage.descriptionLabel.center = descriptionTargetPosition;
@@ -343,44 +323,6 @@ typedef enum {
     [_glkView removeFromSuperview];
     _glkView = nil;
     _isOpenGLLoaded = false;
-}
-
-- (void)updateAppearanceBackgroundColor:(UIColor *)backgroundColor primaryColor:(UIColor *)primaryColor buttonColor:(UIColor *)buttonColor accentColor:(UIColor *)accentColor regularDotColor:(UIColor *)regularDotColor highlightedDotColor:(UIColor *)highlightedDotColor
-{
-    _backgroundColor = backgroundColor;
-    _primaryColor = primaryColor;
-    _buttonColor = buttonColor;
-    _accentColor = accentColor;
-    _regularDotColor = regularDotColor;
-    _highlightedDotColor = highlightedDotColor;
-    if (!self.isViewLoaded) {
-        return;
-    }
-    self.view.backgroundColor = backgroundColor;
-    _glkView.backgroundColor = backgroundColor;
-    if (_isOpenGLLoaded) {
-        [self setupGL];
-    }
-    if (_headlines != nil && _descriptions != nil) {
-        [self setIntroHeadlines:_headlines descriptions:_descriptions];
-    }
-}
-
-- (void)setIntroHeadlines:(NSArray<NSString *> *)headlines descriptions:(NSArray<NSString *> *)descriptions
-{
-    if (headlines.count == 0 || headlines.count != descriptions.count) {
-        return;
-    }
-    _headlines = headlines;
-    _descriptions = descriptions;
-    if (_pageViews == nil) {
-        return;
-    }
-    NSUInteger count = MIN(headlines.count, _pageViews.count);
-    for (NSUInteger i = 0; i < count; i++) {
-        RMIntroPageView *page = _pageViews[i];
-        [page setHeadline:headlines[i] description:descriptions[i] color:_primaryColor];
-    }
 }
 
 - (void)loadView {
@@ -460,16 +402,6 @@ typedef enum {
     return snapshotView;
 }
 
-- (void)tellomiSuppressLivePages {
-    // The transition keeps the snapshots. The live headline must not draw again
-    // on top of them for the frame the splash view is still in the window.
-    // The simulator build never creates the GL view.
-    _pageScrollView.alpha = 0.0;
-    _pageControl.alpha = 0.0;
-    _glkView.alpha = 0.0;
-    _startButton.alpha = 0.0;
-}
-
 - (BOOL)shouldAutorotate
 {
     if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad)
@@ -523,9 +455,7 @@ typedef enum {
                 deviceScreen = Inch65;
                 break;
             default:
-                // iPhone X and later are taller than the Plus sizes this switch lists.
-                // Falling through to Inch55 parked the headline on top of the login form.
-                deviceScreen = Inch65;
+                deviceScreen = Inch55;
                 break;
         }
     }
@@ -695,14 +625,6 @@ typedef enum {
     set_intro_background_color(red, green, blue);
     
     set_telegram_textures(setup_texture(@"telegram_sphere.png", color), setup_texture(@"telegram_plane1.png", color));
-    set_pages_textures(
-        setup_texture(@"intro_page_logo.png", color),
-        setup_texture(@"intro_page_nearby.png", color),
-        setup_texture(@"intro_page_devices.png", color),
-        setup_texture(@"intro_page_messages.png", color),
-        setup_texture(@"intro_page_photos.png", color),
-        setup_texture(@"intro_page_private.png", color)
-    );
     
     set_ic_textures(setup_texture(@"ic_bubble_dot.png", color), setup_texture(@"ic_bubble.png", color), setup_texture(@"ic_cam_lens.png", color), setup_texture(@"ic_cam.png", color), setup_texture(@"ic_pencil.png", color), setup_texture(@"ic_pin.png", color), setup_texture(@"ic_smile_eye.png", color), setup_texture(@"ic_smile.png", color), setup_texture(@"ic_videocam.png", color));
     

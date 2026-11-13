@@ -1,5 +1,35 @@
 # Upstream patches for the Tellomi fork
 
+## Login restored to Telegram's phone flow (2026-11-13)
+
+The custom login skin (邮箱登录 on the phone page, agreement checkbox, gray fields, bundled titles) is removed. Phone, code, password, recovery, reset, and sign-up screens are Telegram's again. The welcome carousel stays out of the stack (`tellomiSkipsWelcomeSplash`).
+
+Email login is the official path, and only that path:
+
+- `auth.sendCode` for a phone may return `auth.sentCodeTypeSetUpEmailRequired`. The existing `AuthorizationSequenceEmailEntryController` (`.setup`) calls `account.sendVerifyEmailCode` with `emailVerifyPurposeLoginSetup`.
+- The code that call returns is submitted with `account.verifyEmail` and the same purpose.
+- `auth.sentCodeTypeEmailCode` with `setup == false` is submitted with `auth.signIn` `flags.1` and `email_verification` (`emailVerificationCode`), not `phone_code`.
+- An email address is not placed in `phone_number`.
+
+`tellomiOfficialEmailLoginStep` is the decision those two branches call.
+
+Remaining edits in original login files:
+
+| File | What remains |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Skips the splash and writes `.phoneEntry`. Downloads `zh-hans` / `zh-hant` before the first screen when the system language is Chinese. Handles `AuthorizationCodeRequestError.floodWait` with the same flood alert as `.limitExceeded`. Dispatches email code types through `tellomiOfficialEmailLoginStep`. Sign-up photo failure uses `tellomiSignUpAvatarFailureText` and can retry the upload. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift`, `...PhoneEntryControllerNode.swift` | `setTellomiBindPhone` only. Change Phone's "link a number" title, notice, and button. The login screen does not use it. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift`, `...CodeEntryControllerNode.swift` | `setTellomiPrimaryActionTitle` only. Bind-phone's code button. Login keeps `Login_Continue`. |
+| `submodules/CountrySelectionUI/Sources/AuthorizationSequenceCountrySelectionController.swift` | Unchanged this round: `defaultCountryCode()` is still 86, shared with New Contact and Change Phone. Empty `help.getCountriesList` does not wipe the bundled list. A bare `+1` stays the United States. |
+| `submodules/CountrySelectionUI/Sources/TellomiCountryListPreparation.swift` | The picker is built off the main thread. It lists every country code again. The +86/+999 whitelist is gone. |
+| `submodules/RMIntro/` | Restored. The carousel is not installed while the splash flag is true. |
+
+The +86-only country list and the email-in-`phone_number` screen are gone. Earlier sections below that describe that skin are history, not the current tree.
+
+Server work this client now requires is described in the pull request. This change does not modify the server.
+
+
+
 Edits under `Telegram/` and `BUILD.bazel` that exist so Tellomi assets can ship. The artwork itself stays in `Tellomi/Brand/`.
 
 | File | Change |

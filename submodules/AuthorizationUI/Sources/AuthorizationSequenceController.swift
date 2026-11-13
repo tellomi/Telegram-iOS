@@ -47,15 +47,12 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     
     private var stateDisposable: Disposable?
     private let actionDisposable = MetaDisposable()
-    /// Push-token read that precedes `auth.sendCode`. That signal emits inline on the main queue, so it must not share `actionDisposable` with the send it starts.
-    private let pushConfigurationDisposable = MetaDisposable()
-    private var applicationStateDisposable: Disposable?
     private let tellomiLanguageDisposable = MetaDisposable()
     private let tellomiLanguageStringsDisposable = MetaDisposable()
-    private let presentationDataDisposable = MetaDisposable()
     private var tellomiLanguageGate = 0
     private var tellomiLatestState: InnerState?
     private var tellomiDidAuthorize = false
+    private var applicationStateDisposable: Disposable?
     
     private var didPlayPresentationAnimation = false
     
@@ -108,11 +105,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             self?.updateState(state: state)
         }).strict()
         
-        self.presentationDataDisposable.set((self.sharedContext.presentationData
-        |> deliverOnMainQueue).start(next: { [weak self] presentationData in
-            self?.tellomiApplyAppearance(presentationData)
-        }))
-
         self.applicationStateDisposable = (self.sharedContext.applicationBindings.applicationIsActive
         |> deliverOnMainQueue).start(next: { [weak self] isActive in
             guard let self else {
@@ -133,11 +125,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     deinit {
         self.stateDisposable?.dispose()
         self.actionDisposable.dispose()
-        self.pushConfigurationDisposable.dispose()
-        self.applicationStateDisposable?.dispose()
         self.tellomiLanguageDisposable.dispose()
         self.tellomiLanguageStringsDisposable.dispose()
-        self.presentationDataDisposable.dispose()
+        self.applicationStateDisposable?.dispose()
     }
     
     override public func loadView() {
@@ -193,7 +183,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                strongSelf.tellomiAbandonPendingLogin()
                 switch tellomiPhoneRootBack(hasOtherAccounts: !strongSelf.otherAccountPhoneNumbers.1.isEmpty, skipsWelcome: tellomiSkipsWelcomeSplash) {
                 case .dismissAddAccount:
                     let _ = (strongSelf.sharedContext.accountManager.transaction { transaction -> Void in
@@ -219,18 +208,16 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let self else {
                     return
                 }
-                let loginAttempt = self.tellomiBeginLoginAttempt(identifier: number)
-                self.tellomiActiveLoginNumber = number
                 controller?.inProgress = true
                 
                 let disableAuthTokens = self.sharedContext.immediateExperimentalUISettings.disableReloginTokens
                 let authorizationPushConfiguration = self.sharedContext.authorizationPushConfiguration
                 |> take(1)
                 |> timeout(2.0, queue: .mainQueue(), alternate: .single(nil))
-                self.pushConfigurationDisposable.set((authorizationPushConfiguration
+                let _ = (authorizationPushConfiguration
                 |> deliverOnMainQueue).startStandalone(next: { [weak self] authorizationPushConfiguration in
                     if let strongSelf = self {
-                        strongSelf.actionDisposable.set((sendAuthorizationCode(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, phoneNumber: number, apiId: strongSelf.apiId, apiHash: strongSelf.apiHash, pushNotificationConfiguration: authorizationPushConfiguration, firebaseSecretStream: strongSelf.sharedContext.firebaseSecretStream, syncContacts: syncContacts, disableAuthTokens: disableAuthTokens, attempt: loginAttempt, forcedPasswordSetupNotice: { value in
+                        strongSelf.actionDisposable.set((sendAuthorizationCode(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, phoneNumber: number, apiId: strongSelf.apiId, apiHash: strongSelf.apiHash, pushNotificationConfiguration: authorizationPushConfiguration, firebaseSecretStream: strongSelf.sharedContext.firebaseSecretStream, syncContacts: syncContacts, disableAuthTokens: disableAuthTokens, forcedPasswordSetupNotice: { value in
                             guard let entry = EngineCodableEntry(ApplicationSpecificCounterNotice(value: value)) else {
                                 return nil
                             }
@@ -250,31 +237,33 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             if let strongSelf = self, let controller = controller {
                                 controller.inProgress = false
                                 
-                                let emailLogin = tellomiIsLoginEmail(number)
-                                let emailCopy = tellomiEmailLoginCopy(languageCode: tellomiInterfaceLanguageCode(strongSelf.presentationData.strings))
                                 let text: String
                                 var actions: [TextAlertAction] = []
                                 switch error {
                                     case .limitExceeded:
                                         text = strongSelf.presentationData.strings.Login_CodeFloodError
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
-                                    case .invalidPhoneNumber where emailLogin:
-                                        text = emailCopy.invalid
+                                    case .floodWait:
+                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .invalidPhoneNumber:
                                         text = strongSelf.presentationData.strings.Login_InvalidPhoneError
                                         actions.append(TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
-                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: {
-                                            guard let strongSelf = self else {
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: { [weak controller] in
+                                            guard let strongSelf = self, let controller = controller else {
                                                 return
                                             }
-                                            strongSelf.sharedContext.applicationBindings.openUrl(TellomiLoginChrome.helpURL)
+                                            let formattedNumber = formatPhoneNumber(number)
+                                            let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
+                                            let systemVersion = UIDevice.current.systemVersion
+                                            let locale = Locale.current.identifier
+                                            let carrier = CTCarrier()
+                                            let mnc = carrier.mobileNetworkCode ?? "none"
+                                            
+                                            AuthorizationSequenceController.presentEmailComposeController(sharedContext: strongSelf.sharedContext, address: "recover@telegram.org", subject: strongSelf.presentationData.strings.Login_InvalidPhoneEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_InvalidPhoneEmailBody(formattedNumber, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
                                         }))
-                                    case .floodWait(let seconds):
-                                        text = tellomiLoginResendWaitText(strongSelf.presentationData.strings, seconds: seconds)
-                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .phoneLimitExceeded:
-                                        text = tellomiLoginCodeFloodText(strongSelf.presentationData.strings)
+                                        text = strongSelf.presentationData.strings.Login_PhoneFloodError
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .appOutdated:
                                         text = strongSelf.presentationData.strings.Login_ErrorAppOutdated
@@ -283,29 +272,43 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {
                                             sharedContext.applicationBindings.openUrl(updateUrl)
                                         }))
-                                    case .phoneBanned where emailLogin:
-                                        text = emailCopy.unavailable
-                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .phoneBanned:
                                         text = strongSelf.presentationData.strings.Login_PhoneBannedError
                                         actions.append(TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
-                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: {
-                                            guard let strongSelf = self else {
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: { [weak controller] in
+                                            guard let strongSelf = self, let controller = controller else {
                                                 return
                                             }
-                                            strongSelf.sharedContext.applicationBindings.openUrl(TellomiLoginChrome.helpURL)
+                                            let formattedNumber = formatPhoneNumber(number)
+                                            let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
+                                            let systemVersion = UIDevice.current.systemVersion
+                                            let locale = Locale.current.identifier
+                                            let carrier = CTCarrier()
+                                            let mnc = carrier.mobileNetworkCode ?? "none"
+                                            
+                                            AuthorizationSequenceController.presentEmailComposeController(sharedContext: strongSelf.sharedContext, address: "recover@telegram.org", subject: strongSelf.presentationData.strings.Login_PhoneBannedEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_PhoneBannedEmailBody(formattedNumber, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
                                         }))
-                                    case .generic(_) where emailLogin:
-                                        text = strongSelf.presentationData.strings.Login_UnknownError
-                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
-                                    case .generic(_):
+                                    case let .generic(info):
                                         text = strongSelf.presentationData.strings.Login_UnknownError
                                         actions.append(TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
-                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: {
-                                            guard let strongSelf = self else {
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Login_PhoneNumberHelp, action: { [weak controller] in
+                                            guard let strongSelf = self, let controller = controller else {
                                                 return
                                             }
-                                            strongSelf.sharedContext.applicationBindings.openUrl(TellomiLoginChrome.helpURL)
+                                            let formattedNumber = formatPhoneNumber(number)
+                                            let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
+                                            let systemVersion = UIDevice.current.systemVersion
+                                            let locale = Locale.current.identifier
+                                            let carrier = CTCarrier()
+                                            let mnc = carrier.mobileNetworkCode ?? "none"
+                                            let errorString: String
+                                            if let (code, description) = info {
+                                                errorString = "\(code): \(description)"
+                                            } else {
+                                                errorString = "unknown"
+                                            }
+                                            
+                                            AuthorizationSequenceController.presentEmailComposeController(sharedContext: strongSelf.sharedContext, address: "recover@telegram.org", subject: strongSelf.presentationData.strings.Login_PhoneGenericEmailSubject(formattedNumber).string, body: strongSelf.presentationData.strings.Login_PhoneGenericEmailBody(formattedNumber, errorString, appVersion, systemVersion, locale, mnc).string, from: controller, presentationData: strongSelf.presentationData)
                                         }))
                                     case .timeout:
                                         text = strongSelf.presentationData.strings.Login_NetworkError
@@ -317,13 +320,13 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             controller.present(strongSelf.sharedContext.makeProxySettingsController(sharedContext: strongSelf.sharedContext, account: strongSelf.account), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
                                         }))
                                 }
-                                (controller.navigationController as? NavigationController)?.presentOverlay(controller: tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: actions), inGlobal: true, blockInteraction: true)
+                                (controller.navigationController as? NavigationController)?.presentOverlay(controller: textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: actions), inGlobal: true, blockInteraction: true)
                                 
                                 controller.dismissConfirmation()
                             }
                         }))
                     }
-                }))
+                })
             }
             controller.loginWithPasskey = { [weak self, weak controller] passkey, syncContacts in
                 guard let self else {
@@ -362,7 +365,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 text = strongSelf.presentationData.strings.Login_UnknownError
                             }
                             
-                            controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                            controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                         }
                     }
                 }))
@@ -390,9 +393,10 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                strongSelf.returnToPhoneOrEmailEntry()
+                let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+                
+                let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
             })
-            controller.tellomiUnauthorizedAccount = self.account
             controller.retryResetEmail = { [weak self] in
                 if let self {
                     self.actionDisposable.set(
@@ -460,7 +464,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                                  let _ = self.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: account.testingEnvironment, masterDatacenterId: account.masterDatacenterId, contents: .empty)).startStandalone()
                                              }
                                              
-                                             controller.presentInGlobalOverlay(tellomiServerErrorAlert(sharedContext: self.sharedContext, strings: self.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]))
+                                             controller.presentInGlobalOverlay(textAlertController(sharedContext: self.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]))
                                          }
                                      })
                                 )
@@ -482,7 +486,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             authorizationCode = .phoneCode(code)
                     }
                     
-                    if case let .email(_, _, _, _, _, setup) = type, setup, case let .emailVerification(emailCode) = authorizationCode {
+                    if case let .email(_, _, _, _, _, setup) = type, tellomiOfficialEmailLoginStep(.email(setup: setup)) == .verifySetupEmail, case let .emailVerification(emailCode) = authorizationCode {
                         strongSelf.actionDisposable.set(((verifyLoginEmailSetup(account: strongSelf.account, code: emailCode))
                         |> deliverOnMainQueue).startStrict(error: { error in
                             Queue.mainQueue().async {
@@ -519,7 +523,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             controller.resetCode()
                                         }
                                         
-                                        controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                        controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                                     }
                                 }
                             }
@@ -632,7 +636,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                             controller.resetCode()
                                         }
                                         
-                                        controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                        controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                                     }
                                 }
                             }
@@ -657,12 +661,46 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         AuthorizationSequenceController.presentDidNotGetCodeUI(sharedContext: strongSelf.sharedContext, controller: controller, presentationData: strongSelf.presentationData, phoneNumber: number, mnc: mnc)
                     }
                 } else {
-                    strongSelf.tellomiResendLoginCode(controller: controller)
+                    controller?.inProgress = true
+                    strongSelf.actionDisposable.set((resendAuthorizationCode(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, apiId: strongSelf.apiId, apiHash: strongSelf.apiHash, firebaseSecretStream: strongSelf.sharedContext.firebaseSecretStream)
+                    |> deliverOnMainQueue).startStrict(next: { result in
+                        controller?.inProgress = false
+                    }, error: { error in
+                        if let strongSelf = self, let controller = controller {
+                            controller.inProgress = false
+                            
+                            var actions: [TextAlertAction] = [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]
+                            
+                            let text: String
+                            switch error {
+                                case .limitExceeded:
+                                    text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                case .floodWait:
+                                    text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                case .invalidPhoneNumber:
+                                    text = strongSelf.presentationData.strings.Login_InvalidPhoneError
+                                case .phoneLimitExceeded:
+                                    text = strongSelf.presentationData.strings.Login_PhoneFloodError
+                                case .appOutdated:
+                                    text = strongSelf.presentationData.strings.Login_ErrorAppOutdated
+                                    let updateUrl = strongSelf.presentationData.strings.InviteText_URL
+                                    let sharedContext = strongSelf.sharedContext
+                                    actions = [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {
+                                        sharedContext.applicationBindings.openUrl(updateUrl)
+                                    })]
+                                case .phoneBanned:
+                                    text = strongSelf.presentationData.strings.Login_PhoneBannedError
+                                case .generic:
+                                    text = strongSelf.presentationData.strings.Login_UnknownError
+                                case .timeout:
+                                    text = strongSelf.presentationData.strings.Login_NetworkError
+                            }
+                            
+                            controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: actions), in: .window(.root))
+                        }
+                    }))
                 }
             }
-        }
-        controller.requestSmsCode = { [weak self, weak controller] in
-            self?.tellomiResendLoginCode(controller: controller)
         }
         controller.requestPreviousOption = { [weak self] in
             guard let self else {
@@ -700,122 +738,13 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 strongSelf.sharedContext.applicationBindings.openUrl(url)
             }
         }
-        let displayedNumber = tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : formatPhoneNumber(number)
-        let displayedEmail = email ?? (tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : nil)
-        controller.updateData(number: displayedNumber, email: displayedEmail, codeType: type, nextType: nextType, timeout: timeout, termsOfService: termsOfService, previousCodeType: previousCodeType, isPrevious: isPrevious)
+        controller.updateData(number: formatPhoneNumber(number), email: email, codeType: type, nextType: nextType, timeout: timeout, termsOfService: termsOfService, previousCodeType: previousCodeType, isPrevious: isPrevious)
         return controller
     }
     
-    private func tellomiResendLoginCode(controller: AuthorizationSequenceCodeEntryController?) {
-        guard controller?.tellomiResendIsActive != false else {
-            return
-        }
-        controller?.inProgress = true
-        self.actionDisposable.set((self.engine.auth.resendLoginCode(accountManager: self.sharedContext.accountManager, apiId: self.apiId, apiHash: self.apiHash, firebaseSecretStream: self.sharedContext.firebaseSecretStream, attempt: self.tellomiActiveLoginAttempt)
-        |> deliverOnMainQueue).startStrict(next: { _ in
-            controller?.inProgress = false
-        }, error: { [weak self] error in
-            guard let self, let controller else {
-                return
-            }
-            controller.inProgress = false
-            var actions: [TextAlertAction] = [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]
-            let text: String
-            switch error {
-            case .limitExceeded:
-                text = self.presentationData.strings.Login_CodeFloodError
-            case .floodWait(let seconds):
-                controller.tellomiPauseResend(seconds: seconds)
-                text = tellomiLoginResendWaitText(self.presentationData.strings, seconds: seconds)
-            case .invalidPhoneNumber:
-                text = self.presentationData.strings.Login_InvalidPhoneError
-            case .phoneLimitExceeded:
-                controller.tellomiBlockFurtherResends()
-                text = tellomiLoginCodeFloodText(self.presentationData.strings)
-            case .appOutdated:
-                text = self.presentationData.strings.Login_ErrorAppOutdated
-                let updateUrl = self.presentationData.strings.InviteText_URL
-                let sharedContext = self.sharedContext
-                actions = [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {
-                    sharedContext.applicationBindings.openUrl(updateUrl)
-                })]
-            case .phoneBanned:
-                text = self.presentationData.strings.Login_PhoneBannedError
-            case .generic:
-                text = self.presentationData.strings.Login_UnknownError
-            case .timeout:
-                text = self.presentationData.strings.Login_NetworkError
-            }
-            controller.present(tellomiServerErrorAlert(sharedContext: self.sharedContext, strings: self.presentationData.strings, text: text, actions: actions), in: .window(.root))
-        }))
-    }
-
     private var signInWithAppleSetup = false
     private var appleSignInAllowed = false
     private var currentEmail: String?
-    /// The identifier of the login in progress. An email is put back into the phone-entry state on Back.
-    private var tellomiActiveLoginNumber: String = ""
-    /// Bumped on each send and on Back. A response whose id no longer matches does not write a code hash.
-    private let tellomiLoginAttemptToken = Atomic<Int>(value: 0)
-    private var tellomiLoginAttemptId: Int = 0
-    private var tellomiPendingIdentifier: String?
-
-    private func tellomiBeginLoginAttempt(identifier: String) -> TellomiLoginAttempt {
-        let id = self.tellomiLoginAttemptToken.modify { $0 + 1 }
-        self.tellomiLoginAttemptId = id
-        self.tellomiPendingIdentifier = identifier
-        return TellomiLoginAttempt(token: self.tellomiLoginAttemptToken, id: id)
-    }
-
-    private var tellomiActiveLoginAttempt: TellomiLoginAttempt {
-        return TellomiLoginAttempt(token: self.tellomiLoginAttemptToken, id: self.tellomiLoginAttemptId)
-    }
-
-    /// Back, close, and a new number invalidate the in-flight `auth.sendCode`.
-    private func tellomiAbandonPendingLogin() {
-        let _ = self.tellomiLoginAttemptToken.modify { $0 + 1 }
-        self.tellomiPendingIdentifier = nil
-        self.actionDisposable.set(nil)
-        self.pushConfigurationDisposable.set(nil)
-    }
-
-    private func tellomiCodeEntryBelongsToThisAttempt(_ number: String) -> Bool {
-        guard let pending = self.tellomiPendingIdentifier, tellomiLoginIdentifiersMatch(pending, number) else {
-            return false
-        }
-        return self.tellomiActiveLoginAttempt.isCurrent()
-    }
-
-    /// Country calling code plus the national number, for the phone field after a dropped code screen.
-    private func tellomiPhoneEntryParts(identifier: String) -> (countryCode: Int32, number: String) {
-        if tellomiIsLoginEmail(identifier) {
-            return (AuthorizationSequenceCountrySelectionController.defaultCountryCode(), tellomiNormalizedLoginEmail(identifier))
-        }
-        let digits = identifier.filter { $0 >= "0" && $0 <= "9" }
-        if let (_, countryCode) = AuthorizationSequenceCountrySelectionController.lookupCountryIdByNumber(digits, preferredCountries: ["86": "CN"]), let code = Int32(countryCode.code), digits.hasPrefix(countryCode.code) {
-            return (code, String(digits.dropFirst(countryCode.code.count)))
-        }
-        let fallback = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
-        let prefix = String(fallback)
-        if digits.hasPrefix(prefix) {
-            return (fallback, String(digits.dropFirst(prefix.count)))
-        }
-        return (fallback, digits)
-    }
-
-    /// A code screen saved by a previous launch, or a response for a number the user already left.
-    /// The hash is dropped. The number stays in the phone field so they can send a new code.
-    private func tellomiDropPersistedCodeEntry(identifier: String) {
-        let parts = self.tellomiPhoneEntryParts(identifier: identifier)
-        let _ = self.engine.auth.replaceConfirmationCodeEntryWithPhoneEntry(countryCode: parts.countryCode, number: parts.number).startStandalone()
-    }
-
-    private func returnToPhoneOrEmailEntry() {
-        self.tellomiAbandonPendingLogin()
-        let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
-        let restored = tellomiIsLoginEmail(self.tellomiActiveLoginNumber) ? tellomiNormalizedLoginEmail(self.tellomiActiveLoginNumber) : ""
-        let _ = self.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: self.account.testingEnvironment, masterDatacenterId: self.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: restored))).startStandalone()
-    }
     
     private func emailSetupController(number: String, appleSignInAllowed: Bool) -> AuthorizationSequenceEmailEntryController {
         var currentController: AuthorizationSequenceEmailEntryController?
@@ -833,7 +762,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                strongSelf.returnToPhoneOrEmailEntry()
+                let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+                
+                let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
             })
         }
         controller.proceedWithEmail = { [weak self, weak controller] email in
@@ -864,7 +795,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             text = strongSelf.presentationData.strings.Login_EmailNotAllowedError
                     }
                     
-                    controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                    controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                 }
             }, completed: {
                 controller?.inProgress = false
@@ -898,7 +829,8 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             guard let self else {
                 return
             }
-            self.returnToPhoneOrEmailEntry()
+            let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+            let _ = self.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: self.account.testingEnvironment, masterDatacenterId: self.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
         })
         return controller
     }
@@ -910,7 +842,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         switch authorization.credential {
             case let appleIdCredential as ASAuthorizationAppleIDCredential:
                 guard let tokenData = appleIdCredential.identityToken, let token = String(data: tokenData, encoding: .utf8) else {
-                    lastController?.present(tellomiServerErrorAlert(sharedContext: self.sharedContext, strings: self.presentationData.strings, text: self.presentationData.strings.Login_UnknownError, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                    lastController?.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: self.presentationData.strings.Login_UnknownError, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                     return
                 }
             
@@ -933,7 +865,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             case .emailNotAllowed:
                                 text = strongSelf.presentationData.strings.Login_EmailNotAllowedError
                         }
-                        lastController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                        lastController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                     }
                 }))
             } else {
@@ -974,7 +906,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         text = strongSelf.presentationData.strings.Login_InvalidEmailAddressError
                                 }
                                 
-                                lastController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                lastController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                             }
                         }
                     })
@@ -990,7 +922,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         guard let lastController = self.viewControllers.last as? ViewController else {
             return
         }
-        lastController.present(tellomiServerErrorAlert(sharedContext: self.sharedContext, strings: self.presentationData.strings, text: error.localizedDescription, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+        lastController.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: error.localizedDescription, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
     }
     
     @available(iOS 13.0, *)
@@ -1014,7 +946,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                strongSelf.returnToPhoneOrEmailEntry()
+                let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+                
+                let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
             })
             controller.loginWithPassword = { [weak self, weak controller] password in
                 if let strongSelf = self {
@@ -1035,7 +969,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         text = strongSelf.presentationData.strings.Login_UnknownError
                                 }
                                 
-                                controller.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                                 controller.passwordIsInvalid()
                             }
                         }
@@ -1069,14 +1003,14 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
 
                     strongController.inProgress = false
 
-                    strongController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: strongSelf.presentationData.strings.TwoStepAuth_RecoveryUnavailable, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                    strongController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: strongSelf.presentationData.strings.TwoStepAuth_RecoveryUnavailable, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                     strongController.didForgotWithNoRecovery = true
                 }))
             }
         }
         controller.reset = { [weak self, weak controller] in
             if let strongSelf = self, let strongController = controller {
-                strongController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: suggestReset ? strongSelf.presentationData.strings.TwoStepAuth_RecoveryFailed : strongSelf.presentationData.strings.TwoStepAuth_RecoveryUnavailable, actions: [
+                strongController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: suggestReset ? strongSelf.presentationData.strings.TwoStepAuth_RecoveryFailed : strongSelf.presentationData.strings.TwoStepAuth_RecoveryUnavailable, actions: [
                     TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_Cancel, action: {}),
                     TextAlertAction(type: .destructiveAction, title: strongSelf.presentationData.strings.Login_ResetAccountProtected_Reset, action: {
                         if let strongSelf = self, let strongController = controller {
@@ -1096,7 +1030,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         case .limitExceeded:
                                             text = strongSelf.presentationData.strings.Login_ResetAccountProtected_LimitExceeded
                                     }
-                                    strongController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                    strongController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                                 }
                             }))
                         }
@@ -1157,11 +1091,13 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                strongSelf.returnToPhoneOrEmailEntry()
+                let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+                
+                let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
             })
             controller.reset = { [weak self, weak controller] in
                 if let strongSelf = self, let strongController = controller {
-                    strongController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: strongSelf.presentationData.strings.TwoStepAuth_ResetAccountConfirmation, actions: [
+                    strongController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: strongSelf.presentationData.strings.TwoStepAuth_ResetAccountConfirmation, actions: [
                         TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_Cancel, action: {}),
                         TextAlertAction(type: .destructiveAction, title: strongSelf.presentationData.strings.Login_ResetAccountProtected_Reset, action: {
                             if let strongSelf = self, let strongController = controller {
@@ -1181,7 +1117,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                                 case .limitExceeded:
                                                     text = strongSelf.presentationData.strings.Login_ResetAccountProtected_LimitExceeded
                                             }
-                                            strongController.present(tellomiServerErrorAlert(sharedContext: strongSelf.sharedContext, strings: strongSelf.presentationData.strings, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                            strongController.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                                         }
                                     }))
                             }
@@ -1199,7 +1135,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         return controller
     }
     
-    private func signUpController(firstName: String, lastName: String, termsOfService: UnauthorizedAccountTermsOfService?, displayCancel: Bool, loginNumber: String) -> AuthorizationSequenceSignUpController {
+    private func signUpController(firstName: String, lastName: String, termsOfService: UnauthorizedAccountTermsOfService?, displayCancel: Bool) -> AuthorizationSequenceSignUpController {
         var currentController: AuthorizationSequenceSignUpController?
         for c in self.viewControllers {
             if let c = c as? AuthorizationSequenceSignUpController {
@@ -1215,7 +1151,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                strongSelf.returnToPhoneOrEmailEntry()
+                let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+                
+                let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
             }, displayCancel: displayCancel)
             controller.openUrl = { [weak self] url in
                 guard let self else {
@@ -1285,7 +1223,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     
                     var retryAvatar: (() -> Void)?
                     retryAvatar = { [weak self, weak controller] in
-                        guard let strongSelf = self, let controller = controller else {
+                        guard let strongSelf = self, let controller else {
                             return
                         }
                         controller.inProgress = true
@@ -1311,6 +1249,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         Queue.mainQueue().async {
                             if let strongSelf = self, let controller = controller {
                                 controller.inProgress = false
+                                
                                 strongSelf.tellomiPresentSignUpError(controller: controller, error: error, retry: { retryAvatar?() })
                             }
                         }
@@ -1318,11 +1257,33 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 }
             }
         }
-        controller.setTellomiNicknameOnly(tellomiIsLoginEmail(loginNumber))
         controller.updateData(firstName: firstName, lastName: lastName, termsOfService: termsOfService)
         return controller
     }
     
+
+    private func tellomiSentCodeEmailKind(_ type: SentAuthorizationCodeType) -> TellomiSentCodeEmailKind {
+        switch type {
+        case .emailSetupRequired:
+            return .setupRequired
+        case let .email(_, _, _, _, _, setup):
+            return .email(setup: setup)
+        default:
+            return .other
+        }
+    }
+
+    /// Screens under a logged-out flow. The welcome carousel is omitted while `tellomiSkipsWelcomeSplash` is set.
+    private func tellomiLoggedOutStackPrefix() -> [ViewController] {
+        if tellomiSkipsWelcomeSplash {
+            return []
+        }
+        if !self.otherAccountPhoneNumbers.1.isEmpty {
+            return [self.splashController()]
+        }
+        return []
+    }
+
     private func tellomiPresentSignUpError(controller: AuthorizationSequenceSignUpController, error: SignUpError, retry: @escaping () -> Void) {
         let text: String
         var actions = [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]
@@ -1338,15 +1299,14 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         case .generic:
             text = self.presentationData.strings.Login_UnknownError
         case let .avatarUploadFailed(code, description):
-            let pack = tellomiAuthorizationStringPack(self.presentationData.strings)
-            text = tellomiSignUpAvatarFailureText(code: code, description: description, languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: pack)
-            let retryTitle = tellomiSignUpAvatarRetryTitle(languageCode: self.presentationData.strings.primaryComponent.languageCode, pack: pack)
+            let languageCode = self.presentationData.strings.primaryComponent.languageCode
+            text = tellomiSignUpAvatarFailureText(code: code, description: description, languageCode: languageCode)
             actions = [
                 TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_OK, action: {}),
-                TextAlertAction(type: .defaultAction, title: retryTitle, action: retry)
+                TextAlertAction(type: .defaultAction, title: tellomiSignUpAvatarRetryTitle(languageCode: languageCode), action: retry)
             ]
         }
-        controller.present(tellomiServerErrorAlert(sharedContext: self.sharedContext, strings: self.presentationData.strings, text: text, actions: actions), in: .window(.root))
+        controller.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: text, actions: actions), in: .window(.root))
     }
 
     private func updateState(state: InnerState) {
@@ -1359,9 +1319,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             self.authorizationCompleted()
             return
         }
-        // Download zh-hans / zh-hant before the login screens are built. The old Start
-        // button stored English, and an update keeps that pack. Skipping the welcome
-        // carousel does not skip this gate, so a Chinese system is not left on English.
         if self.tellomiLanguageGate == 1 {
             return
         } else if self.tellomiLanguageGate == 0, let code = tellomiLangPackCodePendingApplication(currentLanguageCode: self.presentationData.strings.primaryComponent.languageCode) {
@@ -1409,18 +1366,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         case let .state(state):
             switch state {
                 case .empty:
-                    // A temp-key failure can clear the unauthorized state while the code
-                    // screen is up. That used to rebuild the welcome carousel. Keep the
-                    // screen that is already showing until this attempt is abandoned
-                    // (Back) or a real authorization state arrives.
-                    if self.tellomiPendingIdentifier != nil, self.tellomiActiveLoginAttempt.isCurrent() {
-                        break
-                    }
                     let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
                     switch tellomiLoggedOutRoot(skipsWelcome: tellomiSkipsWelcomeSplash, countryCode: countryCode) {
                     case .phoneEntry:
-                        // Same write the Start button used. The splash controller stays
-                        // in splashController() and is not installed.
                         let _ = self.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: self.account.testingEnvironment, masterDatacenterId: self.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
                     case .welcome:
                         if let _ = self.viewControllers.last as? AuthorizationSequenceSplashController {
@@ -1434,19 +1382,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                         }
                     }
-                case let .phoneEntry(storedCountryCode, storedNumber):
-                    // Only the calling-code whitelist is offered. A stored +1, or any other
-                    // code, opens as China with an empty number.
-                    let countryCode: Int32
-                    let number: String
-                    if storedNumber.isEmpty || !TellomiCallingCodePolicy.allows(storedCountryCode) {
-                        countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
-                        number = TellomiCallingCodePolicy.allows(storedCountryCode) ? storedNumber : ""
-                    } else {
-                        countryCode = storedCountryCode
-                        number = storedNumber
-                    }
+                case let .phoneEntry(countryCode, number):
                     var controllers: [ViewController] = []
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                     var previousSplashController: AuthorizationSequenceSplashController?
                     for c in self.viewControllers {
                         if let c = c as? AuthorizationSequenceSplashController {
@@ -1465,37 +1403,31 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     controllers.append(self.phoneEntryController(countryCode: countryCode, number: number, splashController: previousSplashController))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty && (previousSplashController == nil || self.viewControllers.count > 2))
                 case let .confirmationCodeEntry(number, type, phoneCodeHash, timeout, nextType, _, previousCodeEntry, usePrevious):
-                    // A previous launch, or a sendCode for a number the user already replaced, must not
-                    // open the code screen. The hash belongs to that attempt.
-                    if !self.tellomiCodeEntryBelongsToThisAttempt(number) {
-                        self.tellomiDropPersistedCodeEntry(identifier: number)
-                        return
-                    }
-                    self.tellomiActiveLoginNumber = number
-                    let loginEmail = tellomiIsLoginEmail(number) ? tellomiNormalizedLoginEmail(number) : nil
                     var controllers: [ViewController] = []
-                    controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: loginEmail ?? "", splashController: nil))
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
+                    controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: "", splashController: nil))
                 
                     var isGoingBack = false
-                    if case let .emailSetupRequired(appleSignInAllowed) = type {
-                        self.appleSignInAllowed = appleSignInAllowed
-                        controllers.append(self.emailSetupController(number: number, appleSignInAllowed: appleSignInAllowed))
-                    } else {
-                        // currentEmail is the login-email setup screen. An address used as phone_number is the login itself.
-                        if self.currentEmail != nil && loginEmail == nil {
+                    switch tellomiOfficialEmailLoginStep(self.tellomiSentCodeEmailKind(type)) {
+                    case .setupEmail:
+                        if case let .emailSetupRequired(appleSignInAllowed) = type {
+                            self.appleSignInAllowed = appleSignInAllowed
+                            controllers.append(self.emailSetupController(number: number, appleSignInAllowed: appleSignInAllowed))
+                        }
+                    case .verifySetupEmail, .signInWithEmailCode, nil:
+                        if let _ = self.currentEmail {
                             controllers.append(self.emailSetupController(number: number, appleSignInAllowed: self.appleSignInAllowed))
                         }
-                        let codeEmail = loginEmail ?? self.currentEmail
                         
                         if let previousCodeEntry, case let .confirmationCodeEntry(number, previousType, phoneCodeHash, timeout, nextType, _, _, _) = previousCodeEntry, usePrevious {
-                            controllers.append(self.codeEntryController(number: number, phoneCodeHash: phoneCodeHash, email: codeEmail, type: previousType, nextType: nextType, timeout: timeout, previousCodeType: type, isPrevious: true, termsOfService: nil))
+                            controllers.append(self.codeEntryController(number: number, phoneCodeHash: phoneCodeHash, email: self.currentEmail, type: previousType, nextType: nextType, timeout: timeout, previousCodeType: type, isPrevious: true, termsOfService: nil))
                             isGoingBack = true
                         } else {
                             var previousCodeType: SentAuthorizationCodeType?
                             if let previousCodeEntry, case let .confirmationCodeEntry(_, type, _, _, _, _, _, _) = previousCodeEntry {
                                 previousCodeType = type
                             }
-                            controllers.append(self.codeEntryController(number: number, phoneCodeHash: phoneCodeHash, email: codeEmail, type: type, nextType: nextType, timeout: timeout, previousCodeType: previousCodeType, isPrevious: false, termsOfService: nil))
+                            controllers.append(self.codeEntryController(number: number, phoneCodeHash: phoneCodeHash, email: self.currentEmail, type: type, nextType: nextType, timeout: timeout, previousCodeType: previousCodeType, isPrevious: false, termsOfService: nil))
                         }
                     }
                 
@@ -1509,28 +1441,34 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     } else {
                         self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                     }
-                case let .passwordEntry(hint, number, _, suggestReset, syncContacts):
-                    if let number {
-                        self.tellomiActiveLoginNumber = number
-                    }
+                case let .passwordEntry(hint, _, _, suggestReset, syncContacts):
                     var controllers: [ViewController] = []
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                     controllers.append(self.passwordEntryController(hint: hint, suggestReset: suggestReset, syncContacts: syncContacts))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .passwordRecovery(_, _, _, emailPattern, syncContacts):
                     var controllers: [ViewController] = []
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                     controllers.append(self.passwordRecoveryController(emailPattern: emailPattern, syncContacts: syncContacts))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .awaitingAccountReset(protectedUntil, number, _):
                     var controllers: [ViewController] = []
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                     controllers.append(self.awaitingAccountResetController(protectedUntil: protectedUntil, number: number))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
-                case let .signUp(number, _, firstName, lastName, termsOfService, _):
-                    self.tellomiActiveLoginNumber = number
+                case let .signUp(_, _, firstName, lastName, termsOfService, _):
                     var controllers: [ViewController] = []
-                    controllers.append(self.signUpController(firstName: firstName, lastName: lastName, termsOfService: termsOfService, displayCancel: true, loginNumber: number))
+                    var displayCancel = false
+                    if tellomiSkipsWelcomeSplash || self.otherAccountPhoneNumbers.1.isEmpty {
+                        displayCancel = true
+                    } else {
+                        controllers.append(self.splashController())
+                    }
+                    controllers.append(self.signUpController(firstName: firstName, lastName: lastName, termsOfService: termsOfService, displayCancel: displayCancel))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .payment(number, codeHash, storeProduct, premiumDays, supportEmailAddress, supportEmailSubject, _):
                     var controllers: [ViewController] = []
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                 controllers.append(self.paymentController(number: number, phoneCodeHash: codeHash, storeProduct: storeProduct, premiumDays: premiumDays, supportEmailAddress: supportEmailAddress, supportEmailSubject: supportEmailSubject))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
             }
@@ -1577,7 +1515,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             
             controller.view.window?.rootViewController?.present(composeController, animated: true, completion: nil)
         } else {
-            controller.present(tellomiServerErrorAlert(sharedContext: sharedContext, strings: presentationData.strings, text: presentationData.strings.Login_EmailNotConfiguredError, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+            controller.present(textAlertController(sharedContext: sharedContext, title: nil, text: presentationData.strings.Login_EmailNotConfiguredError, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), in: .window(.root))
         }
     }
     
@@ -1600,81 +1538,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
-        self.tellomiApplyAppearance(self.sharedContext.currentPresentationData.with { $0 })
         if !self.didPlayPresentationAnimation {
             self.didPlayPresentationAnimation = true
             self.animateIn()
-        }
-    }
-
-    override public func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        if #available(iOS 13.0, *) {
-            if previousTraitCollection?.userInterfaceStyle != self.traitCollection.userInterfaceStyle {
-                self.tellomiApplyAppearance(self.sharedContext.currentPresentationData.with { $0 })
-            }
-        }
-    }
-
-    /// The auth flow is given whatever theme was current when it was built. That theme does not
-    /// follow the system appearance on its own (a light trait on this controller used to lock it
-    /// to the day theme). The screen's style is the source.
-    private func tellomiSystemIsDark() -> Bool {
-        if #available(iOS 13.0, *) {
-            let screenStyle = UIScreen.main.traitCollection.userInterfaceStyle
-            if screenStyle != .unspecified {
-                return screenStyle == .dark
-            }
-            if let windowStyle = self.view.window?.windowScene?.traitCollection.userInterfaceStyle, windowStyle != .unspecified {
-                return windowStyle == .dark
-            }
-        }
-        return self.presentationData.theme.overallDarkAppearance
-    }
-
-    private func tellomiApplyAppearance(_ presentationData: PresentationData) {
-        var presentationData = presentationData
-        let wantsDark = self.tellomiSystemIsDark()
-        if presentationData.theme.overallDarkAppearance != wantsDark {
-            presentationData = presentationData.withTheme(wantsDark ? defaultDarkPresentationTheme : defaultPresentationTheme)
-        }
-        let themeChanged = presentationData.theme !== self.presentationData.theme || presentationData.theme.overallDarkAppearance != self.presentationData.theme.overallDarkAppearance
-        let stringsChanged = presentationData.strings !== self.presentationData.strings
-        self.presentationData = presentationData
-        if stringsChanged {
-            tellomiNoteAppliedPack(presentationData.strings)
-            for controller in self.viewControllers {
-                if let controller = controller as? AuthorizationSequencePhoneEntryController {
-                    controller.applyTellomiPresentationData(presentationData)
-                } else if let controller = controller as? AuthorizationSequenceCodeEntryController {
-                    controller.applyTellomiStrings(presentationData.strings)
-                }
-            }
-        }
-        guard themeChanged else {
-            return
-        }
-        if self.isViewLoaded {
-            self.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
-        }
-        let navigationStatusBar: NavigationStatusBarStyle
-        switch presentationData.theme.rootController.statusBarStyle {
-        case .black:
-            navigationStatusBar = .black
-        case .white:
-            navigationStatusBar = .white
-        }
-        self.updateTheme(NavigationControllerTheme(statusBar: navigationStatusBar, navigationBar: AuthorizationSequenceController.navigationBarTheme(presentationData.theme), emptyAreaColor: presentationData.theme.list.plainBackgroundColor, separatorColor: .clear, opaqueBackgroundColor: presentationData.theme.list.plainBackgroundColor))
-        for controller in self.viewControllers {
-            if let controller = controller as? AuthorizationSequencePhoneEntryController {
-                controller.applyPresentationTheme(presentationData)
-            } else if let controller = controller as? AuthorizationSequenceCodeEntryController {
-                controller.applyPresentationTheme(presentationData)
-            } else if let controller = controller as? AuthorizationSequenceSplashController {
-                controller.applyPresentationTheme(presentationData.theme)
-            } else if let controller = controller as? AuthorizationSequenceSignUpController {
-                controller.applyPresentationTheme(presentationData)
-            }
         }
     }
     
@@ -1685,7 +1551,20 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     }
     
     public static func defaultCountryCode() -> Int32 {
-        return AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+        let countryId = (Locale.current as NSLocale).object(forKey: .countryCode) as? String
+     
+        var countryCode: Int32 = 1
+        if let countryId = countryId {
+            let normalizedId = countryId.uppercased()
+            for (code, idAndName) in countryCodeToIdAndName {
+                if idAndName.0 == normalizedId {
+                    countryCode = Int32(code)
+                    break
+                }
+            }
+        }
+        
+        return countryCode
     }
     
     public static func presentDidNotGetCodeUI(
@@ -1695,33 +1574,20 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         phoneNumber: String,
         mnc: String
     ) {
-        let _ = (sharedContext, controller, presentationData, phoneNumber, mnc)
-        if let url = URL(string: TellomiLoginChrome.helpURL) {
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
-        }
+        let formattedNumber = formatPhoneNumber(phoneNumber)
+        
+        var emailBody = ""
+        emailBody.append(presentationData.strings.Login_EmailCodeBody(formattedNumber).string)
+        emailBody.append("\n\n")
+        
+        let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
+        let systemVersion = UIDevice.current.systemVersion
+        let locale = Locale.current.identifier
+        emailBody.append("Telegram: \(appVersion)\n")
+        emailBody.append("OS: \(systemVersion)\n")
+        emailBody.append("Locale: \(locale)\n")
+        emailBody.append("MNC: \(mnc)")
+        
+        AuthorizationSequenceController.presentEmailComposeController(sharedContext: sharedContext, address: "sms@telegram.org", subject: presentationData.strings.Login_EmailCodeSubject(formattedNumber).string, body: emailBody, from: controller, presentationData: presentationData)
     }
-}
-
-/// Server-error alerts from the login state machine. The text goes through Telegram's
-/// `Login_*` mapping, then the bundled Chinese sentence when that mapping is still English.
-/// `Auth.Login.ErrorAlert` is how the UI test reads the custom alert (it is not `app.alerts`).
-private func tellomiAuthorizationStringPack(_ strings: PresentationStrings) -> [String: String] {
-    var pack: [String: String] = [:]
-    if let secondary = strings.secondaryComponent?.dict {
-        for (key, value) in secondary {
-            pack[key] = value
-        }
-    }
-    for (key, value) in strings.primaryComponent.dict {
-        pack[key] = value
-    }
-    return pack
-}
-
-private func tellomiServerErrorAlert(sharedContext: SharedAccountContext, strings: PresentationStrings, text: String, actions: [TextAlertAction]) -> ViewController {
-    let localizedText = tellomiLocalizedServerAlert(text, strings: strings)
-    let localizedActions = actions.map { action in
-        return TextAlertAction(type: action.type, title: tellomiLocalizedServerAlert(action.title, strings: strings), action: action.action)
-    }
-    return textAlertController(sharedContext: sharedContext, title: nil, text: localizedText, actions: localizedActions, accessibilityIdentifier: "Auth.Login.ErrorAlert")
 }
