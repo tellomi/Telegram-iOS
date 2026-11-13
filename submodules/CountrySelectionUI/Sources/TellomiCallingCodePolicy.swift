@@ -1,9 +1,10 @@
 import Foundation
 
-/// Calling codes the login field and the country list accept.
-/// The default is mainland China. Assign `allowedCallingCodes` to open more later.
+/// Calling codes the login field accepts. The screen still opens on +86.
+/// 999 is the hidden test country from `help.getCountriesList` (iso2 XT, prefix 66).
+/// The picker still drops `country.hidden` and any iso2 Locale cannot name, so Test is not a row.
 public enum TellomiCallingCodePolicy {
-    public static var allowedCallingCodes: Set<Int32> = [86]
+    public static var allowedCallingCodes: Set<Int32> = [86, 999]
 
     public static func allows(_ code: Int32) -> Bool {
         return self.allowedCallingCodes.contains(code)
