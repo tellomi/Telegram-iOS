@@ -1,5 +1,22 @@
 # Upstream patches
 
+## Profile Moments tab is not latched for the process — 2026-11-13
+
+A failed first page was kept as a final empty result, and `openProfilePosts` returned that opening until the process ended. The tab is inserted only for a non-empty page, and the retry row is inside the tab, so an offline visit or a profile that had no posts yet hid 动态 until relaunch. Publishing did not refresh the opening.
+
+A failed fetch is `.failed`, not `.empty`. The next profile open retries it after 15 seconds. Coming back from `waitingForNetwork` to online retries it once without that wait; a later reconnect inside 5 seconds does not. A confirmed-empty page is requested again on the next profile open, and once more 60 seconds after it settled, so a profile left on screen can gain the tab. That timed check does not schedule another. Publishing refreshes the signed-in user's opening immediately, and a request that was already in flight is ignored when it returns. The in-memory openings are capped at 32 profiles, least recently used first. A cached non-empty page still survives a failed fetch.
+
+`Moments.Loading` was added to `en.lproj` as `Loading…`. That is the string the profile pane shows while the first page is in flight. zh-Hans is 加载中… and zh-Hant is 載入中…. The other bundled lprojs carry the English sentence until a langpack replaces it. zh-Hans also adds `Moments.Title` = 动态 and zh-Hant adds `Moments.Title` = 動態.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsNavigation.swift` | `.failed` is distinct from `.empty`. Opening decisions, throttles, and the 32-profile cap. |
+| `submodules/TelegramCore/Sources/TelegramEngine/Moments/TelegramEngineMoments.swift` | The shared opening is requested again. Publish refreshes this account. Reconnect retries a failure. |
+| `submodules/TelegramCore/Tests/MomentsRulesTests.swift` | A failed fetch then a success shows the tab. An empty profile then a published post shows the tab. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | `Moments.Loading` = `Loading…`. |
+| `Telegram/Telegram-iOS/zh-Hans.lproj/Localizable.strings` | `Moments.Loading` = 加载中…. `Moments.Title` = 动态. |
+| `Telegram/Telegram-iOS/zh-Hant.lproj/Localizable.strings` | `Moments.Loading` = 載入中…. `Moments.Title` = 動態. |
+
 ## Link hosts go through TellomiLinks — 2026-11-12
 
 `GenerateTextEntities` recognized `tell.cc`, `t.me`, and `telegram.me`, and omitted `telegram.dog`. The text-entity host list, the internal-link host list, and the open-link check now use `TellomiLinks.linkHosts` (`tell.cc`, `t.me`, `telegram.me`, `telegram.dog`). Short links use `TellomiLinks.shortLinkHosts`. The site host in that list is `TellomiLinks.siteHost`.
@@ -25,7 +42,7 @@ The restored splash controller calls `updateAppearanceBackgroundColor` and `tell
 
 Native panes come from `peerInfoAvailableMediaPanes` (`PeerInfoData.swift`). Each tag reads `aroundMessageHistoryViewForLocation`: still loading is skipped, an empty finished view is omitted, a non-empty view is added. The first result is `nil` until every tag has settled. Stories are inserted at index 0 only when `hasStories` is true (`PeerInfoData` around the user-profile branch). `PeerInfoPaneContainerNode.update` rebuilds the tabs from `availablePanes`.
 
-Moments follows that rule without taking the whole list to `nil` while its own request is open. `momentsProfileTabs` inserts the pane only when the first posts page is non-empty, immediately after Stories. `unknown` and `empty` leave the existing panes alone. Stories stay a separate pane. The Chinese Stories title is 快拍; Moments stays 动态.
+Moments follows that rule without taking the whole list to `nil` while its own request is open. `momentsProfileTabs` inserts the pane only when the first posts page is non-empty, immediately after Stories. `unknown`, `failed`, and `empty` leave the existing panes alone. A failed or empty opening is not kept for the process; the 2026-11-13 note describes the retry. Stories stay a separate pane. The Chinese Stories title is 快拍; Moments stays 动态.
 
 The first page is one shared opening: the extension cache, then `GET /v1/feed/profiles/{id}/posts`. The tab decision and the list subscribe to that opening, so they do not each hit the network. A failed request does not replace a cached non-empty page. The profile signal emits `.unknown` before that opening returns, so the page is not held. The pane reports ready at init (`momentsProfilePaneReadyAtInit`, one copy). Inside the pane, loading, a failed empty list with retry, and an empty list come from `momentsProfilePostsState`. The list uses the passed top inset and at least 24pt at the bottom, so 关注 and 粉丝 sit below the username card. Likes, comments, paging (`momentsShouldLoadFeedPage`), and the following/follower rows stay in the pane.
 
@@ -42,6 +59,10 @@ The first page is one shared opening: the extension cache, then `GET /v1/feed/pr
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoData.swift` | The Moments insert is the helper call. Stories are not removed. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift` | The Stories tab title uses the helper. |
 | `submodules/TelegramCore/Tests/MomentsRulesTests.swift` | Empty, unknown, posts, failed cache, order, one 快拍 and one 动态, ready, insets, load state. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | `Moments.Loading` = `Loading…`, the sentence the pane shows while posts are loading. |
+| `Telegram/Telegram-iOS/zh-Hans.lproj/Localizable.strings` | `Moments.Loading` = 加载中…. `Moments.Title` = 动态. |
+| `Telegram/Telegram-iOS/zh-Hant.lproj/Localizable.strings` | `Moments.Loading` = 載入中…. `Moments.Title` = 動態. |
+| `Telegram/Telegram-iOS/*.lproj/Localizable.strings` | The other bundled languages use the English `Moments.Loading` until the server langpack has a translation. |
 
 ## Release line keeps Moments and master — 2026-11-12
 

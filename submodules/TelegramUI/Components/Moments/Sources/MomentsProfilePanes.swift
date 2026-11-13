@@ -12,8 +12,10 @@ public func momentsUserProfilePanes(_ panes: [PeerInfoPaneKey]?, isUserProfile: 
 }
 
 /// The shared profile opening. A known snapshot is emitted as it is, so a second
-/// visit does not drop the tab while the same request is replayed. The first visit
-/// emits `.unknown` before the cache and the network, and does not hold the page.
+/// visit does not drop a tab that is already showing while a refresh is in flight.
+/// The first visit emits `.unknown` before the cache and the network, and does not
+/// hold the page. A failed or confirmed-empty opening is refreshed by the engine
+/// on the next visit.
 public func momentsProfilePostsPresence(context: AccountContext, peerId: EnginePeer.Id) -> Signal<MomentsProfilePostsPresence, NoError> {
     let id = "\(peerId.toInt64())"
     let opened = context.engine.moments.openProfilePosts(id: id)

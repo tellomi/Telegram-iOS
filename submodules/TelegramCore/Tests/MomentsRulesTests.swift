@@ -829,9 +829,11 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(momentsProfilePostsPresence(cachedCount: nil, remoteCount: 0, failed: false), .empty)
         XCTAssertEqual(momentsProfilePostsPresence(cachedCount: nil, remoteCount: 3, failed: false), .present)
         XCTAssertEqual(momentsProfilePostsPresence(cachedCount: 4, remoteCount: nil, failed: true), .present)
-        XCTAssertEqual(momentsProfilePostsPresence(cachedCount: nil, remoteCount: nil, failed: true), .empty)
+        XCTAssertEqual(momentsProfilePostsPresence(cachedCount: nil, remoteCount: nil, failed: true), .failed)
+        XCTAssertEqual(momentsProfilePostsPresence(cachedCount: 0, remoteCount: nil, failed: true), .failed)
         XCTAssertEqual(momentsProfilePostsPresence(cachedCount: 4, remoteCount: 0, failed: false), .empty)
         XCTAssertEqual(momentsProfileTabs(base, isUserProfile: true, posts: .empty, isStories: isStories, moments: "moments"), base)
+        XCTAssertEqual(momentsProfileTabs(base, isUserProfile: true, posts: .failed, isStories: isStories, moments: "moments"), base)
         XCTAssertEqual(momentsProfileTabs(base, isUserProfile: true, posts: .unknown, isStories: isStories, moments: "moments"), base)
         XCTAssertEqual(momentsProfilePostsFetch(refresh: false, cursor: nil), .sharedOpening)
         XCTAssertEqual(momentsProfilePostsFetch(refresh: true, cursor: nil), .page(cursor: nil))
@@ -853,11 +855,112 @@ final class MomentsRulesTests: XCTestCase {
         XCTAssertEqual(momentsProfileTabs(["media"], isUserProfile: true, posts: .present, isStories: isStories, moments: "moments"), ["moments", "media"])
         XCTAssertTrue(momentsProfilePaneReadyAtInit())
     }
+
+    func testFailedProfileFetchThenSuccessShowsTheMomentsTab() {
+        var store = MomentsProfileOpeningStore()
+        let id = "7"
+        let openedAt: Int64 = 1_000
+        XCTAssertEqual(store.decision(id: id, now: openedAt, reason: .profileOpen), .refresh)
+        let first = store.begin(id: id, now: openedAt)
+        let failed = store.note(id: id, generation: first.generation, snapshot: momentsOpeningSnapshot(remoteCount: nil, failed: true), now: openedAt + 1)
+        XCTAssertTrue(failed.applied)
+        XCTAssertFalse(failed.confirmedEmpty)
+        XCTAssertEqual(store.snapshot(id: id)?.presence, .failed)
+        XCTAssertNotEqual(store.snapshot(id: id)?.presence, .empty)
+        XCTAssertEqual(momentsOpeningTabs(store, id: id), ["stories", "media"])
+
+        XCTAssertEqual(store.decision(id: id, now: openedAt + 2, reason: .profileOpen), .reuse)
+        let retryAt = (openedAt + 1) + momentsProfileOpeningFailureThrottle
+        XCTAssertEqual(store.decision(id: id, now: retryAt, reason: .profileOpen), .refresh)
+        let second = store.begin(id: id, now: retryAt)
+        XCTAssertTrue(store.note(id: id, generation: second.generation, snapshot: momentsOpeningSnapshot(remoteCount: 2, failed: false), now: retryAt + 1).applied)
+        XCTAssertEqual(store.snapshot(id: id)?.presence, .present)
+        XCTAssertEqual(momentsOpeningTabs(store, id: id), ["stories", "moments", "media"])
+        XCTAssertFalse(store.note(id: id, generation: first.generation, snapshot: momentsOpeningSnapshot(remoteCount: nil, failed: true), now: retryAt + 2).applied)
+        XCTAssertEqual(momentsOpeningTabs(store, id: id), ["stories", "moments", "media"])
+
+        var offline = MomentsProfileOpeningStore()
+        let offlineBegin = offline.begin(id: id, now: 50)
+        XCTAssertTrue(offline.note(id: id, generation: offlineBegin.generation, snapshot: momentsOpeningSnapshot(remoteCount: nil, failed: true), now: 51).applied)
+        XCTAssertEqual(momentsOpeningTabs(offline, id: id), ["stories", "media"])
+        XCTAssertEqual(offline.decision(id: id, now: 51, reason: .reconnect), .reuse)
+        XCTAssertEqual(offline.grantReconnectBypass(), [id])
+        XCTAssertEqual(offline.decision(id: id, now: 51, reason: .reconnect), .refresh)
+        let reconnected = offline.begin(id: id, now: 52)
+        XCTAssertTrue(offline.note(id: id, generation: reconnected.generation, snapshot: momentsOpeningSnapshot(remoteCount: 1, failed: false), now: 53).applied)
+        XCTAssertEqual(momentsOpeningTabs(offline, id: id), ["stories", "moments", "media"])
+
+        var racing = MomentsProfileOpeningStore()
+        let race = racing.begin(id: id, now: 1)
+        XCTAssertEqual(racing.grantReconnectBypass(), [])
+        let raced = racing.note(id: id, generation: race.generation, snapshot: momentsOpeningSnapshot(remoteCount: nil, failed: true), now: 2)
+        XCTAssertTrue(raced.reconnectFollowUp)
+        XCTAssertEqual(racing.decision(id: id, now: 2, reason: .reconnect), .refresh)
+    }
+
+    func testEmptyProfileThenPublishedPostShowsTheMomentsTab() {
+        var store = MomentsProfileOpeningStore()
+        let id = "9"
+        let began = store.begin(id: id, now: 50)
+        let settled = store.note(id: id, generation: began.generation, snapshot: momentsOpeningSnapshot(remoteCount: 0, failed: false), now: 51)
+        XCTAssertTrue(settled.applied)
+        XCTAssertTrue(settled.confirmedEmpty)
+        XCTAssertEqual(store.snapshot(id: id)?.presence, .empty)
+        XCTAssertEqual(momentsOpeningTabs(store, id: id), ["stories", "media"])
+
+        XCTAssertEqual(store.decision(id: id, now: 51, reason: .viewerPublished), .refresh)
+        XCTAssertEqual(store.decision(id: id, now: 51, reason: .ttl), .reuse)
+        XCTAssertEqual(store.decision(id: id, now: 51 + momentsProfileOpeningEmptyTTL - 1, reason: .ttl), .reuse)
+        XCTAssertEqual(store.decision(id: id, now: 51 + momentsProfileOpeningEmptyTTL, reason: .ttl), .refresh)
+        XCTAssertEqual(store.decision(id: id, now: 51, reason: .profileOpen), .refresh)
+
+        let published = store.begin(id: id, now: 51)
+        XCTAssertNotEqual(published.generation, began.generation)
+        XCTAssertFalse(store.note(id: id, generation: began.generation, snapshot: momentsOpeningSnapshot(remoteCount: 0, failed: false), now: 52).applied)
+        XCTAssertTrue(store.note(id: id, generation: published.generation, snapshot: momentsOpeningSnapshot(remoteCount: 1, failed: false), now: 52).applied)
+        XCTAssertEqual(store.snapshot(id: id)?.presence, .present)
+        XCTAssertEqual(momentsOpeningTabs(store, id: id), ["stories", "moments", "media"])
+        XCTAssertEqual(store.decision(id: id, now: 53, reason: .profileOpen), .reuse)
+
+        var again = MomentsProfileOpeningStore()
+        let empty = again.begin(id: id, now: 10)
+        XCTAssertTrue(again.note(id: id, generation: empty.generation, snapshot: momentsOpeningSnapshot(remoteCount: 0, failed: false), now: 11).applied)
+        XCTAssertEqual(again.decision(id: id, now: 12, reason: .profileOpen), .refresh)
+        let nextOpen = again.begin(id: id, now: 12)
+        XCTAssertTrue(again.note(id: id, generation: nextOpen.generation, snapshot: momentsOpeningSnapshot(remoteCount: 3, failed: false), now: 13).applied)
+        XCTAssertEqual(momentsOpeningTabs(again, id: id), ["stories", "moments", "media"])
+    }
+
+    func testProfileOpeningMemoryIsBounded() {
+        var store = MomentsProfileOpeningStore()
+        for index in 0 ..< momentsProfileOpeningMemoryLimit {
+            let began = store.begin(id: "p\(index)", now: Int64(index))
+            XCTAssertTrue(began.evicted.isEmpty)
+        }
+        XCTAssertEqual(store.count, momentsProfileOpeningMemoryLimit)
+        store.touch(id: "p0", now: Int64(momentsProfileOpeningMemoryLimit + 5))
+        let overflow = store.begin(id: "overflow", now: Int64(momentsProfileOpeningMemoryLimit + 6))
+        XCTAssertEqual(overflow.evicted, ["p1"])
+        XCTAssertEqual(store.count, momentsProfileOpeningMemoryLimit)
+        XCTAssertNil(store.snapshot(id: "p1"))
+        XCTAssertEqual(store.decision(id: "p1", now: 1_000, reason: .profileOpen), .refresh)
+        XCTAssertEqual(store.decision(id: "p0", now: 1_000, reason: .profileOpen), .reuse)
+        XCTAssertEqual(store.decision(id: "gone", now: 1_000, reason: .reconnect), .reuse)
+    }
 }
 
 private let momentsServerConfigFixture = """
 {"tabs":["recommend","following","friends","nearby"],"recommend_mode":"personalized","personalization_toggle_visible":true,"hot_enabled":true,"ip_region_visible":true,"sensitive_more_available":false,"media_base_url":"https://media.example/feed","card_ttl_seconds":120,"text_limit":900,"limits":{"post_text_chars":420,"post_images":4,"post_videos":2,"article_chars":8000,"edit_window_seconds":900,"voice_comment_max_seconds":20,"voice_post_max_seconds":30,"video_max_seconds":45,"comment_text_chars":80,"page_size":15,"posts_per_hour":10,"comments_per_hour":40,"max_topics":2,"max_mentions":5,"probe_interval_seconds":30,"notification_days":14,"text_limit":111,"comment_text_limit":222,"voice_max_seconds":180,"image_limit":9,"video_limit":8}}
 """
+
+private func momentsOpeningSnapshot(remoteCount: Int?, failed: Bool, cachedCount: Int? = nil) -> MomentsProfilePostsSnapshot {
+    return MomentsProfilePostsSnapshot(items: [], nextCursor: nil, cachedCount: cachedCount, remoteCount: remoteCount, failed: failed)
+}
+
+private func momentsOpeningTabs(_ store: MomentsProfileOpeningStore, id: String) -> [String] {
+    let posts = store.snapshot(id: id)?.presence ?? .unknown
+    return momentsProfileTabs(["stories", "media"], isUserProfile: true, posts: posts, isStories: { $0 == "stories" }, moments: "moments") ?? []
+}
 
 private func momentsTestPost(text: String, audience: MomentsAudience = MomentsAudience(kind: .everyone), mediaKeys: [String] = [], allowNearby: Bool = false, city: String? = nil, placeId: String? = nil, quoteOf: String? = nil, nonce: String) -> MomentsPostDraft {
     return MomentsPostDraft(text: text, audience: audience, mediaKeys: mediaKeys, allowNearby: allowNearby, city: city, placeId: placeId, quoteOf: quoteOf, clientNonce: nonce)
