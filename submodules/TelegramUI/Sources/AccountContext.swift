@@ -433,6 +433,8 @@ public final class AccountContextImpl: AccountContext {
         self.appConfigurationDisposable = (self._appConfiguration.get()
         |> deliverOnMainQueue).start(next: { value in
             let _ = currentAppConfiguration.swap(value)
+            // Tellomi: picker blocklist. `emoji_blocklist` on this config replaces the built-in list.
+            TellomiEmojiBlocklist.apply(appConfiguration: value)
             let _ = cachedLottieRenderingSettings.swap(AccountContextImpl.resolveLottieRenderingSettings(
                 appConfiguration: value,
                 experimentalSettings: lottieSharedContext.immediateExperimentalUISettings
@@ -470,6 +472,11 @@ public final class AccountContextImpl: AccountContext {
             let currentCountriesConfiguration = self.currentCountriesConfiguration
             self.countriesConfigurationDisposable = (self.engine.localization.getCountriesList(accountManager: sharedContext.accountManager, langCode: langCode)
             |> deliverOnMainQueue).start(next: { [weak self] value in
+                // An empty server list must not replace the bundled countries. Prefix
+                // lookup and the picker both read this configuration.
+                guard !value.isEmpty else {
+                    return
+                }
                 let configuration = CountriesConfiguration(countries: value)
                 let _ = currentCountriesConfiguration.swap(configuration)
                 self?._countriesConfiguration.set(.single(configuration))

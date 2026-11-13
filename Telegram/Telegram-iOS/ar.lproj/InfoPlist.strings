@@ -1,6 +1,6 @@
 /* Localized versions of Info.plist keys */
-"CFBundleDisplayName" = "تيليجرام";
-"NSContactsUsageDescription" = "سيقوم تيليجرام برفع جهات الاتصال الخاصة بك باستمرار إلى خوادم التخزين السحابية ذات التشفير العالي لتتمكن من التواصل مع أصدقائك من خلال جميع أجهزتك.";
+"CFBundleDisplayName" = "Tellomi";
+"NSContactsUsageDescription" = "سيقوم Tellomi برفع جهات الاتصال الخاصة بك باستمرار إلى خوادم التخزين السحابية ذات التشفير العالي لتتمكن من التواصل مع أصدقائك من خلال جميع أجهزتك.";
 "NSLocationWhenInUseUsageDescription" = "عندما ترغب في مشاركة مكانك مع أصدقائك، Tellomi يحتاج لصلاحيات لعرض الخريطة لهم.";
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "عندما تختار أن تشارك مكانك بشكل حي مع أصدقائك في المحادثة، يحتاج Tellomi إلى الوصول لموقعك في الخلفية حتى بعد إغلاق Tellomi خلال فترة المشاركة.";
 "NSLocationAlwaysUsageDescription" = "عندما تقوم بمشاركة موقعك مع أصدقائك، Tellomi يحتاج إلى الصلاحية ليعرض لهم الخريطة. كما تحتاج لإعطاء Tellomi الصلاحية لتتمكن من إرسال موقعك من ساعة آبل.";

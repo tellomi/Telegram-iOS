@@ -16,7 +16,6 @@ import PhotoResources
 import PeerInfoPaneNode
 import WebUI
 import WalletContext
-import MomentsUI
 
 enum PeerInfoUpdatingAvatar {
     case none
@@ -1568,7 +1567,6 @@ func peerInfoScreenData(
             let forcedLinkedCommunityId = Atomic<EnginePeer.Id?>(value: nil)
             
             return combineLatest(
-                combineLatest(
                 context.account.viewTracker.peerView(peerId, updateData: true),
                 peerInfoAvailableMediaPanes(context: context, peerId: peerId, chatLocation: chatLocation, isMyProfile: isMyProfile, chatLocationContextHolder: chatLocationContextHolder, sharedMediaFromForumTopic: sharedMediaFromForumTopic),
                 context.engine.data.subscribe(TelegramEngine.EngineData.Item.NotificationSettings.Global()),
@@ -1591,16 +1589,13 @@ func peerInfoScreenData(
                 webAppPermissions,
                 savedMusicContext.state,
                 combineLatest(businessConnectedBot, walletBalance)
-                ),
-                momentsProfilePostsPresence(context: context, peerId: userPeerId)
             )
-            |> mapToSignal { values, posts -> Signal<PeerInfoScreenData, NoError> in
-                let (peerView, mediaPanes, globalNotificationSettings, encryptionKeyFingerprint, status, hasStories, hasStoryArchive, recommendedBots, accountIsPremium, savedMessagesPeer, hasSavedMessagesChats, hasSavedMessages, hasSavedMessageTags, hasBotPreviewItems, personalChannel, privacySettings, starsRevenueContextAndState, revenueContextAndState, premiumGiftOptions, webAppPermissions, savedMusicState, businessConnectedBotAndWalletBalance) = values
+            |> mapToSignal { peerView, availablePanes, globalNotificationSettings, encryptionKeyFingerprint, status, hasStories, hasStoryArchive, recommendedBots, accountIsPremium, savedMessagesPeer, hasSavedMessagesChats, hasSavedMessages, hasSavedMessageTags, hasBotPreviewItems, personalChannel, privacySettings, starsRevenueContextAndState, revenueContextAndState, premiumGiftOptions, webAppPermissions, savedMusicState, businessConnectedBotAndWalletBalance -> Signal<PeerInfoScreenData, NoError> in
                 let (businessConnectedBot, walletBalance) = businessConnectedBotAndWalletBalance
-                var availablePanes = mediaPanes
+                var availablePanes = availablePanes
                 if isMyProfile {
                     availablePanes?.insert(.stories, at: 0)
-                    if availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData {
+                    if TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).giftsEnabled, availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData {
                         if let starGiftsCount = cachedData.starGiftsCount, starGiftsCount > 0 {
                             availablePanes?.insert(.gifts, at: 1)
                         }
@@ -1613,7 +1608,7 @@ func peerInfoScreenData(
                         availablePanes?.insert(.stories, at: 0)
                     }
                     
-                    if availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData, peerView.peerId != context.account.peerId {
+                    if TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).giftsEnabled, availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData, peerView.peerId != context.account.peerId {
                         if let starGiftsCount = cachedData.starGiftsCount, starGiftsCount > 0 {
                             availablePanes?.insert(.gifts, at: hasStories ? 1 : 0)
                         }
@@ -1655,8 +1650,6 @@ func peerInfoScreenData(
                     availablePanes = nil
                 }
                 
-                availablePanes = momentsUserProfilePanes(availablePanes, isUserProfile: peerView.peers[peerView.peerId] is TelegramUser || isMyProfile, posts: posts)
-
                 if var currentAvailablePanes = availablePanes, let cachedData = peerView.cachedData as? CachedUserData, let mainProfileTab = cachedData.mainProfileTab {
                     let mainTabKey = PeerInfoPaneKey(tab: mainProfileTab)
                     if currentAvailablePanes.contains(mainTabKey) && currentAvailablePanes.first != mainTabKey {
@@ -1955,7 +1948,7 @@ func peerInfoScreenData(
                         }
                     }
                     
-                    if availablePanes != nil, let cachedData = peerView.cachedData as? CachedChannelData {
+                    if TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).giftsEnabled, availablePanes != nil, let cachedData = peerView.cachedData as? CachedChannelData {
                         if (cachedData.starGiftsCount ?? 0) > 0 || (profileGiftsState.count ?? 0) > 0 || forceHasGifts {
                             availablePanes?.insert(.gifts, at: hasStories ? 1 : 0)
                         }

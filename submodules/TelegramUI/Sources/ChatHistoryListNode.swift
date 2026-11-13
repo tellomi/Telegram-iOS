@@ -934,7 +934,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                             var attributes: [MessageAttribute] = []
                             
                             let mappedMessageType: AdMessageAttribute.MessageType = .sponsored
-                            attributes.append(AdMessageAttribute(opaqueId: "fake_ad_\(i)".data(using: .utf8)!, messageType: mappedMessageType, url: "tell.cc/telegram", buttonText: "VIEW", sponsorInfo: nil, additionalInfo: nil, canReport: false, hasContentMedia: false, minDisplayDuration: nil, maxDisplayDuration: nil))
+                            attributes.append(AdMessageAttribute(opaqueId: "fake_ad_\(i)".data(using: .utf8)!, messageType: mappedMessageType, url: "\(TellomiLinks.host)/telegram", buttonText: "VIEW", sponsorInfo: nil, additionalInfo: nil, canReport: false, hasContentMedia: false, minDisplayDuration: nil, maxDisplayDuration: nil))
                             
                             var messagePeers = SimpleDictionary<PeerId, Peer>()
                             
@@ -1522,10 +1522,19 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
     private let currentViewVersion = Atomic<Int?>(value: nil)
     private let previousView = Atomic<(ChatHistoryView, Int, Set<MessageId>?, Int)?>(value: nil)
     private let previousHistoryAppearsCleared = Atomic<Bool?>(value: nil)
+    /// Bumped at the start of every history subscription. The value stored with the rows on screen
+    /// is `appliedHistoryLoadGeneration`. An empty loading snapshot may keep those rows only when
+    /// the two match. `updateChatLocation` bumps this before the new chat emits, so the previous
+    /// chat's rows are not that snapshot's to keep.
+    private let historyLoadGeneration = Atomic<Int>(value: 0)
+    private let appliedHistoryLoadGeneration = Atomic<Int>(value: 0)
     
     private func beginChatHistoryTransitions(resetScrolling: Bool, switchedToAnotherSource: Bool) {
         self.historyDisposable.set(nil)
         self._isReady.set(false)
+        let loadGeneration = self.historyLoadGeneration.modify { $0 + 1 }
+        let historyLoadGeneration = self.historyLoadGeneration
+        let appliedHistoryLoadGeneration = self.appliedHistoryLoadGeneration
         
         let context = self.context
         let chatLocation = self.chatLocation
@@ -2092,6 +2101,10 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                 print("Chat load time: \(deltaTime) ms")
                 #endif
             }
+
+            if !historyLoadEventIsCurrent(eventGeneration: loadGeneration, currentGeneration: historyLoadGeneration.with({ $0 })) {
+                return
+            }
             
             func applyHole() {
                 Queue.mainQueue().async {
@@ -2168,6 +2181,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                     let filteredEntries: [ChatHistoryEntry] = []
                     let processedView = ChatHistoryView(originalView: MessageHistoryView(tag: nil, namespaces: .all, entries: [], holeEarlier: false, holeLater: false, isLoading: true), filteredEntries: filteredEntries, associatedData: previousViewValue.associatedData, lastHeaderId: 0, id: previousViewValue.id, locationInput: previousViewValue.locationInput, ignoreMessagesInTimestampRange: nil, ignoreMessageIds: Set())
                     let previousValueAndVersion = previousView.swap((processedView, update.1, selectedMessages, allAdMessages.version))
+                    let _ = appliedHistoryLoadGeneration.swap(loadGeneration)
                     let previous = previousValueAndVersion?.0
                     let previousSelectedMessages = previousValueAndVersion?.2
                     
@@ -2265,6 +2279,20 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
             case let .HistoryView(view, type, scrollPosition, flashIndicators, originalScrollPosition, data, id):
                 if case .Generic(.FillHole) = type {
                     applyHole()
+                    return
+                }
+                // A navigation around a message that is still inside a hole arrives empty and loading.
+                // Applying it deletes the rows on screen; the list then anchors the replacement at
+                // index 0 (the newest edge). Keep those rows only for the load that displayed them.
+                // A new load (another chat) applies the empty frame and does not leave the old rows up.
+                let previousEntriesEmpty = previousView.with({ $0 })?.0.originalView.entries.isEmpty ?? true
+                if historyEmptyLoadingDecision(
+                    isLoading: view.isLoading,
+                    incomingEntriesEmpty: view.entries.isEmpty,
+                    previousEntriesEmpty: previousEntriesEmpty,
+                    frameGeneration: loadGeneration,
+                    appliedGeneration: appliedHistoryLoadGeneration.with({ $0 })
+                ) == .keepDisplayedRows {
                     return
                 }
                 
@@ -2401,6 +2429,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                 let lastHeaderId = filteredEntries.last.flatMap { listMessageDateHeaderId(timestamp: $0.index.timestamp) } ?? 0
                 let processedView = ChatHistoryView(originalView: view, filteredEntries: filteredEntries, associatedData: associatedData, lastHeaderId: lastHeaderId, id: id, locationInput: update.2, ignoreMessagesInTimestampRange: update.3, ignoreMessageIds: update.4)
                 let previousValueAndVersion = previousView.swap((processedView, update.1, selectedMessages, allAdMessages.version))
+                let _ = appliedHistoryLoadGeneration.swap(loadGeneration)
                 let _ = chatHistoryEntriesForViewState.swap(updatedChatHistoryEntriesForViewState)
                 let previous = previousValueAndVersion?.0
                 let previousSelectedMessages = previousValueAndVersion?.2
@@ -2699,7 +2728,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
             guard let strongSelf = self else {
                 return
             }
-            if !canRead || holdsReadsForSender {
+            if !canRead || holdsReadsForSender || TellomiSecretViewSessions.shared.suppressesReports(accountPeerId: strongSelf.context.account.peerId.toInt64(), chatPeerId: messageIndex.id.peerId.toInt64()) {
                 return
             }
             

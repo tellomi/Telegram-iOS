@@ -193,7 +193,7 @@ func inputTextPanelStateForChatPresentationInterfaceState(_ chatPresentationInte
                 } else {
                     let premiumConfiguration = PremiumConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
                     var showPremiumGift = false
-                    if !premiumConfiguration.isPremiumDisabled && chatPresentationInterfaceState.disallowedGifts != TelegramDisallowedGifts.All {
+                    if !premiumConfiguration.isPremiumDisabled && TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).giftsEnabled && chatPresentationInterfaceState.disallowedGifts != TelegramDisallowedGifts.All {
                         if chatPresentationInterfaceState.alwaysShowGiftButton {
                             showPremiumGift = true
                         } else if chatPresentationInterfaceState.hasBirthdayToday {

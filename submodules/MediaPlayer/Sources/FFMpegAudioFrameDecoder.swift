@@ -10,20 +10,13 @@ final class FFMpegAudioFrameDecoder: MediaTrackFrameDecoder {
     private let audioFrame: FFMpegAVFrame?
     private var resetDecoderOnNextFrame = true
     
-    private let channelCount: Int
     private let formatDescription: CMAudioFormatDescription
     
     private var delayedFrames: [MediaTrackFrame] = []
     
-    // Playback output: stereo for a source with two or more channels, mono for a mono source.
-    static func playbackChannelCount(codecContext: FFMpegAVCodecContext) -> Int {
-        return codecContext.channels() == 1 ? 1 : 2
-    }
-    
     init(codecContext: FFMpegAVCodecContext, sampleRate: Int = 44100, channelCount: Int = 2) {
         self.codecContext = codecContext
         self.audioFrame = FFMpegAVFrame()
-        self.channelCount = channelCount
         
         self.swrContext = FFMpegSWResample(sourceChannelCount: Int(codecContext.channels()), sourceSampleRate: Int(codecContext.sampleRate()), sourceSampleFormat: codecContext.sampleFormat(), destinationChannelCount: channelCount, destinationSampleRate: sampleRate, destinationSampleFormat: FFMPEG_AV_SAMPLE_FMT_S16)
         
@@ -41,7 +34,7 @@ final class FFMpegAudioFrameDecoder: MediaTrackFrameDecoder {
         
         var channelLayout = AudioChannelLayout()
         memset(&channelLayout, 0, MemoryLayout<AudioChannelLayout>.size)
-        channelLayout.mChannelLayoutTag = channelCount == 1 ? kAudioChannelLayoutTag_Mono : kAudioChannelLayoutTag_Stereo
+        channelLayout.mChannelLayoutTag = kAudioChannelLayoutTag_Mono
         
         var formatDescription: CMAudioFormatDescription?
         CMAudioFormatDescriptionCreate(allocator: nil, asbd: &outputDescription, layoutSize: MemoryLayout<AudioChannelLayout>.size, layout: &channelLayout, magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &formatDescription)
@@ -158,7 +151,7 @@ final class FFMpegAudioFrameDecoder: MediaTrackFrameDecoder {
         
         let pts = CMTime(value: frame.pts, timescale: self.timescale)
         
-        guard CMAudioSampleBufferCreateReadyWithPacketDescriptions(allocator: nil, dataBuffer: blockBuffer!, formatDescription: self.formatDescription, sampleCount: data.count / (2 * self.channelCount), presentationTimeStamp: pts, packetDescriptions: nil, sampleBufferOut: &sampleBuffer) == noErr else {
+        guard CMAudioSampleBufferCreateReadyWithPacketDescriptions(allocator: nil, dataBuffer: blockBuffer!, formatDescription: self.formatDescription, sampleCount: Int(data.count / 2), presentationTimeStamp: pts, packetDescriptions: nil, sampleBufferOut: &sampleBuffer) == noErr else {
             return nil
         }
         

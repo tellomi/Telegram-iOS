@@ -300,22 +300,12 @@ public class Serialization: NSObject, MTSerialization {
                     case let .config(configData):
                         let dcOptions = configData.dcOptions
                         var addressDict: [NSNumber: [Any]] = [:]
-                        for option in dcOptions {
-                            switch option {
-                                case let .dcOption(dcOptionData):
-                                    let (flags, id, ipAddress, port, secret) = (dcOptionData.flags, dcOptionData.id, dcOptionData.ipAddress, dcOptionData.port, dcOptionData.secret)
-                                    if addressDict[id as NSNumber] == nil {
-                                        addressDict[id as NSNumber] = []
-                                    }
-                                    let preferForMedia = (flags & (1 << 1)) != 0
-                                    let restrictToTcp = (flags & (1 << 2)) != 0
-                                    let isCdn = (flags & (1 << 3)) != 0
-                                    let preferForProxy = (flags & (1 << 4)) != 0
-                                    // swift_scheme.tl dcOption flags bit 5 is this_port_only.
-                                    let thisPortOnly = (flags & (1 << 5)) != 0
-                                    addressDict[id as NSNumber]!.append(MTDatacenterAddress(ip: ipAddress, port: UInt16(port), preferForMedia: preferForMedia, restrictToTcp: restrictToTcp, cdn: isCdn, preferForProxy: preferForProxy, secret: secret?.makeData(), thisPortOnly: thisPortOnly))
-                                    break
+                        let accepted = tellomiAcceptedDatacenterAddresses(tellomiDcOptionInputs(dcOptions))
+                        for (id, list) in accepted {
+                            let addresses: [Any] = list.map { item in
+                                MTDatacenterAddress(ip: item.host, port: item.port, preferForMedia: item.preferForMedia, restrictToTcp: item.restrictToTcp, cdn: item.cdn, preferForProxy: item.preferForProxy, secret: item.secret) as Any
                             }
+                            addressDict[id as NSNumber] = addresses
                         }
                         return MTDatacenterAddressListData(addressList: addressDict)
                 }

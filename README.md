@@ -1,5 +1,7 @@
 # Telegram iOS Source Code Compilation Guide
 
+This tree is the **Tellomi** fork. The home-screen name, bundle id, API credentials and MTProto server are already set for a local Teamgram deployment. Read [docs/TELLOMI.md](docs/TELLOMI.md) before building: it lists every fork change, how to point the app at a server, and how signing keys are supplied later. The steps below are the upstream compilation guide.
+
 We welcome all developers to use our API and source code to create applications on our platform.
 There are several things we require from **all developers** for the moment.
 

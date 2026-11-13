@@ -56,8 +56,6 @@ public extension ShareWithPeersScreen {
         public let subject: Subject
         public let liveStream: Bool
         public let editing: Bool
-        /// Moments reuses the story privacy sheet: mutual followers is a category, and story-only rows stay off.
-        public let momentsAudience: Bool
         public private(set) var initialPeerIds: Set<EnginePeer.Id> = Set()
         let blockedPeersContext: BlockedPeersContext?
         
@@ -78,7 +76,6 @@ public extension ShareWithPeersScreen {
             subject: Subject = .chats(blocked: false),
             liveStream: Bool = false,
             editing: Bool = false,
-            momentsAudience: Bool = false,
             initialSelectedPeers: [EngineStoryPrivacy.Base: [EnginePeer.Id]] = [:],
             initialPeerIds: Set<EnginePeer.Id> = Set(),
             closeFriends: Signal<[EnginePeer], NoError> = .single([]),
@@ -88,7 +85,6 @@ public extension ShareWithPeersScreen {
             self.subject = subject
             self.liveStream = liveStream
             self.editing = editing
-            self.momentsAudience = momentsAudience
             self.initialPeerIds = initialPeerIds
             self.blockedPeersContext = blockedPeersContext
             

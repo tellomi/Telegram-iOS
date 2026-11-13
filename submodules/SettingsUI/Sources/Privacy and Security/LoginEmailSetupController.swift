@@ -124,7 +124,8 @@ public func loginEmailSetupController(context: AccountContext, blocking: Bool, e
                         }
                     }
                 }, completed: { [weak codeController] in
-                   emailChangeCompletion(codeController)
+                    tellomiRememberLoginEmail(peerId: context.account.peerId, login: email)
+                    emailChangeCompletion(codeController)
                 })
             }
             codeController.updateData(number: "", email: email, codeType: .email(emailPattern: "", length: data.length, resetAvailablePeriod: nil, resetPendingDate: nil, appleSignInAllowed: false, setup: true), nextType: nil, timeout: nil, termsOfService: nil, previousCodeType: nil, isPrevious: false)

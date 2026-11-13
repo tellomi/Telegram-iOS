@@ -46,6 +46,13 @@ public protocol TabBarContainedController {
 
 open class TabBarControllerImpl: ViewController, TabBarController {
     private var validLayout: ContainerViewLayout?
+    public var tellomiHidesTabTitles: Bool = false {
+        didSet {
+            if oldValue != self.tellomiHidesTabTitles {
+                self.updateLayout()
+            }
+        }
+    }
     
     private var tabBarControllerNode: TabBarControllerNode {
         get {
@@ -127,17 +134,6 @@ open class TabBarControllerImpl: ViewController, TabBarController {
         self.pendingControllerDisposable.dispose()
     }
     
-    /// Phone tab titles. Compact bars ignore this. Changing it lays the bar out again.
-    public var showsItemTitles: Bool = true {
-        didSet {
-            guard self.showsItemTitles != oldValue, self.isNodeLoaded else {
-                return
-            }
-            self.tabBarControllerNode.showsItemTitles = self.showsItemTitles
-            self.updateLayout(transition: .animated(duration: 0.2, curve: .easeInOut))
-        }
-    }
-
     public func updateTheme(theme: PresentationTheme) {
         if self.theme !== theme {
             self.theme = theme
@@ -289,7 +285,6 @@ open class TabBarControllerImpl: ViewController, TabBarController {
             self.currentController?.tabBarDeactivateSearch()
         })
         
-        self.tabBarControllerNode.showsItemTitles = self.showsItemTitles
         self.updateSelectedIndex()
         self.displayNodeDidLoad()
     }
@@ -390,7 +385,7 @@ open class TabBarControllerImpl: ViewController, TabBarController {
         super.containerLayoutUpdated(layout, transition: transition)
         
         self.validLayout = layout
-        self.tabBarControllerNode.showsItemTitles = self.showsItemTitles
+        self.tabBarControllerNode.tellomiHidesTabTitles = self.tellomiHidesTabTitles
         
         let bottomInset = self.tabBarControllerNode.containerLayoutUpdated(layout, toolbar: self.currentController?.toolbar, transition: transition)
         

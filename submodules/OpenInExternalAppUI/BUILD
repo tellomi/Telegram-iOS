@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
 
 swift_library(
     name = "OpenInExternalAppUI",
@@ -27,5 +27,21 @@ swift_library(
     ],
     visibility = [
         "//visibility:public",
+    ],
+)
+
+# Host test of the map URL builders. The rest of this module needs UIKit.
+# Run with `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/OpenInExternalAppUI:TellomiMapOpenInTests`.
+swift_test(
+    name = "TellomiMapOpenInTests",
+    srcs = [
+        "Sources/TellomiMapOpenIn.swift",
+        "Tests/TellomiMapOpenInTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
+    ],
+    deps = [
+        "//submodules/UrlEscaping",
     ],
 )

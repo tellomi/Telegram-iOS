@@ -180,9 +180,6 @@ EXPECTED_DIAL = [
     for port in SEED_PORTS
 ]
 # Files that decide what this client dials, plus the docs that describe that list.
-# Unit tests are not listed. MTDiscoverConnectionSignalsTests names port 5222
-# to assert a locked address does not gain it, and uses 5222 as the declared
-# port of a non-seed media address. Those files are not linked into the app.
 DIAL_SURFACE_PATHS = (
     "Tellomi/tellomi-server.json",
     "submodules/MtProtoKit/Sources/TellomiServerConfigJSON.h",
@@ -190,6 +187,7 @@ DIAL_SURFACE_PATHS = (
     "submodules/MtProtoKit/PublicHeaders/MtProtoKit/TellomiServerConfig.h",
     "submodules/TelegramCore/Sources/Network/Network.swift",
     "submodules/MtProtoKit/Sources/MTDiscoverConnectionSignals.m",
+    "submodules/MtProtoKit/Tests/MTDiscoverConnectionSignalsTests.m",
     "docs/TELLOMI.md",
     "docs/dc-addresses.md",
 )
@@ -337,35 +335,14 @@ def check_seed_implementation() -> None:
         fail("Network.swift is not installing Tellomi seed address sets")
 
 
-def is_test_path(relative: str) -> bool:
-    """A unit test. It is not linked into the app, so it may name a retired port."""
-    return "Tests" in pathlib.PurePosixPath(relative).parts
-
-
-def dial_surface_failures(texts: dict[str, str]) -> list[str]:
-    """Forbidden dial tokens in sources that ship. Test paths are ignored."""
-    failures = []
-    for relative, text in texts.items():
-        if is_test_path(relative):
-            continue
-        hits = forbidden_dial_hits(text)
-        if hits:
-            failures.append(f"{relative} contains forbidden dial token(s): " + ", ".join(hits))
-    return failures
-
-
 def check_dial_surfaces() -> None:
-    texts = {}
     for relative in DIAL_SURFACE_PATHS:
-        if is_test_path(relative):
-            continue
         path = ROOT / relative
         if not path.is_file():
             fail(f"missing dial surface {relative}")
-        texts[relative] = path.read_text(encoding="utf-8")
-    failures = dial_surface_failures(texts)
-    if failures:
-        fail(failures[0])
+        hits = forbidden_dial_hits(path.read_text(encoding="utf-8"))
+        if hits:
+            fail(f"{relative} contains forbidden dial token(s): " + ", ".join(hits))
 
 
 def check_keys(config: dict) -> None:
@@ -395,8 +372,10 @@ def check_build_configuration() -> None:
             fail(f"{name} still uses Telegram's api_id")
         if config.team_id != "CB7KP6GBAR":
             fail(f"{name} team id is {config.team_id}")
-        if config.enable_siri or config.enable_icloud:
-            fail(f"{name} enables Siri or iCloud before signing entitlements exist")
+        if config.enable_siri:
+            fail(f"{name} sets enable_siri. Make.py turns that bit on only when the profile grants com.apple.developer.siri")
+        if config.enable_icloud:
+            fail(f"{name} enables iCloud before that signing entitlement exists")
         if config.is_appstore_build != "false":
             fail(f"{name} is still marked as an App Store build")
         if config.app_specific_url_scheme != "tellomi":
@@ -485,7 +464,7 @@ def check_extension_suffixes(build: str, variables: str) -> None:
     if "SIRIKIT" not in siri["capabilities"]:
         fail("SiriIntents must enable SiriKit")
     main = next(item for item in targets() if item["suffix"] == "")
-    if main["capabilities"] != ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS", "USERNOTIFICATIONS_COMMUNICATION"]:
+    if main["capabilities"] != ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS", "USERNOTIFICATIONS_COMMUNICATION", "SIRIKIT"]:
         fail("main app capabilities changed")
 
     for line in bazel_suffix_lines().splitlines():
@@ -518,14 +497,16 @@ def check_extension_suffixes(build: str, variables: str) -> None:
             fail("variables.bzl writer dropped " + line)
     if "telegram_communication_notifications = True\n" not in written:
         fail("variables.bzl writer dropped communication notifications")
+    if "telegram_enable_siri = False\n" not in written:
+        fail("variables.bzl writer turned Siri on without a profile")
+    if "telegram_siri_extension_entitlement = False\n" not in written:
+        fail("variables.bzl writer turned the extension Siri entitlement on without a profile")
 
 
 def check_wiring() -> None:
     network = (ROOT / "submodules/TelegramCore/Sources/Network/Network.swift").read_text(encoding="utf-8")
     if "149.154.175.50" in network or "TellomiSeedAddressSets" not in network:
         fail("Network.swift is not using Tellomi seed addresses")
-    if "TellomiSeedPort()" in network:
-        fail("Network.swift still installs a single seed port")
     if "TellomiDisablesTelegramBackupDiscovery" not in network:
         fail("backup discovery is not gated")
     account = (ROOT / "submodules/TelegramCore/Sources/Account/Account.swift").read_text(encoding="utf-8")
@@ -539,8 +520,24 @@ def check_wiring() -> None:
     build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
     if 'app_icons = ["//:TellomiAppIcon"]' not in build:
         fail("the home-screen icon is not the Tellomi brand icon")
-    if build.count('entitlements = ":ExtensionAppGroupEntitlements.entitlements"') != 6:
-        fail("every extension that opens the app group must sign that entitlement")
+    if build.count('entitlements = ":ExtensionAppGroupEntitlements.entitlements"') != 5:
+        fail("every extension except SiriIntents that opens the app group must sign that entitlement")
+    if build.count('entitlements = ":IntentsExtensionEntitlements.entitlements"') != 1:
+        fail("SiriIntents must sign IntentsExtensionEntitlements")
+    intents_at = build.find('name = "IntentsExtensionEntitlements"')
+    intents_block = build[intents_at:build.find('name = "IntentsExtension"', intents_at)]
+    if "intents_siri_fragment" not in intents_block:
+        fail("SiriIntents entitlements do not include the profile-gated Siri key")
+    if "group.{telegram_bundle_id}" not in intents_block:
+        fail("SiriIntents entitlements dropped the app group")
+    if 'intents_siri_fragment = "" if not telegram_siri_extension_entitlement' not in build:
+        fail("the SiriIntents entitlement is not gated on the profile flag")
+    if build.count("<key>com.apple.developer.siri</key>") != 2:
+        fail("Siri must be requested by the app and by SiriIntents, and by nothing else")
+    shared_at = build.find('name = "ExtensionAppGroupEntitlements"')
+    shared_block = build[shared_at:build.find("ios_extension(", shared_at)]
+    if "com.apple.developer.siri" in shared_block:
+        fail("the shared extension entitlements request Siri; only SiriIntents may")
     if 'telegram_app_name' not in build:
         fail("the Bazel app name is not wired")
     variables = (ROOT / "build-system/example-configuration/variables.bzl").read_text(encoding="utf-8")
@@ -550,6 +547,10 @@ def check_wiring() -> None:
         fail("example variables.bzl team id is not CB7KP6GBAR")
     if "telegram_communication_notifications = True" not in variables:
         fail("example variables.bzl does not include communication notifications")
+    if "telegram_siri_extension_entitlement = False" not in variables:
+        fail("example variables.bzl is missing the SiriIntents entitlement flag")
+    if "telegram_siri_extension_entitlement" not in build:
+        fail("Telegram/BUILD does not sign the SiriIntents entitlement from the profile flag")
     if "telegram_communication_notifications" not in build:
         fail("Telegram/BUILD does not sign communication notifications from the profile flag")
     check_extension_suffixes(build, variables)

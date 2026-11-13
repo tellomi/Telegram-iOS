@@ -17,12 +17,17 @@ import RemoteBuild
 import TartBuild
 import GenerateProfiles
 import PostboxImportCheck
+import IconSizeCheck
+import ChatListSwipeCheck
 
 
 class ResolvedCodesigningData:
-    def __init__(self, aps_environment, use_xcode_managed_codesigning):
+    def __init__(self, aps_environment, use_xcode_managed_codesigning, communication_notifications, siri_entitlement, siri_extension_entitlement):
         self.aps_environment = aps_environment
         self.use_xcode_managed_codesigning = use_xcode_managed_codesigning
+        self.communication_notifications = communication_notifications
+        self.siri_entitlement = siri_entitlement
+        self.siri_extension_entitlement = siri_extension_entitlement
 
 
 class BazelCommandLine:
@@ -326,7 +331,7 @@ class BazelCommandLine:
         print(subprocess.list2cmdline(combined_arguments))
         call_executable(combined_arguments)
 
-    def invoke_test(self, test_target='Tests/AllTests', test_filter=None, test_args=None, test_output='errors'):
+    def invoke_test(self, test_target='Tests/AllTests'):
         combined_arguments = [
             self.build_environment.bazel_path
         ]
@@ -334,12 +339,7 @@ class BazelCommandLine:
         combined_arguments += ['test']
 
         combined_arguments += ['--cache_test_results=no']
-        combined_arguments += ['--test_output={}'.format(test_output or 'errors')]
-        if test_filter:
-            combined_arguments += ['--test_filter={}'.format(test_filter)]
-        if test_args:
-            for test_arg in test_args:
-                combined_arguments += ['--test_arg={}'.format(test_arg)]
+        combined_arguments += ['--test_output=errors']
 
         combined_arguments += [test_target]
 
@@ -454,7 +454,10 @@ def resolve_codesigning(arguments, base_path, build_configuration, provisioning_
 
     return ResolvedCodesigningData(
         aps_environment=profile_source.resolve_aps_environment(),
-        use_xcode_managed_codesigning=profile_source.use_xcode_managed_codesigning()
+        use_xcode_managed_codesigning=profile_source.use_xcode_managed_codesigning(),
+        communication_notifications=profile_source.resolve_communication_notifications(),
+        siri_entitlement=profile_source.resolve_siri_entitlement(),
+        siri_extension_entitlement=profile_source.resolve_siri_extension_entitlement()
     )
 
 
@@ -485,12 +488,53 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
         provisioning_profiles_path=provisioning_path,
         additional_codesigning_output_path=additional_codesigning_output_path
     )
+    # Unsigned builds ad-hoc sign and do not embed a profile, so the
+    # communication-notifications entitlement can be present. A signed build
+    # may request it only when the profile grants it.
+    if getattr(arguments, 'disableProvisioningProfiles', False):
+        communication_notifications = True
+        enable_siri = True
+        siri_extension_entitlement = True
+    else:
+        communication_notifications = codesigning_data.communication_notifications is True
+        # JSON enable_siri stays false. The signed bit follows the profile, the
+        # same way communication notifications do: a profile without the key
+        # must not make codesign fail, and a profile that grants it is what
+        # stops the SiriIntents process from being killed on launch.
+        enable_siri = codesigning_data.siri_entitlement is True
+        siri_extension_entitlement = codesigning_data.siri_extension_entitlement is True
     if codesigning_data.aps_environment is None:
-        print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
-        sys.exit(1)
+        # build-system/fake-codesigning is the upstream Telegram team
+        # (C67CF9S4VU / ph.telegra.Telegraph). A fork whose configuration
+        # names a different team and bundle finds no main profile, so the
+        # aps-environment lookup returns None. An unsigned build
+        # (--disableProvisioningProfiles) does not embed those profiles;
+        # rules_apple ad-hoc signs instead. Leave the entitlement empty,
+        # which is also what Xcode-managed codesigning stores.
+        if getattr(arguments, 'disableProvisioningProfiles', False):
+            print('Provisioning profiles are disabled; continuing without an aps-environment entitlement.')
+            codesigning_data.aps_environment = ''
+        else:
+            print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
+            sys.exit(1)
+
+    if build_configuration.bundle_id == 'app.tellomi.chat' and not communication_notifications:
+        print('Communication notifications entitlement omitted: the provisioning profile has no com.apple.developer.usernotifications.communication key. Lock-screen notifications keep the app icon until that capability is enabled on the App ID and the profile is regenerated.')
+    elif build_configuration.bundle_id == 'app.tellomi.chat':
+        print('Communication notifications entitlement included.')
+
+    if build_configuration.bundle_id == 'app.tellomi.chat':
+        if enable_siri:
+            print('Siri entitlement included on the app.')
+        else:
+            print('Siri entitlement omitted on the app: the provisioning profile has no com.apple.developer.siri key.')
+        if siri_extension_entitlement:
+            print('Siri entitlement included on the SiriIntents extension.')
+        else:
+            print('Siri entitlement omitted on the SiriIntents extension: its provisioning profile has no com.apple.developer.siri key. iOS kills that process on launch until the profile grants the key.')
 
     if bazel_command_line is not None:
-        build_configuration.write_to_variables_file(bazel_path=bazel_command_line.bazel, use_xcode_managed_codesigning=codesigning_data.use_xcode_managed_codesigning, aps_environment=codesigning_data.aps_environment, path=configuration_repository_path + '/variables.bzl')
+        build_configuration.write_to_variables_file(bazel_path=bazel_command_line.bazel, use_xcode_managed_codesigning=codesigning_data.use_xcode_managed_codesigning, aps_environment=codesigning_data.aps_environment, path=configuration_repository_path + '/variables.bzl', communication_notifications=communication_notifications, enable_siri=enable_siri, siri_extension_entitlement=siri_extension_entitlement)
 
     provisioning_profile_files = []
     for file_name in os.listdir(provisioning_path):
@@ -612,6 +656,10 @@ def resolve_watch_provisioning_profile(arguments, base_path):
 def build(bazel, arguments):
     if PostboxImportCheck.run(os.getcwd()) != 0:
         sys.exit(1)
+    if IconSizeCheck.run(os.getcwd()) != 0:
+        sys.exit(1)
+    if ChatListSwipeCheck.run(os.getcwd()) != 0:
+        sys.exit(1)
 
     bazel_command_line = BazelCommandLine(
         bazel=bazel,
@@ -636,6 +684,8 @@ def build(bazel, arguments):
     )
 
     bazel_command_line.set_configuration(arguments.configuration)
+    if getattr(arguments, 'disableProvisioningProfiles', False):
+        bazel_command_line.set_disable_provisioning_profiles()
     if arguments.embedWatchApp:
         if arguments.configuration in ('debug_arm64', 'release_arm64'):
             if arguments.watchApiId is None or arguments.watchApiHash is None:
@@ -655,8 +705,6 @@ def build(bazel, arguments):
     bazel_command_line.set_show_actions(arguments.showActions)
     bazel_command_line.set_enable_sandbox(arguments.sandbox)
     bazel_command_line.set_profile_swift(arguments.profileSwift)
-    if arguments.disableProvisioningProfiles:
-        bazel_command_line.set_disable_provisioning_profiles()
 
     bazel_command_line.set_split_swiftmodules(arguments.enableParallelSwiftmoduleGeneration)
 
@@ -699,6 +747,10 @@ def build(bazel, arguments):
 def test(bazel, arguments):
     if PostboxImportCheck.run(os.getcwd()) != 0:
         sys.exit(1)
+    if IconSizeCheck.run(os.getcwd()) != 0:
+        sys.exit(1)
+    if ChatListSwipeCheck.run(os.getcwd()) != 0:
+        sys.exit(1)
 
     bazel_command_line = BazelCommandLine(
         bazel=bazel,
@@ -722,12 +774,7 @@ def test(bazel, arguments):
     bazel_command_line.set_configuration('debug_sim_arm64')
     bazel_command_line.set_build_number('10000')
 
-    bazel_command_line.invoke_test(
-        test_target=arguments.target,
-        test_filter=getattr(arguments, 'testFilter', None),
-        test_args=getattr(arguments, 'testArg', None),
-        test_output=getattr(arguments, 'testOutput', None)
-    )
+    bazel_command_line.invoke_test(test_target=arguments.target)
 
 
 def query(bazel, arguments):
@@ -965,24 +1012,6 @@ if __name__ == '__main__':
         default='Tests/AllTests',
         help='Bazel test target to run (default: Tests/AllTests, the full suite).'
     )
-    testParser.add_argument(
-        '--testFilter',
-        type=str,
-        default=None,
-        help='Passed to bazel as --test_filter (for example MomentsRulesTests).'
-    )
-    testParser.add_argument(
-        '--testArg',
-        action='append',
-        default=None,
-        help='Passed to bazel as --test_arg. Repeat for more than one.'
-    )
-    testParser.add_argument(
-        '--testOutput',
-        type=str,
-        default='errors',
-        help='Passed to bazel as --test_output.'
-    )
 
     generateProjectParser = subparsers.add_parser('generateProject', help='Generate Xcode project')
     generateProjectParser.add_argument(
@@ -1070,7 +1099,12 @@ if __name__ == '__main__':
         '--disableProvisioningProfiles',
         action='store_true',
         default=False,
-        help='Build for the simulator without codesigning identities. A device build will fail.',
+        help='''
+            Do not embed provisioning profiles. A simulator build then
+            ad-hoc signs and does not need a certificate. A device build
+            still fails in rules_apple analysis: "Building for device, but
+            no provisioning_profile attribute was set."
+            '''
     )
     buildParser.add_argument(
         '--enableParallelSwiftmoduleGeneration',

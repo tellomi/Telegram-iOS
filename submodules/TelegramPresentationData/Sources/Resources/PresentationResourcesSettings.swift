@@ -106,15 +106,17 @@ public func renderAttachAppIcon(iconImage: UIImage?) -> UIImage? {
     })
 }
 
-let colorRed = UIColor(rgb: 0xFF453A)
-let colorGreen = UIColor(rgb: 0x34C759)
-let colorBlue = UIColor(rgb: 0x0a84ff)
-let colorLightBlue = UIColor(rgb: 0x32ADE6)
-let colorTeal = UIColor(rgb: 0x00c7be)
-let colorOrange = UIColor(rgb: 0xFF9F0A)
-let colorPurple = UIColor(rgb: 0xAF52DE)
+// Settings row badges stay black, white, and gray. The old values were Telegram's
+// colored circles (blue, green, orange, purple).
+let colorRed = UIColor(rgb: 0x1C1C1E)
+let colorGreen = UIColor(rgb: 0x111111)
+let colorBlue = UIColor(rgb: 0x111111)
+let colorLightBlue = UIColor(rgb: 0x3A3A3C)
+let colorTeal = UIColor(rgb: 0x3A3A3C)
+let colorOrange = UIColor(rgb: 0x636366)
+let colorPurple = UIColor(rgb: 0x1C1C1E)
 let colorGray = UIColor(rgb: 0x8E8E93)
-let colorViolet = UIColor(rgb: 0x5E5CE6)
+let colorViolet = UIColor(rgb: 0x636366)
 
 public struct PresentationResourcesSettings {
     public static let proxy = renderSettingsIcon(name: "Item List/Icons/Proxy", backgroundColors: [colorGreen])
@@ -122,7 +124,7 @@ public struct PresentationResourcesSettings {
     public static let recentCalls = renderSettingsIcon(name: "Item List/Icons/Phone", backgroundColors: [colorGreen])
     public static let devices = renderSettingsIcon(name: "Item List/Icons/Devices", backgroundColors: [colorOrange])
     public static let chatFolders = renderSettingsIcon(name: "Item List/Icons/Folder", backgroundColors: [colorLightBlue])
-    public static let stickers = renderSettingsIcon(name: "Item List/Icons/Sticker", backgroundColors: [colorOrange])
+    public static let stickers = renderSettingsIcon(name: "Item List/Icons/TellomiSticker", backgroundColors: [colorOrange])
     public static let notifications = renderSettingsIcon(name: "Item List/Icons/Notifications", backgroundColors: [colorRed])
     public static let security = renderSettingsIcon(name: "Item List/Icons/Privacy", backgroundColors: [colorGray])
     public static let dataAndStorage = renderSettingsIcon(name: "Item List/Icons/Data", backgroundColors: [colorGreen])
@@ -151,8 +153,8 @@ public struct PresentationResourcesSettings {
     public static let photos = renderSettingsIcon(name: "Item List/Icons/Photo", backgroundColors: [colorOrange])
     public static let videos = renderSettingsIcon(name: "Item List/Icons/Video", backgroundColors: [colorRed])
     public static let files = renderSettingsIcon(name: "Item List/Icons/File", backgroundColors: [colorBlue])
-    public static let gifs = renderSettingsIcon(name: "Item List/Icons/Gif", backgroundColors: [colorOrange])
-    public static let stickersGreen = renderSettingsIcon(name: "Item List/Icons/Sticker", backgroundColors: [colorGreen])
+    public static let gifs = renderSettingsIcon(name: "Item List/Icons/TellomiGif", backgroundColors: [colorOrange])
+    public static let stickersGreen = renderSettingsIcon(name: "Item List/Icons/TellomiSticker", backgroundColors: [colorGreen])
     public static let emoji = renderSettingsIcon(name: "Item List/Icons/Emoji", backgroundColors: [colorLightBlue])
     public static let emojiTeal = renderSettingsIcon(name: "Item List/Icons/Emoji", backgroundColors: [colorTeal])
     public static let archivedSticker = renderSettingsIcon(name: "Item List/Icons/ArchivedSticker", backgroundColors: [colorGreen])
@@ -316,6 +318,8 @@ public struct PresentationResourcesSettings {
     
     public static let support = renderSettingsIcon(name: "Item List/Icons/Support", backgroundColors: [colorOrange])
     public static let faq = renderSettingsIcon(name: "Item List/Icons/Faq", backgroundColors: [colorLightBlue])
+    public static let info = renderSettingsIcon(name: "Navigation/Info", backgroundColors: [colorGray])
+    public static let more = renderSettingsIcon(name: "Chat/Context Menu/More", scaleFactor: 1.15, backgroundColors: [colorLightBlue])
     public static let tips = renderSettingsIcon(name: "Item List/Icons/Tips", backgroundColors: [UIColor(rgb: 0xffcc02)])
         
     public static let changePhoneNumber = renderSettingsIcon(name: "Item List/Icons/ChangePhone", backgroundColors: [colorPurple])
@@ -349,7 +353,7 @@ public struct PresentationResourcesSettings {
     public static let calls = renderSettingsIcon(name: "Item List/Icons/Phone", backgroundColors: [colorOrange])
     public static let messages = renderSettingsIcon(name: "Item List/Icons/Chat", backgroundColors: [colorViolet])
     public static let filesGreen = renderSettingsIcon(name: "Item List/Icons/File", backgroundColors: [colorGreen])
-    public static let stickersYellow = renderSettingsIcon(name: "Item List/Icons/Sticker", backgroundColors: [colorOrange])
+    public static let stickersYellow = renderSettingsIcon(name: "Item List/Icons/TellomiSticker", backgroundColors: [colorOrange])
     public static let music = renderSettingsIcon(name: "Item List/Icons/Play", backgroundColors: [colorRed])
     public static let voices = renderSettingsIcon(name: "Item List/Icons/Microphone", backgroundColors: [colorPurple])
     public static let upload = renderSettingsIcon(name: "Item List/Icons/Upload", backgroundColors: [colorBlue])

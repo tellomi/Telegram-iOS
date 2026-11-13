@@ -1,0 +1,27 @@
+# Lists App Store and TestFlight marketing versions for app.tellomi.chat.
+# Triggered only by an asc-versions-* tag so it does not start a TestFlight build.
+
+name: ASC versions
+
+on:
+  push:
+    tags:
+      - "asc-versions-*"
+
+permissions:
+  contents: read
+
+jobs:
+  versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Query versions
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_P8_BASE64 }}
+        run: python3 Tellomi/query_asc_versions.py

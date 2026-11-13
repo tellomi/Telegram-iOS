@@ -1270,12 +1270,14 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             smallTitleAttributes = MultiScaleTextState.Attributes(font: Font.medium(28.0), color: .white, shadowColor: titleShadowColor)
             
             if self.isSettings, case let .user(user) = peer {
-                var subtitle = formatPhoneNumber(context: self.context, number: user.phone ?? "")
-                
-                if let mainUsername = user.addressName, !mainUsername.isEmpty {
-                    subtitle = "\(subtitle) • @\(mainUsername)"
+                let contact = tellomiAccountContact(phone: user.phone, peerId: user.id)
+                let formattedPhone: String?
+                if let phone = contact.phone, !phone.isEmpty {
+                    formattedPhone = formatPhoneNumber(context: self.context, number: phone)
+                } else {
+                    formattedPhone = nil
                 }
-                subtitleStringText = subtitle
+                subtitleStringText = tellomiSettingsIdentityLine(formattedPhone: formattedPhone, email: contact.email, username: user.addressName)
                 subtitleAttributes = MultiScaleTextState.Attributes(font: Font.regular(17.0), color: .white)
                 smallSubtitleAttributes = MultiScaleTextState.Attributes(font: Font.regular(16.0), color: .white, shadowColor: titleShadowColor)
                 
@@ -1485,13 +1487,12 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         let subtitleConstrainedSize: CGSize
         let expandedSubtitleConstrainedSize: CGSize
         if self.isSettings {
-            subtitleConstrainedSize = CGSize(width: max(0.0, width - stripLeft - stripRight - textSideInset * 2.0 - subtitleRatingInset), height: .greatestFiniteMagnitude)
+            subtitleConstrainedSize = CGSize(width: max(0.0, titleConstrainedSize.width - subtitleRatingInset), height: titleConstrainedSize.height)
             expandedSubtitleConstrainedSize = CGSize(width: max(0.0, width - stripLeft - stripRight - 16.0 * 2.0 - subtitleRatingInset), height: .greatestFiniteMagnitude)
         } else {
             subtitleConstrainedSize = CGSize(width: max(0.0, titleConstrainedSize.width - subtitleRatingInset), height: titleConstrainedSize.height)
             expandedSubtitleConstrainedSize = subtitleConstrainedSize
         }
-        let subtitleMainState = self.isSettings && self.isAvatarExpanded ? TitleNodeStateExpanded : TitleNodeStateRegular
 
         let subtitleStates: [AnyHashable: MultiScaleTextState] = [
             TitleNodeStateRegular: MultiScaleTextState(attributes: subtitleAttributes, constrainedSize: subtitleConstrainedSize),
@@ -1499,9 +1500,9 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         ]
         let subtitleNodeLayout: [AnyHashable: MultiScaleTextLayout]
         if let subtitleAttributedText {
-            subtitleNodeLayout = self.subtitleNode.updateLayout(attributedText: subtitleAttributedText, accessibilityText: subtitleStringText, states: subtitleStates, mainState: subtitleMainState)
+            subtitleNodeLayout = self.subtitleNode.updateLayout(attributedText: subtitleAttributedText, accessibilityText: subtitleStringText, states: subtitleStates, mainState: TitleNodeStateRegular)
         } else {
-            subtitleNodeLayout = self.subtitleNode.updateLayout(text: subtitleStringText, states: subtitleStates, mainState: subtitleMainState)
+            subtitleNodeLayout = self.subtitleNode.updateLayout(text: subtitleStringText, states: subtitleStates, mainState: TitleNodeStateRegular)
         }
         self.subtitleNode.accessibilityLabel = subtitleStringText
         
@@ -1612,9 +1613,9 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         ]
         let panelSubtitleNodeLayout: [AnyHashable: MultiScaleTextLayout]
         if panelSubtitleString == nil, let subtitleAttributedText {
-            panelSubtitleNodeLayout = self.panelSubtitleNode.updateLayout(attributedText: subtitleAttributedText, accessibilityText: subtitleStringText, states: panelSubtitleStates, mainState: subtitleMainState)
+            panelSubtitleNodeLayout = self.panelSubtitleNode.updateLayout(attributedText: subtitleAttributedText, accessibilityText: subtitleStringText, states: panelSubtitleStates, mainState: TitleNodeStateRegular)
         } else {
-            panelSubtitleNodeLayout = self.panelSubtitleNode.updateLayout(text: panelSubtitleString?.text ?? subtitleStringText, states: panelSubtitleStates, mainState: subtitleMainState)
+            panelSubtitleNodeLayout = self.panelSubtitleNode.updateLayout(text: panelSubtitleString?.text ?? subtitleStringText, states: panelSubtitleStates, mainState: TitleNodeStateRegular)
         }
         self.panelSubtitleNode.accessibilityLabel = panelSubtitleString?.text ?? subtitleStringText
         
@@ -1628,7 +1629,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         
         let titleSize = titleNodeLayout[TitleNodeStateRegular]!.size
         let titleExpandedSize = titleNodeLayout[TitleNodeStateExpanded]!.size
-        let subtitleSize = subtitleNodeLayout[subtitleMainState]!.size
+        let subtitleMeasureState = self.isSettings && self.isAvatarExpanded ? TitleNodeStateExpanded : TitleNodeStateRegular
+        let subtitleSize = subtitleNodeLayout[subtitleMeasureState]!.size
         var subtitleBadgeSize: CGSize?
         let _ = panelSubtitleNodeLayout[TitleNodeStateRegular]!.size
         let usernameSize = usernameNodeLayout[TitleNodeStateRegular]!.size
@@ -1730,8 +1732,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         
         let titleLockOffset: CGFloat = 16.0 + singleTitleLockOffset
         let titleMaxLockOffset: CGFloat = 7.0
-        let titleOffset: CGFloat
-        let titleCollapseFraction: CGFloat
+        var titleOffset: CGFloat
+        var titleCollapseFraction: CGFloat
         
         if self.isAvatarExpanded {
             let minTitleSize = CGSize(width: titleSize.width * expandedTitleScale, height: titleSize.height * expandedTitleScale)
@@ -1780,7 +1782,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 usernameFrame = CGRect(origin: CGPoint(x: subtitleFrame.maxX + usernameSpacing, y: titleFrame.maxY + 1.0), size: usernameSize)
             }
         }
-        
+
         let titleMinScale: CGFloat = 0.6
         let subtitleMinScale: CGFloat = 0.8
         let avatarMinScale: CGFloat = 0.55

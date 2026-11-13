@@ -1042,6 +1042,10 @@ public final class ChatListView {
         self.groupId = mutableView.groupId
         
         var entries: [ChatListEntry] = []
+        // The hole is appended after the dialogs it does not invalidate. A consumer
+        // that stops at the first hole then still has those dialogs; dropping them
+        // collapses the chat list and the scroll offset clamps to the top.
+        var terminalHole: ChatListHole?
         for entry in mutableView.sampledState.entries {
             switch entry {
             case let .MessageEntry(entryData):
@@ -1072,11 +1076,18 @@ public final class ChatListView {
                     extractedCachedData: entryData.extractedCachedData
                 )))
             case let .HoleEntry(hole):
-                entries.removeAll()
-                entries.append(.HoleEntry(hole))
+                // Entries are oldest-first. A hole means everything strictly older
+                // than it is not a contiguous page. The dialog at the hole index is
+                // the loaded cursor, and every newer dialog is already loaded.
+                let holeIndex = ChatListIndex(pinningIndex: nil, messageIndex: hole.index)
+                entries.removeAll(where: { $0.index < holeIndex })
+                terminalHole = hole
             case .IntermediateMessageEntry:
                 assertionFailure()
             }
+        }
+        if let terminalHole {
+            entries.append(.HoleEntry(terminalHole))
         }
         
         self.entries = entries

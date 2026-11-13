@@ -973,10 +973,7 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
             return MediaItemNodeView(context: context, items: items, audioColorOverride: audioColors, cornerRadius: 4.0, showsControls: false)
         }
         self.textInputPanelNode?.formulaRenderer = chatInputFormulaRenderResult
-        if let data = self.context.currentAppConfiguration.with({ $0 }).data, let value = data["ios_disable_ai_chat"] as? Double, value == 1.0 {
-        } else if let peerId = self.chatPresentationInterfaceState.chatLocation.peerId, peerId.namespace != Namespaces.Peer.SecretChat {
-            self.textInputPanelNode?.isAIEnabled = true
-        }
+        self.textInputPanelNode?.isAIEnabled = TellomiFeatureGate.aiComposeEnabled(appConfiguration: self.context.currentAppConfiguration.with { $0 }, peerId: self.chatPresentationInterfaceState.chatLocation.peerId, killSwitchKey: "ios_disable_ai_chat")
         self.textInputPanelNode?.textInputAccessoryPanel = textInputAccessoryPanel
         self.textInputPanelNode?.textInputContextPanel = textInputContextPanel
         self.textInputPanelNode?.storedInputLanguage = chatPresentationInterfaceState.interfaceState.inputLanguage
@@ -1575,7 +1572,8 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         }
         
         var hasTranslationPanel = false
-        if !hideTopPanels, let _ = self.chatPresentationInterfaceState.translationState, self.emptyType == nil {
+        let tellomiFeatures = TellomiFeatureGate.with(appConfiguration: self.context.currentAppConfiguration.with { $0 })
+        if !hideTopPanels, tellomiFeatures.translateEnabled, let _ = self.chatPresentationInterfaceState.translationState, self.emptyType == nil {
             if case .overlay = self.chatPresentationInterfaceState.mode {
             } else if self.chatPresentationInterfaceState.renderedPeer?.peer?.restrictionText(platform: "ios", contentSettings: self.context.currentContentSettings.with { $0 }) != nil {
             } else if self.chatPresentationInterfaceState.search != nil {
@@ -1585,7 +1583,7 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         }
         
         var displayAdPanel = false
-        if !hideTopPanels, let _ = self.chatPresentationInterfaceState.adMessage {
+        if !hideTopPanels, tellomiFeatures.channelAdsEnabled, let _ = self.chatPresentationInterfaceState.adMessage {
             if let chatHistoryState = self.chatPresentationInterfaceState.chatHistoryState, case .loaded(false, _) = chatHistoryState {
                 if let user = chatPresentationInterfaceState.renderedPeer?.peer as? TelegramUser, user.botInfo != nil && !self.chatPresentationInterfaceState.peerIsBlocked && self.chatPresentationInterfaceState.hasAtLeast3Messages {
                     displayAdPanel = true

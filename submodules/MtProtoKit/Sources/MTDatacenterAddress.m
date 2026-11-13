@@ -39,10 +39,8 @@
         _restrictToTcp = [aDecoder decodeBoolForKey:@"restrictToTcp"];
         _cdn = [aDecoder decodeBoolForKey:@"cdn"];
         _preferForProxy = [aDecoder decodeBoolForKey:@"preferForProxy"];
-        // Absent on addresses saved before the flag existed, so those keep the
-        // 80/5222 fallback. decodeBoolForKey: returns false when the key is missing.
-        _thisPortOnly = [aDecoder decodeBoolForKey:@"thisPortOnly"];
         _secret = [aDecoder decodeObjectForKey:@"secret"];
+        _thisPortOnly = [aDecoder decodeBoolForKey:@"thisPortOnly"];
     }
     return self;
 }
@@ -56,8 +54,8 @@
     [aCoder encodeBool:_restrictToTcp forKey:@"restrictToTcp"];
     [aCoder encodeBool:_cdn forKey:@"cdn"];
     [aCoder encodeBool:_preferForProxy forKey:@"preferForProxy"];
-    [aCoder encodeBool:_thisPortOnly forKey:@"thisPortOnly"];
     [aCoder encodeObject:_secret forKey:@"secret"];
+    [aCoder encodeBool:_thisPortOnly forKey:@"thisPortOnly"];
 }
 
 - (instancetype)copyWithZone:(NSZone *)__unused zone {
@@ -73,7 +71,7 @@
 }
 
 - (NSUInteger)hash {
-    return [_ip hash] * 31 + ((NSUInteger)_port) + (_thisPortOnly ? 1 : 0);
+    return [_ip hash] * 31 + ((NSUInteger)_port);
 }
 
 - (BOOL)isEqualToAddress:(MTDatacenterAddress *)other

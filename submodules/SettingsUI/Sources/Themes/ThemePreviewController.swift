@@ -515,10 +515,10 @@ public final class ThemePreviewController: ViewController {
             case .settings:
                 return
             case let .theme(theme):
-                subject = .url("https://tell.cc/addtheme/\(theme.slug)")
+                subject = .url("https://\(TellomiLinks.host)/addtheme/\(theme.slug)")
                 preferredAction = .default
             case let .slug(slug, _), let .themeSettings(slug, _):
-                subject = .url("https://tell.cc/addtheme/\(slug)")
+                subject = .url("https://\(TellomiLinks.host)/addtheme/\(slug)")
                 preferredAction = .default
             case let .media(media):
                 subject = .media(media, nil)

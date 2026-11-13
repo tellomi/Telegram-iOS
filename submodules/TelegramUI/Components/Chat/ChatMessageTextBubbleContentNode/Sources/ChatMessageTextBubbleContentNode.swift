@@ -412,7 +412,8 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
                         messageEntities = updatingMedia.entities?.entities ?? []
                     }
                     
-                    let translateToLanguage = item.associatedData.translateToLanguage
+                    let sideTranslation = item.controllerInteraction.translatedMessageIds.contains(item.message.id)
+                    let translateToLanguage = item.associatedData.translateToLanguage ?? (sideTranslation ? "zh" : nil)
                     var isSummarized = false
                     if item.controllerInteraction.summarizedMessageIds.contains(item.message.id) {
                         isSummarized = true

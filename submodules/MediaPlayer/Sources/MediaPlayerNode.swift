@@ -49,17 +49,6 @@ private final class MediaPlayerNodeDisplayNode: ASDisplayNode {
     }
 }
 
-func mediaPlayerVideoRotationTransform(size: CGSize, rotationAngle: Double) -> CGAffineTransform {
-    guard size.width > 0.0, size.height > 0.0, size.width.isFinite, size.height.isFinite, rotationAngle.isFinite else {
-        return .identity
-    }
-    var transform = CGAffineTransform(rotationAngle: CGFloat(rotationAngle))
-    if abs(rotationAngle.truncatingRemainder(dividingBy: Double.pi)) > 0.1 {
-        transform = transform.scaledBy(x: size.height / size.width, y: size.width / size.height)
-    }
-    return transform
-}
-
 private enum PollStatus: CustomStringConvertible {
     case delay(Double)
     case finished
@@ -109,14 +98,6 @@ public final class MediaPlayerNode: ASDisplayNode {
     var currentRotationAngle = 0.0
     var currentAspect = 1.0
     
-    var externalVideoRotationAngle: Double? {
-        didSet {
-            if self.externalVideoRotationAngle != oldValue {
-                self.updateLayout()
-            }
-        }
-    }
-
     public var state: (timebase: CMTimebase, requestFrames: Bool, rotationAngle: Double, aspect: Double)? {
         didSet {
             self.updateState()
@@ -133,8 +114,7 @@ public final class MediaPlayerNode: ASDisplayNode {
                     }
                 }
                 
-                if self.externalVideoRotationAngle != nil || !self.currentRotationAngle.isEqual(to: rotationAngle) || !self.currentAspect.isEqual(to: aspect) {
-                    self.externalVideoRotationAngle = nil
+                if !self.currentRotationAngle.isEqual(to: rotationAngle) || !self.currentAspect.isEqual(to: aspect) {
                     self.currentRotationAngle = rotationAngle
                     self.currentAspect = aspect
                     var transform = CGAffineTransform(rotationAngle: CGFloat(rotationAngle))
@@ -447,9 +427,6 @@ public final class MediaPlayerNode: ASDisplayNode {
         if let videoLayer = self.videoLayer {
             videoLayer.position = CGPoint(x: fittedRect.midX, y: fittedRect.midY)
             videoLayer.bounds = CGRect(origin: CGPoint(), size: fittedRect.size)
-            if let rotationAngle = self.externalVideoRotationAngle {
-                videoLayer.setAffineTransform(mediaPlayerVideoRotationTransform(size: fittedRect.size, rotationAngle: rotationAngle))
-            }
         }
         self.snapshotNode?.frame = fittedRect
     }

@@ -27,11 +27,6 @@ typedef struct {
 // Extra TCP ports tried beside each IPv4 address; empty when a proxy is configured.
 + (NSArray<NSNumber *> * _Nonnull)alternatePortsForProxySettings:(MTSocksProxySettings * _Nullable)proxySettings;
 
-// Ports added beside one address. Empty when a proxy is configured, when the
-// address itself is `thisPortOnly`, or when another address in the same list
-// locks that ip and port. The address stays in the probe list either way.
-+ (NSArray<NSNumber *> * _Nonnull)alternatePortsForAddress:(MTDatacenterAddress * _Nonnull)address inAddressList:(NSArray<MTDatacenterAddress *> * _Nullable)addressList proxySettings:(MTSocksProxySettings * _Nullable)proxySettings;
-
 // Re-runs `signal` after it completes, waiting `initialDelay` before the second run and
 // doubling the wait each time up to `maxDelay`. Values pass straight through; `take:` to stop.
 + (MTSignal * _Nonnull)repeatSignal:(MTSignal * _Nonnull)signal withBackoffFrom:(NSTimeInterval)initialDelay upTo:(NSTimeInterval)maxDelay onQueue:(MTQueue * _Nonnull)queue;

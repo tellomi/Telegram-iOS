@@ -156,8 +156,6 @@ public enum Stories {
                 case contacts = 1
                 case closeFriends = 2
                 case nobody = 3
-                /// Moments only. A story that somehow carries this value stays visible to the author alone.
-                case mutualFollowers = 4
                 
                 public init(from decoder: Decoder) throws {
                     let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -1024,8 +1022,6 @@ private func apiInputPrivacyRules(privacy: EngineStoryPrivacy, transaction: Tran
         } else {
             privacyRules = []
         }
-    case .mutualFollowers:
-        privacyRules = [.inputPrivacyValueAllowUsers(.init(users: [.inputUserSelf]))]
     }
     var privacyUsers: [Api.InputUser] = []
     var privacyChats: [Int64] = []

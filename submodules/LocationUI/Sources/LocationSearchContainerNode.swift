@@ -254,7 +254,7 @@ final class LocationSearchContainerNode: ASDisplayNode {
                         } else {
                             name = displayCountryName(address.country, locale: locale)
                         }
-                        self?.interaction.sendLocation(venue.coordinate, name, address)
+                        self?.interaction.sendLocation(venue.coordinate, name, address, nil)
                     } else {
                         self?.interaction.goToCoordinate(venue.coordinate, false)
                         self?.interaction.dismissSearch()

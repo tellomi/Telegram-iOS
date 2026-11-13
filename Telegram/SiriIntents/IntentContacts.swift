@@ -28,7 +28,7 @@ enum IntentContactsError {
 }
 
 private let phonebookUsernamePathPrefix = "@id"
-private let phonebookUsernamePrefix = "https://tell.cc/" + phonebookUsernamePathPrefix
+private let phonebookUsernamePrefix = "https://\(TellomiLinks.host)/" + phonebookUsernamePathPrefix
 
 private func parseAppSpecificContactReference(_ value: String) -> PeerId? {
     if !value.hasPrefix(phonebookUsernamePrefix) {

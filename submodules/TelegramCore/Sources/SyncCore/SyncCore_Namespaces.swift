@@ -171,9 +171,6 @@ public struct Namespaces {
         public static let feed: Int8 = 60
         public static let shareThemeBackdrops: Int8 = 61
         public static let cachedUniqueStarGifts: Int8 = 62
-        /// Moments (动态) page cache, drafts and browse state. Keys are told apart in MomentsCache.swift.
-        /// TelegramCore's ids must stay below 64, where applicationSpecificItemCacheCollectionId starts.
-        public static let moments: Int8 = 63
     }
     
     public struct UnorderedItemList {

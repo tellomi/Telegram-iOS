@@ -52,12 +52,10 @@ public final class NewsScreen: ViewController {
         self.title = self.presentationData.strings.News_Title
         self.tabBarItem.title = self.presentationData.strings.News_Title
         let icon = UIImage(bundleImageName: "Chat List/Tabs/IconNews")?.withRenderingMode(.alwaysTemplate)
+        let selectedIcon = UIImage(bundleImageName: "Chat List/Tabs/IconNewsFilled")?.withRenderingMode(.alwaysTemplate)
         self.tabBarItem.image = icon
-        self.tabBarItem.selectedImage = icon
-        if !self.presentationData.reduceMotion {
-            self.tabBarItem.animationName = "TabNews"
-            self.tabBarItem.animationOffset = CGPoint(x: 0.0, y: UIScreenPixel)
-        }
+        self.tabBarItem.selectedImage = selectedIcon
+        self.tabBarItem.animationName = nil
 
         self.scrollToTop = { [weak self] in
             guard let self, self.isNodeLoaded else {

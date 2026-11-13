@@ -268,7 +268,7 @@ final class TextProcessingContentComponent: Component {
                 return
             }
             let shareController = component.context.sharedContext.makeShareScreen(context: component.context, params: ShareControllerParams(
-                subject: .url("https://tell.cc/addstyle/\(slug)"),
+                subject: .url("https://\(TellomiLinks.host)/addstyle/\(slug)"),
                 completed: { [weak self] peerIds in
                     Task { @MainActor in
                         guard let self, let component = self.component, let environment = self.environment, let peerId = peerIds.first else {
@@ -1726,7 +1726,7 @@ private final class TextProcessingSheetComponent: Component {
                 }
             }
 
-            var displayInfoButton = true
+            var displayInfoButton = TellomiFeatureGate.with(appConfiguration: component.context.currentAppConfiguration.with { $0 }).translateEnabled
             let titleString: String
             switch component.mode {
             case .edit:

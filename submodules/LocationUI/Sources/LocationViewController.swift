@@ -160,10 +160,10 @@ public final class LocationViewController: ViewController {
             guard let strongSelf = self else {
                 return
             }
-            let item: OpenInItem = .location(location: location, directions: directions)
+            let item: OpenInItem = .location(location: location, directions: directions, placeName: peerName)
             let openInOptions = availableOpenInOptions(context: context, item: item)
             if openInOptions.count == 1, let action = openInOptions.first?.action() {
-                if case let .openLocation(latitude, longitude, directions) = action {
+                if case let .openLocation(latitude, longitude, _, directions) = action {
                     let placemark = MKPlacemark(coordinate: CLLocationCoordinate2DMake(latitude, longitude), addressDictionary: [:])
                     let mapItem = MKMapItem(placemark: placemark)
                     if let title = location.venue?.title {
@@ -180,7 +180,7 @@ public final class LocationViewController: ViewController {
                     }
                 }
             } else {
-                strongSelf.push(OpenInOptionsScreen(context: context, updatedPresentationData: updatedPresentationData, item: .location(location: location, directions: directions), additionalAction: nil, openUrl: params.openUrl))
+                strongSelf.push(OpenInOptionsScreen(context: context, updatedPresentationData: updatedPresentationData, item: item, additionalAction: nil, openUrl: params.openUrl))
             }
         }, share: { [weak self] in
             guard let strongSelf = self else {
@@ -190,7 +190,7 @@ public final class LocationViewController: ViewController {
                 let shareAction = OpenInControllerAction(title: strongSelf.presentationData.strings.Conversation_ContextMenuShare, action: {
                     strongSelf.present(context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .mapMedia(location), externalShare: true)), in: .window(.root), with: nil)
                 })
-                strongSelf.push(OpenInOptionsScreen(context: context, updatedPresentationData: updatedPresentationData, item: .location(location: location, directions: nil), additionalAction: shareAction, openUrl: params.openUrl))
+                strongSelf.push(OpenInOptionsScreen(context: context, updatedPresentationData: updatedPresentationData, item: .location(location: location, directions: nil, placeName: nil), additionalAction: shareAction, openUrl: params.openUrl))
             }
         }, setupProximityNotification: { [weak self] reset, messageId in
             guard let strongSelf = self else {

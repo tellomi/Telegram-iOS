@@ -17,7 +17,7 @@ final class TabBarControllerNode: ASDisplayNode {
         let currentControllerSearchState: ViewController.TabBarSearchState?
         /// The side placement depends on it, and with it the bottom inset the tab gets.
         let itemCount: Int
-        let showsItemTitles: Bool
+        let hideTitles: Bool
         
         init(
             layout: ContainerViewLayout,
@@ -25,14 +25,14 @@ final class TabBarControllerNode: ASDisplayNode {
             isTabBarHidden: Bool,
             currentControllerSearchState: ViewController.TabBarSearchState?,
             itemCount: Int,
-            showsItemTitles: Bool
+            hideTitles: Bool
         ) {
             self.layout = layout
             self.toolbar = toolbar
             self.isTabBarHidden = isTabBarHidden
             self.currentControllerSearchState = currentControllerSearchState
             self.itemCount = itemCount
-            self.showsItemTitles = showsItemTitles
+            self.hideTitles = hideTitles
         }
     }
     
@@ -74,7 +74,6 @@ final class TabBarControllerNode: ASDisplayNode {
     
     private(set) var tabBarItems: [TabBarNodeItem] = []
     private(set) var selectedIndex: Int = 0
-    var showsItemTitles: Bool = true
 
     private weak var currentController: ViewController?
     
@@ -179,6 +178,7 @@ final class TabBarControllerNode: ASDisplayNode {
         transition.updateAlpha(node: self.disabledOverlayNode, alpha: value ? 0.0 : 1.0)
     }
     
+    var tellomiHidesTabTitles = false
     var tabBarHidden = false {
         didSet {
             if self.tabBarHidden != oldValue {
@@ -195,7 +195,7 @@ final class TabBarControllerNode: ASDisplayNode {
     
     /// The bottom inset the current tab gets, or nil to leave the tab's own.
     func containerLayoutUpdated(_ layout: ContainerViewLayout, toolbar: Toolbar?, transition: ContainedViewLayoutTransition) -> CGFloat? {
-        let params = Params(layout: layout, toolbar: toolbar, isTabBarHidden: self.tabBarHidden, currentControllerSearchState: self.currentController?.tabBarSearchState, itemCount: self.tabBarItems.count, showsItemTitles: self.showsItemTitles)
+        let params = Params(layout: layout, toolbar: toolbar, isTabBarHidden: self.tabBarHidden, currentControllerSearchState: self.currentController?.tabBarSearchState, itemCount: self.tabBarItems.count, hideTitles: self.tellomiHidesTabTitles)
         if let layoutResult = self.layoutResult, layoutResult.params == params {
             return layoutResult.bottomInset
         } else {
@@ -326,7 +326,7 @@ final class TabBarControllerNode: ASDisplayNode {
                 outerInsets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: tabBarBottomInset, right: sideInset),
                 axis: sidePlacement == nil ? .horizontal : .vertical,
                 isCompact: tabBarIsCompact(layout: params.layout, sidePlacement: sidePlacement),
-                showsItemTitles: params.showsItemTitles
+                hideTitles: self.tellomiHidesTabTitles
             )),
             environment: {},
             containerSize: sidePlacement?.frame.size ?? CGSize(width: params.layout.size.width - sideInset * 2.0, height: 100.0)

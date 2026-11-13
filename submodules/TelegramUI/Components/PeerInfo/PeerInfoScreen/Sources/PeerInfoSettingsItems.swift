@@ -13,6 +13,8 @@ import DeviceAccess
 import TelegramStringFormatting
 import PeerNameColorItem
 import WalletContext
+import AuthorizationUI
+import TelegramUIPreferences
 
 enum SettingsSection: Int, CaseIterable {
     case edit
@@ -23,14 +25,13 @@ enum SettingsSection: Int, CaseIterable {
     case proxy
     case apps
     case shortcuts
-    case tools
     case advanced
     case payment
     case extra
     case support
 }
 
-func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
+func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool, loginEmailPattern: String? = nil) -> [(AnyHashable, [PeerInfoScreenItem])] {
     guard let data = data else {
         return []
     }
@@ -83,9 +84,11 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     }
     
     if let settings = data.globalSettings {
-        if settings.premiumGracePeriod {
-            items[.phone]!.append(PeerInfoScreenInfoItem(id: 0, title: "Your access to Telegram Premium will expire soon!", text: .markdown("Unfortunately, your latest payment didn't come through. To keep your access to exclusive features, please renew the subscription."), isWarning: true, linkAction: nil))
-            items[.phone]!.append(PeerInfoScreenActionItem(id: 1, text: "Restore Subscription", action: {
+        let premiumEnabled = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).premiumEnabled
+        if settings.premiumGracePeriod, premiumEnabled {
+            let graceCopy = TellomiSettingsCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
+            items[.phone]!.append(PeerInfoScreenInfoItem(id: 0, title: graceCopy.premiumGraceTitle, text: .markdown(graceCopy.premiumGraceText), isWarning: true, linkAction: nil))
+            items[.phone]!.append(PeerInfoScreenActionItem(id: 1, text: graceCopy.premiumGraceAction, action: {
                 interaction.openSettings(.premiumManagement)
             }))
         } else if settings.suggestPhoneNumberConfirmation, case let .user(peer) = data.peer {
@@ -125,7 +128,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
                     engine: peerAccountContext.engine,
                     animationCache: context.animationCache,
                     animationRenderer: context.animationRenderer,
-                    isPremiumDisabled: false,
+                    isPremiumDisabled: !TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).premiumEnabled,
                     resolveInlineStickers: { fileIds in
                         return context.engine.stickers.resolveInlineStickers(fileIds: fileIds)
                     }
@@ -154,7 +157,8 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             interaction.openSettings(.profile)
         }))
         
-        if WalletConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 }).isAvailable {
+        let featureGate = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
+        if featureGate.walletEnabled, WalletConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 }).isAvailable {
             let balanceText: NSAttributedString
             if let balance = settings.walletBalance, balance > 10_000_000 {
                 var formattedLabel = formatTonAmountText(balance, dateTimeFormat: presentationData.dateTimeFormat)
@@ -247,11 +251,6 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 4, text: presentationData.strings.Settings_ChatFolders, icon: PresentationResourcesSettings.chatFolders, action: {
         interaction.openSettings(.chatFolders)
     }))
-
-    items[.tools]!.append(PeerInfoScreenHeaderItem(id: 0, text: presentationData.strings.Tellomi_MenuSettings_Tools))
-    items[.tools]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Tellomi_MenuSettings_Title, icon: PresentationResourcesSettings.dataAndStorage, action: {
-        interaction.openSettings(.menuSettings)
-    }))
     
     let notificationsWarning: Bool
     if let settings = data.globalSettings {
@@ -280,16 +279,16 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 4, label: .text(languageName.isEmpty ? presentationData.strings.Localization_LanguageName : languageName), text: presentationData.strings.Settings_AppLanguage, icon: PresentationResourcesSettings.language, action: {
         interaction.openSettings(.language)
     }))
+    tellomiAppendNavigationSettingsEntry(items: &items, context: context, presentationData: presentationData, interaction: interaction)
     
-    let premiumConfiguration = PremiumConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
-    let isPremiumDisabled = premiumConfiguration.isPremiumDisabled
-    if !isPremiumDisabled || context.isPremium {
+    let featureGate = TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 })
+    if featureGate.premiumEnabled {
         items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 100, label: .text(""), text: presentationData.strings.Settings_Premium, icon: PresentationResourcesSettings.premium, action: {
             interaction.openSettings(.premium)
         }))
     }
     if let starsState = data.starsState {
-        if !isPremiumDisabled || abs(starsState.balance.value) > 0 {
+        if featureGate.starsEnabled {
             let balanceText: NSAttributedString
             if abs(starsState.balance.value) > 0 {
                 let formattedLabel = formatStarsAmountText(starsState.balance, dateTimeFormat: presentationData.dateTimeFormat)
@@ -305,7 +304,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             }))
         }
     }
-    if let tonState = data.tonState {
+    if let tonState = data.tonState, featureGate.walletEnabled {
         if abs(tonState.balance.value) > 0 {
             let balanceText: NSAttributedString
             if abs(tonState.balance.value) > 0 {
@@ -322,21 +321,21 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             }))
         }
     }
-    if !isPremiumDisabled || context.isPremium {
+    // Business settings are the perk list. The purchase screen stays closed unless the
+    // account is already Premium, which is what the server reports for TELLOMI_PREMIUM_EVERYONE.
+    if featureGate.businessEnabled && data.accountIsPremium {
         items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 104, label: .text(""), additionalBadgeLabel: nil, text: presentationData.strings.Settings_Business, icon: PresentationResourcesSettings.business, action: {
             interaction.openSettings(.businessSetup)
         }))
     }
-    if let starsState = data.starsState {
-        if !isPremiumDisabled || starsState.balance > StarsAmount.zero {
-            items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 105, label: .text(""), text: presentationData.strings.Settings_SendGift, icon: PresentationResourcesSettings.premiumGift, action: {
-                interaction.openSettings(.premiumGift)
-            }))
-        }
+    if featureGate.giftsEnabled {
+        items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 105, label: .text(""), text: presentationData.strings.Settings_SendGift, icon: PresentationResourcesSettings.premiumGift, action: {
+            interaction.openSettings(.premiumGift)
+        }))
     }
     
     if let settings = data.globalSettings {
-        if settings.hasPassport {
+        if settings.hasPassport && featureGate.passportEnabled {
             items[.extra]!.append(PeerInfoScreenDisclosureItem(id: 0, text: presentationData.strings.Settings_Passport, icon: PresentationResourcesSettings.passport, action: {
                 interaction.openSettings(.passport)
             }))
@@ -357,6 +356,10 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.support]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.Settings_Tips, icon: PresentationResourcesSettings.tips, action: {
         interaction.openSettings(.tips)
     }))
+    let openSourceLicensesTitle = presentationData.strings.primaryComponent.languageCode.lowercased().hasPrefix("zh") ? "开源许可" : "Open Source Licenses"
+    items[.support]!.append(PeerInfoScreenDisclosureItem(id: 3, text: openSourceLicensesTitle, icon: PresentationResourcesSettings.faq, action: {
+        interaction.openSettings(.openSourceLicenses)
+    }))
     
     var result: [(AnyHashable, [PeerInfoScreenItem])] = []
     for section in SettingsSection.allCases {
@@ -367,7 +370,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     return result
 }
 
-func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isMyProfile: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
+func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isMyProfile: Bool, loginEmailPattern: String? = nil) -> [(AnyHashable, [PeerInfoScreenItem])] {
     guard let data = data else {
         return []
     }
@@ -476,9 +479,36 @@ func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, conte
     }
     
     if case let .user(user) = data.peer {
-        items[.info]!.append(PeerInfoScreenDisclosureItem(id: ItemPhoneNumber, label: .text(user.phone.flatMap({ formatPhoneNumber(context: context, number: $0) }) ?? ""), text: presentationData.strings.Settings_PhoneNumber, icon: PresentationResourcesSettings.recentCalls, action: {
-            interaction.openSettings(.phoneNumber)
-        }))
+        let contact = tellomiAccountContact(phone: user.phone, peerId: user.id)
+        let accountCopy = tellomiAccountLabels(languageCode: tellomiInterfaceLanguageCode(presentationData.strings))
+        if let phone = contact.phone, !phone.isEmpty {
+            items[.info]!.append(PeerInfoScreenDisclosureItem(id: ItemPhoneNumber, label: .text(formatPhoneNumber(context: context, number: phone)), text: presentationData.strings.Settings_PhoneNumber, icon: PresentationResourcesSettings.recentCalls, action: {
+                interaction.openSettings(.phoneNumber)
+            }))
+        }
+        let emailAction = tellomiSettingsEmailAction(tellomiSettingsEmailChannels(phone: user.phone, peerId: user.id, loginEmailPattern: loginEmailPattern))
+        switch emailAction {
+        case let .showIdentity(display, fullAddress):
+            items[.info]!.append(PeerInfoScreenDisclosureItem(id: 30, label: .text(display), text: accountCopy.email, icon: PresentationResourcesSettings.email, action: {
+                let pack = tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict)
+                tellomiPresentSignInEmailNotice(context: context, controller: interaction.getController(), languageCode: presentationData.strings.primaryComponent.languageCode, pack: pack, masked: fullAddress == nil)
+            }))
+        case let .phoneAccountLoginEmail(pattern):
+            if let pattern, !pattern.isEmpty {
+                items[.info]!.append(PeerInfoScreenDisclosureItem(id: 30, label: .text(pattern), text: accountCopy.email, icon: PresentationResourcesSettings.email, action: {
+                    interaction.openSettings(.loginEmail)
+                }))
+            } else {
+                items[.info]!.append(PeerInfoScreenDisclosureItem(id: 32, text: accountCopy.bindEmail, icon: PresentationResourcesSettings.email, action: {
+                    interaction.openSettings(.loginEmail)
+                }))
+            }
+        }
+        if contact.phone == nil {
+            items[.info]!.append(PeerInfoScreenDisclosureItem(id: 31, text: accountCopy.bindPhone, icon: PresentationResourcesSettings.recentCalls, action: {
+                interaction.openSettings(.phoneNumber)
+            }))
+        }
     }
     var username = ""
     if let addressName = data.peer?.addressName, !addressName.isEmpty {

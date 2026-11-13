@@ -1,4 +1,5 @@
 import Foundation
+import TellomiLinks
 import SwiftSignalKit
 import Postbox
 internal import TelegramApi
@@ -59,12 +60,7 @@ public struct ExportedChatFolderLink: Equatable {
 public extension ExportedChatFolderLink {
     var slug: String {
         var slug = self.link
-        for prefix in ["https://tell.cc/addlist/", "https://t.me/addlist/", "https://telegram.me/addlist/", "https://telegram.dog/addlist/"] {
-            if slug.hasPrefix(prefix) {
-                slug = String(slug[slug.index(slug.startIndex, offsetBy: prefix.count)...])
-                break
-            }
-        }
+        slug = TellomiLinks.strippingPublicLinkPrefix(slug, path: "addlist/")
         return slug
     }
 }

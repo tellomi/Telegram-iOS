@@ -674,21 +674,30 @@ public class ChatListItem: ListViewItem {
 }
 
 
-private let pinIcon = ItemListRevealOptionIcon.animation(animation: "anim_pin", scale: 1.0, offset: 0.0, replaceColors: nil, flip: false)
-private let unpinIcon = ItemListRevealOptionIcon.animation(animation: "anim_unpin", scale: 1.0, offset: 0.0, replaceColors: [0x1993fa], flip: false)
-private let muteIcon = ItemListRevealOptionIcon.animation(animation: "anim_mute", scale: 1.0, offset: 0.0, replaceColors: [0xff9500], flip: false)
-private let unmuteIcon = ItemListRevealOptionIcon.animation(animation: "anim_unmute", scale: 1.0, offset: 0.0, replaceColors: nil, flip: false)
-private let deleteIcon = ItemListRevealOptionIcon.animation(animation: "anim_delete", scale: 1.0, offset: 0.0, replaceColors: nil, flip: false)
-private let groupIcon = ItemListRevealOptionIcon.animation(animation: "anim_group", scale: 1.0, offset: 0.0, replaceColors: nil, flip: false)
-private let ungroupIcon = ItemListRevealOptionIcon.animation(animation: "anim_ungroup", scale: 1.0, offset: 0.0, replaceColors: nil, flip: false)
-private let readIcon = ItemListRevealOptionIcon.animation(animation: "anim_read_reveal", scale: 1.0, offset: 0.0, replaceColors: nil, flip: false)
-private let unreadIcon = ItemListRevealOptionIcon.animation(animation: "anim_unread", scale: 1.0, offset: 0.0, replaceColors: [0x2194fa], flip: false)
-private let archiveIcon = ItemListRevealOptionIcon.animation(animation: "anim_archive", scale: 1.0, offset: 2.0, replaceColors: [0xa9a9ad], flip: false)
-private let unarchiveIcon = ItemListRevealOptionIcon.animation(animation: "anim_unarchive", scale: 0.52, offset: -6.0, replaceColors: [0xa9a9ad], flip: false)
-private let hideIcon = ItemListRevealOptionIcon.animation(animation: "anim_hide", scale: 1.1, offset: 2.0, replaceColors: [0xbdbdc2], flip: false)
-private let unhideIcon = ItemListRevealOptionIcon.animation(animation: "anim_hide", scale: 1.0, offset: -15.0, replaceColors: [0xbdbdc2], flip: true)
-private let startIcon = ItemListRevealOptionIcon.animation(animation: "anim_play", scale: 1.0, offset: 0.0, replaceColors: [0xbdbdc2], flip: false)
-private let closeIcon = ItemListRevealOptionIcon.animation(animation: "anim_pause", scale: 1.0, offset: 0.0, replaceColors: [0xbdbdc2], flip: false)
+private func swipeIcon(_ name: String) -> ItemListRevealOptionIcon {
+    // Each folder in `name` must set provides-namespace. Otherwise imageNamed
+    // is nil and the reveal layout uses the iconless 60×32 pill.
+    if let image = UIImage(bundleImageName: name) {
+        return .image(image: image)
+    }
+    return .none
+}
+
+private let pinIcon = swipeIcon("Chat List/Swipe/Pin")
+private let unpinIcon = swipeIcon("Chat List/Swipe/Unpin")
+private let muteIcon = swipeIcon("Chat List/Swipe/Mute")
+private let unmuteIcon = swipeIcon("Chat List/Swipe/Unmute")
+private let deleteIcon = swipeIcon("Chat List/Swipe/Delete")
+private let groupIcon = swipeIcon("Chat List/Swipe/Group")
+private let ungroupIcon = swipeIcon("Chat List/Swipe/Ungroup")
+private let readIcon = swipeIcon("Chat List/Swipe/Read")
+private let unreadIcon = swipeIcon("Chat List/Swipe/Unread")
+private let archiveIcon = swipeIcon("Chat List/Swipe/Archive")
+private let unarchiveIcon = swipeIcon("Chat List/Swipe/Unarchive")
+private let hideIcon = swipeIcon("Chat List/Swipe/Hide")
+private let unhideIcon = swipeIcon("Chat List/Swipe/Unhide")
+private let startIcon = swipeIcon("Chat List/Swipe/Play")
+private let closeIcon = swipeIcon("Chat List/Swipe/Pause")
 private let ungroupCommunityIcon = ItemListRevealOptionIcon.animation(animation: "anim_ungroupcom", scale: 0.5, offset: -4.0, replaceColors: nil, flip: false, startFrame: 0)
 
 enum RevealOptionKey: Int32 {

@@ -3,14 +3,17 @@ exports_files([
     "Tellomi/version",
 ])
 
-# Icons from the released 14.0.4 tree (Tellomi/Brand at d5c5d581, tree 3acc9d283b50445939a70bcf9688454f7afd016e).
-# Not a new drawing. rules_apple rejects an .appiconset next to an Icon Composer .icon.
+# The size set, not AppIcon.icon. This rules_apple pin rejects an .appiconset next to an
+# Icon Composer .icon, and the .icon compile does not emit the iPad 152 and 167 pixel icons
+# App Store still checks. AppIcon.icon stays in the tree as the glyph source.
 filegroup(
     name = "TellomiAppIcon",
     srcs = glob(["Tellomi/Brand/AppIcon.xcassets/**"]),
     visibility = ["//visibility:public"],
 )
 
+# 152 and 167 copies of the primary icon. The asset catalog already has these
+# slots; App Store still looks for loose PNGs named from CFBundleIcons~ipad.
 filegroup(
     name = "TellomiLooseIpadHomeIcons",
     srcs = [
@@ -20,6 +23,7 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+# Same filenames as the upstream *.alticon slots, with the traced Tellomi logo.
 [
     filegroup(
         name = "TellomiAlternate_{}".format(name),

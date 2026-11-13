@@ -277,6 +277,28 @@ final class TextProcessingTranslateContentComponent: Component {
                     mappedMode = .proofread
                 }
                 
+                if case .translate = component.mode {
+                    let appData = component.context.currentAppConfiguration.with { $0 }.data
+                    let languageCode = component.strings.baseLanguageCode
+                    if !tellomiManualTranslationAvailable(manual: appData?["translations_manual_enabled"] as? String, flag: appData?[TellomiFeatureGate.translateKey] as Any?) {
+                        component.externalState.isProcessing = false
+                        component.externalState.result = (result.language, .plain(text: tellomiTranslationUnavailableText(languageCode: languageCode), entities: []), [])
+                        if !self.isUpdating {
+                            self.state?.updated(transition: .spring(duration: 0.4))
+                        }
+                        return
+                    }
+                    let source = component.externalState.sourceLanguage ?? "en"
+                    if tellomiNormalizeTranslationLanguage(source) != "en" || !tellomiTranslationTargetAccepted(result.language) {
+                        component.externalState.isProcessing = false
+                        component.externalState.result = (result.language, .plain(text: tellomiTranslationOnlyEnglishToChineseText(languageCode: languageCode), entities: []), [])
+                        if !self.isUpdating {
+                            self.state?.updated(transition: .spring(duration: 0.4))
+                        }
+                        return
+                    }
+                }
+
                 if let mappedMode {
                     component.externalState.isProcessing = true
                     self.processDisposable = (component.context.engine.messages.composeAIMessage(
@@ -296,8 +318,16 @@ final class TextProcessingTranslateContentComponent: Component {
                             return
                         }
                         component.externalState.isProcessing = false
-                        if case .nonPremiumFlood = error {
+                        let languageCode = component.strings.baseLanguageCode
+                        switch error {
+                        case .nonPremiumFlood:
                             component.externalState.nonPremiumFloodTriggered = true
+                        case .unavailable:
+                            component.externalState.result = (result.language, .plain(text: tellomiTranslationUnavailableText(languageCode: languageCode), entities: []), [])
+                        case .invalidLanguage:
+                            component.externalState.result = (result.language, .plain(text: tellomiTranslationOnlyEnglishToChineseText(languageCode: languageCode), entities: []), [])
+                        case .generic:
+                            break
                         }
                         if !self.isUpdating {
                             self.state?.updated(transition: .spring(duration: 0.4))
@@ -356,38 +386,8 @@ final class TextProcessingTranslateContentComponent: Component {
             
             if component.externalState.result == nil {
                 switch component.mode {
-                case let .translate(ignoredLanguages):
-                    var baseLang = component.strings.baseLanguageCode
-                    let rawSuffix = "-raw"
-                    if baseLang.hasSuffix(rawSuffix) {
-                        baseLang = String(baseLang.dropLast(rawSuffix.count))
-                    }
-                    var toLanguage = baseLang
-                    
-                    let fromLanguage = component.externalState.sourceLanguage ?? ""
-                    if toLanguage == fromLanguage {
-                        if fromLanguage == "en" {
-                            var dontTranslateLanguages = Set<String>()
-                            if !ignoredLanguages.isEmpty {
-                                dontTranslateLanguages = Set(ignoredLanguages)
-                            } else {
-                                dontTranslateLanguages.insert(baseLang)
-                                for language in systemLanguageCodes() {
-                                    dontTranslateLanguages.insert(language)
-                                }
-                            }
-                            toLanguage = dontTranslateLanguages.first(where: { $0 != "en" }) ?? "en"
-                        } else {
-                            toLanguage = "en"
-                        }
-                        if toLanguage == "en" && fromLanguage == "en" {
-                            if let anyOtherLanguage = NSLocale.preferredLanguages.first(where: { !$0.hasPrefix("en-") }) {
-                                toLanguage = anyOtherLanguage
-                            }
-                        }
-                    }
-                    
-                    component.externalState.result = (toLanguage, nil, [])
+                case .translate(ignoredLanguages: _):
+                    component.externalState.result = ("zh", nil, [])
                     self.beginTranslationIfNecessary(reset: false, force: false)
                 case let .stylize(isComposeWithAI):
                     if isComposeWithAI {

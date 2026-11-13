@@ -33,31 +33,20 @@ final class QrStudioExportSticker {
 }
 
 func qrStudioDecodeExportPlane(pixelSide: Int) -> QrStudioExportSticker? {
-    guard pixelSide > 0, let url = getAppBundle().url(forResource: "PlaneLogoPlain", withExtension: "tgs"), let data = try? Data(contentsOf: url), let unpacked = TGGUnzipData(data, 5 * 1024 * 1024), let instance = makeLottieInstance(data: unpacked, fitzModifier: .none, colorReplacements: nil, cacheKey: "", settings: .noAccountFallback), instance.frameCount > 0 else {
+    guard pixelSide > 0, let source = UIImage(bundleImageName: "Share/QrPlaneIcon") else {
         return nil
     }
-    let frameRate = max(1, Int(instance.frameRate))
-    let step = QrStudioExportMotion.frameStep(frameDuration: 1.0 / Double(frameRate))
     let size = CGSize(width: CGFloat(pixelSide), height: CGFloat(pixelSide))
-    var frames: [CGImage] = []
-    var index = 0
-    while index < Int(instance.frameCount) {
-        guard let context = DrawingContext(size: size, scale: 1.0, opaque: false) else {
-            return nil
-        }
-        context.withContext { c in
-            c.clear(CGRect(origin: CGPoint(), size: size))
-        }
-        instance.renderFrame(with: Int32(index), into: context.bytes.assumingMemoryBound(to: UInt8.self), width: Int32(pixelSide), height: Int32(pixelSide), bytesPerRow: Int32(context.bytesPerRow))
-        if let image = context.generateImage()?.cgImage, let tinted = qrStudioTinted(image, color: .white) {
-            frames.append(tinted)
-        }
-        index += step
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1.0
+    format.opaque = false
+    let rendered = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+        source.draw(in: CGRect(origin: CGPoint(), size: size))
     }
-    guard !frames.isEmpty else {
+    guard let image = rendered.cgImage, let tinted = qrStudioTinted(image, color: .white) else {
         return nil
     }
-    return QrStudioExportSticker(frames: frames, period: Double(instance.frameCount) / Double(frameRate))
+    return QrStudioExportSticker(frames: [tinted], period: 0.0)
 }
 
 func qrStudioExportCGImage(rgba data: Data, width: Int, height: Int, bytesPerRow: Int) -> CGImage? {

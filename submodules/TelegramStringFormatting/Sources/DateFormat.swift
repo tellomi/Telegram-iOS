@@ -12,6 +12,17 @@ public func getDateTimeComponents(timestamp: Int32) -> (day: Int32, month: Int32
     return (timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year, timeinfo.tm_hour, timeinfo.tm_min)
 }
 
+/// `year` is `tm_year` (years since 1900), which every caller passes through.
+/// Two-digit display used to be `tm_year - 100`. That is 26 for 2026 and **-30 for 1970**,
+/// so a last-seen timestamp of 0 rendered as `01/01/-30`. Years before 2000 show in full.
+func calendarDisplayYear(tmYear year: Int32, requiresFullYear: Bool) -> Int32 {
+    let fullYear = year + 1900
+    if requiresFullYear || fullYear < 2000 {
+        return fullYear
+    }
+    return fullYear % 100
+}
+
 public func stringForMediumCompactDate(timestamp: Int32, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat, withTime: Bool = true) -> String {
     var t: time_t = Int(timestamp)
     var timeinfo = tm()
@@ -48,7 +59,7 @@ public func stringForMediumDate(timestamp: Int32, strings: PresentationStrings, 
     let dateString: String
     let separator = dateTimeFormat.dateSeparator
     let suffix = dateTimeFormat.dateSuffix
-    let displayYear = dateTimeFormat.requiresFullYear ? year - 100 + 2000 : year - 100
+    let displayYear = calendarDisplayYear(tmYear: year, requiresFullYear: dateTimeFormat.requiresFullYear)
     switch dateTimeFormat.dateFormat {
         case .monthFirst:
             dateString = String(format: "%02d%@%02d%@%02d%@", month, separator, day, separator, displayYear, suffix)
@@ -70,7 +81,7 @@ public func stringForFullDate(timestamp: Int32, strings: PresentationStrings, da
     localtime_r(&t, &timeinfo);
     
     let dayString = "\(timeinfo.tm_mday)"
-    let yearString = "\(2000 + timeinfo.tm_year - 100)"
+    let yearString = "\(calendarDisplayYear(tmYear: timeinfo.tm_year, requiresFullYear: true))"
     let timeString = stringForShortTimestamp(hours: Int32(timeinfo.tm_hour), minutes: Int32(timeinfo.tm_min), dateTimeFormat: dateTimeFormat)
     
     let monthFormat: (String, String, String) -> PresentationStrings.FormattedString

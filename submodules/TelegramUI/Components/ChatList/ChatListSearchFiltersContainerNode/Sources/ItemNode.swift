@@ -111,9 +111,6 @@ final class ItemNode: ASDisplayNode {
         case .instantVideo:
             title = presentationData.strings.ChatList_Search_FilterVoice
             icon = nil
-        case .moments:
-            title = presentationData.strings.Moments_Search
-            icon = nil
         case .publicPosts:
             title = presentationData.strings.ChatList_Search_FilterPublicPosts
             icon = nil

@@ -3,582 +3,159 @@ import CoreLocation
 import MapKit
 import SwiftSignalKit
 import TelegramCore
-import TelegramPresentationData
-import AccountContext
 
-/// Nearby places and venue text search when `venue_search_username` cannot be resolved
-/// or returns no venues. The bot request still runs, in parallel, and is given
-/// `appleMapVenueBotTimeout`. MapKit is `MKLocalPointsOfInterestRequest` (~2.5 km),
-/// then one `MKLocalSearch` if that list is empty, and `MKLocalSearch` within ~100 km
-/// for a text query. Rows are ordinary `TelegramMediaMap` venues (`provider` `apple`),
-/// so the picker and `inputMediaVenue` stay the existing send path.
-///
-/// Disposal cancels the in-flight `MKLocalSearch`. A new coordinate replaces the
-/// previous signal (`mapToSignal`), so a pan or a new query does not leave the old
-/// request running. Starts are at least `appleMapVenueMinimumInterval` apart, and
-/// `MKError.loadingThrottled` opens a cooldown instead of a second request.
-/// The same query within `appleMapVenueCacheDistance` is served from memory.
-/// Nothing here is written to disk, and nothing is requested except Apple and the
-/// existing bot RPC.
-func appleMapNearbyVenueSignal(context: AccountContext, story: Bool, latitude: Double, longitude: Double, query: String?) -> Signal<ChatContextResultCollection?, NoError> {
-    let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
-    let primary = strings.primaryComponent.languageCode
-    let languageCode = primary.isEmpty ? strings.baseLanguageCode : primary
-    let apple = appleMapVenueDraftSignal(latitude: latitude, longitude: longitude, query: query, languageCode: languageCode)
-    let bot = appleMapVenueBotSignal(context: context, story: story, latitude: latitude, longitude: longitude, query: query)
-    |> timeout(appleMapVenueBotTimeout, queue: Queue.concurrentDefaultQueue(), alternate: .single(nil))
-    return appleMapMergedVenueSignal(bot: bot, apple: apple, peerId: context.account.peerId, query: query ?? "", latitude: latitude, longitude: longitude)
-}
-
-private final class AppleMapVenueGate {
-    static let shared = AppleMapVenueGate()
-
-    private let lock = NSLock()
-    private var state = AppleMapVenueGateState()
-
-    func lookup(now: Double, latitude: Double, longitude: Double, query: String) -> AppleMapVenueLookup {
-        self.lock.lock()
-        let result = self.state.lookup(now: now, latitude: latitude, longitude: longitude, query: query)
-        self.lock.unlock()
-        return result
-    }
-
-    func store(now: Double, latitude: Double, longitude: Double, query: String, venues: [AppleMapVenueDraft]) {
-        self.lock.lock()
-        self.state.store(now: now, latitude: latitude, longitude: longitude, query: query, venues: venues)
-        self.lock.unlock()
-    }
-
-    func noteThrottled(now: Double) {
-        self.lock.lock()
-        self.state.noteThrottled(now: now)
-        self.lock.unlock()
-    }
-
-    func reserveExtraDelay(now: Double) -> Double {
-        self.lock.lock()
-        let delay = self.state.reserveStart(now: now)
-        self.lock.unlock()
-        return delay
-    }
-}
-
-private struct AppleMapSearchPayload {
-    var items: [MKMapItem]
-    var throttled: Bool
-    var failed: Bool
-}
-
-private struct AppleMapFetchedPlaces {
-    var fields: [AppleMapPlacemarkFields]
-    var throttled: Bool
-    var failed: Bool
-}
-
-private final class AppleMapSearchRun {
-    private let lock = NSLock()
-    private var cancelled = false
-    private var search: MKLocalSearch?
-
-    func isCancelled() -> Bool {
-        self.lock.lock()
-        let value = self.cancelled
-        self.lock.unlock()
-        return value
-    }
-
-    func begin(_ search: MKLocalSearch) -> Bool {
-        self.lock.lock()
-        if self.cancelled {
-            self.lock.unlock()
-            search.cancel()
-            return false
-        }
-        self.search = search
-        self.lock.unlock()
-        return true
-    }
-
-    func finish() {
-        self.lock.lock()
-        self.search = nil
-        self.lock.unlock()
-    }
-
-    func cancel() {
-        self.lock.lock()
-        self.cancelled = true
-        let search = self.search
-        self.search = nil
-        self.lock.unlock()
-        search?.cancel()
-    }
-}
-
-private final class AppleMapResolveState {
-    var sawResult = false
-}
-
-private final class AppleMapVenueMerge {
-    var bot: ChatContextResultCollection?
-    var botReady = false
-    var apple: [AppleMapVenueDraft] = []
-    var appleReady = false
-    var finished = false
-    let lock = NSLock()
-}
-
-private func appleMapVenueDraftSignal(latitude: Double, longitude: Double, query: String?, languageCode: String) -> Signal<[AppleMapVenueDraft], NoError> {
-    return Signal { subscriber in
-        guard appleMapCoordinateIsUsable(latitude: latitude, longitude: longitude) else {
-            subscriber.putNext([])
-            subscriber.putCompletion()
-            return EmptyDisposable
-        }
-        let trimmed = (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let queryKey = appleMapVenueQueryKey(trimmed)
-        let now = CFAbsoluteTimeGetCurrent()
-        switch AppleMapVenueGate.shared.lookup(now: now, latitude: latitude, longitude: longitude, query: queryKey) {
-        case let .cached(venues):
-            subscriber.putNext(venues)
-            subscriber.putCompletion()
-            return EmptyDisposable
-        case .coolingDown:
-            subscriber.putNext([])
-            subscriber.putCompletion()
-            return EmptyDisposable
-        case let .fetch(delay):
-            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-            return appleMapFetchItems(coordinate: coordinate, query: trimmed, languageCode: languageCode, delay: delay).start(next: { places in
-                let drafts = appleMapVenueDrafts(from: places.fields, latitude: latitude, longitude: longitude, limit: appleMapVenueLimit)
-                if !places.throttled && !places.failed {
-                    AppleMapVenueGate.shared.store(now: CFAbsoluteTimeGetCurrent(), latitude: latitude, longitude: longitude, query: queryKey, venues: drafts)
-                }
-                subscriber.putNext(drafts)
-            }, completed: {
-                subscriber.putCompletion()
-            })
-        }
-    }
-}
-
-private func appleMapFetchItems(coordinate: CLLocationCoordinate2D, query: String, languageCode: String, delay: Double) -> Signal<AppleMapFetchedPlaces, NoError> {
-    let payload: Signal<AppleMapSearchPayload, NoError>
-    if query.isEmpty {
-        payload = appleMapNearbyItems(coordinate: coordinate, languageCode: languageCode, delay: delay)
+/// Places around a coordinate when the venue bot cannot be resolved or returns no venues.
+/// Nearby uses `MKLocalPointsOfInterestRequest`. A text query uses `MKLocalSearch` biased to
+/// that coordinate. Results are ordinary `TelegramMediaMap` venues (`provider` `apple`), so
+/// the picker rows, category colors, and the send path stay the bot's.
+/// MapKit's search requests have no preferred locale. Place names are Apple's local names
+/// (a Chongqing restaurant stays Chinese). The empty nearby fallback query follows
+/// `languageCode`, which is the UI language from `localeIdentifierLanguageCode`.
+func appleMapVenueResults(peerId: EnginePeer.Id, latitude: Double, longitude: Double, query: String?, languageCode: String) -> Signal<ChatContextResultCollection?, NoError> {
+    let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let items: Signal<[MKMapItem], NoError>
+    if !CLLocationCoordinate2DIsValid(coordinate) {
+        items = .single([])
+    } else if trimmed.isEmpty {
+        items = appleNearbyMapItems(coordinate: coordinate, languageCode: languageCode)
     } else {
-        payload = appleMapPerformSearch(delay: delay, makeSearch: {
-            return appleMapTextSearch(query: query, coordinate: coordinate)
-        })
+        items = appleTextMapItems(query: trimmed, coordinate: coordinate)
     }
-    return payload
-    |> map { result in
-        return appleMapFetchedPlaces(from: result)
+    return items
+    |> map { mapItems -> ChatContextResultCollection? in
+        let venues = appleVenues(from: mapItems, around: coordinate, sortByDistance: trimmed.isEmpty)
+        return appleVenueCollection(peerId: peerId, query: trimmed, latitude: latitude, longitude: longitude, venues: venues)
     }
 }
 
-private func appleMapNearbyItems(coordinate: CLLocationCoordinate2D, languageCode: String, delay: Double) -> Signal<AppleMapSearchPayload, NoError> {
-    return appleMapPerformSearch(delay: delay, makeSearch: {
-        return appleMapNearbySearch(coordinate: coordinate)
-    })
-    |> mapToSignal { payload in
-        if !appleMapShouldRunNearbyFallback(itemCount: payload.items.count, throttled: payload.throttled) {
-            return .single(payload)
+private let appleNearbyRadius: CLLocationDistance = 2500
+private let appleSearchSpan: CLLocationDistance = 100_000
+private let appleVenueLimit = 20
+
+private func appleNearbyMapItems(coordinate: CLLocationCoordinate2D, languageCode: String) -> Signal<[MKMapItem], NoError> {
+    let pointsOfInterest = appleMapItems {
+        let radius = min(appleNearbyRadius, MKLocalPointsOfInterestRequest.maxRadius)
+        let request = MKLocalPointsOfInterestRequest(center: coordinate, radius: radius)
+        request.pointOfInterestFilter = .includingAll
+        return MKLocalSearch(request: request)
+    }
+    return pointsOfInterest
+    |> mapToSignal { items -> Signal<[MKMapItem], NoError> in
+        if !items.isEmpty {
+            return .single(items)
         }
-        let spacing = AppleMapVenueGate.shared.reserveExtraDelay(now: CFAbsoluteTimeGetCurrent())
-        return appleMapPerformSearch(delay: spacing, makeSearch: {
-            return appleMapFallbackSearch(coordinate: coordinate, languageCode: languageCode)
-        })
+        let fallbackQuery = appleNearbyFallbackQuery(languageCode: languageCode)
+        return appleMapItems {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = fallbackQuery
+            request.region = MKCoordinateRegion(center: coordinate, latitudinalMeters: appleNearbyRadius * 2, longitudinalMeters: appleNearbyRadius * 2)
+            request.resultTypes = .pointOfInterest
+            return MKLocalSearch(request: request)
+        }
     }
 }
 
-private func appleMapPerformSearch(delay: Double, makeSearch: @escaping () -> MKLocalSearch) -> Signal<AppleMapSearchPayload, NoError> {
+private func appleTextMapItems(query: String, coordinate: CLLocationCoordinate2D) -> Signal<[MKMapItem], NoError> {
+    return appleMapItems {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.region = MKCoordinateRegion(center: coordinate, latitudinalMeters: appleSearchSpan, longitudinalMeters: appleSearchSpan)
+        request.resultTypes = [.pointOfInterest, .address]
+        return MKLocalSearch(request: request)
+    }
+}
+
+private func appleMapItems(makeSearch: @escaping () -> MKLocalSearch) -> Signal<[MKMapItem], NoError> {
     return Signal { subscriber in
-        let run = AppleMapSearchRun()
-        let start = {
-            if run.isCancelled() {
-                return
-            }
-            let search = makeSearch()
-            guard run.begin(search) else {
-                return
-            }
-            search.start { response, error in
-                if run.isCancelled() {
-                    return
-                }
-                run.finish()
-                let throttled = appleMapSearchIsThrottled(error)
-                if throttled {
-                    AppleMapVenueGate.shared.noteThrottled(now: CFAbsoluteTimeGetCurrent())
-                }
-                let failed = error != nil && !throttled
-                let items = (throttled || failed) ? [] : (response?.mapItems ?? [])
-                subscriber.putNext(AppleMapSearchPayload(items: items, throttled: throttled, failed: failed))
-                subscriber.putCompletion()
-            }
-        }
-        let timerDisposable = MetaDisposable()
-        if delay <= 0.0 && Queue.mainQueue().isCurrent() {
-            start()
-        } else if delay <= 0.0 {
-            Queue.mainQueue().async {
-                start()
-            }
-        } else {
-            let timer = Timer(timeout: delay, repeat: false, completion: {
-                start()
-            }, queue: .mainQueue())
-            timerDisposable.set(ActionDisposable {
-                timer.invalidate()
-            })
-            timer.start()
+        let search = makeSearch()
+        search.start { response, _ in
+            subscriber.putNext(response?.mapItems ?? [])
+            subscriber.putCompletion()
         }
         return ActionDisposable {
-            run.cancel()
-            timerDisposable.dispose()
+            search.cancel()
         }
     }
 }
 
-private func appleMapNearbySearch(coordinate: CLLocationCoordinate2D) -> MKLocalSearch {
-    let radius = min(appleMapNearbyRadiusMeters, MKLocalPointsOfInterestRequest.maxRadius)
-    let request = MKLocalPointsOfInterestRequest(center: coordinate, radius: radius)
-    request.pointOfInterestFilter = .includingAll
-    return MKLocalSearch(request: request)
-}
-
-private func appleMapFallbackSearch(coordinate: CLLocationCoordinate2D, languageCode: String) -> MKLocalSearch {
-    let request = MKLocalSearch.Request()
-    request.naturalLanguageQuery = appleMapNearbyFallbackQuery(languageCode: languageCode)
-    let span = appleMapNearbyRadiusMeters * 2.0
-    request.region = MKCoordinateRegion(center: coordinate, latitudinalMeters: span, longitudinalMeters: span)
-    request.resultTypes = .pointOfInterest
-    return MKLocalSearch(request: request)
-}
-
-private func appleMapTextSearch(query: String, coordinate: CLLocationCoordinate2D) -> MKLocalSearch {
-    let request = MKLocalSearch.Request()
-    request.naturalLanguageQuery = query
-    request.region = MKCoordinateRegion(center: coordinate, latitudinalMeters: appleMapTextSearchSpanMeters, longitudinalMeters: appleMapTextSearchSpanMeters)
-    request.resultTypes = [.pointOfInterest, .address]
-    return MKLocalSearch(request: request)
-}
-
-private func appleMapSearchIsThrottled(_ error: Error?) -> Bool {
-    guard let error = error as NSError? else {
-        return false
+private func appleNearbyFallbackQuery(languageCode: String) -> String {
+    let code = languageCode.lowercased().replacingOccurrences(of: "_", with: "-")
+    if code.hasPrefix("zh-hant") || code.hasPrefix("zh-tw") || code.hasPrefix("zh-hk") || code.hasPrefix("zh-mo") {
+        return "餐飲"
     }
-    return error.domain == MKErrorDomain && error.code == MKError.Code.loadingThrottled.rawValue
-}
-
-private func appleMapFetchedPlaces(from payload: AppleMapSearchPayload) -> AppleMapFetchedPlaces {
-    if payload.throttled || payload.failed {
-        return AppleMapFetchedPlaces(fields: [], throttled: payload.throttled, failed: true)
+    if code == "zh" || code.hasPrefix("zh-") {
+        return "餐饮"
     }
-    return AppleMapFetchedPlaces(fields: payload.items.compactMap(appleMapPlacemarkFields), throttled: false, failed: false)
+    return "restaurant"
 }
 
-/// MapKit's public coordinates are WGS-84, including in mainland China. The GCJ-02
-/// offset is applied by the map renderer. A shared location from `CLLocation` and
-/// the Apple Maps URL in `TellomiMapOpenIn` use that same value. Converting a search
-/// result here would move the pin off the building on iOS and shift it a second time
-/// for 高德 (`dev=1`), 百度 (`coord_type=wgs84`), and 腾讯. The stored point is the
-/// coordinate MapKit returned, so an Android receiver plots the same building.
-private func appleMapPlacemarkFields(from item: MKMapItem) -> AppleMapPlacemarkFields? {
+private func appleVenues(from items: [MKMapItem], around coordinate: CLLocationCoordinate2D, sortByDistance: Bool) -> [TelegramMediaMap] {
+    var seen = Set<String>()
+    var venues: [TelegramMediaMap] = []
+    for item in items {
+        guard let venue = appleVenue(from: item), let id = venue.venue?.id, seen.insert(id).inserted else {
+            continue
+        }
+        venues.append(venue)
+    }
+    if sortByDistance {
+        let origin = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        venues.sort { lhs, rhs in
+            let left = CLLocation(latitude: lhs.latitude, longitude: lhs.longitude).distance(from: origin)
+            let right = CLLocation(latitude: rhs.latitude, longitude: rhs.longitude).distance(from: origin)
+            if left == right {
+                return (lhs.venue?.title ?? "") < (rhs.venue?.title ?? "")
+            }
+            return left < right
+        }
+    }
+    if venues.count > appleVenueLimit {
+        venues = Array(venues.prefix(appleVenueLimit))
+    }
+    return venues
+}
+
+private func appleVenue(from item: MKMapItem) -> TelegramMediaMap? {
     if item.isCurrentLocation {
         return nil
     }
     let placemark = item.placemark
     let coordinate = placemark.coordinate
-    return AppleMapPlacemarkFields(
+    guard CLLocationCoordinate2DIsValid(coordinate), coordinate.latitude != 0 || coordinate.longitude != 0 else {
+        return nil
+    }
+    let title = (item.name ?? placemark.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ")
+    guard !title.isEmpty else {
+        return nil
+    }
+    let address = venueAddress(from: placemark, title: title)
+    let latitudeText = String(format: "%.5f", locale: Locale(identifier: "en_US_POSIX"), coordinate.latitude)
+    let longitudeText = String(format: "%.5f", locale: Locale(identifier: "en_US_POSIX"), coordinate.longitude)
+    let id = "apple:\(latitudeText):\(longitudeText):\(String(title.prefix(80)))"
+    return TelegramMediaMap(
         latitude: coordinate.latitude,
         longitude: coordinate.longitude,
-        name: item.name ?? placemark.name ?? "",
-        thoroughfare: placemark.thoroughfare,
-        subThoroughfare: placemark.subThoroughfare,
-        subLocality: placemark.subLocality,
-        locality: placemark.locality,
-        administrativeArea: placemark.administrativeArea,
-        category: appleMapVenueCategoryToken(item.pointOfInterestCategory)
+        heading: nil,
+        accuracyRadius: nil,
+        venue: MapVenue(title: title, address: address.isEmpty ? nil : address, provider: "apple", id: id, type: appleVenueType(for: item.pointOfInterestCategory)),
+        liveBroadcastingTimeout: nil,
+        liveProximityNotificationRadius: nil
     )
 }
 
-private func appleMapVenueCategoryToken(_ category: MKPointOfInterestCategory?) -> String? {
-    guard let category else {
-        return nil
-    }
-    if category == .cafe {
-        return "cafe"
-    }
-    if category == .restaurant {
-        return "restaurant"
-    }
-    if category == .bakery {
-        return "bakery"
-    }
-    if category == .brewery {
-        return "brewery"
-    }
-    if category == .winery {
-        return "winery"
-    }
-    if category == .foodMarket {
-        return "foodMarket"
-    }
-    if category == .hotel {
-        return "hotel"
-    }
-    if category == .park {
-        return "park"
-    }
-    if category == .nationalPark {
-        return "nationalPark"
-    }
-    if category == .beach {
-        return "beach"
-    }
-    if category == .campground {
-        return "campground"
-    }
-    if category == .nightlife {
-        return "nightlife"
-    }
-    if category == .hospital {
-        return "hospital"
-    }
-    if category == .pharmacy {
-        return "pharmacy"
-    }
-    if category == .fitnessCenter {
-        return "fitnessCenter"
-    }
-    if category == .stadium {
-        return "stadium"
-    }
-    if category == .school {
-        return "school"
-    }
-    if category == .university {
-        return "university"
-    }
-    if category == .library {
-        return "library"
-    }
-    if category == .museum {
-        return "museum"
-    }
-    if category == .movieTheater {
-        return "movieTheater"
-    }
-    if category == .theater {
-        return "theater"
-    }
-    if category == .amusementPark {
-        return "amusementPark"
-    }
-    if category == .aquarium {
-        return "aquarium"
-    }
-    if category == .zoo {
-        return "zoo"
-    }
-    if category == .store {
-        return "store"
-    }
-    if category == .airport {
-        return "airport"
-    }
-    if category == .publicTransport {
-        return "publicTransport"
-    }
-    if category == .marina {
-        return "marina"
-    }
-    if category == .carRental {
-        return "carRental"
-    }
-    if category == .gasStation {
-        return "gasStation"
-    }
-    return nil
-}
-
-private func appleMapVenueBotSignal(context: AccountContext, story: Bool, latitude: Double, longitude: Double, query: String?) -> Signal<ChatContextResultCollection?, NoError> {
-    let botUsername: Signal<String, NoError>
-    if story {
-        botUsername = context.engine.data.get(TelegramEngine.EngineData.Item.Configuration.App())
-        |> map { appConfiguration in
-            let storiesConfiguration = StoriesConfiguration.with(appConfiguration: appConfiguration)
-            return storiesConfiguration.venueSearchBot
-        }
-    } else {
-        botUsername = context.engine.data.get(TelegramEngine.EngineData.Item.Configuration.SearchBots())
-        |> map { searchBotsConfiguration -> String in
-            return searchBotsConfiguration.venueBotUsername ?? "foursquare"
-        }
-    }
-    return botUsername
-    |> mapToSignal { name in
-        return appleMapResolvedPeer(context: context, name: name)
-        |> mapToSignal { peer -> Signal<ChatContextResultCollection?, NoError> in
-            guard let peer else {
-                return .single(nil)
-            }
-            return context.engine.messages.requestChatContextResults(botId: peer.id, peerId: context.account.peerId, query: query ?? "", location: .single((latitude, longitude)), offset: "")
-            |> map { results -> ChatContextResultCollection? in
-                return results?.results
-            }
-            |> `catch` { _ -> Signal<ChatContextResultCollection?, NoError> in
-                return .single(nil)
-            }
-        }
-    }
-}
-
-private func appleMapResolvedPeer(context: AccountContext, name: String) -> Signal<EnginePeer?, NoError> {
-    return Signal { subscriber in
-        let state = AppleMapResolveState()
-        return context.engine.peers.resolvePeerByName(name: name, referrer: nil).start(next: { result in
-            guard case let .result(peer) = result else {
-                return
-            }
-            state.sawResult = true
-            subscriber.putNext(peer)
-        }, completed: {
-            if !state.sawResult {
-                subscriber.putNext(nil)
-            }
-            subscriber.putCompletion()
-        })
-    }
-}
-
-private func appleMapMergedVenueSignal(bot: Signal<ChatContextResultCollection?, NoError>, apple: Signal<[AppleMapVenueDraft], NoError>, peerId: EnginePeer.Id, query: String, latitude: Double, longitude: Double) -> Signal<ChatContextResultCollection?, NoError> {
-    return Signal { subscriber in
-        let merge = AppleMapVenueMerge()
-        let publish = {
-            let snapshot: (ChatContextResultCollection, Bool)? = {
-                merge.lock.lock()
-                defer {
-                    merge.lock.unlock()
-                }
-                if merge.finished {
-                    return nil
-                }
-                let botDrafts = appleMapDrafts(from: merge.bot)
-                let appleHasVenues = merge.appleReady && !merge.apple.isEmpty
-                let botHasVenues = merge.botReady && !botDrafts.isEmpty
-                let bothReady = merge.appleReady && merge.botReady
-                if !appleHasVenues && !botHasVenues && !bothReady {
-                    return nil
-                }
-                if bothReady {
-                    merge.finished = true
-                }
-                let drafts = appleMapMergeVenues(bot: botDrafts, apple: merge.apple, latitude: latitude, longitude: longitude, limit: appleMapVenueLimit)
-                let collection = appleMapVenueCollection(peerId: peerId, query: query, latitude: latitude, longitude: longitude, drafts: drafts)
-                return (collection, bothReady)
-            }()
-            guard let snapshot else {
-                return
-            }
-            subscriber.putNext(snapshot.0)
-            if snapshot.1 {
-                subscriber.putCompletion()
-            }
-        }
-        let disposable = DisposableSet()
-        disposable.add(bot.start(next: { value in
-            merge.lock.lock()
-            merge.bot = value
-            merge.botReady = true
-            merge.lock.unlock()
-            publish()
-        }, completed: {
-            merge.lock.lock()
-            let already = merge.botReady
-            merge.botReady = true
-            merge.lock.unlock()
-            if !already {
-                publish()
-            }
-        }))
-        disposable.add(apple.start(next: { value in
-            merge.lock.lock()
-            merge.apple = value
-            merge.appleReady = true
-            merge.lock.unlock()
-            publish()
-        }, completed: {
-            merge.lock.lock()
-            let already = merge.appleReady
-            merge.appleReady = true
-            merge.lock.unlock()
-            if !already {
-                publish()
-            }
-        }))
-        return disposable
-    }
-}
-
-private func appleMapDrafts(from collection: ChatContextResultCollection?) -> [AppleMapVenueDraft] {
-    guard let collection else {
-        return []
-    }
-    var drafts: [AppleMapVenueDraft] = []
-    for result in collection.results {
-        guard case let .mapLocation(media, _) = result.message, let venue = media.venue else {
-            continue
-        }
-        guard let title = appleMapVenueTitle(venue.title) else {
-            continue
-        }
-        guard appleMapCoordinateIsUsable(latitude: media.latitude, longitude: media.longitude) else {
-            continue
-        }
-        let identifier = venue.id ?? result.id
-        drafts.append(AppleMapVenueDraft(
-            latitude: media.latitude,
-            longitude: media.longitude,
-            title: title,
-            address: venue.address,
-            provider: venue.provider ?? "",
-            id: identifier,
-            type: venue.type ?? ""
-        ))
-    }
-    return drafts
-}
-
-private func appleMapVenueCollection(peerId: EnginePeer.Id, query: String, latitude: Double, longitude: Double, drafts: [AppleMapVenueDraft]) -> ChatContextResultCollection {
-    let results: [ChatContextResult] = drafts.map { draft in
-        let identifier = draft.id.isEmpty ? "venue:\(draft.latitude):\(draft.longitude)" : draft.id
-        let media = TelegramMediaMap(
-            latitude: draft.latitude,
-            longitude: draft.longitude,
-            heading: nil,
-            accuracyRadius: nil,
-            venue: MapVenue(
-                title: draft.title,
-                address: draft.address,
-                provider: draft.provider.isEmpty ? nil : draft.provider,
-                id: identifier,
-                type: draft.type.isEmpty ? nil : draft.type
-            ),
-            liveBroadcastingTimeout: nil,
-            liveProximityNotificationRadius: nil
-        )
+private func appleVenueCollection(peerId: EnginePeer.Id, query: String, latitude: Double, longitude: Double, venues: [TelegramMediaMap]) -> ChatContextResultCollection {
+    let results: [ChatContextResult] = venues.map { venue in
+        let id = venue.venue?.id ?? ""
         return .internalReference(ChatContextResult.InternalReference(
             queryId: 0,
-            id: identifier,
+            id: id,
             type: "venue",
-            title: draft.title,
-            description: draft.address,
+            title: venue.venue?.title,
+            description: venue.venue?.address,
             image: nil,
             file: nil,
-            message: .mapLocation(media: media, replyMarkup: nil)
+            message: .mapLocation(media: venue, replyMarkup: nil)
         ))
     }
     return ChatContextResultCollection(
@@ -594,4 +171,102 @@ private func appleMapVenueCollection(peerId: EnginePeer.Id, query: String, latit
         results: results,
         cacheTimeout: 0
     )
+}
+
+private func appleVenueType(for category: MKPointOfInterestCategory?) -> String {
+    guard let category else {
+        return "building/default"
+    }
+    if category == .cafe {
+        return "food/cafe"
+    }
+    if [.restaurant, .bakery, .brewery, .winery, .foodMarket].contains(category) {
+        return "food"
+    }
+    if category == .hotel {
+        return "travel/hotel"
+    }
+    if [.park, .nationalPark, .beach, .campground].contains(category) {
+        return "parks_outdoors"
+    }
+    if category == .nightlife {
+        return "nightlife"
+    }
+    if [.hospital, .pharmacy].contains(category) {
+        return "building/medical"
+    }
+    if [.fitnessCenter, .stadium].contains(category) {
+        return "building/gym"
+    }
+    if [.school, .university, .library].contains(category) {
+        return "education"
+    }
+    if [.museum, .movieTheater, .theater, .amusementPark, .aquarium, .zoo].contains(category) {
+        return "arts_entertainment"
+    }
+    if category == .store {
+        return "shops"
+    }
+    if [.airport, .publicTransport, .marina, .carRental, .gasStation].contains(category) {
+        return "travel"
+    }
+    return "building/default"
+}
+
+private func venueAddress(from placemark: MKPlacemark, title: String) -> String {
+    let street = streetLine(from: placemark)
+    let chinese = containsCJK(title) || containsCJK(street ?? "") || containsCJK(placemark.subLocality ?? "") || containsCJK(placemark.locality ?? "")
+    var parts: [String] = []
+    func append(_ value: String?) {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty, value != title, !parts.contains(value) else {
+            return
+        }
+        parts.append(value)
+    }
+    if chinese {
+        append(placemark.subLocality)
+        append(street)
+        if parts.isEmpty {
+            append(placemark.locality)
+        }
+        return parts.joined()
+    }
+    append(street)
+    append(placemark.subLocality)
+    append(placemark.locality)
+    return parts.joined(separator: ", ")
+}
+
+private func streetLine(from placemark: MKPlacemark) -> String? {
+    let street = trimmed(placemark.thoroughfare)
+    let number = trimmed(placemark.subThoroughfare)
+    switch (street, number) {
+    case let (street?, number?):
+        if containsCJK(street) || containsCJK(number) {
+            return street + number
+        }
+        return number + " " + street
+    case let (street?, nil):
+        return street
+    case let (nil, number?):
+        return number
+    default:
+        return nil
+    }
+}
+
+private func trimmed(_ value: String?) -> String? {
+    guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+        return nil
+    }
+    return value
+}
+
+private func containsCJK(_ text: String) -> Bool {
+    for scalar in text.unicodeScalars {
+        if (0x3400...0x4DBF).contains(scalar.value) || (0x4E00...0x9FFF).contains(scalar.value) {
+            return true
+        }
+    }
+    return false
 }

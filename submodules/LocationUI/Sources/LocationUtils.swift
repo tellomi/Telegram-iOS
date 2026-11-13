@@ -7,8 +7,8 @@ import MapKit
 import AccountContext
 
 extension TelegramMediaMap {
-    convenience init(coordinate: CLLocationCoordinate2D, liveBroadcastingTimeout: Int32? = nil, proximityNotificationRadius: Int32? = nil) {
-        self.init(latitude: coordinate.latitude, longitude: coordinate.longitude, heading: nil, accuracyRadius: nil, venue: nil, liveBroadcastingTimeout: liveBroadcastingTimeout, liveProximityNotificationRadius: proximityNotificationRadius)
+    convenience init(coordinate: CLLocationCoordinate2D, liveBroadcastingTimeout: Int32? = nil, proximityNotificationRadius: Int32? = nil, accuracyRadius: Double? = nil) {
+        self.init(latitude: coordinate.latitude, longitude: coordinate.longitude, heading: nil, accuracyRadius: accuracyRadius, venue: nil, liveBroadcastingTimeout: liveBroadcastingTimeout, liveProximityNotificationRadius: proximityNotificationRadius)
     }
     
     var coordinate: CLLocationCoordinate2D {
@@ -41,7 +41,64 @@ extension CLLocationCoordinate2D {
 }
 
 public func nearbyVenues(context: AccountContext, story: Bool = false, latitude: Double, longitude: Double, query: String? = nil) -> Signal<ChatContextResultCollection?, NoError> {
-    return appleMapNearbyVenueSignal(context: context, story: story, latitude: latitude, longitude: longitude, query: query)
+    let botUsername: Signal<String, NoError>
+    if story {
+        botUsername = context.engine.data.get(TelegramEngine.EngineData.Item.Configuration.App())
+        |> map { appConfiguration in
+            let storiesConfiguration = StoriesConfiguration.with(appConfiguration: appConfiguration)
+            return storiesConfiguration.venueSearchBot
+        }
+    } else {
+        botUsername = context.engine.data.get(TelegramEngine.EngineData.Item.Configuration.SearchBots())
+        |> map { searchBotsConfiguration -> String in
+            return searchBotsConfiguration.venueBotUsername ?? "foursquare"
+        }
+    }
+    return botUsername
+    |> mapToSignal { botUsername in
+        return context.engine.peers.resolvePeerByName(name: botUsername, referrer: nil)
+        |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
+            guard case let .result(result) = result else {
+                return .complete()
+            }
+            return .single(result)
+        }
+        |> mapToSignal { peer -> Signal<ChatContextResultCollection?, NoError> in
+            let botResults: Signal<ChatContextResultCollection?, NoError>
+            if let peer {
+                botResults = context.engine.messages.requestChatContextResults(botId: peer.id, peerId: context.account.peerId, query: query ?? "", location: .single((latitude, longitude)), offset: "")
+                |> map { results -> ChatContextResultCollection? in
+                    return results?.results
+                }
+                |> `catch` { _ -> Signal<ChatContextResultCollection?, NoError> in
+                    return .single(nil)
+                }
+            } else {
+                botResults = .single(nil)
+            }
+            // The inline venue bot (foursquare) wins when it returns venues. Tellomi has no
+            // such bot: resolve fails or the result list is empty, and MapKit fills the same
+            // venue rows.
+            return botResults
+            |> mapToSignal { collection -> Signal<ChatContextResultCollection?, NoError> in
+                if let collection, contextResultHasVenues(collection) {
+                    return .single(collection)
+                }
+                let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
+                let languageCode = localeIdentifierLanguageCode(baseLanguageCode: strings.baseLanguageCode, primaryLanguageCode: strings.primaryComponent.languageCode)
+                return appleMapVenueResults(peerId: context.account.peerId, latitude: latitude, longitude: longitude, query: query, languageCode: languageCode)
+            }
+        }
+    }
+}
+
+private func contextResultHasVenues(_ collection: ChatContextResultCollection) -> Bool {
+    for result in collection.results {
+        if case let .mapLocation(media, _) = result.message, media.venue != nil {
+            return true
+        }
+    }
+    return false
 }
 
 func stringForEstimatedDuration(strings: PresentationStrings, time: Double, format: (String) -> String) -> String? {

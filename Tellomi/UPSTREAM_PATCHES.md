@@ -1,269 +1,34 @@
-# Upstream patches
-
-## Profile Moments tab is not latched for the process — 2026-11-13
-
-A failed first page was kept as a final empty result, and `openProfilePosts` returned that opening until the process ended. The tab is inserted only for a non-empty page, and the retry row is inside the tab, so an offline visit or a profile that had no posts yet hid 动态 until relaunch. Publishing did not refresh the opening.
-
-A failed fetch is `.failed`, not `.empty`. The next profile open retries it after 15 seconds. Coming back from `waitingForNetwork` to online retries it once without that wait; a later reconnect inside 5 seconds does not. A confirmed-empty page is requested again on the next profile open, and once more 60 seconds after it settled, so a profile left on screen can gain the tab. That timed check does not schedule another. Publishing refreshes the signed-in user's opening immediately, and a request that was already in flight is ignored when it returns. The in-memory openings are capped at 32 profiles, least recently used first. A cached non-empty page still survives a failed fetch.
-
-`Moments.Loading` was added to `en.lproj` as `Loading…`. That is the string the profile pane shows while the first page is in flight. zh-Hans is 加载中… and zh-Hant is 載入中…. The other bundled lprojs carry the English sentence until a langpack replaces it. zh-Hans also adds `Moments.Title` = 动态 and zh-Hant adds `Moments.Title` = 動態.
-
-| File | Change |
-| --- | --- |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsNavigation.swift` | `.failed` is distinct from `.empty`. Opening decisions, throttles, and the 32-profile cap. |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/TelegramEngineMoments.swift` | The shared opening is requested again. Publish refreshes this account. Reconnect retries a failure. |
-| `submodules/TelegramCore/Tests/MomentsRulesTests.swift` | A failed fetch then a success shows the tab. An empty profile then a published post shows the tab. |
-| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | `Moments.Loading` = `Loading…`. |
-| `Telegram/Telegram-iOS/zh-Hans.lproj/Localizable.strings` | `Moments.Loading` = 加载中…. `Moments.Title` = 动态. |
-| `Telegram/Telegram-iOS/zh-Hant.lproj/Localizable.strings` | `Moments.Loading` = 載入中…. `Moments.Title` = 動態. |
-
-## Link hosts go through TellomiLinks — 2026-11-12
-
-`GenerateTextEntities` recognized `tell.cc`, `t.me`, and `telegram.me`, and omitted `telegram.dog`. The text-entity host list, the internal-link host list, and the open-link check now use `TellomiLinks.linkHosts` (`tell.cc`, `t.me`, `telegram.me`, `telegram.dog`). Short links use `TellomiLinks.shortLinkHosts`. The site host in that list is `TellomiLinks.siteHost`.
-
-| File | Change |
-| --- | --- |
-| `submodules/TextFormat/Sources/GenerateTextEntities.swift` | Whitelist is `linkHosts` plus the site and the other public hosts. |
-| `submodules/UrlHandling/Sources/UrlHandling.swift` | Internal and short-link hosts come from `TellomiLinks`. |
-| `submodules/TelegramUI/Sources/OpenUrl.swift` | The internet-url host list is `linkHosts`. |
-| `submodules/TelegramUI/Sources/Chat/ChatControllerOpenLinkContextMenu.swift` | A public link host uses `isPublicLinkHost`. |
-
-## Login splash methods the restored sequence calls — 2026-11-12
-
-The restored splash controller calls `updateAppearanceBackgroundColor` and `tellomiSuppressLivePages` on `RMIntroViewController`. Those two methods were on master and absent after the client-tree restore, so the release IPA did not compile. They are on the intro controller again. `resendLoginCode` is the engine wrapper around the existing `resendAuthorizationCode`; the code-entry resend call had no method to type-check.
-
-| File | Change |
-| --- | --- |
-| `submodules/RMIntro/PublicHeaders/RMIntro/RMIntroViewController.h` | Declares the two splash methods. |
-| `submodules/RMIntro/Sources/platform/ios/RMIntroViewController.m` | Applies appearance colors and hides the live pages during the snapshot handoff. |
-| `submodules/TelegramCore/Sources/TelegramEngine/Auth/TelegramEngineAuth.swift` | `resendLoginCode` forwards to `resendAuthorizationCode`. |
-
-## Profile Moments pane — 2026-11-12
-
-Native panes come from `peerInfoAvailableMediaPanes` (`PeerInfoData.swift`). Each tag reads `aroundMessageHistoryViewForLocation`: still loading is skipped, an empty finished view is omitted, a non-empty view is added. The first result is `nil` until every tag has settled. Stories are inserted at index 0 only when `hasStories` is true (`PeerInfoData` around the user-profile branch). `PeerInfoPaneContainerNode.update` rebuilds the tabs from `availablePanes`.
-
-Moments follows that rule without taking the whole list to `nil` while its own request is open. `momentsProfileTabs` inserts the pane only when the first posts page is non-empty, immediately after Stories. `unknown`, `failed`, and `empty` leave the existing panes alone. A failed or empty opening is not kept for the process; the 2026-11-13 note describes the retry. Stories stay a separate pane. The Chinese Stories title is 快拍; Moments stays 动态.
-
-The first page is one shared opening: the extension cache, then `GET /v1/feed/profiles/{id}/posts`. The tab decision and the list subscribe to that opening, so they do not each hit the network. A failed request does not replace a cached non-empty page. The profile signal emits `.unknown` before that opening returns, so the page is not held. The pane reports ready at init (`momentsProfilePaneReadyAtInit`, one copy). Inside the pane, loading, a failed empty list with retry, and an empty list come from `momentsProfilePostsState`. The list uses the passed top inset and at least 24pt at the bottom, so 关注 and 粉丝 sit below the username card. Likes, comments, paging (`momentsShouldLoadFeedPage`), and the following/follower rows stay in the pane.
-
-`PeerInfoScreen` layout, the Stories grid, and the media-pane algorithm are unchanged. The hook in `PeerInfoData` replaces the unconditional `insert(.moments, at: 0)` with `momentsUserProfilePanes` and passes the opening beside the media-pane signal, the same way Stories receives `hasStories`. The Stories tab title in `PeerInfoPaneContainerNode` calls the title helper.
-
-| File | Change |
-| --- | --- |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsNavigation.swift` | Pane order, presence (cache / remote / failed cache), and the shared-opening vs page choice. |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsRequests.swift` | Ready at init, once. Posts-area state. |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsCache.swift` | Profile posts cache key. |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/TelegramEngineMoments.swift` | One opening: cache, then one request, replayed to the list. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsProfilePanes.swift` | Maps the opening onto `PeerInfoPaneKey` without blocking the first profile value. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsProfilePaneNode.swift` | Ready at init, insets, loading / retry / empty, shared first page. |
-| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoData.swift` | The Moments insert is the helper call. Stories are not removed. |
-| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift` | The Stories tab title uses the helper. |
-| `submodules/TelegramCore/Tests/MomentsRulesTests.swift` | Empty, unknown, posts, failed cache, order, one 快拍 and one 动态, ready, insets, load state. |
-| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | `Moments.Loading` = `Loading…`, the sentence the pane shows while posts are loading. |
-| `Telegram/Telegram-iOS/zh-Hans.lproj/Localizable.strings` | `Moments.Loading` = 加载中…. `Moments.Title` = 动态. |
-| `Telegram/Telegram-iOS/zh-Hant.lproj/Localizable.strings` | `Moments.Loading` = 載入中…. `Moments.Title` = 動態. |
-| `Telegram/Telegram-iOS/*.lproj/Localizable.strings` | The other bundled languages use the English `Moments.Loading` until the server langpack has a translation. |
-
-## Release line keeps Moments and master — 2026-11-12
-
-`release/ios` is the branch TestFlight builds. It held the Moments commits. `master` did not: those commits were made on `release/ios` after the two lines split at `d5c5d581d9`, and `fc420b8589` restored the client tree only on `release/ios`. This merge brings `master` (`484ef4a8c9`, including #172, #173, #175, and #176) onto `release/ios` (`e1ae313a1d`). Moments sources stay. Master's login, link, datacenter, CallKit, and dSYM changes stay. Where a conflict was a URL, the `tellomi.cn` / `TellomiLinks` side is kept and `tell.cc`, `t.me`, and `telegram.me` stay in the link host list. The seed list stays `8.137.198.240` then `api.tellomi.cn`, with 10443 then 443, and `thisPortOnly` stays. The merge had left `thisPortOnly` declared twice and `TellomiSeedPorts` / `TellomiSeedAddressSets` defined twice. One declaration remains. The address list is still reversed, so the relay's 10443 is dialed first. `TellomiLinks` had been removed by the client-tree restore and was not changed on master after the split, so the merge dropped it while the rewritten call sites stayed. The module, `@_exported import`, the wallet info screen's build dependency, and its `import TellomiLinks` are restored. The merged login controllers called the master login helpers while the helper sources and the `attempt` parameter on `sendAuthorizationCode` had been left on the restored tree. Those login sources are the master copies again, including `TellomiCallingCodePolicy` and `TellomiAccountIdentity`. Privacy, the secret-chat key text, and the link whitelist use `TellomiLinks` (`tellomi.cn`, `linkHosts`, including `telegram.dog`).
-
-The Moments notes below are the `release/ios` record. The notes after that are the `master` record, unchanged.
-
-## Moments gallery uses the chat media viewer — 2026-11-11
-
-Tapping a photo in the feed pushed `GalleryController` onto the navigation stack. That controller is an overlay: its back button, swipe-down and the end of the transition all call `presentingViewController?.dismiss`, which the navigation overlay installs and a push does not. The swipe still ran the dismiss animation (`animateOut` leaves the background clear and the content off-screen) and then did not remove the controller. `disablesInteractiveTransitionGestureRecognizer` also blocked the navigation edge swipe, so there was no way back. The open had no `GalleryControllerPresentationArguments`, so the thumbnail transition never ran. A missing `width`/`height` was stored as 1×1, and the viewer draws into the representation size, so the bitmap was a single pixel.
-
-The tap now presents `GalleryController` in the window overlay, the same call a chat photo uses, with a transition node on the tapped thumbnail. Pages are one https image or video each. The message id is the slide index, so a slide without a URL does not shift the later pages. `.custom` reverses its array the way a chat history is ordered; the list is passed reversed so the pager follows the post. Several pages share one `MessageGroupInfo`, which is what turns on the album filmstrip. The bytes are `HttpReferenceMediaResource` on the same URL the row already fetched, so MediaBox serves the cached file. Closing the overlay does not push or pop, and the feed list is not asked to restore its offset.
-
-No upstream file is modified. iMe's published iOS tree does not contain this feed. No iMe source was copied.
-
-| File | Change |
-| --- | --- |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsRules.swift` | Gallery pages, the tapped index, and the pixel size. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsGallery.swift` | Presents `GalleryController` as an overlay with the thumbnail transition. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsPostItem.swift` | The row reports the thumbnail that was tapped. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsFeedActions.swift` | The feed opens the overlay and does not arm a scroll restore. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsDetailScreen.swift` | The post detail opens the same overlay. |
-
-## Moments feed main-thread layout — 2026-11-11
-
-Scrolling the feed asked `ListView` to build each new row on a global queue. `MomentsPostItemNode` and `MomentsStatusItemNode` are view-backed (`UIStackView`, labels, image views, content-hugging constraints). Creating them there opened an implicit `CATransaction`. When the GCD worker exited, Core Animation committed it and Auto Layout aborted (`_AssertAutoLayoutOnAllowedThreadsOnly`, TestFlight 14.0.5 (86)). Measurement still runs on that queue. The node, its frames and image assignment run on the main queue. Cached feed and hide reads, and like, save, follow and comment completions that touch views, are delivered on the main queue too. ImageIO thumbnails stay off the main queue; only `UIImageView.image` is set on it.
-
-| File | Change |
-| --- | --- |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsMainQueue.swift` | `momentsOnMainQueue`. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsPostItem.swift` | Row and status nodes are created on the main queue. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsRemoteImage.swift` | Bitmap decode stays in the background. The image view is updated on the main queue. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsScreen.swift` | Cached page and hides render on the main queue. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsFeedActions.swift` | Like, save and follow rollbacks render on the main queue. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsCommentSheet.swift` | Comment send, delete and report errors update the sheet on the main queue. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsDetailScreen.swift` | Comment send updates the field on the main queue. |
-
-## Crash log prompt — 2026-11-11
-
-The prompt after an unexpected quit used four English sentences, and it marked every pending report presented as soon as the alert appeared. Opening Apple's share sheet resigns the app, which dismissed the alert. The presented flag was never cleared, so Send Log did not come back. Send Log also resolved `@iOSCrashReportsBot` and wrapped the zip in an Instant Page, which this server does not collect.
-
-The report stays pending until Not Now, or until the server accepts Send. Resigning active dismisses the alert and shows it again once the app can present. A later update while that alert is already up, or while a send is in flight, does not present a second copy. A refused send leaves the report pending and the prompt can show again. The zip is a normal document (`application/zip`, filename `Tellomi-iOS-<version>-crash.zip`, caption `app=<version> device=<device>`), sent with `messages.sendMedia`. The thank-you toast waits for that RPC to return. A transport acknowledgement is not success, and a refused send leaves the report pending. The bot username is `help.getAppConfig`'s `tellomi_crash_report_bot`, or `TellomiBot` when that value is missing or not a username.
-
-The four sentences are `CrashReport.Prompt.*` in every built-in lproj. `PresentationStrings` is generated from `en.lproj`. The server langpack still wins when it has a translation that is not the English sentence. Until then, the lproj for the active language is used.
-
-| File | Change |
-| --- | --- |
-| `submodules/DebugSettingsUI/Sources/CrashReportPrompt.swift` | Prompt state machine, bot name, document caption. |
-| `submodules/DebugSettingsUI/Sources/CrashReportsController.swift` | Lang-pack prompt. Document send. Server confirmation. |
-| `submodules/DebugSettingsUI/Tests/CrashReportPromptTests.swift` | Show, resign, confirm, failure, decline, document, bot name. |
-| `Telegram/Telegram-iOS/*.lproj/Localizable.strings` | Prompt strings for every built-in language. |
-
-## Moments feed limits and recommendation switch — 2026-11-11
-
-`GET /v1/feed/config` puts the caps in a nested `limits` object. The client was reading invented names from the top of the document, so every server cap was ignored. The parser now reads only the engine's keys. A missing key, or a value that is not a positive whole number, keeps the client default. Those defaults are the content-engine constants: 2000 characters, 12 images, and 180 seconds for both voice caps. `personalization_toggle_visible` is a top-level boolean. Anything else, including `1` and `"true"`, hides the switch.
-
-The recommendation switch is only on the Moments settings screen. Off sends `personalized=false` on recommend and reloads that feed. On leaves the recommend query unchanged. The choice is read again when the Moments tab is created, and an older read cannot overwrite a newer toggle.
-
-| Server key | Client field |
-| --- | --- |
-| `limits.post_text_chars` | `textLimit` (2000, `posts.go` `MaxPostChars`) |
-| `limits.post_images` | `imageLimit` (12) |
-| `limits.post_videos` | `videoLimit` (3) |
-| `limits.video_max_seconds` | `videoMaxDuration` (60) |
-| `limits.voice_post_max_seconds` | `voicePostMaxDuration` (180, `media/audio.go` `MaxAudioSeconds`), composer |
-| `limits.voice_comment_max_seconds` | `voiceCommentMaxDuration` (180), comment voice |
-| `limits.comment_text_chars` | `commentTextLimit` (1000) |
-| `limits.page_size` | `pageSize` (20) |
-| `limits.max_mentions` | `mentionLimit` (10) |
-| `limits.max_topics` | `topicLimit` (3) |
-| `limits.probe_interval_seconds` | `newPostsProbeInterval` (60) |
-| `limits.notification_days` | `notificationRetentionDays` (90) |
-
-| File | Change |
-| --- | --- |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/MomentsLimits.swift` | Nested `limits` parser, preference body, recommend query. |
-| `submodules/TelegramCore/Sources/TelegramEngine/Moments/TelegramEngineMoments.swift` | Applies the config. `GET`/`PUT /v1/feed/me/preferences`. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsSettingsController.swift` | Switch and footer, only when the config flag is true. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsComposerScreen.swift` | Voice posts use `voice_post_max_seconds`. |
-| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | Recommendations, the switch, and its footer. |
-
-## Root tab menu (选单设定) — 2026-11-10
-
-A fresh install shows 动态, 聊天, 设置. Contacts, Calls and News stay off until the person turns them on. Chats and Settings cannot be hidden. The choice is shared account-manager data (`ApplicationSpecificSharedDataKeys.tellomiTabBarPreferences`), the same store as `CallListSettings`, not an account postbox record and not `UserDefaults`. A value saved by the first build in the `app.tellomi.chat.tab-bar` suite is copied in once and then removed. Hiding button titles shortens the phone tab bar; an iPad or vertical bar is unchanged. The bar rebuilds when the switches move.
-
-Hidden tabs are left out of the controller list, the same way Calls is. The phone capsule then hugs those tabs: 90pt for a titled tab, 56pt when titles are hidden. Two titled tabs are 188pt. It still takes the whole width when the leftover would be under 60pt. `tabBarItemsLayout` itself is unchanged and still shares the full length in the horizontal regular case; the phone bar replaces that result.
-
-The screen is an `ItemListController`: Settings → a Tools card → 选单设定. Strings are `presentationData.strings` from `en.lproj` (`Tellomi.MenuSettings.*`). Other languages come from the server langpack. `dictFromLocalization` does not fill them. iMe's public iOS tree (only `master`, pushed 2019-10-31, no tags) does not contain this screen. Swiftgram's tab settings (`CallListSettings.showContactsTab`, `SGSimpleSettings.showTabNames`, `addRootControllers`) are the pattern: optional tabs are left out of the controller list, and chats and settings are always appended. Swiftgram asks for a restart to hide titles. This build applies that immediately. No Swiftgram or iMe source was copied.
-
-| File | Change |
-| --- | --- |
-| `submodules/TelegramUI/Sources/TelegramRootController.swift` | Builds the root tabs from `tabBarPreferences`. |
-| `submodules/TelegramUI/Sources/ApplicationContext.swift` | Follows the shared tab-bar record and keeps the Calls "show tab" switch in step with it. |
-| `submodules/TelegramUI/Sources/AppDelegate.swift` | Loads that record with the other shared settings before the root tabs are built. |
-| `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | `tellomiTabBarPreferences` shared-data key. |
-| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift` | Settings row that opens the screen. |
-| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | Tools card. |
-| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift` | Pushes the screen. |
-| `submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift` | Hides phone tab titles, shortens the bar, and uses the hugged phone capsule. |
-| `submodules/TelegramUI/Components/TabBarLayout/Sources/TellomiTabBarPhoneLayout.swift` | Phone capsule width from the visible tab count. |
-| `submodules/TabBarUI/Sources/TabBarController.swift` | `showsItemTitles`, applied on the next layout. |
-| `submodules/TabBarUI/Sources/TabBarContollerNode.swift` | Passes that flag into the bar. |
-| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | English keys for the generated string accessors. |
-
-## Login language, sign-up handoff, upstream crash logs — 2026-11-10
-
-Build 80 on a Chinese phone showed the English tour plus "Continue in 简体中文", and `initConnection` sent `system_lang_code=zh-Hans-US` with `lang_code=en`. `AppleLanguages` is the system list. `zh-Hans-US`, `zh-Hans-CN`, `zh-CN` and `zh` resolve to bundled `zh-Hans`. `zh-Hant-TW`, `zh-Hant-HK`, `zh-TW` and `zh-HK` resolve to `zh-Hant`. Anything else is English. A language stored with `tellomiRememberExplicitLanguage` wins. The welcome pages are the bundled `Tour.*` strings, so they do not wait for a langpack, and the suggested-language button is not shown.
-
-`auth.signUp` returned `auth.authorization` (`auth.authorization#2ea2c0d4`, layer 232). About 49ms later the client closed the connection and opened a new unauthorized session (new temp keys, no `updates.getState`). `signUp` used to write the authorized state and switch the account record as two later signals. The record could leave the auth slot while the postbox still looked unauthorized, `SharedAccountContext` deleted that record, and `beginNewAuth` showed the welcome screen. `signUp` now writes `AuthorizedAccountState` and switches the record in the same order as `auth.signIn`. A following nil state does not rebuild the welcome on that controller. If the open still races, a postbox that already holds `AuthorizedAccountState` is opened again instead of being deleted.
-
-Crash logs are the upstream Telegram-iOS screen again (MetricKit store, debug Settings list, prompt that resolves `@iOSCrashReportsBot` and gives up after 15 seconds). The Tellomi prompt that waited on `networkState` and never called `contacts.resolveUsername`, the `tellomi_crash_report_bot` upload, the Saved Messages fallback, and the pre-login signal handler are gone. `CrashReport.*` strings were removed from every `Localizable.strings`.
-
-| File | Change |
-| --- | --- |
-| `submodules/TelegramCore/Sources/TellomiBuiltinLanguage.swift` | Resolves `zh-Hans-US` and the other variants. Sets `lang_code`. |
-| `submodules/AuthorizationUI/Sources/TellomiBundledWelcome.swift` | Welcome and pre-login strings from the bundled lproj. |
-| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | No second language button. |
-| `submodules/TelegramCore/Sources/Authorization.swift` | `signUp` persists the account the same way `signIn` does. |
-| `submodules/DebugSettingsUI/Sources/CrashReportsController.swift` | Restored from upstream Telegram-iOS. |
-| `submodules/CrashReporting/Sources/*` | Restored from upstream. The signal handler is deleted. |
-
-## MTProto port 443 fallback — 2026-11-10
-
-Overseas networks drop TCP 10443 and pass 443. The seed for datacenter 1 is `api.tellomi.cn` on 10443, then 443. 10443 is last in the address list, so a client that never sees 10443 fail still dials 10443 first. An endpoint that has never received a response uses a 5 second TCP handshake timeout; after it has answered once, the handshake timeout stays 12 seconds. The failure is recorded before the reconnect is queued, including before login, and the first reconnect is immediate, so the next dial is 443. A saved datacenter list and a `help.getConfig` `dc_options` list that omit 443 get it added back. The server does not have to return 443 for this client to keep the fallback.
-
-| File | Change |
-| --- | --- |
-| `Tellomi/tellomi-server.json` | `seed_fallback_ports` is `[443]`. `seed_port` stays 10443. |
-| `submodules/MtProtoKit/Sources/TellomiServerConfig.m` | Builds one `thisPortOnly` address per port, preferred port last. |
-| `submodules/MtProtoKit/Sources/MTContext.m` | Merges those seed addresses into a saved or server-supplied list. |
-| `submodules/MtProtoKit/Sources/MTTcpConnection.m` | 5s handshake until the endpoint has answered, then 12s. |
-| `submodules/MtProtoKit/Sources/MTTcpTransport.m` | Records the failed scheme before asking for the next connection. |
-| `submodules/MtProtoKit/Sources/MTProto.m` | A pre-login TCP failure counts toward that rotation. |
-| `submodules/TelegramCore/Sources/Network/Network.swift` | Installs the seed address sets. |
-| `submodules/MtProtoKit/Tests/MTSeedFallbackTests.m` | Seed order, saved-list merge, dc_options merge, and the 10443-then-443 choice. |
-
-## Moments feed contract, list and comments — 2026-11-10
-
-Branch `cursor/moments-feed-f01-f04-7ea6`, based on `release/ios` (`043a05bd55`).
-
-- `POST /v1/feed/posts` is built by `momentsEncodePost`. The body is `kind=post`, `visibility`, `media_keys`, root `city` / `allow_nearby` / `place_id`, `quote_of` and a UUID `client_nonce`. It does not send `media`, `location`, `comment_policy` or `link_preview`. Include and exclude send `audience.audience_token` from `discover.getAudienceToken` (`#dc5213c2` / `#da177181`). A token failure leaves the picked audience in place. The nonce is fixed for retries of that draft.
-- Tapping the post body opens `MomentsDetailScreen`. The comment button presents `MomentsCommentSheet` over the list. Closing the sheet does not push or pop, so the tab and scroll position stay. A photo or video opens the gallery. Tab taps and pager swipes share `commitSelection`. Profile, search and a post deep link keep the detail screen.
-- The list loads the next page near the bottom and dedupes by id. Pulling down refreshes from a nil cursor and cancels the previous page request. A failed page can be retried. Following, friends and nearby probe the first page on an interval while the feed is on screen and only raise the new-posts pill. Recommend does not poll. The probe pauses while the feed is off screen or the comment sheet is covering it.
-- The comment sheet keeps separate hot and latest cursors, sends `parent_id` for a reply, opens an author from the avatar or name, and long-presses for reply, copy, report and delete where that action is allowed. `canComment` and `commentPolicy` disable the field. The text, reply target and attachment clear only after a successful send. A failed send shows `presentationData.strings.Moments_Comment_SendFailed`. A failed audience token shows `Moments_Audience_Kept` and leaves the selection in place. Both keys are in every bundled lproj, the same set as the crash-log prompt: en, zh-Hans, zh-Hant, ar, be, ca, de, es, fa, fr, id, it, ko, ms, nl, pl, pt, ru, tr, uk, and uz. zh-Hans is 简体 and zh-Hant is 繁體. The server langpack should carry the same two keys, `Moments_Comment_SendFailed` and `Moments_Audience_Kept`; a pack value replaces the bundled sentence. A repeated tab change cancels the previous page before its callback can render. A like updates only that row. Feed photos are bound to the cell that requested them. The post body opens the detail screen, and a photo or video opens the gallery. Relative times use the shared timer strings. A retry uses the same nonce. Comments that are turned off still use `Moments.Comment.Closed`.
-
-## Moments feed (动态) — 2026-11-09
-
-Branch `cursor/moments-feed-v1-b405`, based on `de22e3ff` (official restore, PR #138). This is not part of the 14.0.5 release candidate.
-
-The feed is new client code. It does not revive the cancelled Discover/Feed work from iOS PRs #124–#137.
-
-- Root tabs: Contacts, Calls, Moments, Chats, Settings. Search stays the native tab-bar search, with a Moments filter.
-- News stays behind `isNewsFeedEnabled` (off while the channel feed API is parked).
-- `TelegramEngine.Moments` calls content-engine `/v1/feed`. The host is `https://feed.tellomi.cn` unless `help.getAppConfig` supplies a valid `tellomi_discover_feed_base_url`. `tellomi_discover_feed_enabled` does not show or hide the tab. The bearer token is `discover.getEngineCredential` (`#a80a7f76` / `#0578ccaa`, appended to `swift_scheme.tl` the same way as the other Tellomi constructors) and is sent as `Authorization: Bearer`, refreshed before `expires`. `region` is `cn` or `global` and is not a host. Image URLs are joined onto `media_base_url` from `GET /v1/feed/config`. Photos are fetched with `HttpReferenceMediaResource` into `MediaBox` and decoded as an ImageIO thumbnail at the view size. `MomentsPrefetchManager` starts that fetch for the visible rows and the next 8.
-- The Moments tab is created with the other root tabs and is not removed when `GET /v1/feed/status` fails or reports `visible: false`. An unreachable engine is an error row inside the feed.
-- Feed pages, hides and the one-page cache live in the account Postbox item-cache collection `moments` (id 63), which is cleaned with the rest of the account database. The composer does not restore the previous audience; each post asks again.
-- Audience reuses `ShareWithPeersScreen` with a mutual-followers category. The row title is `presentationData.strings.Story_Privacy_CategoryMutualFollowers` (`Story.Privacy.CategoryMutualFollowers` in `en.lproj`). Other languages, including 互相关注, come from the server langpack. Story-only rows stay off. Exclude lists stay in the story peer-list cache.
-- Gallery media goes through `legacyAssetPickerEnqueueMessages` and tus `POST /v1/feed/media/uploads`.
-- A visible video uses `UniversalVideoNode` only when autoplay is on and Reduce Motion is off.
-- Comment stickers and GIFs use `StickerPickerScreen` (`hasGifs`) and are uploaded with tus. Likes and poll votes open an `ItemListPeerItem` list filled from `/v1/feed`.
-- Feed list endpoints return `{items:[{id,reason}],cursor}`. The client hydrates with `POST /v1/feed/cards`. Notifications use `?tab=interactions|follows|system`. Home tabs are always 推荐 / 关注 / 好友 / 同城 (`recommend`, `following`, `friends`, `nearby`). `GET /v1/capabilities` does not hide 好友. `GET /v1/feed/friends` uses the same cursor as following; following list reasons are `self`, `following` and `repost`, and friends items use `reason=friend`. A failed friends request is an in-feed retry, not a hidden tab. The composer stops at 2000 characters and 12 images. Image `renditions` (largest first) supply the feed bitmap: 1080 for a single image, 360 for a carousel cell, original only in the gallery. A missing tier uses the original key/url. Video cells show `poster`, then `cover_key`. An absolute `url` is used as-is; a key is `media_base_url` + key. ImageIO still downsamples whatever bytes arrive.
-- `prepareMediaBase()` emits one `Void` so the requests chained after it actually run.
-- There is no city catalog (`/v1/feed/cities` is empty). 同城 is `GET /v1/feed/nearby` with no city picker. A card's city name is shown only when the card includes it.
-- Voice posts and voice comments are capped at 180 seconds, unless `limits.voice_post_max_seconds` or `limits.voice_comment_max_seconds` says otherwise.
-- Comment stickers and GIFs are uploaded with tus and sent as `{type,key,...}`. They are not Telegram document ids.
-- Relative media keys use `media_base_url`, or `https://media.tellomi.app/feed` when that is missing. Absolute https URLs (signed R2) are left as returned. Image versus video follows the card `type`, not the HTTP content-type.
-
-## Moments profile peer open — 2026-11-10
-
-The profile Moments pane opens an author with the same peer navigation the rest of the profile uses. The pane is created in the shared pane container, so that one assignment lives next to the other panes.
-
-| File | Change |
-| --- | --- |
-| `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift` | Sets `MomentsProfilePaneNode.openPeer` from `ChatControllerInteraction.openPeer`. |
-
-## Moments comment focus and topic screen — 2026-11-10
-
-`ListViewScrollPosition.center` takes `ListViewCenterScrollPositionOverflow`. A focused comment uses `.center(.bottom)`, the same unanimated scroll a chat uses to land on a message. A short row is centered either way; a row taller than the screen keeps its bottom in view. The topic screen is the shared post list with that topic's title, sort and loader. It does not subclass the list.
-
-| File | Change |
-| --- | --- |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsDetailScreen.swift` | Comment focus scrolls with `.center(.bottom)`. |
-| `submodules/TelegramUI/Components/Moments/Sources/MomentsRouteScreens.swift` | `MomentsTopicScreen` returns the shared post list. |
-
-## On-device MapKit venues
-
-Nearby places and the location search box call `nearbyVenues`. That asks `help.getConfig`'s `venue_search_username` (otherwise `foursquare`), resolves the bot, then calls `messages.getInlineBotResults`. This server's venue bot returns an empty list, and a mainland Apple developer account cannot get a MapKit JS key, so the list stays empty unless the device asks MapKit itself.
-
-The bot request still runs. It runs beside MapKit and is dropped after 1.5 seconds. MapKit nearby is `MKLocalPointsOfInterestRequest` at 2.5 km, then one `MKLocalSearch` (`餐饮` / `餐飲` / `restaurant`, from the UI language) when that list is empty. A text query is `MKLocalSearch` within 100 km. Rows are `TelegramMediaMap` venues with `provider` `apple`, a foursquare-style `type`, and the title and address the message sends. Bot rows and MapKit rows are merged, the same place is kept once (the bot row wins), and the list is nearest first.
-
-A disposed signal cancels `MKLocalSearch`. Starts are at least 0.4 seconds apart. `MKError.loadingThrottled` does not start the second search and opens an 8 second cooldown. The same query within 200 meters is reused from memory for 3 minutes (20 seconds when the list was empty). The cache is not written to disk. The search does not call anyone except Apple and the existing bot RPC. Coordinates are stored as MapKit returns them (WGS-84). The China offset stays in the map renderer, which is the same value a shared location and the Apple Maps open-in URL already use.
-
-| File | Change |
-| --- | --- |
-| `submodules/LocationUI/Sources/LocationUtils.swift` | `nearbyVenues` forwards to the MapKit signal. |
-| `submodules/LocationUI/Sources/AppleMapVenueSearch.swift` | Bot request, MapKit requests, cancel, cache, merge. |
-| `submodules/LocationUI/Sources/AppleMapVenueMapping.swift` | Venue fields, dedup, distance order, cache and throttle rules. |
-| `submodules/LocationUI/Tests/AppleMapVenueMappingTests.swift` | Those rules. |
-| `submodules/LocationUI/BUILD` | Host test `AppleMapVenueMappingTests`. |
-
 # Upstream patches for the Tellomi fork
+
+## Login restored to Telegram's phone flow (2026-11-13)
+
+The custom login skin (邮箱登录 on the phone page, agreement checkbox, gray fields, bundled titles) is removed. Phone, code, password, recovery, reset, and sign-up screens are Telegram's again. The welcome carousel stays out of the stack (`tellomiSkipsWelcomeSplash`).
+
+Email login is the official path, and only that path:
+
+- `auth.sendCode` for a phone may return `auth.sentCodeTypeSetUpEmailRequired`. The existing `AuthorizationSequenceEmailEntryController` (`.setup`) calls `account.sendVerifyEmailCode` with `emailVerifyPurposeLoginSetup`.
+- The code that call returns is submitted with `account.verifyEmail` and the same purpose.
+- `auth.sentCodeTypeEmailCode` with `setup == false` is submitted with `auth.signIn` `flags.1` and `email_verification` (`emailVerificationCode`), not `phone_code`.
+- An email address is not placed in `phone_number`.
+
+`tellomiOfficialEmailLoginStep` is the decision those two branches call.
+
+Remaining edits in original login files:
+
+| File | What remains |
+| --- | --- |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | Skips the splash and writes `.phoneEntry`. Downloads `zh-hans` / `zh-hant` before the first screen when the system language is Chinese. Handles `AuthorizationCodeRequestError.floodWait` with the same flood alert as `.limitExceeded`. Dispatches email code types through `tellomiOfficialEmailLoginStep`. Sign-up photo failure uses `tellomiSignUpAvatarFailureText` and can retry the upload. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift`, `...PhoneEntryControllerNode.swift` | `setTellomiBindPhone` only. Change Phone's "link a number" title, notice, and button. The login screen does not use it. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceCodeEntryController.swift`, `...CodeEntryControllerNode.swift` | `setTellomiPrimaryActionTitle` only. Bind-phone's code button. Login keeps `Login_Continue`. |
+| `submodules/CountrySelectionUI/Sources/AuthorizationSequenceCountrySelectionController.swift` | Unchanged this round: `defaultCountryCode()` is still 86, shared with New Contact and Change Phone. Empty `help.getCountriesList` does not wipe the bundled list. A bare `+1` stays the United States. |
+| `submodules/CountrySelectionUI/Sources/TellomiCountryListPreparation.swift` | The picker is built off the main thread. It lists every country code again. The +86/+999 whitelist is gone. |
+| `submodules/RMIntro/` | Restored. The carousel is not installed while the splash flag is true. |
+
+The +86-only country list and the email-in-`phone_number` screen are gone. Earlier sections below that describe that skin are history, not the current tree.
+
+Server work this client now requires is described in the pull request. This change does not modify the server.
+
+
 
 Edits under `Telegram/` and `BUILD.bazel` that exist so Tellomi assets can ship. The artwork itself stays in `Tellomi/Brand/`.
 
@@ -676,16 +441,29 @@ Stacked on the solid-wallpaper change. Day and dayClassic outgoing bubbles are w
 
 ## Hidden Telegram features
 
-Teamgram does not implement Premium, Stars, gifts, TON, Fragment, channel ads, Business, Boosts, Passport, AI compose, translation/Cocoon, or AI summary. Those entry points stay hidden unless `help.getAppConfig` turns them on. Stories stay. A missing key is off. `premium_purchase_blocked` and `stars_purchase_blocked` keep their official names and default to blocked. The other switches are `tellomi_*_enabled`.
+Premium purchase, Stars, gifts, TON, Fragment, channel ads, AI compose, translation/Cocoon, and AI summary stay hidden unless `help.getAppConfig` turns them on. Stories stay. A missing key for those switches is off. `premium_purchase_blocked` and `stars_purchase_blocked` keep their official names and default to blocked. The other purchase and Fragment switches are `tellomi_*_enabled`.
+
+Native feature audit 2026-11-14, against teamgram-server `625632af5ad64b06e3874109a85996205c75aa01`. Business, Passport, and Boosts default on. The server implements `account.updateBusiness*`, `account.getBusinessChatLinks`, `account.getAuthorizationForm`, and `premium.getBoostsStatus` / `premium.applyBoost` / `premium.getMyBoosts`, and `help.getAppConfig` does not send `tellomi_business_enabled`, `tellomi_passport_enabled`, or `tellomi_boosts_enabled`. A missing key is on. `false` still hides the row.
+
+Settings and search show Business only when `context.isPremium` is already true (the flag the server sets for `TELLOMI_PREMIUM_EVERYONE`). The screen is `PremiumIntroScreen` in business mode with `forceHasPremium` set from that flag. While `premiumEnabled` is false, that screen does not draw App Store plans, does not show the subscribe or upgrade button, does not open the subscribe demo, and `buy()` is not called. A non-premium account does not open it.
+
+Boost still applies a boost the account already has. If the account is not Premium and purchase is blocked, the prompt is an OK alert and does not push the Premium intro. If gifts are blocked, the "gift for more boosts" alert and the reassign-boost gift link do not open `makePremiumGiftController`. Passport is unchanged: it appears only when the account has secret values.
+
+Left off, with the server reason: `messages.getSponsoredMessages` returns an empty list (`sponsoredEmpty`), and `messages.summarizeText` returns empty text. Translation and AI compose stay off until the server sets `tellomi_translate_enabled` / `translations_manual_enabled` and `tellomi_ai_compose_enabled`. Premium purchase, Stars, gifts, wallet/TON, and Fragment stay off.
 
 | File | Change |
 | --- | --- |
-| `submodules/TelegramCore/Sources/TellomiFeatureGate.swift` | The one reader. `aiComposeEnabled` also keeps the secret-chat ban and the `ios_disable_ai_*` kill switch. |
+| `submodules/TelegramCore/Sources/TellomiFeatureGate.swift` | The one reader. `aiComposeEnabled` also keeps the secret-chat ban and the `ios_disable_ai_*` kill switch. 2026-11-14: `tellomi_business_enabled`, `tellomi_passport_enabled`, and `tellomi_boosts_enabled` default to on. |
 | `submodules/AccountContext/Sources/Premium.swift` | Premium and Stars follow that reader. Gift flags stay off unless `tellomi_gifts_enabled` is true and `stargifts_blocked` is false. The built-in default treats Premium as blocked. |
 | `submodules/WalletContext/Sources/WalletContext.swift` | `wallet_available` is not enough. `tellomi_wallet_enabled` must also be true. |
 | Chat composer, attachment panel, legacy input | The four `isAIEnabled = true` sites read `tellomi_ai_compose_enabled`. |
 | `TranslateUI` | `canTranslateText` / `canTranslateChats` return false unless `tellomi_translate_enabled`. That drops the translation header, including Cocoon. |
-| Settings, profiles, attach menu, chat input, search, deep links | Premium, Stars, gifts, wallet/TON, Business, Passport, Boosts, channel revenue, and AI summary rows and links are omitted. Fragment auction, anonymous-number, and ads top-up URLs are not opened unless `tellomi_fragment_enabled`. |
+| Settings, profiles, attach menu, chat input, search, deep links | Premium, Stars, gifts, wallet/TON, channel revenue, and AI summary rows and links stay omitted. Business shows only for an account that is already Premium. Passport and Boosts follow the defaults above. Fragment auction, anonymous-number, and ads top-up URLs are not opened unless `tellomi_fragment_enabled`. |
+| `submodules/PremiumUI/Sources/PremiumIntroScreen.swift` | Business mode draws no plans, subscribe button, upgrade button, or subscribe demo while Premium purchase is blocked, and does not call `buy()`. |
+| `submodules/PremiumUI/Sources/PremiumBoostLevelsScreen.swift` | The Premium intro is not pushed when purchase is blocked. The gift screen is not pushed when gifts are blocked. |
+| `submodules/PremiumUI/Sources/ReplaceBoostScreen.swift` | The gift link does not open the gift screen when gifts are blocked. |
+| `submodules/TelegramUI/Sources/SharedAccountContext.swift` | `makeBusinessSetupScreen` sets `forceHasPremium` from `context.isPremium`. |
+| `PeerInfoSettingsItems.swift`, `PeerInfoScreenSettingsActions.swift`, `SettingsSearchableItems.swift` | The Business row and the two Business search rows require `isPremium`. |
 
 ## Welcome art and empty states
 
@@ -981,8 +759,6 @@ Shippable seeds match Android #142. Datacenters 1 and 2 each dial `8.137.198.240
 
 `chooseTransportScheme` keeps the last address when nothing has failed, so `TellomiSeedAddressSets` writes hosts and ports in reverse. Every seed address is `thisPortOnly`, so discovery does not open another port on those addresses. The old extra discovery port is no longer probed for any address; port 80 remains for an address that is not `thisPortOnly`. A non-empty `help.getConfig` list still replaces the seed and is dialed in the order it was saved. `seed_address_a_record` is the relay, and it is not a separate dial entry. Login still defaults to +86. The welcome carousel stays skipped (`tellomiSkipsWelcomeSplash`).
 
-`MTDiscoverConnectionSignalsTests` still names port 5222. A locked address must not gain it, and a non-seed media address may use it as its own declared port. An unlocked address's alternate list in that test is port 80 only. The seed checker reads the sources and docs that ship, and it does not read a `Tests` directory.
-
 | File | Change |
 | --- | --- |
 | `Tellomi/tellomi-server.json` | Both environments seed DC 1 and DC 2 with the relay, then `api.tellomi.cn`. Ports are 10443 then 443. |
@@ -990,8 +766,7 @@ Shippable seeds match Android #142. Datacenters 1 and 2 each dial `8.137.198.240
 | `submodules/MtProtoKit/Sources/MTDatacenterAddress.m` | `thisPortOnly` keeps discovery on the declared port. |
 | `submodules/MtProtoKit/Sources/MTDiscoverConnectionSignals.m` | Skips extra ports when `thisPortOnly` is set. The only alternate port left is 80. |
 | `submodules/TelegramCore/Sources/Network/Network.swift` | Installs `TellomiSeedAddressSets`. |
-| `Tellomi/check_server_config.py`, `Tellomi/test_server_config.py` | Requires the eight endpoints and rejects the retired dial literals, including the negative cases. The scan is the shipped sources and docs, not `Tests`. |
-| `submodules/MtProtoKit/Tests/MTDiscoverConnectionSignalsTests.m` | A locked address gains no extra port. An unlocked address probes 80 only. A media address that declares port 5222 stays on that port. |
+| `Tellomi/check_server_config.py`, `Tellomi/test_server_config.py` | Requires the eight endpoints and rejects the retired dial literals, including the negative cases. |
 
 ## DC addresses from help.getConfig (M7 / D-33)
 
@@ -1463,7 +1238,7 @@ Colors now start from the authorization theme (`intro.startButtonColor`, `list.i
 
 The globe opened the language card, then waited for `langpack.getLanguage` before rewriting the page, and the download had no error handler. The login sentences for 简体 / 繁體 / English are already in the app, so the choice is stored and the current screen lays out before the request. The login connection is known to answer `langpack.getLanguages`, `getLangPack`, `getStrings`, and `getDifference`. The download's first call is the separate method `langpack.getLanguage` (`0x6a596502`). If that one fails, the client still requests `getLangPack` for the chosen code (base `en`). A failed download no longer leaves the welcome button dimmed.
 
-The country list and a pasted number accept `TellomiCallingCodePolicy.allowedCallingCodes`, which is `{86}`. Assign that set to add codes later. Any other calling code is put back to +86 and the screen says only mainland China is available. The full country table stays loaded so a pasted `+66…` is still recognized as foreign.
+The country list and a pasted number accept `TellomiCallingCodePolicy.allowedCallingCodes`, which is `{86, 999}`. 999 is the hidden test country from `help.getCountriesList` (iso2 XT, prefix 66, numbers `99966XYYYY`, login code `11111`). The picker still drops `country.hidden` and any iso2 Locale cannot name, so Test is not a row, and the phone screen still opens on +86. Any other calling code is put back to +86 and the screen says only mainland China is available. The full country table stays loaded so a pasted `+66…` is still recognized as foreign.
 
 On server 235 the 11th code of the day is `400 PHONE_NUMBER_FLOOD`. A resend inside 60 seconds is `420 FLOOD_WAIT_X`. `PHONE_NUMBER_FLOOD` shows the daily cap (10) and leaves resend off. `FLOOD_WAIT_X` shows the wait in seconds and pauses resend only for that long. It does not say the day is used up, and it does not keep the button off.
 
@@ -1601,6 +1376,31 @@ TestFlight 构建 91（14.0.5，提交 `e1ae313a1de4ade26714830ed4d387cdca46689a
 | `submodules/TelegramCallsUI/Sources/PresentationCallManager.swift` | 失败提示框在主队列上创建。 |
 | `submodules/TelegramCallsUI/Tests/CallKitCompletionThreadTests.swift` | 后台队列回到主线程；语音和视频的四种拒绝都走失败分支。 |
 
+## GCDAsyncSocket stream close
+
+Build 90 (MetricKit, iPhone 17 Pro Max, arm64e) aborted on the `GCDAsyncSocket` queue with `Trying to recursively lock an os_unfair_lock`. The frames are `CFSocketInvalidate`, `SocketStream::~SocketStream`, `CFSocketInvalidate` again, `SocketStream::close`, `_CFStreamClose`, then MtProtoKit. One `CFReadStreamClose` / `CFWriteStreamClose` is enough. `CFSocketInvalidate` holds the socket lock and `CFRelease`s `CFSocket` context.info. That object is the C++ `SocketStream`, not the `CFReadStream` / `CFWriteStream` the caller holds. `~SocketStream` calls `CFSocketInvalidate` again and the lock aborts. The read and write callbacks already `dispatch_async` onto the socket queue before `closeWithError`, so a same-stack re-entry flag does not see this path.
+
+This is Apple's CFNetwork / CoreFoundation re-entrancy, reported since iOS 16. CocoaAsyncSocket issue 803 is still open and has no merged fix. Telegram-iOS issue 2306 is still open; upstream `GCDAsyncSocket.m` still closes with `removeStreamsFromRunLoop`, `CFReadStreamSetClient` / `CFWriteStreamSetClient` of `kCFStreamEventNone`, `CFReadStreamClose` / `CFWriteStreamClose`, then `CFRelease`. The reported repro is many connections torn down together (VPN plus airplane mode), on the order of minutes, not every single disconnect. Build 90 recorded one occurrence on one TestFlight phone. A single `disconnect` can hit it, but ordinary disconnects do not.
+
+Public close-order changes do not leave the lock before the nested invalidate:
+
+- Unscheduling the streams (`removeStreamsFromRunLoop`) and clearing the client are already what upstream does, and they run before `CFStreamClose`.
+- `kCFStreamPropertyShouldCloseNativeSocket` is already set false when the streams are created. The dispatch source cancel handler closes the native fd once (`socketFDRefCount` starts at 2). Closing or shutting down that fd first does not stop `SocketStream::close` from calling `CFSocketInvalidate`.
+- Moving `CFStreamClose` onto the CFStream thread or another queue does not help. The recursive lock is inside `CFSocketInvalidate`, not on the GCDAsyncSocket queue.
+- An extra `CFRetain` of the caller's stream wrapper cannot help. `CFStreamClose` already runs while that wrapper is alive. The object released under the lock is context.info.
+
+There is no public API that retains context.info or replaces `CFSocketContext.release` without reading CF private layout or writing a signed function pointer. The earlier scan of the stream object for a `CFSocket` is removed. It was not a public API, it was not an existing Telegram path, a miss fell through to the same `CFStreamClose`, and the probe socket closed every fd that appeared during the probe window. The simulator is `ios_sim_arm64` and never executed an arm64e-only branch, so that scan was not evidence on the crash phone. This client does not ship a private-memory workaround. `GCDAsyncSocket.m`'s iOS close block is the upstream sequence again.
+
+The fd-count tests (normal disconnect, read error, disconnect twice, reconnect) stay. They require the process fd count to return to the baseline taken after the first connection's CFStream thread has settled, and they fail if a descriptor is still open two seconds later. They pass on this restored close. They do not claim the Apple abort is gone. The discover-backoff window stays 1.3 s with a round cap of 9.
+
+Leaving the crash unfixed is the decision. Serializing every disconnect would only reduce how often many streams close at once. It would not remove the abort from one `CFStreamClose`, and it is not in this change.
+
+| File | Change |
+| --- | --- |
+| `submodules/MtProtoKit/Sources/GCDAsyncSocket.m` | iOS close is upstream again: unschedule, clear the client, `CFStreamClose`, `CFRelease`. No context.info retain, no same-stack close flag. |
+| `submodules/MtProtoKit/Tests/GCDAsyncSocketCloseTests.m` | Descriptor is closed once and not closed again if the number is reused. No private `CFSocket` lookup. |
+| `submodules/MtProtoKit/BUILD` | `GCDAsyncSocketCloseTests` stays on the iOS 27 simulator and in the pull-request list. The stream-close planner target is gone. |
+
 ## TestFlight dSYM artifact
 
 `release_arm64` already passes `--apple_generate_dsym`. The TestFlight workflow built the IPA and left the dSYMs on the runner. Build 91's `TelegramUIFramework` UUID `1575DE22-0975-3591-A160-CCF1A2EA97F1` could not be symbolicated.
@@ -1612,3 +1412,23 @@ After the IPA exists, including when `altool` fails, the bundles are copied to `
 | `Tellomi/collect_dsyms.py` | Names each bundle by build number and arm64 UUID. Leaves the IPA out. |
 | `Tellomi/collect_dsyms_test.py` | Parser, two bundles, and a missing directory. |
 | `.github/workflows/testflight.yml` | Stores the directory after the build, including when the upload fails. |
+
+## SiriIntents launch crash
+
+Siri launches `IntentsExtension` (`app.tellomi.chat.SiriIntents`). TestFlight run `43142054783` enables `SIRIKIT` on that App ID and writes `tellomi-ios-siri`. The signed entitlements did not request `com.apple.developer.siri`: `enable_siri` is false, and `siri_fragment` is only concatenated into the main app's entitlements. The extension signs `ExtensionAppGroupEntitlements`, which is the app group alone. iOS then kills the intents process on launch.
+
+The host bundle id is not the mismatch. `IntentHandler` drops the last component of `app.tellomi.chat.SiriIntents`, which is `app.tellomi.chat`, and opens `group.app.tellomi.chat`. That is the group in both entitlement fragments. The other five extensions stay on the shared fragment. Their profiles do not grant Siri, so putting the key there would fail codesign.
+
+`enable_siri` in the JSON stays false. `Make.py` sets `telegram_enable_siri` and `telegram_siri_extension_entitlement` only when that target's profile contains the key, and on `--disableProvisioningProfiles`. An unsigned simulator build ad-hoc signs, so the key can be present. A signed build that requests a key the profile does not allow is rejected by codesign, which is why a missing key is omitted and reported.
+
+The main App ID now requests `SIRIKIT` as well. Upstream puts the entitlement on the app. Without it, Siri does not launch the extension. The extension's own profile is the one that already had SiriKit; the extension now signs the key when that profile still contains it.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/extension-suffixes.json` | The main App ID requests `SIRIKIT`. SiriIntents already did. |
+| `Tellomi/siri_entitlements.py` | Profile gate, and the host bundle id the extension derives. |
+| `build-system/Make/BuildConfiguration.py`, `Make.py` | Read `com.apple.developer.siri` from the main profile and from the `.SiriIntents` profile. |
+| `Telegram/BUILD` | `IntentsExtensionEntitlements` is the app group plus the gated Siri key. The other extensions keep `ExtensionAppGroupEntitlements`. |
+| `Tellomi/prepare_appstore_signing.py` | Prints whether the main and SiriIntents profiles contain the key. |
+| `Tellomi/check_server_config.py`, `Tellomi/test_siri_entitlements.py` | The gate, the host id, and the BUILD split. |
+| `docs/TELLOMI.md` | The signed Siri key follows the profile. |

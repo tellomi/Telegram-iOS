@@ -231,9 +231,8 @@ private final class AttachButtonComponent: CombinedComponent {
             let name: String
             let imageName: String
             var imageFile: TelegramMediaFile?
-            var animationName: String?
-            var animationScale: CGFloat = 1.0
-            var animationOffset: CGFloat = 0.0
+            let animationScale: CGFloat = 1.0
+            let animationOffset: CGFloat = 0.0
             var animationFile: TelegramMediaFile?
             var botPeer: EnginePeer?
 
@@ -243,49 +242,37 @@ private final class AttachButtonComponent: CombinedComponent {
             switch component.type {
             case .gallery:
                 name = strings.Attachment_Gallery
-                animationName = "TabPhoto"
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/ImageFilled" : "Chat/Attach Menu/Image"
             case .file:
                 name = strings.Attachment_File
-                animationName = "TabFile"
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/FileFilled" : "Chat/Attach Menu/File"
             case .money:
                 name = strings.Attachment_Money
-                animationName = "TabMoney"
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/MoneyFilled" : "Chat/Attach Menu/Money"
             case .location:
                 name = strings.Attachment_Location
-                animationName = "TabLocation"
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/LocationFilled" : "Chat/Attach Menu/Location"
             case .todo:
                 name = strings.Attachment_Todo
-                animationName = "TabTodo"
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/PollFilled" : "Chat/Attach Menu/Poll"
             case .contact:
                 name = strings.Attachment_Contact
-                animationName = "TabContacts"
-                animationScale = 1.78
-                animationOffset = UIScreenPixel
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/ContactFilled" : "Chat/Attach Menu/Contact"
             case .poll:
                 name = strings.Attachment_Poll
-                animationName = "TabPoll"
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/PollFilled" : "Chat/Attach Menu/Poll"
             case .gift:
                 name = strings.Attachment_Gift
-                animationName = "TabGift"
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/GiftFilled" : "Chat/Attach Menu/Gift"
             case .sticker:
                 name = strings.Attachment_Sticker
-                animationName = "TabSticker"
-                imageName = ""
+                imageName = "Chat/Attach Menu/TellomiSticker"
             case .emoji:
                 name = "Emoji"
                 imageName = "Chat/Attach Menu/Emoji"
             case .audio:
                 name = strings.Attachment_Audio
-                animationName = "TabAudio"
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/MusicFilled" : "Chat/Attach Menu/Music"
             case .link:
                 name = strings.Attachment_Link
                 imageName = "Chat/Attach Menu/Link"
@@ -306,12 +293,10 @@ private final class AttachButtonComponent: CombinedComponent {
                 imageFile = nil
             case .quickReply:
                 name = strings.Attachment_Reply
-                animationName = "TabReply"
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/ReplyFilled" : "Chat/Attach Menu/Reply"
             case .richText:
                 name = strings.Attachment_Article
-                animationName = "TabArticle"
-                imageName = ""
+                imageName = component.isSelected ? "Chat/Attach Menu/ArticleFilled" : "Chat/Attach Menu/Article"
             }
 
             let tintColor: UIColor
@@ -322,36 +307,19 @@ private final class AttachButtonComponent: CombinedComponent {
                 tintColor = component.isSelected ? component.theme.rootController.tabBar.selectedIconColor : component.theme.rootController.tabBar.iconColor
             }
 
-            let iconSize = CGSize(width: 30.0, height: 30.0)
+            var iconSize = CGSize(width: 30.0, height: 30.0)
             var topInset: CGFloat = 4.0 + UIScreenPixel
             var spacing: CGFloat = 15.0 + UIScreenPixel
             if case .glass = component.style {
-                topInset += 5.0
-                spacing += UIScreenPixel
+                // The tab glyphs were sitting small in the 30pt slot. 36pt matches
+                // the weight of the other controls in this bar.
+                iconSize = CGSize(width: 36.0, height: 36.0)
+                topInset = 2.0
+                spacing = 19.0
             }
 
             let iconFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((context.availableSize.width - iconSize.width) / 2.0), y: topInset + animationOffset), size: iconSize)
-            if let animationName {
-                let icon = animatedIcon.update(
-                    component: AnimatedStickerComponent(
-                        account: component.context.account,
-                        animation: AnimatedStickerComponent.Animation(
-                            source: .bundle(name: animationName),
-                            scale: UIScreenScale,
-                            loop: false
-                        ),
-                        tintColor: tintColor,
-                        isAnimating: component.isAnimating,
-                        size: CGSize(width: iconSize.width * animationScale, height: iconSize.height * animationScale),
-                        lottieSettings: component.context.lottieRenderingSettings
-                    ),
-                    availableSize: iconSize,
-                    transition: context.transition
-                )
-                context.add(icon
-                    .position(CGPoint(x: iconFrame.midX, y: iconFrame.midY))
-                )
-            } else if let animationFile = animationFile {
+            if let animationFile = animationFile {
                 let icon = animatedIcon.update(
                     component: AnimatedStickerComponent(
                         account: component.context.account,
@@ -2334,10 +2302,7 @@ final class AttachmentPanel: ASDisplayNode, ASScrollViewDelegate, ASGestureRecog
             }, getNavigationController: { [weak self] in
                 return self?.getNavigationController()
             }, inputPanelBottomSpacing: self.panelStyle == .glass ? glassTextPanelInset : nil)
-            if let data = self.context.currentAppConfiguration.with({ $0 }).data, let value = data["ios_disable_ai_chat"] as? Double, value == 1.0 {
-            } else if let peerId = self.presentationInterfaceState.chatLocation.peerId, peerId.namespace != Namespaces.Peer.SecretChat {
-                textInputPanelNode.isAIEnabled = true
-            }
+            textInputPanelNode.isAIEnabled = TellomiFeatureGate.aiComposeEnabled(appConfiguration: self.context.currentAppConfiguration.with { $0 }, peerId: self.presentationInterfaceState.chatLocation.peerId, killSwitchKey: "ios_disable_ai_chat")
             textInputPanelNode.interfaceInteraction = self.interfaceInteraction
             textInputPanelNode.sendMessage = { [weak self] mode, messageEffect in
                 if let strongSelf = self {

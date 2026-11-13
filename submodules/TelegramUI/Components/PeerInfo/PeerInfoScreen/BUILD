@@ -15,6 +15,7 @@ swift_library(
         "//submodules/TelegramUI/Components/NavigationBarComponent",
         "//submodules/TelegramUI/Components/NavigationExpansionTransition",
         "//submodules/AccountContext",
+        "//submodules/AlertUI:AlertUI",
         "//submodules/LottieSettings:LottieSettings",
         "//submodules/AccountUtils",
         "//submodules/ActionSheetPeerItem",
@@ -185,7 +186,6 @@ swift_library(
         "//submodules/TelegramUI/Components/AvatarComponent",
         "//submodules/TelegramUI/Components/AlertComponent/AlertTransferHeaderComponent",
         "//submodules/TelegramUI/Components/HorizontalTabsComponent",
-        "//submodules/TelegramUI/Components/Moments:MomentsUI",
         "//submodules/TelegramUI/Components/PeerInfo/AccountPeerContextItem",
     ],
     visibility = [

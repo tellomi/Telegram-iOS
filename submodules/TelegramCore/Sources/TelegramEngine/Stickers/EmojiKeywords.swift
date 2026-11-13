@@ -5,6 +5,19 @@ import SwiftSignalKit
 
 private let refreshTimeout: Int32 = 60 * 60
 
+func tellomiFilteredEmojiKeywords(_ items: [EmojiKeywordItem]) -> [EmojiKeywordItem] {
+    return items.compactMap { item in
+        let emoticons = TellomiEmojiBlocklist.filtering(item.emoticons)
+        if emoticons.isEmpty {
+            return nil
+        }
+        if emoticons.count == item.emoticons.count {
+            return item
+        }
+        return EmojiKeywordItem(index: item.index, collectionId: item.collectionId, keyword: item.keyword, emoticons: emoticons, indexKeys: item.indexKeys)
+    }
+}
+
 private enum SearchEmojiKeywordsIntermediateResult {
     case updating(timestamp: Int32?)
     case completed([EmojiKeywordItem])
@@ -29,13 +42,13 @@ func _internal_searchEmojiKeywords(postbox: Postbox, inputLanguageCode: String, 
             } as? [EmojiKeywordItem]
             
             if let items = items {
-                return items.sorted(by: { lhs, rhs -> Bool in
+                return tellomiFilteredEmojiKeywords(items.sorted(by: { lhs, rhs -> Bool in
                     if lhs.keyword.count == rhs.keyword.count {
                         return lhs.keyword < rhs.keyword
                     } else {
                         return lhs.keyword.count < rhs.keyword.count
                     }
-                })
+                }))
             }
         }
         return []

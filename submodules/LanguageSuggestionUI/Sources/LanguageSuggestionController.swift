@@ -353,7 +353,6 @@ public func languageSuggestionController(context: AccountContext, suggestedLocal
             startActivity()
             disposable.set((context.engine.localization.downloadAndApplyLocalization(accountManager: context.sharedContext.accountManager, languageCode: languageCode)
             |> deliverOnMainQueue).start(completed: {
-                tellomiRememberExplicitLanguage(languageCode)
                 dismissImpl?(true)
             }))
         }

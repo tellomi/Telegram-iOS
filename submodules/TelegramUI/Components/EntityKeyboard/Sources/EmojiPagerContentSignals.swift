@@ -10,28 +10,14 @@ import TelegramNotices
 import FlatBuffers
 import FlatSerialization
 
-public extension EmojiPagerContentComponent {
-    static func momentsStickerInput(
-        context: AccountContext,
-        animationCache: AnimationCache,
-        animationRenderer: MultiAnimationRenderer,
-        stickerNamespaces: [ItemCollectionId.Namespace],
-        stickerOrderedItemListCollectionIds: [Int32],
-        chatPeerId: EnginePeer.Id?
-    ) -> Signal<EmojiPagerContentComponent, NoError> {
-        return stickerInputData(
-            context: context,
-            animationCache: animationCache,
-            animationRenderer: animationRenderer,
-            stickerNamespaces: stickerNamespaces,
-            stickerOrderedItemListCollectionIds: stickerOrderedItemListCollectionIds,
-            chatPeerId: chatPeerId,
-            hasSearch: true,
-            hasTrending: false,
-            forceHasPremium: true
-        )
+private func tellomiBlocksReaction(_ reaction: MessageReaction.Reaction) -> Bool {
+    if case let .builtin(value) = reaction {
+        return TellomiEmojiBlocklist.isBlocked(value)
     }
-    
+    return false
+}
+
+public extension EmojiPagerContentComponent {    
     private static func hasPremium(context: AccountContext, chatPeerId: EnginePeer.Id?, premiumIfSavedMessages: Bool) -> Signal<Bool, NoError> {
         let hasPremium: Signal<Bool, NoError>
         if premiumIfSavedMessages, let chatPeerId = chatPeerId, chatPeerId == context.account.peerId {
@@ -401,6 +387,9 @@ public extension EmojiPagerContentComponent {
             
             if case .stickerAlt = subject {
                 for emoji in topEmojiItems {
+                    if TellomiEmojiBlocklist.isBlocked(emoji) {
+                        continue
+                    }
                     let resultItem = EmojiPagerContentComponent.Item(
                         animationData: nil,
                         content: .staticEmoji(emoji),
@@ -763,7 +752,7 @@ public extension EmojiPagerContentComponent {
                 
                 if let availableReactions = availableReactions {
                     for reactionItem in availableReactions.reactions {
-                        if !reactionItem.isEnabled {
+                        if !reactionItem.isEnabled || tellomiBlocksReaction(reactionItem.value) {
                             continue
                         }
                         if existingIds.contains(reactionItem.value) {
@@ -842,7 +831,7 @@ public extension EmojiPagerContentComponent {
                 }
                 
                 for reactionItem in topReactionItems {
-                    if existingIds.contains(reactionItem.reaction) {
+                    if tellomiBlocksReaction(reactionItem.reaction) || existingIds.contains(reactionItem.reaction) {
                         continue
                     }
                     existingIds.insert(reactionItem.reaction)
@@ -902,7 +891,7 @@ public extension EmojiPagerContentComponent {
                     
                     if let availableReactions = availableReactions {
                         for reactionItem in availableReactions.reactions {
-                            if !reactionItem.isEnabled {
+                            if !reactionItem.isEnabled || tellomiBlocksReaction(reactionItem.value) {
                                 continue
                             }
                             if existingIds.contains(reactionItem.value) {
@@ -969,7 +958,7 @@ public extension EmojiPagerContentComponent {
                             
                             switch item.content {
                             case let .builtin(value):
-                                if existingIds.contains(.builtin(value)) {
+                                if TellomiEmojiBlocklist.isBlocked(value) || existingIds.contains(.builtin(value)) {
                                     continue
                                 }
                                 existingIds.insert(.builtin(value))
@@ -1078,7 +1067,7 @@ public extension EmojiPagerContentComponent {
                 let maxTopLineCount: Int = 1000
                 
                 for reactionItem in topReactionItems {
-                    if existingIds.contains(reactionItem.reaction) {
+                    if tellomiBlocksReaction(reactionItem.reaction) || existingIds.contains(reactionItem.reaction) {
                         continue
                     }
                     existingIds.insert(reactionItem.reaction)
@@ -1239,6 +1228,14 @@ public extension EmojiPagerContentComponent {
                     if case let .file(file) = item.content, isPremiumDisabled, file.isPremiumEmoji {
                         continue
                     }
+                    if case let .file(file) = item.content, file.attributes.contains(where: { attribute in
+                        if case let .CustomEmoji(_, _, alt, _) = attribute {
+                            return TellomiEmojiBlocklist.isBlocked(alt)
+                        }
+                        return false
+                    }) {
+                        continue
+                    }
                     
                     if !areCustomEmojiEnabled, case .file = item.content {
                         continue
@@ -1262,7 +1259,7 @@ public extension EmojiPagerContentComponent {
                             tintMode: tintMode
                         )
                     case let .text(text):
-                        if !areUnicodeEmojiEnabled {
+                        if !areUnicodeEmojiEnabled || TellomiEmojiBlocklist.isBlocked(text) {
                             continue
                         }
                         resultItem = EmojiPagerContentComponent.Item(

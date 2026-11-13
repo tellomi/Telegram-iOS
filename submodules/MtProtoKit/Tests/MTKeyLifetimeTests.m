@@ -377,7 +377,7 @@ static NSNumber *authInfoKey(int32_t datacenterId, MTDatacenterAuthInfoSelector 
         [service setValue:nonce forKey:@"_nonce"];
         [service mtProto:proto receivedMessage:message authInfoSelector:MTDatacenterAuthInfoSelectorPersistent networkType:0];
     });
-    XCTAssertEqual(provider.bignumContextRequests - before, 3, @"two fingerprint lookups, then RSA_PAD with the only CDN key from the main datacenter, as before (a rejected key stops after the first lookup)");
+    XCTAssertEqual(provider.bignumContextRequests - before, 2, @"one fingerprint of the only CDN key, then the RSA context");
     [proto stop];
 }
 

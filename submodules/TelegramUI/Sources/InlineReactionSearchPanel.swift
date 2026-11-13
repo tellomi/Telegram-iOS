@@ -178,7 +178,7 @@ private final class InlineReactionSearchStickersNode: ASDisplayNode, ASScrollVie
                             )
                                 
                             menuItems.append(
-                                .action(ContextMenuActionItem(text: strongSelf.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
+                                .action(ContextMenuActionItem(text: strongSelf.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
                                     f(.default)
                                 
                                     if let strongSelf = self, let controllerInteraction = strongSelf.getControllerInteraction?() {

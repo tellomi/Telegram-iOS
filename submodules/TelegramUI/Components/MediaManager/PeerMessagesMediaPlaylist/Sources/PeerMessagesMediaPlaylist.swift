@@ -917,7 +917,9 @@ public final class PeerMessagesMediaPlaylist: SharedMediaPlaylist {
                 default:
                     break
             }
-            let _ = self.context.engine.messages.markMessageContentAsConsumedInteractively(messageId: item.message.id).startStandalone()
+            if !TellomiSecretViewSessions.shared.suppressesReports(accountPeerId: self.context.account.peerId.toInt64(), chatPeerId: item.message.id.peerId.toInt64()) {
+                let _ = self.context.engine.messages.markMessageContentAsConsumedInteractively(messageId: item.message.id).startStandalone()
+            }
         }
     }
 }

@@ -98,8 +98,8 @@ final class CreateBotUsernameTests: XCTestCase {
     // MARK: - Validation runs on the full username
 
     func testMinimumLengthCountsTheAppendedSuffix() {
-        XCTAssertNil(CreateBotUsername(typedText: "ab", endings: self.endings).validationError, "abbot is 5 characters")
-        XCTAssertEqual(CreateBotUsername(typedText: "a", endings: self.endings).validationError, .tooShort)
+        XCTAssertNil(CreateBotUsername(typedText: "a", endings: self.endings).validationError, "abot is 4 characters")
+        XCTAssertEqual(CreateBotUsername(typedText: "", endings: self.endings).validationError, .tooShort, "bot is 3 characters")
     }
 
     func testMaximumLengthCountsTheAppendedSuffix() {

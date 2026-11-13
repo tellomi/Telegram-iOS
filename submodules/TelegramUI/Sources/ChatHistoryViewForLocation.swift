@@ -338,6 +338,15 @@ func chatHistoryViewForLocation(
                 return account.viewTracker.aroundMessageHistoryViewForLocation(context.chatLocationInput(for: chatLocation, contextHolder: chatLocationContextHolder), ignoreMessagesInTimestampRange: ignoreMessagesInTimestampRange, ignoreMessageIds: ignoreMessageIds, index: index, anchorIndex: anchorIndex, count: count, trackHoles: trackHoles, ignoreRelatedChats: ignoreRelatedChats, fixedCombinedReadStates: fixedCombinedReadStates, tag: tag, appendMessagesFromTheSameGroup: appendMessagesFromTheSameGroup, orderStatistics: orderStatistics, additionalData: additionalData, useRootInterfaceStateForThread: useRootInterfaceStateForThread) |> map { view, updateType, initialData -> ChatHistoryViewUpdate in
                     let (cachedData, cachedDataMessages, readStateData, _) = extractAdditionalData(view: view, chatLocation: chatLocation)
                     
+                    // An anchor that still sits in a hole is an empty loading view. Publishing it as the
+                    // first UpdateVisible frame replaces the rows already on screen. The list then anchors
+                    // the next page at index 0, which is the newest edge. Leave `first` unset so the
+                    // loaded snapshot is still that anchored frame. `.Generic` (not the raw update, which
+                    // may be FillHole) keeps the node from starting another navigation while this one loads.
+                    if view.isLoading && view.entries.isEmpty {
+                        return .HistoryView(view: view, type: .Generic(type: .Generic), scrollPosition: nil, flashIndicators: false, originalScrollPosition: nil, initialData: ChatHistoryCombinedInitialData(initialData: initialData, buttonKeyboardMessage: view.topTaggedMessages.first, cachedData: cachedData, cachedDataMessages: cachedDataMessages, readStateData: readStateData), id: location.id)
+                    }
+                    
                     let genericType: ViewUpdateType
                     if first {
                         first = false

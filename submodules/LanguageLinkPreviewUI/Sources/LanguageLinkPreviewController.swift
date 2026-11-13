@@ -121,7 +121,6 @@ public final class LanguageLinkPreviewController: ViewController {
             strongSelf.controllerNode.setInProgress(false)
             strongSelf.present(textAlertController(context: strongSelf.context, title: nil, text: strongSelf.presentationData.strings.Login_UnknownError, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
         }, completed: { [weak self] in
-            tellomiRememberExplicitLanguage(localizationInfo.languageCode)
             guard let strongSelf = self else {
                 return
             }

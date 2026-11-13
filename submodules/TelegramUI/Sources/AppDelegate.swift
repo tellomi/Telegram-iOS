@@ -574,6 +574,19 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             BuildConfig.keychainAccessGroup(baseAppBundleId: baseAppBundleId)
         })
         let maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
+        if let appGroupUrl = maybeAppGroupUrl {
+            TellomiChatLockDirectory.shared.setIndexPath(tellomiChatLockIndexPath(rootPath: rootPathForBasePath(appGroupUrl.path)))
+        }
+        TellomiChatLockKeychain.load()
+        TellomiAppPasscodeBridge.hasPasscode = {
+            return (try? PasscodeCredentialStore.shared.protectionSettings().enabled) == true
+        }
+        TellomiAppPasscodeBridge.verify = { code in
+            guard let settings = try? PasscodeCredentialStore.shared.protectionSettings(), settings.enabled, let reference = settings.passcode else {
+                return false
+            }
+            return (try? PasscodeCredentialStore.shared.verify(code, reference: reference, scope: .settings)) != nil
+        }
         
         let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
         self.buildConfig = buildConfig
@@ -853,7 +866,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 if parsed.scheme == nil || parsed.scheme!.isEmpty {
                     parsedUrl = URL(string: "https://\(url)")
                 }
-                if parsed.scheme == "tg" {
+                if TellomiLinks.isDeepLinkScheme(parsed.scheme) {
                     return
                 }
             }
@@ -1298,24 +1311,32 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 }
                 return true
             })
-            |> mapToSignal { context -> Signal<(AccountContext, TellomiTabBarPreferences)?, NoError> in
-                guard let context else {
-                    return .single(nil)
+            |> mapToSignal { context -> Signal<(AccountContext, CallListSettings)?, NoError> in
+                return sharedApplicationContext.sharedContext.accountManager.transaction { transaction -> CallListSettings? in
+                    tellomiCaptureLaunchTabs(transaction)
+                    return transaction.getSharedData(ApplicationSpecificSharedDataKeys.callListSettings)?.get(CallListSettings.self)
                 }
-                return sharedApplicationContext.sharedContext.accountManager.transaction { transaction -> TellomiPreparedTabBarPreferences in
-                    return tellomiPrepareTabBarPreferences(transaction: transaction)
-                }
-                |> map { prepared -> (AccountContext, TellomiTabBarPreferences)? in
-                    if prepared.consumedLegacy {
-                        tellomiClearLegacyTabBarPreferences()
+                |> reduceLeft(value: nil) { current, updated -> CallListSettings? in
+                    var result: CallListSettings?
+                    if let updated = updated {
+                        result = updated
+                    } else if let current = current {
+                        result = current
                     }
-                    return (context, prepared.preferences)
+                    return result
+                }
+                |> map { callListSettings -> (AccountContext, CallListSettings)? in
+                    if let context = context {
+                        return (context, callListSettings ?? .defaultSettings)
+                    } else {
+                        return nil
+                    }
                 }
             }
             |> deliverOnMainQueue
             |> map { accountAndSettings -> AuthorizedApplicationContext? in
-                return accountAndSettings.flatMap { context, tabBarPreferences in
-                    return AuthorizedApplicationContext(sharedApplicationContext: sharedApplicationContext, mainWindow: self.mainWindow, context: context as! AccountContextImpl, accountManager: sharedApplicationContext.sharedContext.accountManager, tabBarPreferences: tabBarPreferences, reinitializedNotificationSettings: {
+                return accountAndSettings.flatMap { context, callListSettings in
+                    return AuthorizedApplicationContext(sharedApplicationContext: sharedApplicationContext, mainWindow: self.mainWindow, context: context as! AccountContextImpl, accountManager: sharedApplicationContext.sharedContext.accountManager, showCallsTab: callListSettings.showTab, reinitializedNotificationSettings: {
                         let _ = (self.context.get()
                         |> take(1)
                         |> deliverOnMainQueue).start(next: { context in
@@ -1347,29 +1368,59 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             })
             |> mapToSignal { authAndAccounts -> Signal<(UnauthorizedAccount, ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]))?, NoError> in
                 if let (primary, auth, accounts) = authAndAccounts {
-                    let phoneNumbers = combineLatest(accounts.map { context -> Signal<(AccountRecordId, String, Bool)?, NoError> in
+                    let phoneNumbers = combineLatest(accounts.map { context -> Signal<(AccountRecordId, String, Bool), NoError> in
                         return context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId))
-                        |> map { peer -> (AccountRecordId, String, Bool)? in
-                            if case let .user(user) = peer, let phone = user.phone {
-                                return (context.account.id, phone, context.account.testingEnvironment)
+                        |> map { peer -> (AccountRecordId, String, Bool) in
+                            let testing = context.account.testingEnvironment
+                            let peerId = context.account.peerId
+                            let contact: TellomiAccountContact
+                            if case let .user(user) = peer {
+                                contact = tellomiAccountContact(phone: user.phone, peerId: user.id)
                             } else {
-                                return nil
+                                contact = tellomiAccountContact(phone: nil, peerId: peerId)
                             }
+                            // A placeholder keeps an account with no phone and no email in the list.
+                            // An empty list is what used to open the welcome screen.
+                            if let phone = contact.phone, !phone.isEmpty {
+                                return (context.account.id, phone, testing)
+                            }
+                            if let email = contact.email, !email.isEmpty {
+                                return (context.account.id, email, testing)
+                            }
+                            return (context.account.id, " ", testing)
                         }
                     })
                     return phoneNumbers
                     |> map { phoneNumbers -> (UnauthorizedAccount, ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]))? in
                         var primaryNumber: (String, AccountRecordId, Bool)?
                         if let primary = primary {
-                            for idAndNumber in phoneNumbers {
-                                if let (id, number, testingEnvironment) = idAndNumber, id == primary.account.id {
+                            for (id, number, testingEnvironment) in phoneNumbers {
+                                if id == primary.account.id {
                                     primaryNumber = (number, id, testingEnvironment)
                                     break
                                 }
                             }
                         }
-                        return (auth, (primaryNumber, phoneNumbers.compactMap({ $0.flatMap({ ($0.1, $0.0, $0.2) }) })))
+                        let list = phoneNumbers.map { ($0.1, $0.0, $0.2) }
+                        return (auth, (primaryNumber, list))
                     }
+                    |> distinctUntilChanged(isEqual: { lhs, rhs in
+                        guard let lhs, let rhs else {
+                            return lhs == nil && rhs == nil
+                        }
+                        if lhs.0 !== rhs.0 {
+                            return false
+                        }
+                        if lhs.1.1.count != rhs.1.1.count {
+                            return false
+                        }
+                        for (left, right) in zip(lhs.1.1, rhs.1.1) {
+                            if left.0 != right.0 || left.1 != right.1 || left.2 != right.2 {
+                                return false
+                            }
+                        }
+                        return lhs.1.0?.0 == rhs.1.0?.0 && lhs.1.0?.1 == rhs.1.0?.1
+                    })
                 } else {
                     return .single(nil)
                 }
@@ -1478,8 +1529,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                         authContextValue.rootController.dismiss()
                     }
                     // Wait until the signed-in root is actually ready, then put it in the window
-                    // before dismissing the code screen. Dismissing first left a blank window and
-                    // crashed a new account while the root was still being installed.
+                    // before dismissing the code screen. Dismissing first left a blank window.
                     let _ = (self.context.get()
                     |> mapToSignal { applicationContext -> Signal<AuthorizedApplicationContext, NoError> in
                         guard let applicationContext, applicationContext.context.account.id == accountId else {

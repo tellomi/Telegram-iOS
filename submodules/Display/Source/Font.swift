@@ -234,7 +234,7 @@ public struct Font {
         } else {
             let font: UIFont
             switch design {
-                case .regular, .round:
+                case .regular, .round, .camera:
                     if traits.contains(.italic) {
                         if let descriptor = UIFont.systemFont(ofSize: size, weight: weight.weight).fontDescriptor.withSymbolicTraits([.traitItalic]) {
                             font = UIFont(descriptor: descriptor, size: size)
@@ -263,12 +263,6 @@ public struct Font {
                         font = UIFont(name: "Menlo-Italic", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)
                     } else {
                         font = UIFont(name: "Menlo", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)
-                    }
-                case .camera:
-                    if traits.contains(.monospacedNumbers) {
-                        font = UIFont.monospacedDigitSystemFont(ofSize: size, weight: weight.weight)
-                    } else {
-                        font = UIFont.systemFont(ofSize: size, weight: weight.weight)
                     }
             }
             

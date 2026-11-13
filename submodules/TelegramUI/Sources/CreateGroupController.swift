@@ -338,7 +338,7 @@ private enum CreateGroupEntry: ItemListNodeEntry {
             case let .usernameHeader(_, title):
                 return ItemListSectionHeaderItem(presentationData: presentationData, text: title, sectionId: self.section)
             case let .username(theme, placeholder, text):
-                return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: "tell.cc/", textColor: theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: .username, clearType: .always, tag: nil, sectionId: self.section, textUpdated: { updatedText in
+                return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: "\(TellomiLinks.host)/", textColor: theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: .username, clearType: .always, tag: nil, sectionId: self.section, textUpdated: { updatedText in
                     arguments.updatePublicLinkText(updatedText)
                 }, action: {
                 })
@@ -1214,6 +1214,9 @@ public func createGroupControllerImpl(context: AccountContext, peerIds: [PeerId]
         }
     }, openAuction: { username in
         endEditingImpl?()
+        guard TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).fragmentEnabled else {
+            return
+        }
         
         context.sharedContext.openExternalUrl(context: context, urlContext: .generic, url: "https://fragment.com/username/\(username)", forceExternal: true, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: nil, dismissInput: {})
     })

@@ -34,3 +34,10 @@ def bazel_suffix_lines():
             continue
         lines.append('{} = "{}"\n'.format(variable, item["suffix"]))
     return "".join(lines)
+
+
+def siri_intents_suffix():
+    for item in targets():
+        if item.get("bazel_variable") == "telegram_suffix_siri_intents":
+            return item["suffix"]
+    raise RuntimeError("extension-suffixes.json has no SiriIntents target")

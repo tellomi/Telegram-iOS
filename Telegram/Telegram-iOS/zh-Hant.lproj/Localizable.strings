@@ -217,32 +217,3 @@
 "Tellomi.Settings.PremiumGraceTitle" = "你的會員即將到期。";
 "Tellomi.Settings.PremiumGraceText" = "最近一次付款沒有成功。要繼續使用這些功能，請續訂。";
 "Tellomi.Settings.PremiumGraceAction" = "恢復訂閱";
-
-"Login.CodeFloodError" = "嘗試次數過多，請稍後再試。";
-"Login.CodeFloodWait" = "請在 %@ 秒後再試。";
-"Tour.Title1" = "Tellomi";
-"Tour.Text1" = "世界上**最快**的聊天應用。\n**免費**，也**安全**。";
-"Tour.Title2" = "快速";
-"Tour.Text2" = "**Tellomi** 傳送訊息\n比其他應用更快。";
-"Tour.Title3" = "強大";
-"Tour.Text3" = "**Tellomi** 不限制\n媒體和聊天的大小。";
-"Tour.Title4" = "安全";
-"Tour.Text4" = "**Tellomi** 保護你的訊息\n免受攻擊。";
-"Tour.Title5" = "雲端";
-"Tour.Text5" = "**Tellomi** 讓你在多台裝置上\n查看訊息。";
-"Tour.Title6" = "免費";
-"Tour.Text6" = "**Tellomi** 為聊天和媒體\n提供免費的無限雲端儲存。";
-"Tour.StartButton" = "開始使用";
-
-/* Crash log prompt. Shown after an unexpected quit until the person sends or declines. */
-"CrashReport.Prompt.Title" = "有新的當機紀錄";
-"CrashReport.Prompt.Text" = "應用程式意外關閉了。\n\n要把當機紀錄傳給我們，幫我們修好這個問題嗎？";
-"CrashReport.Prompt.NotNow" = "暫時不要";
-"CrashReport.Prompt.Send" = "傳送紀錄";
-
-
-/* Moments feed. Same wording as the Android values pack for this language. */
-"Moments.Title" = "動態";
-"Moments_Comment_SendFailed" = "留言沒有送出，內容還在。";
-"Moments.Loading" = "載入中…";
-"Moments_Audience_Kept" = "沒能修改可見範圍，你的選擇還在。";

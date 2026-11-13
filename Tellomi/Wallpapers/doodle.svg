@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<g id="lucide-message-circle-0" transform="translate(64.0,64.0) rotate(0) scale(2.3333) translate(-12,-12)"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" /></g>
+<g id="lucide-coffee-1" transform="translate(192.0,64.0) rotate(330) scale(2.3333) translate(-12,-12)"><path d="M10 2v2" />
+  <path d="M14 2v2" />
+  <path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" />
+  <path d="M6 2v2" /></g>
+<g id="lucide-star-2" transform="translate(320.0,64.0) rotate(300) scale(2.3333) translate(-12,-12)"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></g>
+<g id="lucide-sprout-3" transform="translate(448.0,64.0) rotate(270) scale(2.3333) translate(-12,-12)"><path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3" />
+  <path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4" />
+  <path d="M5 21h14" /></g>
+<g id="lucide-plane-4" transform="translate(576.0,64.0) rotate(240) scale(2.3333) translate(-12,-12)"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></g>
+<g id="lucide-heart-5" transform="translate(704.0,64.0) rotate(210) scale(2.3333) translate(-12,-12)"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" /></g>
+<g id="lucide-sun-6" transform="translate(832.0,64.0) rotate(180) scale(2.3333) translate(-12,-12)"><circle cx="12" cy="12" r="4" />
+  <path d="M12 2v2" />
+  <path d="M12 20v2" />
+  <path d="m4.93 4.93 1.41 1.41" />
+  <path d="m17.66 17.66 1.41 1.41" />
+  <path d="M2 12h2" />
+  <path d="M20 12h2" />
+  <path d="m6.34 17.66-1.41 1.41" />
+  <path d="m19.07 4.93-1.41 1.41" /></g>
+<g id="lucide-moon-7" transform="translate(960.0,64.0) rotate(150) scale(2.3333) translate(-12,-12)"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" /></g>
+<g id="lucide-cloud-8" transform="translate(64.0,192.0) rotate(120) scale(2.3333) translate(-12,-12)"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /></g>
+<g id="lucide-camera-9" transform="translate(192.0,192.0) rotate(90) scale(2.3333) translate(-12,-12)"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z" />
+  <circle cx="12" cy="13" r="3" /></g>
+<g id="lucide-book-open-10" transform="translate(320.0,192.0) rotate(60) scale(2.3333) translate(-12,-12)"><path d="M12 5v16" />
+  <path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z" /></g>
+<g id="lucide-gift-11" transform="translate(448.0,192.0) rotate(30) scale(2.3333) translate(-12,-12)"><path d="M12 7v14" />
+  <path d="M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8" />
+  <path d="M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5" />
+  <rect x="3" y="7" width="18" height="4" rx="1" /></g>
+<g id="lucide-bell-12" transform="translate(576.0,192.0) rotate(0) scale(2.3333) translate(-12,-12)"><path d="M10.268 21a2 2 0 0 0 3.464 0" />
+  <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></g>
+<g id="lucide-bike-13" transform="translate(704.0,192.0) rotate(330) scale(2.3333) translate(-12,-12)"><circle cx="18.5" cy="17.5" r="3.5" />
+  <circle cx="5.5" cy="17.5" r="3.5" />
+  <circle cx="15" cy="5" r="1" />
+  <path d="M12 17.5V14l-3-3 4-3 2 3h2" /></g>
+<g id="lucide-flower-2-14" transform="translate(832.0,192.0) rotate(300) scale(2.3333) translate(-12,-12)"><path d="M12 5a3 3 0 1 1 3 3m-3-3a3 3 0 1 0-3 3m3-3v1M9 8a3 3 0 1 0 3 3M9 8h1m5 0a3 3 0 1 1-3 3m3-3h-1m-2 3v-1" />
+  <circle cx="12" cy="8" r="2" />
+  <path d="M12 10v12" />
+  <path d="M12 22c4.2 0 7-1.667 7-5-4.2 0-7 1.667-7 5Z" />
+  <path d="M12 22c-4.2 0-7-1.667-7-5 4.2 0 7 1.667 7 5Z" /></g>
+<g id="lucide-headphones-15" transform="translate(960.0,192.0) rotate(270) scale(2.3333) translate(-12,-12)"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" /></g>
+<g id="lucide-map-pin-16" transform="translate(64.0,320.0) rotate(240) scale(2.3333) translate(-12,-12)"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
+  <circle cx="12" cy="10" r="3" /></g>
+<g id="lucide-zap-17" transform="translate(192.0,320.0) rotate(210) scale(2.3333) translate(-12,-12)"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z" /></g>
+<g id="lucide-umbrella-18" transform="translate(320.0,320.0) rotate(180) scale(2.3333) translate(-12,-12)"><path d="M12 13v7a2 2 0 0 0 4 0" />
+  <path d="M12 2v2" />
+  <path d="M20.992 13a1 1 0 0 0 .97-1.274 10.284 10.284 0 0 0-19.923 0A1 1 0 0 0 3 13z" /></g>
+<g id="lucide-anchor-19" transform="translate(448.0,320.0) rotate(150) scale(2.3333) translate(-12,-12)"><path d="M12 6v16" />
+  <path d="m19 13 2-1a9 9 0 0 1-18 0l2 1" />
+  <path d="M9 11h6" />
+  <circle cx="12" cy="4" r="2" /></g>
+<g id="lucide-feather-20" transform="translate(576.0,320.0) rotate(120) scale(2.3333) translate(-12,-12)"><path d="M14.086 18.412A2 2 0 0112.67 19H5v-7.672a2 2 0 01.586-1.414L11.75 3.75a6 6 0 118.49 8.49z" />
+  <path d="M16 8 2 22" />
+  <path d="M17.488 15H9" /></g>
+<g id="lucide-fish-21" transform="translate(704.0,320.0) rotate(90) scale(2.3333) translate(-12,-12)"><path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z" />
+  <path d="M18 12v.5" />
+  <path d="M16 17.93a9.77 9.77 0 0 1 0-11.86" />
+  <path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33" />
+  <path d="M10.46 7.26C10.2 5.88 9.17 4.24 8 3h5.8a2 2 0 0 1 1.98 1.67l.23 1.4" />
+  <path d="m16.01 17.93-.23 1.4A2 2 0 0 1 13.8 21H9.5a5.96 5.96 0 0 0 1.49-3.98" /></g>
+<g id="lucide-bird-22" transform="translate(832.0,320.0) rotate(60) scale(2.3333) translate(-12,-12)"><path d="M16 7h.01" />
+  <path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20" />
+  <path d="m20 7 2 .5-2 .5" />
+  <path d="M10 18v3" />
+  <path d="M14 17.75V21" />
+  <path d="M7 18a6 6 0 0 0 3.84-10.61" /></g>
+<g id="lucide-cat-23" transform="translate(960.0,320.0) rotate(30) scale(2.3333) translate(-12,-12)"><path d="M12 5c.67 0 1.35.09 2 .26 1.78-2 5.03-2.84 6.42-2.26 1.4.58-.42 7-.42 7 .57 1.07 1 2.24 1 3.44C21 17.9 16.97 21 12 21s-9-3-9-7.56c0-1.25.5-2.4 1-3.44 0 0-1.89-6.42-.5-7 1.39-.58 4.72.23 6.5 2.23A9.04 9.04 0 0 1 12 5Z" />
+  <path d="M8 14v.5" />
+  <path d="M16 14v.5" />
+  <path d="M11.25 16.25h1.5L12 17l-.75-.75Z" /></g>
+<g id="lucide-dog-24" transform="translate(64.0,448.0) rotate(0) scale(2.3333) translate(-12,-12)"><path d="M11.25 16.25h1.5L12 17z" />
+  <path d="M16 14v.5" />
+  <path d="M4.42 11.247A13.152 13.152 0 0 0 4 14.556C4 18.728 7.582 21 12 21s8-2.272 8-6.444a11.702 11.702 0 0 0-.493-3.309" />
+  <path d="M8 14v.5" />
+  <path d="M8.5 8.5c-.384 1.05-1.083 2.028-2.344 2.5-1.931.722-3.576-.297-3.656-1-.113-.994 1.177-6.53 4-7 1.923-.321 3.651.845 3.651 2.235A7.497 7.497 0 0 1 14 5.277c0-1.39 1.844-2.598 3.767-2.277 2.823.47 4.113 6.006 4 7-.08.703-1.725 1.722-3.656 1-1.261-.472-1.855-1.45-2.239-2.5" /></g>
+<g id="lucide-apple-25" transform="translate(192.0,448.0) rotate(330) scale(2.3333) translate(-12,-12)"><path d="M12 6.528V3a1 1 0 0 1 1-1h0" />
+  <path d="M18.237 21A15 15 0 0 0 22 11a6 6 0 0 0-10-4.472A6 6 0 0 0 2 11a15.1 15.1 0 0 0 3.763 10 3 3 0 0 0 3.648.648 5.5 5.5 0 0 1 5.178 0A3 3 0 0 0 18.237 21" /></g>
+<g id="lucide-cake-26" transform="translate(320.0,448.0) rotate(300) scale(2.3333) translate(-12,-12)"><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8" />
+  <path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1" />
+  <path d="M2 21h20" />
+  <path d="M7 8v3" />
+  <path d="M12 8v3" />
+  <path d="M17 8v3" />
+  <path d="M7 4h.01" />
+  <path d="M12 4h.01" />
+  <path d="M17 4h.01" /></g>
+<g id="lucide-palette-27" transform="translate(448.0,448.0) rotate(270) scale(2.3333) translate(-12,-12)"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z" />
+  <circle cx="13.5" cy="6.5" r=".5" fill="#000" />
+  <circle cx="17.5" cy="10.5" r=".5" fill="#000" />
+  <circle cx="6.5" cy="12.5" r=".5" fill="#000" />
+  <circle cx="8.5" cy="7.5" r=".5" fill="#000" /></g>
+<g id="lucide-leaf-28" transform="translate(576.0,448.0) rotate(240) scale(2.3333) translate(-12,-12)"><path d="M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20" />
+  <path d="M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13" /></g>
+<g id="lucide-trees-29" transform="translate(704.0,448.0) rotate(210) scale(2.3333) translate(-12,-12)"><path d="M10 10v.2A3 3 0 0 1 8.9 16H5a3 3 0 0 1-1-5.8V10a3 3 0 0 1 6 0Z" />
+  <path d="M7 16v6" />
+  <path d="M13 19v3" />
+  <path d="M12 19h8.3a1 1 0 0 0 .7-1.7L18 14h.3a1 1 0 0 0 .7-1.7L16 9h.2a1 1 0 0 0 .8-1.7L13 3l-1.4 1.5" /></g>
+<g id="tabler-message-30" transform="translate(832.0,448.0) rotate(180) scale(2.3333) translate(-12,-12)"><path d="M8 9h8" />
+  <path d="M8 13h6" />
+  <path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12" /></g>
+<g id="tabler-mug-31" transform="translate(960.0,448.0) rotate(150) scale(2.3333) translate(-12,-12)"><path d="M4.083 5h10.834a1.08 1.08 0 0 1 1.083 1.077v8.615c0 2.38 -1.94 4.308 -4.333 4.308h-4.334c-2.393 0 -4.333 -1.929 -4.333 -4.308v-8.615a1.08 1.08 0 0 1 1.083 -1.077" />
+  <path d="M16 8h2.5c1.38 0 2.5 1.045 2.5 2.333v2.334c0 1.288 -1.12 2.333 -2.5 2.333h-2.5" /></g>
+<g id="tabler-music-32" transform="translate(64.0,576.0) rotate(120) scale(2.3333) translate(-12,-12)"><path d="M3 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+  <path d="M13 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+  <path d="M9 17v-13h10v13" />
+  <path d="M9 8h10" /></g>
+<g id="tabler-star-33" transform="translate(192.0,576.0) rotate(90) scale(2.3333) translate(-12,-12)"><path d="M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873l-6.158 -3.245" /></g>
+<g id="tabler-plant-34" transform="translate(320.0,576.0) rotate(60) scale(2.3333) translate(-12,-12)"><path d="M7 15h10v4a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2v-4" />
+  <path d="M12 9a6 6 0 0 0 -6 -6h-3v2a6 6 0 0 0 6 6h3" />
+  <path d="M12 11a6 6 0 0 1 6 -6h3v1a6 6 0 0 1 -6 6h-3" />
+  <path d="M12 15l0 -6" /></g>
+<g id="tabler-plane-35" transform="translate(448.0,576.0) rotate(30) scale(2.3333) translate(-12,-12)"><path d="M16 10h4a2 2 0 0 1 0 4h-4l-4 7h-3l2 -7h-4l-2 2h-3l2 -4l-2 -4h3l2 2h4l-2 -7h3l4 7" /></g>
+<g id="tabler-heart-36" transform="translate(576.0,576.0) rotate(0) scale(2.3333) translate(-12,-12)"><path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" /></g>
+<g id="tabler-sun-37" transform="translate(704.0,576.0) rotate(330) scale(2.3333) translate(-12,-12)"><path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+  <path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" /></g>
+<g id="tabler-moon-38" transform="translate(832.0,576.0) rotate(300) scale(2.3333) translate(-12,-12)"><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454l0 .008" /></g>
+<g id="tabler-cloud-39" transform="translate(960.0,576.0) rotate(270) scale(2.3333) translate(-12,-12)"><path d="M6.657 18c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.488 1.19 2.162 3.007 1.77 4.769h.99c1.913 0 3.464 1.56 3.464 3.486c0 1.927 -1.551 3.487 -3.465 3.487h-11.878" /></g>
+<g id="tabler-camera-40" transform="translate(64.0,704.0) rotate(240) scale(2.3333) translate(-12,-12)"><path d="M5 7h1a2 2 0 0 0 2 -2a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2" />
+  <path d="M9 13a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></g>
+<g id="tabler-book-41" transform="translate(192.0,704.0) rotate(210) scale(2.3333) translate(-12,-12)"><path d="M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0" />
+  <path d="M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0" />
+  <path d="M3 6l0 13" />
+  <path d="M12 6l0 13" />
+  <path d="M21 6l0 13" /></g>
+<g id="tabler-gift-42" transform="translate(320.0,704.0) rotate(180) scale(2.3333) translate(-12,-12)"><path d="M3 9a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1l0 -2" />
+  <path d="M12 8l0 13" />
+  <path d="M19 12v7a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-7" />
+  <path d="M7.5 8a2.5 2.5 0 0 1 0 -5a4.8 8 0 0 1 4.5 5a4.8 8 0 0 1 4.5 -5a2.5 2.5 0 0 1 0 5" /></g>
+<g id="tabler-bell-43" transform="translate(448.0,704.0) rotate(150) scale(2.3333) translate(-12,-12)"><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6" />
+  <path d="M9 17v1a3 3 0 0 0 6 0v-1" /></g>
+<g id="tabler-bike-44" transform="translate(576.0,704.0) rotate(120) scale(2.3333) translate(-12,-12)"><path d="M2 18a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+  <path d="M16 18a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+  <path d="M12 19v-4l-3 -3l5 -4l2 3h3" />
+  <path d="M13.007 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /></g>
+<g id="tabler-flower-45" transform="translate(704.0,704.0) rotate(90) scale(2.3333) translate(-12,-12)"><path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+  <path d="M12 2a3 3 0 0 1 3 3c0 .562 -.259 1.442 -.776 2.64l-.724 1.36l1.76 -1.893c.499 -.6 .922 -1 1.27 -1.205a2.968 2.968 0 0 1 4.07 1.099a3.011 3.011 0 0 1 -1.09 4.098c-.374 .217 -.99 .396 -1.846 .535l-2.664 .366l2.4 .326c1 .145 1.698 .337 2.11 .576a3.011 3.011 0 0 1 1.09 4.098a2.968 2.968 0 0 1 -4.07 1.098c-.348 -.202 -.771 -.604 -1.27 -1.205l-1.76 -1.893l.724 1.36c.516 1.199 .776 2.079 .776 2.64a3 3 0 0 1 -6 0c0 -.562 .259 -1.442 .776 -2.64l.724 -1.36l-1.76 1.893c-.499 .601 -.922 1 -1.27 1.205a2.968 2.968 0 0 1 -4.07 -1.098a3.011 3.011 0 0 1 1.09 -4.098c.374 -.218 .99 -.396 1.846 -.536l2.664 -.366l-2.4 -.325c-1 -.145 -1.698 -.337 -2.11 -.576a3.011 3.011 0 0 1 -1.09 -4.099a2.968 2.968 0 0 1 4.07 -1.099c.348 .203 .771 .604 1.27 1.205l1.76 1.894c-1 -2.292 -1.5 -3.625 -1.5 -4a3 3 0 0 1 3 -3" /></g>
+<g id="tabler-headphones-46" transform="translate(832.0,704.0) rotate(60) scale(2.3333) translate(-12,-12)"><path d="M4 15a2 2 0 0 1 2 -2h1a2 2 0 0 1 2 2v3a2 2 0 0 1 -2 2h-1a2 2 0 0 1 -2 -2l0 -3" />
+  <path d="M15 15a2 2 0 0 1 2 -2h1a2 2 0 0 1 2 2v3a2 2 0 0 1 -2 2h-1a2 2 0 0 1 -2 -2l0 -3" />
+  <path d="M4 15v-3a8 8 0 0 1 16 0v3" /></g>
+<g id="tabler-map-pin-47" transform="translate(960.0,704.0) rotate(30) scale(2.3333) translate(-12,-12)"><path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+  <path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0" /></g>
+<g id="tabler-mood-smile-48" transform="translate(64.0,832.0) rotate(0) scale(2.3333) translate(-12,-12)"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+  <path d="M9 10l.01 0" />
+  <path d="M15 10l.01 0" />
+  <path d="M9.5 15a3.5 3.5 0 0 0 5 0" /></g>
+<g id="tabler-bolt-49" transform="translate(192.0,832.0) rotate(330) scale(2.3333) translate(-12,-12)"><path d="M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11" /></g>
+<g id="tabler-umbrella-50" transform="translate(320.0,832.0) rotate(300) scale(2.3333) translate(-12,-12)"><path d="M4 12a8 8 0 0 1 16 0l-16 0" />
+  <path d="M12 12v6a2 2 0 0 0 4 0" /></g>
+<g id="tabler-anchor-51" transform="translate(448.0,832.0) rotate(270) scale(2.3333) translate(-12,-12)"><path d="M12 9v12m-8 -8a8 8 0 0 0 16 0m1 0h-2m-14 0h-2" />
+  <path d="M9 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /></g>
+<g id="tabler-feather-52" transform="translate(576.0,832.0) rotate(240) scale(2.3333) translate(-12,-12)"><path d="M4 20l10 -10m0 -5v5h5m-9 -1v5h5m-9 -1v5h5m-5 -5l4 -4l4 -4" />
+  <path d="M19 10c.638 -.636 1 -1.515 1 -2.486a3.515 3.515 0 0 0 -3.517 -3.514c-.97 0 -1.847 .367 -2.483 1m-3 13l4 -4l4 -4" /></g>
+<g id="tabler-fish-53" transform="translate(704.0,832.0) rotate(210) scale(2.3333) translate(-12,-12)"><path d="M16.69 7.44a6.973 6.973 0 0 0 -1.69 4.56c0 1.747 .64 3.345 1.699 4.571" />
+  <path d="M2 9.504c7.715 8.647 14.75 10.265 20 2.498c-5.25 -7.761 -12.285 -6.142 -20 2.504" />
+  <path d="M18 11v.01" />
+  <path d="M11.5 10.5c-.667 1 -.667 2 0 3" /></g>
+<g id="tabler-cat-54" transform="translate(832.0,832.0) rotate(180) scale(2.3333) translate(-12,-12)"><path d="M20 3v10a8 8 0 1 1 -16 0v-10l3.432 3.432a7.963 7.963 0 0 1 4.568 -1.432c1.769 0 3.403 .574 4.728 1.546l3.272 -3.546" />
+  <path d="M2 16h5l-4 4" />
+  <path d="M22 16h-5l4 4" />
+  <path d="M11 16a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+  <path d="M9 11v.01" />
+  <path d="M15 11v.01" /></g>
+<g id="tabler-dog-55" transform="translate(960.0,832.0) rotate(150) scale(2.3333) translate(-12,-12)"><path d="M11 5h2" />
+  <path d="M19 12c-.667 5.333 -2.333 8 -5 8h-4c-2.667 0 -4.333 -2.667 -5 -8" />
+  <path d="M11 16c0 .667 .333 1 1 1s1 -.333 1 -1h-2" />
+  <path d="M12 18v2" />
+  <path d="M10 11v.01" />
+  <path d="M14 11v.01" />
+  <path d="M5 4l6 .97l-6.238 6.688a1.021 1.021 0 0 1 -1.41 .111a.953 .953 0 0 1 -.327 -.954l1.975 -6.815" />
+  <path d="M19 4l-6 .97l6.238 6.688c.358 .408 .989 .458 1.41 .111a.953 .953 0 0 0 .327 -.954l-1.975 -6.815" /></g>
+<g id="tabler-apple-56" transform="translate(64.0,960.0) rotate(120) scale(2.3333) translate(-12,-12)"><path d="M4 11.319c0 3.102 .444 5.319 2.222 7.978c1.351 1.797 3.156 2.247 5.08 .988c.426 -.268 .97 -.268 1.397 0c1.923 1.26 3.728 .809 5.079 -.988c1.778 -2.66 2.222 -4.876 2.222 -7.977c0 -2.661 -1.99 -5.32 -4.444 -5.32c-1.267 0 -2.41 .693 -3.22 1.44a.5 .5 0 0 1 -.672 0c-.809 -.746 -1.953 -1.44 -3.22 -1.44c-2.454 0 -4.444 2.66 -4.444 5.319" />
+  <path d="M7 12c0 -1.47 .454 -2.34 1.5 -3" />
+  <path d="M12 7c0 -1.2 .867 -4 3 -4" /></g>
+<g id="tabler-cake-57" transform="translate(192.0,960.0) rotate(90) scale(2.3333) translate(-12,-12)"><path d="M3 20h18v-8a3 3 0 0 0 -3 -3h-12a3 3 0 0 0 -3 3v8" />
+  <path d="M3 14.803c.312 .135 .654 .204 1 .197a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1c.35 .007 .692 -.062 1 -.197" />
+  <path d="M12 4l1.465 1.638a2 2 0 1 1 -3.015 .099l1.55 -1.737" /></g>
+<g id="tabler-palette-58" transform="translate(320.0,960.0) rotate(60) scale(2.3333) translate(-12,-12)"><path d="M12 21a9 9 0 0 1 0 -18c4.97 0 9 3.582 9 8c0 1.06 -.474 2.078 -1.318 2.828c-.844 .75 -1.989 1.172 -3.182 1.172h-2.5a2 2 0 0 0 -1 3.75a1.3 1.3 0 0 1 -1 2.25" />
+  <path d="M7.5 10.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+  <path d="M11.5 7.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+  <path d="M15.5 10.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></g>
+<g id="tabler-leaf-59" transform="translate(448.0,960.0) rotate(30) scale(2.3333) translate(-12,-12)"><path d="M5 21c.5 -4.5 2.5 -8 7 -10" />
+  <path d="M9 18c6.218 0 10.5 -3.288 11 -12v-2h-4.014c-9 0 -11.986 4 -12 9c0 1 0 3 2 5h3l.014 0" /></g>
+<g id="tabler-trees-60" transform="translate(576.0,960.0) rotate(0) scale(2.3333) translate(-12,-12)"><path d="M16 5l3 3l-2 1l4 4l-3 1l4 4h-9" />
+  <path d="M15 21l0 -3" />
+  <path d="M8 13l-2 -2" />
+  <path d="M8 12l2 -2" />
+  <path d="M8 21v-13" />
+  <path d="M5.824 16a3 3 0 0 1 -2.743 -3.69a3 3 0 0 1 .304 -4.833a3 3 0 0 1 4.615 -3.707a3 3 0 0 1 4.614 3.707a3 3 0 0 1 .305 4.833a3 3 0 0 1 -2.919 3.695h-4l-.176 -.005" /></g>
+<g id="lucide-message-circle-61" transform="translate(704.0,960.0) rotate(330) scale(2.3333) translate(-12,-12)"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" /></g>
+<g id="lucide-coffee-62" transform="translate(832.0,960.0) rotate(300) scale(2.3333) translate(-12,-12)"><path d="M10 2v2" />
+  <path d="M14 2v2" />
+  <path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" />
+  <path d="M6 2v2" /></g>
+<g id="lucide-star-63" transform="translate(960.0,960.0) rotate(270) scale(2.3333) translate(-12,-12)"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></g>
+</svg>

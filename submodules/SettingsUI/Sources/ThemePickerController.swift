@@ -12,6 +12,7 @@ import AlertUI
 import PresentationDataUtils
 import MediaResources
 import WallpaperResources
+import TellomiWallpapers
 
 import AccountContext
 import ContextUI
@@ -186,42 +187,11 @@ private enum ThemePickerControllerEntry: ItemListNodeEntry {
                 for theme in themes {
                     colorItems.append(.theme(theme))
                 }
-            
-                var defaultColor: PresentationThemeAccentColor? = PresentationThemeAccentColor(baseColor: .blue)
-                var colors = PresentationThemeBaseColor.allCases
-                colors = colors.filter { $0 != .custom && $0 != .preset && $0 != .theme }
-                if case let .builtin(name) = generalThemeReference {
-                    if name == .dayClassic {
-                        colorItems.append(.default)
-                        defaultColor = nil
-            
-                        for preset in dayClassicColorPresets {
-                            colorItems.append(.preset(preset))
-                        }
-                    } else if name == .day {
-                        colorItems.append(.color(.blue))
-                        colors = colors.filter { $0 != .blue }
-            
-                        for preset in dayColorPresets {
-                            colorItems.append(.preset(preset))
-                        }
-                    } else if name == .night {
-                        colorItems.append(.color(.blue))
-                        colors = colors.filter { $0 != .blue }
-            
-                        for preset in nightColorPresets {
-                            colorItems.append(.preset(preset))
-                        }
-                    }
-                    if name != .day {
-                        colors = colors.filter { $0 != .black }
-                    }
-                    if name == .night {
-                        colors = colors.filter { $0 != .gray }
-                    } else {
-                        colors = colors.filter { $0 != .white }
-                    }
+                for preset in tellomiAccentPresets {
+                    colorItems.append(.preset(preset))
                 }
+
+                let defaultColor = tellomiAccentPresets.first
                 var currentColor = color ?? defaultColor.flatMap { .accentColor($0) }
                 if let color = currentColor, case let .accentColor(accentColor) = color, accentColor.baseColor == .theme {
                     var themeExists = false
@@ -232,22 +202,7 @@ private enum ThemePickerControllerEntry: ItemListNodeEntry {
                         currentColor = defaultColor.flatMap { .accentColor($0) }
                     }
                 }
-                colorItems.append(contentsOf: colors.map { .color($0) })
-                if let index = colorItems.firstIndex(where: { item in
-                    if case .default = item {
-                        return true
-                    } else {
-                        return false
-                    }
-                }) {
-                    if index > 0 {
-                        let item = colorItems[index]
-                        colorItems.remove(at: index)
-                        colorItems.insert(item, at: 1)
-                    }
-                }
-            
-                
+
                 let baseTheme: TelegramBaseTheme?
                 if case let .builtin(theme) = generalThemeReference {
                     baseTheme = theme.baseTheme
@@ -289,7 +244,6 @@ private func themePickerControllerEntries(presentationData: PresentationData, pr
     entries.append(.themesHeader(presentationData.theme, presentationData.strings.Themes_SelectTheme.uppercased()))
     entries.append(.themes(presentationData.theme, presentationData.strings, chatThemes, themeReference, nightMode, animatedEmojiStickers, presentationThemeSettings.themeSpecificAccentColors, presentationThemeSettings.themeSpecificChatWallpapers))
     
-    entries.append(.customHeader(presentationData.theme, presentationData.strings.Themes_BuildOwn.uppercased()))
     entries.append(.chatPreview(presentationData.theme, presentationData.chatWallpaper, presentationData.chatFontSize, presentationData.chatBubbleCorners, presentationData.strings, presentationData.dateTimeFormat, presentationData.nameDisplayOrder, [ChatPreviewMessageItem(outgoing: false, reply: (presentationData.strings.Appearance_PreviewReplyAuthor, presentationData.strings.Appearance_PreviewReplyText), text: presentationData.strings.Appearance_PreviewIncomingText, nameColor: .preset(.blue), backgroundEmojiId: nil), ChatPreviewMessageItem(outgoing: true, reply: nil, text: presentationData.strings.Appearance_PreviewOutgoingText, nameColor: .preset(.blue), backgroundEmojiId: nil)]))
     
     let generalThemes: [PresentationThemeReference] = availableThemes.filter { reference in
@@ -300,43 +254,8 @@ private func themePickerControllerEntries(presentationData: PresentationData, pr
         }
     }
 
-    let generalThemeReference: PresentationThemeReference
-    if case let .cloud(theme) = themeReference, let settings = theme.theme.settings {
-        if let baseTheme = presentationThemeSettings.themePreferredBaseTheme[themeReference.index] {
-            generalThemeReference = .builtin(PresentationBuiltinThemeReference(baseTheme: baseTheme))
-        } else if let first = settings.first {
-            generalThemeReference = .builtin(PresentationBuiltinThemeReference(baseTheme: first.baseTheme))
-        } else {
-            generalThemeReference = themeReference
-        }
-    } else {
-        generalThemeReference = themeReference
-    }
-    
     entries.append(.theme(presentationData.theme, presentationData.strings, generalThemes, availableThemes, themeReference, presentationThemeSettings.themeSpecificAccentColors, presentationThemeSettings.themeSpecificChatWallpapers, presentationThemeSettings.themeSpecificAccentColors[themeReference.index], presentationThemeSettings.themePreferredBaseTheme))
 
-    if case let .builtin(builtinTheme) = generalThemeReference {
-        let colorThemes = availableThemes.filter { reference in
-            if case let .cloud(theme) = reference, let settings = theme.theme.settings, settings.contains(where: { $0.baseTheme == builtinTheme.baseTheme }) {
-                return true
-            } else {
-                return false
-            }
-        }
-
-        var colorOption: ThemeSettingsColorOption?
-        if case .builtin = themeReference {
-            colorOption = presentationThemeSettings.themeSpecificAccentColors[themeReference.index].flatMap { .accentColor($0) }
-        } else {
-            colorOption = .theme(themeReference)
-        }
-
-        entries.append(.accentColor(presentationData.theme, generalThemeReference, themeReference, colorThemes, colorOption))
-    }
-    
-    entries.append(.editTheme(presentationData.theme, presentationData.strings.Themes_EditCurrentTheme))
-    entries.append(.createTheme(presentationData.theme, presentationData.strings.Themes_CreateNewTheme))
-    
     return entries
 }
 
@@ -622,7 +541,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
                 }
                 items.append(.action(ContextMenuActionItem(text: presentationData.strings.Appearance_ShareTheme, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Share"), color: theme.contextMenu.primaryColor) }, action: { c, f in
                     c?.dismiss(completion: {
-                        let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://tell.cc/addtheme/\(theme.theme.slug)"), preferredAction: .default, actionCompleted: {
+                        let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://\(TellomiLinks.host)/addtheme/\(theme.theme.slug)"), preferredAction: .default, actionCompleted: {
                             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
                             presentControllerImpl?(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), nil)
                         }))
@@ -646,12 +565,8 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
                                     })))
                                     
                                     if isCurrent, let currentThemeIndex = themes.firstIndex(where: { $0.id == theme.theme.id }) {
-                                        if let settings = theme.theme.settings?.first {
-                                            if settings.baseTheme == .night {
-                                                selectAccentColorImpl?(nil, PresentationThemeAccentColor(baseColor: .blue))
-                                            } else {
-                                                selectAccentColorImpl?(nil, nil)
-                                            }
+                                        if theme.theme.settings?.first != nil {
+                                            selectAccentColorImpl?(nil, nil)
                                         } else {
                                             let previousThemeIndex = themes.prefix(upTo: currentThemeIndex).reversed().firstIndex(where: { $0.file != nil })
                                             let newTheme: PresentationThemeReference
@@ -659,7 +574,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
                                                 let theme = themes[themes.index(before: previousThemeIndex.base)]
                                                 newTheme = .cloud(PresentationCloudTheme(theme: theme, resolvedWallpaper: nil, creatorAccountId: theme.isCreator ? context.account.id : nil))
                                             } else {
-                                                newTheme = .builtin(.nightAccent)
+                                                newTheme = .builtin(.night)
                                             }
                                             selectThemeImpl?(nil, newTheme, false)
                                         }
@@ -874,7 +789,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
                     }
                     items.append(.action(ContextMenuActionItem(text: presentationData.strings.Appearance_ShareTheme, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Share"), color: theme.contextMenu.primaryColor) }, action: { c, f in
                         c?.dismiss(completion: {
-                            let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://tell.cc/addtheme/\(cloudTheme.theme.slug)"), preferredAction: .default, actionCompleted: {
+                            let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://\(TellomiLinks.host)/addtheme/\(cloudTheme.theme.slug)"), preferredAction: .default, actionCompleted: {
                                 let presentationData = context.sharedContext.currentPresentationData.with { $0 }
                                 presentControllerImpl?(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), nil)
                             }))
@@ -897,7 +812,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
                                              return updated
                                          })))
                                         
-                                        if isCurrent, let settings = cloudTheme.theme.settings?.first {
+                                        if isCurrent, cloudTheme.theme.settings?.first != nil {
                                             let colorThemes = themes.filter { theme in
                                                 if let _ = theme.settings {
                                                     return true
@@ -912,11 +827,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
                                                     let theme = themes[themes.index(before: previousThemeIndex.base)]
                                                     selectThemeImpl?(nil, .cloud(PresentationCloudTheme(theme: theme, resolvedWallpaper: nil, creatorAccountId: theme.isCreator ? context.account.id : nil)), false)
                                                 } else {
-                                                    if settings.baseTheme == .night {
-                                                        selectAccentColorImpl?(nil, PresentationThemeAccentColor(baseColor: .blue))
-                                                    } else {
-                                                        selectAccentColorImpl?(nil, nil)
-                                                    }
+                                                    selectAccentColorImpl?(nil, nil)
                                                 }
                                             }
                                         }
@@ -952,10 +863,7 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
             let preferredBaseTheme: TelegramBaseTheme = .night
             
             let automaticTheme = settings.automaticThemeSwitchSetting.theme
-            var effectiveColors = settings.themeSpecificAccentColors[automaticTheme.index]
-            if automaticTheme == .builtin(.night) && effectiveColors == nil {
-                effectiveColors = PresentationThemeAccentColor(baseColor: .blue)
-            }
+            let effectiveColors = settings.themeSpecificAccentColors[automaticTheme.index]
             let themeSpecificWallpaper = (settings.themeSpecificChatWallpapers[coloredThemeIndex(reference: automaticTheme, accentColor: effectiveColors)] ?? settings.themeSpecificChatWallpapers[automaticTheme.index])
             
             let darkTheme = makePresentationTheme(mediaBox: context.sharedContext.accountManager.mediaBox, themeReference: automaticTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.color, bubbleColors: effectiveColors?.customBubbleColors ?? [], wallpaper: effectiveColors?.wallpaper, baseColor: effectiveColors?.baseColor, serviceBackgroundColor: defaultServiceBackgroundColor) ?? defaultPresentationTheme
@@ -1001,15 +909,17 @@ public func themePickerController(context: AccountContext, focusOnItemTag: Theme
         }
         
         var defaultThemes: [PresentationThemeReference] = []
-        if presentationData.autoNightModeTriggered {
-            defaultThemes.append(contentsOf: [.builtin(.nightAccent), .builtin(.night)])
-        } else {
-            defaultThemes.append(contentsOf: [
-                .builtin(.dayClassic),
-                .builtin(.nightAccent),
-                .builtin(.day),
-                .builtin(.night)
-            ])
+        for builtin in themePickerBuiltinOrder(autoNight: presentationData.autoNightModeTriggered) {
+            switch builtin {
+            case .dayClassic:
+                defaultThemes.append(.builtin(.dayClassic))
+            case .nightAccent:
+                defaultThemes.append(.builtin(.nightAccent))
+            case .day:
+                defaultThemes.append(.builtin(.day))
+            case .night:
+                defaultThemes.append(.builtin(.night))
+            }
         }
         
         let cloudThemes: [PresentationThemeReference] = cloudThemes.map { .cloud(PresentationCloudTheme(theme: $0, resolvedWallpaper: nil, creatorAccountId: $0.isCreator ? context.account.id : nil)) }.filter { !removedThemeIndexes.contains($0.index) }

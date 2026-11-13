@@ -522,7 +522,7 @@ final class PostSuggestionsSettingsScreenComponent: Component {
             }
             
             let address = component.peer?.addressName ?? ""
-            let link = "tell.cc/\(address)?direct"
+            let link = "\(TellomiLinks.host)/\(address)?direct"
             let fullLink = "https://\(link)"
             var linkSectionItems: [AnyComponentWithIdentity<Empty>] = []
             linkSectionItems.append(AnyComponentWithIdentity(id: 0, component: AnyComponent(

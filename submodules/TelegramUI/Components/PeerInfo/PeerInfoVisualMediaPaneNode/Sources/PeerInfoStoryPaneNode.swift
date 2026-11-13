@@ -1340,8 +1340,6 @@ private final class SparseItemGridBindingImpl: SparseItemGridBinding {
                 topRightIcon = .privacyCloseFriends
             case .nobody:
                 topRightIcon = .privacySelected
-            case .mutualFollowers:
-                topRightIcon = .privacySelected
             }
         }
         
@@ -5367,7 +5365,7 @@ public final class PeerInfoStoryPaneNode: ASDisplayNode, PeerInfoPaneNode, ASScr
             }
             
             let shareController = self.context.sharedContext.makeShareScreen(context: self.context, params: ShareControllerParams(
-                subject: .url("https://tell.cc/\(urlBase)/a/\(id)"),
+                subject: .url("https://\(TellomiLinks.host)/\(urlBase)/a/\(id)"),
                 externalShare: false,
                 actionCompleted: { [weak self] in
                     guard let self else {

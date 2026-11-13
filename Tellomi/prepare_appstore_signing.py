@@ -285,6 +285,20 @@ def profile_includes_communication_notifications(entitlements):
     return entitlements.get(COMMUNICATION_NOTIFICATIONS_ENTITLEMENT) is True
 
 
+def note_siri_entitlement(identifier, destination):
+    from siri_entitlements import profile_grants_siri
+
+    entitlements = profile_plist(destination).get("Entitlements") or {}
+    if profile_grants_siri(entitlements):
+        print("siri entitlement present on {}".format(identifier))
+        return
+    print(
+        "warning: {} has no com.apple.developer.siri. "
+        "The SiriIntents process is killed on launch until this profile grants the key.".format(identifier),
+        file=sys.stderr,
+    )
+
+
 def ensure_capability(client, bundle_resource_id, capability, group, optional=False):
     settings = capability_settings(capability, group)
     body = {
@@ -653,264 +667,43 @@ def write_configuration(source, destination, team_id):
     print("team id {}".format(team_id))
 
 
-def find_app_id(client, bundle_id):
-    payload = client.request("GET", app_lookup_path(bundle_id))
+def next_build_number(client, bundle_id, floor):
+    query = urllib.parse.urlencode({"filter[bundleId]": bundle_id, "limit": 1})
+    payload = client.request("GET", "/v1/apps?" + query)
     apps = payload.get("data") or []
     if not apps:
-        return None
-    return apps[0].get("id")
-
-
-# github.run_number on this workflow sits below the App Store build (run 61
-# while App Store Connect already had 75). The fallback has to clear that gap
-# on its own, and it has to increase on every later run.
-BUILD_NUMBER_FALLBACK_OFFSET = 1000
-# PROCESSING is omitted from an unfiltered build list. A build altool has
-# already accepted stays invisible there for several minutes, and the next
-# run would upload the same CFBundleVersion. FAILED and INVALID still consume
-# the number: the duplicate check counts every previously uploaded version.
-BUILD_PROCESSING_STATES = ("PROCESSING", "FAILED", "INVALID", "VALID")
-MAX_BUILD_PAGES = 40
-
-
-class BuildNumberLookupError(Exception):
-    """The build list could not be read completely. Callers use the fallback number."""
-
-
-def app_lookup_path(bundle_id):
-    query = urllib.parse.urlencode({"filter[bundleId]": bundle_id, "limit": 1})
-    return "/v1/apps?" + query
-
-
-def parse_bundle_version(value):
-    """Dotted CFBundleVersion as integers, or None when it is not that shape.
-
-    Apple compares the components as integers. "75", "75.0" and "09" are all
-    versions; "75b" is not.
-    """
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    numbers = []
-    for part in text.split("."):
-        if not part.isdigit():
-            return None
-        numbers.append(int(part))
-    if not numbers:
-        return None
-    return tuple(numbers)
-
-
-def highest_bundle_version(versions):
-    """Largest leading CFBundleVersion component, or 0 when nothing was uploaded.
-
-    A single integer one above that leading component is strictly above every
-    dotted version, because comparison is component by component and a missing
-    component counts as 0. "76" is above both "75" and "75.9".
-    """
-    firsts = []
-    for value in versions:
-        if value is None:
-            continue
-        text = str(value).strip()
-        if not text:
-            continue
-        parsed = parse_bundle_version(text)
-        if parsed is None:
-            raise BuildNumberLookupError("CFBundleVersion was not dotted integers")
-        firsts.append(parsed[0])
-    if not firsts:
-        return 0
-    return max(firsts)
-
-
-def choose_build_number(highest, floor, offset, api_ok):
-    """Next CFBundleVersion. API success is one above the highest upload.
-
-    A failed lookup does not trust a partial maximum. It uses offset plus the
-    workflow run number, which increases on every run.
-    """
-    floor = int(floor)
-    offset = int(offset)
-    if floor < 0:
-        raise ValueError("build number floor must be >= 0")
-    if offset < 1:
-        raise ValueError("build number offset must be positive")
-    if not api_ok:
-        return offset + max(floor, 1)
-    return max(int(highest) + 1, max(floor, 1))
-
-
-def fallback_build_number(floor, offset=BUILD_NUMBER_FALLBACK_OFFSET):
-    return choose_build_number(0, floor, offset, api_ok=False)
-
-
-def _api_path(url):
-    if not url:
-        return None
-    if url.startswith(API):
-        rest = url[len(API):]
-        if not rest.startswith("/"):
-            rest = "/" + rest
-        return rest
-    if url.startswith("/"):
-        return url
-    raise BuildNumberLookupError("App Store Connect returned a next link this client cannot follow")
-
-
-def _pages(client, path):
-    seen = set()
-    for _page in range(MAX_BUILD_PAGES):
-        if path in seen:
-            raise BuildNumberLookupError("App Store Connect build list repeated a page")
-        seen.add(path)
+        print("no App Store Connect app record yet; build number {}".format(floor))
+        return floor
+    app_id = apps[0]["id"]
+    query = urllib.parse.urlencode({
+        "filter[app]": app_id,
+        "limit": 200,
+        "fields[builds]": "version",
+    })
+    highest = 0
+    path = "/v1/builds?" + query
+    for _page in range(10):
         payload = client.request("GET", path)
-        if not isinstance(payload, dict):
-            raise BuildNumberLookupError("App Store Connect build list was not an object")
-        yield payload
-        nxt = _api_path(((payload.get("links") or {}).get("next")) or "")
-        if not nxt:
-            return
-        path = nxt
-    raise BuildNumberLookupError(
-        "App Store Connect build list did not finish within {} pages".format(MAX_BUILD_PAGES)
-    )
-
-
-def _collect(client, path, read):
-    versions = []
-    seen = 0
-    reported = None
-    for payload in _pages(client, path):
-        data = payload.get("data") or []
-        if not isinstance(data, list):
-            raise BuildNumberLookupError("App Store Connect build list was not a list")
-        seen += len(data)
-        versions.extend(read(payload))
-        paging = ((payload.get("meta") or {}).get("paging") or {})
-        total = paging.get("total")
-        if isinstance(total, int):
-            reported = total
-    if reported is not None and seen < reported:
-        raise BuildNumberLookupError("App Store Connect build list ended early")
-    return versions
-
-
-def _versions_from_builds(payload):
-    found = []
-    for item in payload.get("data") or []:
-        found.append((item.get("attributes") or {}).get("version"))
-    return found
-
-
-def _versions_from_uploads(payload):
-    found = []
-    for item in payload.get("data") or []:
-        found.append((item.get("attributes") or {}).get("cfBundleVersion"))
-    return found
-
-
-def _builds_query(app_id, state=None, expired=None):
-    params = [
-        ("filter[app]", app_id),
-        ("limit", "200"),
-        ("fields[builds]", "version"),
-    ]
-    # One state per request. A comma-joined value can be read as only the
-    # first state, which would hide VALID builds or the one still processing.
-    if state is not None:
-        params.append(("filter[processingState]", state))
-    if expired is not None:
-        params.append(("filter[expired]", "true" if expired else "false"))
-    return "/v1/builds?" + urllib.parse.urlencode(params)
-
-
-def _uploads_query(app_id):
-    params = [
-        ("limit", "200"),
-        ("fields[buildUploads]", "cfBundleVersion"),
-    ]
-    quoted = urllib.parse.quote(str(app_id), safe="")
-    return "/v1/apps/{}/buildUploads?{}".format(quoted, urllib.parse.urlencode(params))
-
-
-def _list_builds(client, app_id):
-    # The unfiltered list is what a plain GET returns. Each state is then
-    # requested on its own, because that list leaves out PROCESSING and the
-    # duplicate check still counts a build altool has already accepted.
-    found = []
-    found.extend(_collect(client, _builds_query(app_id), _versions_from_builds))
-    for state in BUILD_PROCESSING_STATES:
-        found.extend(_collect(client, _builds_query(app_id, state), _versions_from_builds))
-    return found
-
-
-def _list_expired_builds(client, app_id):
-    try:
-        return _collect(client, _builds_query(app_id, expired=True), _versions_from_builds)
-    except ApiError as error:
-        if error.status == 400:
-            print("expired builds filter was rejected; using the unfiltered build list")
-            return []
-        raise
-
-
-def _list_uploads(client, app_id):
-    try:
-        return _collect(client, _uploads_query(app_id), _versions_from_uploads)
-    except ApiError as error:
-        # The builds list is the record once processing has started. Uploads
-        # cover the gap before that record exists. A key or query the server
-        # rejects must not hide builds that were read successfully.
-        if error.status in (400, 403, 404):
-            print("build uploads are not readable (HTTP {}); using builds only".format(error.status))
-            return []
-        raise
-
-
-def _lookup_failure(error):
-    if isinstance(error, ApiError):
-        return BuildNumberLookupError("HTTP {}".format(error.status))
-    if isinstance(error, BuildNumberLookupError):
-        return error
-    return BuildNumberLookupError(type(error).__name__)
-
-
-def next_build_number(client, bundle_id, floor, offset=BUILD_NUMBER_FALLBACK_OFFSET):
-    """Smallest CFBundleVersion strictly above every build of this app.
-
-    The maximum is taken across marketing versions and across processing,
-    failed, invalid, expired, and still-uploading builds. sort=-version is
-    not used: App Store Connect sorts that field as text, so "9" beats "75".
-    """
-    try:
-        app_id = find_app_id(client, bundle_id)
-        if not app_id:
-            number = max(int(floor), 1)
-            print("no App Store Connect app record yet; build number {}".format(number))
-            return number
-        versions = []
-        versions.extend(_list_builds(client, app_id))
-        versions.extend(_list_expired_builds(client, app_id))
-        versions.extend(_list_uploads(client, app_id))
-        highest = highest_bundle_version(versions)
-    except (ApiError, BuildNumberLookupError, urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException, OSError) as error:
-        raise _lookup_failure(error)
-    number = choose_build_number(highest, floor, offset, api_ok=True)
+        for item in payload.get("data") or []:
+            version = (item.get("attributes") or {}).get("version") or ""
+            if version.isdigit():
+                highest = max(highest, int(version))
+        next_link = ((payload.get("links") or {}).get("next")) or ""
+        if not next_link.startswith(API):
+            break
+        path = next_link[len(API):]
+    number = max(highest + 1, floor)
     print("build number {} (previous highest {})".format(number, highest))
     return number
 
 
-def resolve_build_number(client, bundle_id, floor, offset=BUILD_NUMBER_FALLBACK_OFFSET):
-    """API maximum plus one, or the monotonic fallback when the list cannot be read."""
-    try:
-        return next_build_number(client, bundle_id, floor, offset)
-    except BuildNumberLookupError as error:
-        number = fallback_build_number(floor, offset)
-        print("build number lookup failed ({}); fallback build number {}".format(error, number))
-        return number
+def find_app_id(client, bundle_id):
+    query = urllib.parse.urlencode({"filter[bundleId]": bundle_id, "limit": 1})
+    payload = client.request("GET", "/v1/apps?" + query)
+    apps = payload.get("data") or []
+    if not apps:
+        return None
+    return apps[0].get("id")
 
 
 def app_record_plan(found_before, create_status=None, found_after=False):
@@ -1021,6 +814,8 @@ def prepare(args):
             create_profile(client, profile_name, ids[identifier], certificate_id, destination)
             require_app_group(destination, group)
             require_profile_certificate(destination, profile_serial)
+            if identifier == bundle_id or identifier.endswith(".SiriIntents"):
+                note_siri_entitlement(identifier, destination)
             if identifier == bundle_id:
                 main_profile = destination
                 if profile_includes_communication_notifications(profile_plist(destination).get("Entitlements") or {}):
@@ -1038,16 +833,13 @@ def prepare(args):
         team_id = team_id_from_profile(main_profile)
         write_configuration(args.configuration, pathlib.Path(args.configuration_out), team_id)
         ensure_app_record(client, bundle_id, ids[bundle_id], app_name)
-        number = resolve_build_number(
-            client, bundle_id, args.build_number_floor, args.build_number_offset,
-        )
+        number = next_build_number(client, bundle_id, args.build_number_floor)
         pathlib.Path(args.build_number_out).write_text(str(number) + "\n", encoding="utf-8")
     finally:
         shutil.rmtree(p8_dir, ignore_errors=True)
 
 
 def self_test():
-    build_number_self_test()
     work = pathlib.Path(tempfile.mkdtemp(prefix="tellomi-jwt-"))
     try:
         key = work / "key.p8"
@@ -1076,6 +868,13 @@ def self_test():
         main = [item for item in signing_targets() if item[0] == ""]
         if len(main) != 1 or COMMUNICATION_NOTIFICATIONS_CAPABILITY not in main[0][3]:
             raise SystemExit("main app must enable USERNOTIFICATIONS_COMMUNICATION")
+        if len(main) != 1 or "SIRIKIT" not in main[0][3]:
+            raise SystemExit("main app must enable SIRIKIT")
+        from siri_entitlements import profile_grants_siri
+        if not profile_grants_siri({"com.apple.developer.siri": True}):
+            raise SystemExit("siri entitlement check failed")
+        if profile_grants_siri({}) or profile_grants_siri({"com.apple.developer.siri": False}):
+            raise SystemExit("missing siri entitlement was accepted")
         if not profile_includes_communication_notifications({COMMUNICATION_NOTIFICATIONS_ENTITLEMENT: True}):
             raise SystemExit("communication entitlement check failed")
         if profile_includes_communication_notifications({}):
@@ -1179,211 +978,6 @@ def self_test():
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _build_page(versions, next_url="", total=None):
-    body = {
-        "data": [
-            {"id": str(index), "attributes": {"version": version}}
-            for index, version in enumerate(versions)
-        ],
-        "links": {},
-    }
-    if next_url:
-        body["links"]["next"] = next_url
-    if total is not None:
-        body["meta"] = {"paging": {"total": total}}
-    return body
-
-
-def _upload_page(versions):
-    return {
-        "data": [
-            {"id": str(index), "attributes": {"cfBundleVersion": version}}
-            for index, version in enumerate(versions)
-        ],
-        "links": {},
-    }
-
-
-class _BuildRoutes:
-    def __init__(self, routes):
-        self.routes = routes
-        self.calls = []
-
-    def request(self, method, path, body=None):
-        self.calls.append(path)
-        if path not in self.routes:
-            # State queries the test did not special-case are empty. A test
-            # that cares about one state puts that version on that path.
-            if path.startswith("/v1/builds?") or "/buildUploads?" in path:
-                return {"data": [], "links": {}}
-            raise AssertionError("unexpected App Store Connect path " + path.split("?", 1)[0])
-        value = self.routes[path]
-        if isinstance(value, Exception):
-            raise value
-        return value
-
-
-def _expect_build(number, routes, floor=61, offset=1000):
-    client = _BuildRoutes(routes)
-    got = resolve_build_number(client, "app.tellomi.chat", floor, offset)
-    if got != number:
-        raise SystemExit("build number {} != {}".format(got, number))
-    return client
-
-
-def build_number_self_test():
-    """The number must clear every uploaded CFBundleVersion, including ones still processing.
-
-    Run 42627904292 printed "previous highest 74" and uploaded 75 again. Build 75
-    was already accepted and was still processing, so an unfiltered builds list
-    did not contain it. altool then rejected the duplicate.
-    """
-    if BUILD_NUMBER_FALLBACK_OFFSET != 1000:
-        raise SystemExit("fallback offset changed")
-    if parse_bundle_version(" 75 ") != (75,):
-        raise SystemExit("75 did not parse")
-    if parse_bundle_version("75.9") != (75, 9):
-        raise SystemExit("dotted build did not parse")
-    if parse_bundle_version("09") != (9,):
-        raise SystemExit("leading zero did not parse as an integer")
-    if parse_bundle_version("75b") is not None or parse_bundle_version("") is not None:
-        raise SystemExit("non-numeric build was accepted")
-    if highest_bundle_version(["9", "75", "75.9", None, " 74 "]) != 75:
-        raise SystemExit("leading component was not the numeric maximum")
-    # "9" sorts above "75" as text. The number is the integer maximum plus one.
-    if choose_build_number(75, 61, 1000, True) != 76:
-        raise SystemExit("next build after 75 must be 76")
-    if choose_build_number(75, 90, 1000, True) != 90:
-        raise SystemExit("floor above the App Store maximum was ignored")
-    if choose_build_number(0, 61, 1000, False) != 1061:
-        raise SystemExit("fallback must be offset plus the run number")
-    if fallback_build_number(61) >= fallback_build_number(62):
-        raise SystemExit("fallback is not monotonic")
-    if fallback_build_number(61) <= 75:
-        raise SystemExit("fallback does not clear the current App Store build")
-    try:
-        choose_build_number(1, -1, 1000, True)
-    except ValueError:
-        pass
-    else:
-        raise SystemExit("negative floor was accepted")
-
-    app = app_lookup_path("app.tellomi.chat")
-    app_row = {"data": [{"id": "123", "attributes": {"bundleId": "app.tellomi.chat"}}], "links": {}}
-    builds = _builds_query("123")
-    processing = _builds_query("123", "PROCESSING")
-    expired = _builds_query("123", expired=True)
-    uploads = _uploads_query("123")
-    if "sort" in builds or "," in builds:
-        raise SystemExit("build query sorts version as text or joins processing states")
-
-    # The failure: the default list stops at 74 while 75 is still PROCESSING.
-    client = _expect_build(76, {
-        app: app_row,
-        builds: _build_page(["74"], total=1),
-        processing: _build_page(["75"], total=1),
-    })
-    for state in BUILD_PROCESSING_STATES:
-        needle = "filter%5BprocessingState%5D=" + state
-        if not any(needle + "&" in call or call.endswith(needle) for call in client.calls):
-            raise SystemExit("did not query processing state {}".format(state))
-    # Same gap, before the build record exists: only the upload has 75.
-    _expect_build(76, {
-        app: app_row,
-        builds: _build_page(["74"], total=1),
-        uploads: _upload_page(["75"]),
-    })
-    _expect_build(81, {
-        app: app_row,
-        builds: _build_page(["75"], total=1),
-        expired: _build_page(["80"], total=1),
-        uploads: _upload_page(["79"]),
-    })
-    _expect_build(76, {
-        app: app_row,
-        builds: _build_page(["9", "75"], total=2),
-    })
-    _expect_build(61, {
-        app: {"data": [], "links": {}},
-    })
-    # Expired filter unsupported, uploads unreadable: the PROCESSING build still counts.
-    _expect_build(76, {
-        app: app_row,
-        builds: _build_page(["74"], total=1),
-        processing: _build_page(["75"], total=1),
-        expired: ApiError(400, "{}"),
-        uploads: ApiError(403, "{}"),
-    })
-
-    page2 = "/v1/builds?cursor=2"
-    client = _expect_build(76, {
-        app: app_row,
-        builds: _build_page(["74"], next_url=API + page2, total=2),
-        page2: _build_page(["75"], total=2),
-        expired: _build_page([], total=0),
-        uploads: _upload_page([]),
-    })
-    if page2 not in client.calls:
-        raise SystemExit("absolute next link was not followed")
-
-    relative = "/v1/builds?cursor=rel"
-    _expect_build(76, {
-        app: app_row,
-        builds: _build_page(["1"], next_url=relative, total=2),
-        relative: _build_page(["75"], total=2),
-        expired: _build_page([], total=0),
-        uploads: _upload_page([]),
-    })
-
-    # Stopping at an unreadable next link would reuse 74. Fail closed instead.
-    got = resolve_build_number(_BuildRoutes({
-        app: app_row,
-        builds: _build_page(["74"], next_url="https://evil.example/next", total=2),
-    }), "app.tellomi.chat", 61, 1000)
-    if got != 1061:
-        raise SystemExit("unreadable next link produced {}".format(got))
-
-    got = resolve_build_number(_BuildRoutes({
-        app: app_row,
-        builds: _build_page(["74"], total=2),
-    }), "app.tellomi.chat", 61, 1000)
-    if got != 1061:
-        raise SystemExit("truncated build list produced {}".format(got))
-
-    class Endless:
-        def request(self, method, path, body=None):
-            if path == app:
-                return app_row
-            return {"data": [{"attributes": {"version": "1"}}], "links": {"next": API + path + "x"}}
-
-    got = resolve_build_number(Endless(), "app.tellomi.chat", 62, 1000)
-    if got != 1062:
-        raise SystemExit("unfinished pagination produced {}".format(got))
-
-    got = resolve_build_number(_BuildRoutes({
-        app: ApiError(500, "{}"),
-    }), "app.tellomi.chat", 61, 1000)
-    if got != 1061:
-        raise SystemExit("API failure produced {}".format(got))
-
-    try:
-        highest_bundle_version(["75b"])
-    except BuildNumberLookupError:
-        pass
-    else:
-        raise SystemExit("non-numeric CFBundleVersion was ignored")
-
-    workflow = pathlib.Path(__file__).resolve().parents[1] / ".github" / "workflows" / "testflight.yml"
-    text = workflow.read_text(encoding="utf-8")
-    if "group: tellomi-testflight" not in text or "cancel-in-progress: true" not in text:
-        raise SystemExit("overlapping TestFlight runs are not cancelled")
-    if "--build-number-floor" not in text or "github.run_number" not in text:
-        raise SystemExit("fallback floor is not the workflow run number")
-    if '--build-number-offset "1000"' not in text:
-        raise SystemExit("fallback offset is not wired to the workflow")
-    print("build number self-test passed")
-
-
 def main():
     parser = argparse.ArgumentParser(description="Prepare Tellomi App Store signing material.")
     parser.add_argument("--configuration", required=False)
@@ -1392,7 +986,6 @@ def main():
     parser.add_argument("--cert-dir", required=False, help="Persistent directory for Distribution.p12")
     parser.add_argument("--build-number-out", required=False)
     parser.add_argument("--build-number-floor", type=int, default=1)
-    parser.add_argument("--build-number-offset", type=int, default=BUILD_NUMBER_FALLBACK_OFFSET)
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.self_test:
@@ -1404,9 +997,6 @@ def main():
     ]
     if missing:
         print("missing arguments: {}".format(", ".join(missing)), file=sys.stderr)
-        sys.exit(2)
-    if args.build_number_floor < 0 or args.build_number_offset < 1:
-        print("build number floor must be >= 0 and offset must be positive", file=sys.stderr)
         sys.exit(2)
     prepare(args)
 

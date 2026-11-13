@@ -36,6 +36,7 @@ jobs:
         run: |
           python3 Tellomi/check_server_config.py --seeds
           python3 Tellomi/test_server_config.py
+          python3 Tellomi/test_siri_entitlements.py
 
   test:
     runs-on: xcode-27
@@ -121,6 +122,7 @@ jobs:
             //submodules/TelegramPresentationData:TellomiBrandRewriteTests
             //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests
             //submodules/TelegramCore:EphemeralMediaLifecycleTests
+            //submodules/TelegramCore:TellomiFeatureGateTests
             //submodules/TelegramCore:TellomiNativeBatchTests
             //submodules/OpenInExternalAppUI:TellomiMapOpenInTests
             //submodules/TelegramCallsUI:CallKitCompletionThreadTests
@@ -129,6 +131,8 @@ jobs:
           ios=(
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
             //submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode:PeerInfoPaneNodeTests
+            //submodules/MtProtoKit:MtProtoKitTests
+            //submodules/MtProtoKit:GCDAsyncSocketCloseTests
           )
           # Run 42416611063 died before any test: the Bazel registry fetch timed out.
           # .github/bazel_registry_retry.sh retries only that pure fetch failure

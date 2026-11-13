@@ -85,7 +85,8 @@ public extension TelegramEngineUnauthorized {
             |> ignoreValues
         }
 
-        /// Replaces a stored confirmation-code screen with phone entry. Other stored states stay.
+        /// Replaces a stored `.confirmationCodeEntry` with phone entry, in one transaction.
+        /// Password, payment, empty, and phone entry already stored stay as they are.
         public func replaceConfirmationCodeEntryWithPhoneEntry(countryCode: Int32, number: String) -> Signal<Never, NoError> {
             let account = self.account
             return account.postbox.transaction { transaction -> Void in
@@ -230,6 +231,20 @@ public extension TelegramEngine {
         
         public func reportMissingCode(phoneNumber: String, phoneCodeHash: String, mnc: String) -> Signal<Never, ReportMissingCodeError> {
             return _internal_reportMissingCode(network: self.account.network, phoneNumber: phoneNumber, phoneCodeHash: phoneCodeHash, mnc: mnc)
+        }
+
+        /// Ends this authorization on the server. A duplicate login calls this before the local record is dropped.
+        public func logOut() -> Signal<Never, NoError> {
+            let account = self.account
+            return account.network.request(Api.functions.auth.logOut())
+            |> map { _ -> Void in
+                withExtendedLifetime(account) {}
+                return Void()
+            }
+            |> `catch` { _ -> Signal<Void, NoError> in
+                return .single(Void())
+            }
+            |> ignoreValues
         }
 
         public func passkeysData() -> Signal<[TelegramPasskey], NoError> {

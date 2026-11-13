@@ -246,7 +246,7 @@ public final class StorySearchGridScreen: ViewControllerComponentContainer {
         guard case let .location(_, venue) = self.scope else {
             return
         }
-        let locationMap = TelegramMediaMap(latitude: venue.latitude, longitude: venue.longitude, heading: nil, accuracyRadius: nil, venue: nil, address: venue.address, liveBroadcastingTimeout: nil, liveProximityNotificationRadius: nil)
+        let locationMap = TelegramMediaMap(latitude: venue.latitude, longitude: venue.longitude, heading: nil, accuracyRadius: nil, venue: venue.venue, address: venue.address, liveBroadcastingTimeout: nil, liveProximityNotificationRadius: nil)
         
         let presentationData = self.context.sharedContext.currentPresentationData.with({ $0 })
         
@@ -256,7 +256,7 @@ public final class StorySearchGridScreen: ViewControllerComponentContainer {
             }
             self.present(self.context.sharedContext.makeShareScreen(context: self.context, params: ShareControllerParams(subject: .mapMedia(locationMap), externalShare: true)), in: .window(.root), with: nil)
         })
-        self.push(OpenInOptionsScreen(context: self.context, updatedPresentationData: nil, item: .location(location: locationMap, directions: nil), additionalAction: shareAction, openUrl: { [weak self] url in
+        self.push(OpenInOptionsScreen(context: self.context, updatedPresentationData: nil, item: .location(location: locationMap, directions: nil, placeName: venue.venue?.title), additionalAction: shareAction, openUrl: { [weak self] url in
             guard let self else {
                 return
             }

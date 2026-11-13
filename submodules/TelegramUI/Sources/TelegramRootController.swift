@@ -5,6 +5,7 @@ import AsyncDisplayKit
 import TelegramCore
 import SwiftSignalKit
 import TelegramPresentationData
+import TelegramUIPreferences
 import AccountContext
 import ContactListUI
 import CallListUI
@@ -31,8 +32,6 @@ import PeerInfoStoryGridScreen
 import ShareWithPeersScreen
 import ChatEmptyNode
 import NewsScreen
-import MomentsUI
-import TelegramUIPreferences
 
 private class DetailsChatPlaceholderNode: ASDisplayNode, NavigationDetailsPlaceholderNode {
     private var presentationData: PresentationData
@@ -83,7 +82,6 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     public var chatListController: ChatListController?
     public var accountSettingsController: PeerInfoScreen?
     public var newsController: NewsScreen?
-    public var momentsController: MomentsScreen?
     
     private var permissionsDisposable: Disposable?
     private var presentationDataDisposable: Disposable?
@@ -154,6 +152,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     }
     
     public func getContactsController() -> ViewController? {
+        if let resolved = tellomiResolvedContactsController(root: self, context: self.context, tabContacts: self.contactsController) {
+            return resolved
+        }
         return self.contactsController
     }
     
@@ -199,12 +200,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         super.containerLayoutUpdated(layout, transition: transition)
     }
     
-    /// Which tabs are on, and whether their titles are shown. Set before `addRootControllers` and `updateRootControllers`.
-    public var tabBarPreferences: TellomiTabBarPreferences = .freshInstall
-
-    public func addRootControllers(showCallsTab: Bool, showNewsTab: Bool, showMomentsTab: Bool) {
-        // Calls visibility is `tabBarPreferences`. The argument remains so existing callers still compile.
-        let _ = showCallsTab
+    public func addRootControllers(showCallsTab: Bool, showNewsTab: Bool) {
         let tabBarController = TabBarControllerImpl(theme: self.presentationData.theme, strings: self.presentationData.strings)
         tabBarController.navigationPresentation = .master
         let chatListController = self.context.sharedContext.makeChatListController(context: self.context, location: .chatList(groupId: .root), controlsHistoryPreload: true, hideNetworkActivityStatus: false, previewing: false, enableDebugActions: !GlobalExperimentalSettings.isAppStoreBuild)
@@ -214,17 +210,22 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         let callListController = CallListController(context: self.context, mode: .tab)
         // Created even when hidden, like the calls tab: `updateRootControllers` shows and hides it.
         let newsController = NewsScreen(context: self.context)
-        let momentsController = MomentsScreen(context: self.context)
-        momentsController.openPeer = { [weak self] peerId in
-            guard let self else {
-                return
-            }
-            self.pushViewController(PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil, peerId: peerId, avatarInitiallyExpanded: false, isOpenedFromChat: false, reactionSourceMessageId: nil, callMessages: []))
-        }
         
+        var controllers: [ViewController] = []
+
         let contactsController = ContactsController(context: self.context)
         contactsController.switchToChatsController = {  [weak self] in
             self?.openChatsController(activateSearch: false)
+        }
+        if !tellomiAppendRootTabs(&controllers, root: self, context: self.context, contacts: contactsController, calls: callListController, chats: chatListController, news: newsController, showCallsTab: showCallsTab, showNewsTab: showNewsTab) {
+            controllers.append(contactsController)
+            if showCallsTab {
+                controllers.append(callListController)
+            }
+            controllers.append(chatListController)
+            if showNewsTab {
+                controllers.append(newsController)
+            }
         }
         
         var restoreSettignsController: (ViewController & SettingsController)?
@@ -236,7 +237,8 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             sharedContext.switchingData = (nil, nil, nil)
         }
         
-        let accountSettingsController = PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil, peerId: self.context.account.peerId, avatarInitiallyExpanded: false, isOpenedFromChat: false, reactionSourceMessageId: nil, callMessages: [], isSettings: true)
+        let meTabIsProfile = tellomiMeTabRootIsProfile(bottomNavigationEnabled: tellomiBottomNavigationEnabled(appConfiguration: self.context.currentAppConfiguration.with { $0 }))
+        let accountSettingsController = PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil, peerId: self.context.account.peerId, avatarInitiallyExpanded: false, isOpenedFromChat: false, reactionSourceMessageId: nil, callMessages: [], isSettings: !meTabIsProfile, isMyProfile: meTabIsProfile, tellomiTabRoot: meTabIsProfile)
         accountSettingsController.tabBarItemDebugTapAction = { [weak self] in
             guard let strongSelf = self else {
                 return
@@ -244,87 +246,43 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             strongSelf.pushViewController(debugController(sharedContext: strongSelf.context.sharedContext, context: strongSelf.context))
         }
         accountSettingsController.parentController = self
-
+        controllers.append(accountSettingsController)
+                
+        let chatsIndex = controllers.firstIndex(where: { $0 === chatListController }) ?? 0
+        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : chatsIndex)
+        
         self.contactsController = contactsController
         self.callListController = callListController
         self.newsController = newsController
-        self.momentsController = momentsController
         self.chatListController = chatListController
         self.accountSettingsController = accountSettingsController
         self.rootTabController = tabBarController
-
-        let preferences = self.tabBarPreferences.normalized()
-        tabBarController.showsItemTitles = !preferences.hideButtonTitles
-        let controllers = self.tellomiOrderedControllers(newsAvailable: showNewsTab, momentsAvailable: showMomentsTab)
-        let chatsIndex = controllers.firstIndex(where: { $0 === chatListController }) ?? controllers.firstIndex(where: { $0 === accountSettingsController }) ?? 0
-        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : chatsIndex)
         self.pushViewController(tabBarController, animated: false)
     }
-
-    /// `showCallsTab` is unused. Which tabs are on the bar is `tabBarPreferences`.
-    /// `showNewsTab` and `showMomentsTab` are whether those tabs exist in this build.
-    public func updateRootControllers(showCallsTab: Bool, showNewsTab: Bool, showMomentsTab: Bool) {
+        
+    public func updateRootControllers(showCallsTab: Bool, showNewsTab: Bool) {
         guard let rootTabController = self.rootTabController as? TabBarControllerImpl else {
             return
         }
-        let _ = showCallsTab
-        let preferences = self.tabBarPreferences.normalized()
-        if rootTabController.showsItemTitles != !preferences.hideButtonTitles {
-            rootTabController.showsItemTitles = !preferences.hideButtonTitles
-        }
-        let controllers = self.tellomiOrderedControllers(newsAvailable: showNewsTab, momentsAvailable: showMomentsTab)
-        let current = rootTabController.controllers
-        let same = current.count == controllers.count && zip(current, controllers).allSatisfy { $0 === $1 }
-        guard !same else {
-            return
-        }
-        // A removed selected tab would otherwise fall back to index 0. Chats stays on the bar.
-        var selectedIndex: Int?
-        if let currentController = rootTabController.currentController, !controllers.contains(where: { $0 === currentController }) {
-            selectedIndex = controllers.firstIndex(where: { $0 === self.chatListController }) ?? controllers.firstIndex(where: { $0 === self.accountSettingsController })
-        }
-        rootTabController.setControllers(controllers, selectedIndex: selectedIndex)
-    }
-
-    private func tellomiOrderedControllers(newsAvailable: Bool, momentsAvailable: Bool) -> [ViewController] {
-        var available: Set<TellomiRootTab> = [.chats, .contacts, .calls, .settings]
-        if momentsAvailable {
-            available.insert(.moments)
-        }
-        if newsAvailable {
-            available.insert(.news)
-        }
-        let tabs = tellomiVisibleRootTabs(preferences: self.tabBarPreferences, available: available)
         var controllers: [ViewController] = []
-        for tab in tabs {
-            switch tab {
-            case .moments:
-                if let controller = self.momentsController {
-                    controllers.append(controller)
-                }
-            case .chats:
-                if let controller = self.chatListController {
-                    controllers.append(controller)
-                }
-            case .contacts:
-                if let controller = self.contactsController {
-                    controllers.append(controller)
-                }
-            case .calls:
-                if let controller = self.callListController {
-                    controllers.append(controller)
-                }
-            case .news:
-                if let controller = self.newsController {
-                    controllers.append(controller)
-                }
-            case .settings:
-                if let controller = self.accountSettingsController {
-                    controllers.append(controller)
-                }
+        if !tellomiAppendRootTabs(&controllers, root: self, context: self.context, contacts: self.contactsController!, calls: self.callListController!, chats: self.chatListController!, news: self.newsController, showCallsTab: showCallsTab, showNewsTab: showNewsTab) {
+            controllers.append(self.contactsController!)
+            if showCallsTab {
+                controllers.append(self.callListController!)
+            }
+            controllers.append(self.chatListController!)
+            if showNewsTab, let newsController = self.newsController {
+                controllers.append(newsController)
             }
         }
-        return controllers
+        controllers.append(self.accountSettingsController!)
+
+        // A removed selected tab would otherwise fall back to index 0: select Chats instead.
+        var selectedIndex: Int?
+        if let currentController = rootTabController.currentController, !controllers.contains(where: { $0 === currentController }) {
+            selectedIndex = controllers.firstIndex(where: { $0 === self.chatListController })
+        }
+        rootTabController.setControllers(controllers, selectedIndex: selectedIndex)
     }
     
     public func openChatsController(activateSearch: Bool, filter: ChatListSearchFilter = .chats, query: String? = nil) {
@@ -867,6 +825,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     }
     
     public func openContacts() {
+        if tellomiOpenContacts(root: self, context: self.context) {
+            return
+        }
         guard let rootTabController = self.rootTabController else {
             return
         }

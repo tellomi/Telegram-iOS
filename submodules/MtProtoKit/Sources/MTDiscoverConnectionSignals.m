@@ -226,23 +226,6 @@
     return @[@80];
 }
 
-+ (NSArray<NSNumber *> *)alternatePortsForAddress:(MTDatacenterAddress *)address inAddressList:(NSArray<MTDatacenterAddress *> *)addressList proxySettings:(MTSocksProxySettings *)proxySettings
-{
-    // `dcOption.this_port_only` is the server saying this port is the one that
-    // answers. The declared address is still probed, including when it is the
-    // media address. A saved copy of the same ip and port from before the flag
-    // was stored does not keep the extra probes once any copy in this list is locked.
-    if (address.thisPortOnly) {
-        return @[];
-    }
-    for (MTDatacenterAddress *other in addressList) {
-        if (other.thisPortOnly && other.port == address.port && [other.ip isEqualToString:address.ip]) {
-            return @[];
-        }
-    }
-    return [self alternatePortsForProxySettings:proxySettings];
-}
-
 + (void)_startBackoffRoundOf:(MTSignal *)signal delay:(NSTimeInterval)delay maxDelay:(NSTimeInterval)maxDelay queue:(MTQueue *)queue subscriber:(MTSubscriber *)subscriber currentDisposable:(MTMetaDisposable *)currentDisposable isDisposed:(MTAtomic *)isDisposed
 {
     if ([[isDisposed value] boolValue]) {
@@ -279,6 +262,7 @@
 {
     MTSocksProxySettings *proxySettings = context.apiEnvironment.socksProxySettings;
     NSArray<MTDatacenterAddress *> *bestAddressList = [self probeAddressesForAddressList:addressList media:media isProxy:isProxy proxySettings:proxySettings];
+    NSArray<NSNumber *> *alternatePorts = [self alternatePortsForProxySettings:proxySettings];
 
     NSMutableArray *bestTcp4Signals = [[NSMutableArray alloc] init];
     NSMutableArray *bestTcp6Signals = [[NSMutableArray alloc] init];
@@ -315,7 +299,6 @@
             }];
             [bestTcp4Signals addObject:signal];
 
-            NSArray<NSNumber *> *alternatePorts = [self alternatePortsForAddress:address inAddressList:addressList proxySettings:proxySettings];
             for (NSNumber *nPort in alternatePorts) {
                 if (address.thisPortOnly) {
                     continue;

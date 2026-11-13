@@ -6,6 +6,9 @@ import SwiftSignalKit
 import PhoneNumberFormat
 
 /// Width of one digit box when the row should span `width`.
+/// The preferred box is kept when it fits, and grows when the row is wider.
+/// On a 320pt phone, six boxes at that preferred size run past the row; spacing
+/// then drops to 4pt and the boxes shrink so the last one stays inside `width`.
 private func tellomiExpandedCodeMetrics(width: CGFloat, count: Int, prefixWidth: CGFloat, prefixSpacing: CGFloat, preferredSpacing: CGFloat, preferredItemWidth: CGFloat) -> (itemWidth: CGFloat, spacing: CGFloat) {
     guard count > 0, width > 0.0 else {
         return (max(1.0, preferredItemWidth), preferredSpacing)
@@ -85,7 +88,7 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
             self.textNode.layer.anchorPoint = CGPoint(x: 0.5, y: 1.0)
         }
         
-        func update(borderColor: UInt32, fill: UInt32? = nil, isHighlighted: Bool) {
+        func update(borderColor: UInt32, fill: UInt32?, isHighlighted: Bool) {
             if let fill {
                 self.backgroundView.backgroundColor = UIColor(argb: fill)
             }
@@ -121,7 +124,7 @@ public final class CodeInputView: ASDisplayNode, UITextFieldDelegate {
                 }
             }
             
-            self.backgroundView.layer.cornerRadius = size.height == 28.0 ? 12.0 : 15.0
+            self.backgroundView.layer.cornerRadius = size.width >= size.height ? 12.0 : (size.height == 28.0 ? 12.0 : 15.0)
             if #available(iOS 13.0, *) {
                 self.backgroundView.layer.cornerCurve = .continuous
             }

@@ -251,6 +251,7 @@ NSString *const TGUserInfoControllerIdentifier = @"TGUserInfoController";
     NSMutableArray *handles = [[NSMutableArray alloc] init];
     if (_channelModel.userName.length > 0)
     {
+        // Host matches TellomiLinks.host. This legacy watch target has no Swift import.
         [handles addObject:[[TGUserHandle alloc] initWithHandle:[NSString stringWithFormat:@"tell.cc/%@", self->_channelModel.userName] type:TGLocalized(@"Channel.LinkItem") handleType:TGUserHandleTypeUndefined data:nil]];
     }
     if (_channelModel.about.length > 0)

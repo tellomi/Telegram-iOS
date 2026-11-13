@@ -2063,7 +2063,7 @@ private final class CameraScreenComponent: CombinedComponent {
                 let durationString =  String(format: "%02d:%02d", (duration / 60) % 60, duration % 60)
                 let timeLabel = timeLabel.update(
                     component: MultilineTextComponent(
-                        text: .plain(NSAttributedString(string: durationString, font: UIFont.monospacedDigitSystemFont(ofSize: 21.0, weight: .regular), textColor: controlsTintColor)),
+                        text: .plain(NSAttributedString(string: durationString, font: Font.with(size: 21.0, design: .camera), textColor: controlsTintColor)),
                         horizontalAlignment: .center,
                         textShadowColor: controlsTintColor == .black ? .clear : UIColor(rgb: 0x000000, alpha: 0.2)
                     ),
@@ -2990,7 +2990,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                     }
                     let filteredCodes = codes.filter {
                         let message = $0.message.replacingOccurrences(of: "https://", with: "")
-                        if message.hasPrefix("tell.cc/c/") || message.hasPrefix("tell.cc/+") || message.hasPrefix("tell.cc/contact/") || message.hasPrefix("tell.cc/") || message.hasPrefix("t.me/c/") || message.hasPrefix("t.me/+") || message.hasPrefix("t.me/contact/") || message.hasPrefix("t.me/") {
+                        if message.hasPrefix("\(TellomiLinks.host)/c/") || message.hasPrefix("\(TellomiLinks.host)/+") || message.hasPrefix("\(TellomiLinks.host)/contact/") || message.hasPrefix("\(TellomiLinks.host)/") {
                             return true
                         } else {
                             return false

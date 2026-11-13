@@ -4,19 +4,40 @@ import TelegramPresentationData
 import TelegramUIPreferences
 //import PhoneNumberFormat
 
+private func tellomiIsOfficialServiceAccount(_ peerId: EnginePeer.Id) -> Bool {
+    if peerId.isTelegramNotifications {
+        return true
+    }
+    return peerId.namespace == Namespaces.Peer.CloudUser && peerId.id._internalGetInt64Value() == 333000
+}
+
+/// The service and notification accounts are client placeholders when they have no photo.
+/// A server name that still says Telegram is shown as Tellomi. Any other name is kept.
+private func tellomiServiceAccountTitle(peerId: EnginePeer.Id, name: String) -> String {
+    guard tellomiIsOfficialServiceAccount(peerId) else {
+        return name
+    }
+    let rewritten = tellomiRewriteBrand(name)
+    return rewritten.isEmpty ? "Tellomi" : rewritten
+}
+
 public extension EnginePeer {
     var compactDisplayTitle: String {
         switch self {
         case let .user(user):
+            let name: String
             if let firstName = user.firstName, !firstName.isEmpty {
-                return firstName
+                name = firstName
             } else if let lastName = user.lastName, !lastName.isEmpty {
-                return lastName
+                name = lastName
             } else if let _ = user.phone {
-                return "" //formatPhoneNumber("+\(phone)")
+                name = "" //formatPhoneNumber("+\(phone)")
+            } else if tellomiIsOfficialServiceAccount(user.id) {
+                name = "Tellomi"
             } else {
-                return "Deleted Account"
+                name = "Deleted Account"
             }
+            return tellomiServiceAccountTitle(peerId: user.id, name: name)
         case let .legacyGroup(group):
             return group.title
         case let .channel(channel):
@@ -34,24 +55,28 @@ public extension EnginePeer {
             if user.id.isReplies {
                 return strings.DialogList_Replies
             }
+            let name: String
             if let firstName = user.firstName, !firstName.isEmpty {
                 if let lastName = user.lastName, !lastName.isEmpty {
                     switch displayOrder {
                     case .firstLast:
-                        return "\(firstName) \(lastName)"
+                        name = "\(firstName) \(lastName)"
                     case .lastFirst:
-                        return "\(lastName) \(firstName)"
+                        name = "\(lastName) \(firstName)"
                     }
                 } else {
-                    return firstName
+                    name = firstName
                 }
             } else if let lastName = user.lastName, !lastName.isEmpty {
-                return lastName
+                name = lastName
             } else if let _ = user.phone {
-                return "" //formatPhoneNumber("+\(phone)")
+                name = "" //formatPhoneNumber("+\(phone)")
+            } else if tellomiIsOfficialServiceAccount(user.id) {
+                name = "Tellomi"
             } else {
-                return strings.User_DeletedAccount
+                name = strings.User_DeletedAccount
             }
+            return tellomiServiceAccountTitle(peerId: user.id, name: name)
         case let .legacyGroup(group):
             return group.title
         case let .channel(channel):

@@ -8,7 +8,7 @@ import UrlEscaping
 
 public enum OpenInItem {
     case url(url: String)
-    case location(location: TelegramMediaMap, directions: OpenInLocationDirections?)
+    case location(location: TelegramMediaMap, directions: OpenInLocationDirections?, placeName: String?)
 }
 
 public enum OpenInLocationDirections: Equatable {
@@ -48,22 +48,27 @@ public enum OpenInApplication: Equatable {
 public enum OpenInAction {
     case none
     case openUrl(url: String)
-    case openLocation(latitude: Double, longitude: Double, directions: OpenInLocationDirections?)
+    case openLocation(latitude: Double, longitude: Double, name: String?, directions: OpenInLocationDirections?)
 }
 
 public final class OpenInOption {
     public let identifier: String
     public let application: OpenInApplication
     public let action: () -> OpenInAction
+    private let titleOverride: String?
     
-    public init(identifier: String, application: OpenInApplication, action: @escaping () -> OpenInAction) {
+    public init(identifier: String, application: OpenInApplication, titleOverride: String? = nil, action: @escaping () -> OpenInAction) {
         self.identifier = identifier
         self.application = application
+        self.titleOverride = titleOverride
         self.action = action
     }
     
     public var title: String {
         get {
+            if let titleOverride = self.titleOverride {
+                return titleOverride
+            }
             switch self.application {
                 case .safari:
                     return "Safari"
@@ -77,12 +82,41 @@ public final class OpenInOption {
 }
 
 public func availableOpenInOptions(context: AccountContext, item: OpenInItem) -> [OpenInOption] {
-    return allOpenInOptions(context: context, item: item).filter { option in
+    let options = allOpenInOptions(context: context, item: item).filter { option in
         if case let .other(_, _, scheme, _) = option.application {
             return context.sharedContext.applicationBindings.canOpenUrl("\(scheme)://")
         } else {
             return true
         }
+    }
+    switch item {
+    case .location:
+        let order = tellomiOrderedLocationOpenInIdentifiers(options.map { $0.identifier })
+        let byIdentifier = Dictionary(options.map { ($0.identifier, $0) }, uniquingKeysWith: { first, _ in first })
+        return order.compactMap { byIdentifier[$0] }
+    case .url:
+        return options
+    }
+}
+
+private func tellomiCurrentOpenInLanguageCode(context: AccountContext) -> String {
+    let saved = context.sharedContext.currentPresentationData.with { $0 }.strings.primaryComponent.languageCode
+    let systemLanguages = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String] ?? []
+    let applied = UserDefaults.standard.bool(forKey: tellomiOpenInSystemLangPackDefaultsKey)
+    return tellomiOpenInLanguageCode(savedLanguageCode: saved, systemLanguages: systemLanguages, systemLangPackApplied: applied)
+}
+
+private func tellomiMapTravelMode(_ directions: OpenInLocationDirections?) -> TellomiMapTravelMode? {
+    guard let directions = directions else {
+        return nil
+    }
+    switch directions {
+    case .driving:
+        return .driving
+    case .walking:
+        return .walking
+    case .transit:
+        return .transit
     }
 }
 
@@ -208,10 +242,34 @@ private func allOpenInOptions(context: AccountContext, item: OpenInItem) -> [Ope
                 }
                 return .none
             }))
-        case let .location(location, directions):
+        case let .location(location, directions, explicitPlaceName):
             let lat = location.latitude
             let lon = location.longitude
-        
+            let languageCode = tellomiCurrentOpenInLanguageCode(context: context)
+            let venueTitle = location.venue?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let fallbackName = explicitPlaceName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let placeName = venueTitle.isEmpty ? fallbackName : venueTitle
+            let placeAddress = location.venue?.address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let travelMode = tellomiMapTravelMode(directions)
+
+            options.append(OpenInOption(identifier: tellomiAppleMapsOpenInIdentifier, application: .maps, titleOverride: tellomiOpenInMapAppTitle(.apple, languageCode: languageCode), action: {
+                let name = placeName.isEmpty ? nil : placeName
+                // WGS-84. Apple Maps in China offsets this itself.
+                return .openLocation(latitude: lat, longitude: lon, name: name, directions: directions)
+            }))
+
+            options.append(OpenInOption(identifier: tellomiAmapOpenInIdentifier, application: .other(title: tellomiOpenInMapAppTitle(.amap, languageCode: languageCode), identifier: tellomiAmapAppStoreIdentifier, scheme: tellomiAmapURLScheme, store: "cn"), action: {
+                return .openUrl(url: tellomiAmapURL(latitude: lat, longitude: lon, name: placeName, mode: travelMode))
+            }))
+
+            options.append(OpenInOption(identifier: tellomiBaiduMapsOpenInIdentifier, application: .other(title: tellomiOpenInMapAppTitle(.baidu, languageCode: languageCode), identifier: tellomiBaiduMapsAppStoreIdentifier, scheme: tellomiBaiduMapURLScheme, store: "cn"), action: {
+                return .openUrl(url: tellomiBaiduMapURL(latitude: lat, longitude: lon, name: placeName, address: placeAddress, mode: travelMode))
+            }))
+
+            options.append(OpenInOption(identifier: tellomiTencentMapsOpenInIdentifier, application: .other(title: tellomiOpenInMapAppTitle(.tencent, languageCode: languageCode), identifier: tellomiTencentMapsAppStoreIdentifier, scheme: tellomiTencentMapURLScheme, store: "cn"), action: {
+                return .openUrl(url: tellomiTencentMapURL(latitude: lat, longitude: lon, name: placeName, address: placeAddress, mode: travelMode))
+            }))
+
             if directions == nil {
                 if let venue = location.venue, let venueId = venue.id, let provider = venue.provider, provider == "foursquare" {
                     options.append(OpenInOption(identifier: "foursquare", application: .other(title: "Foursquare", identifier: 306934924, scheme: "foursquare", store: nil), action: {
@@ -219,105 +277,8 @@ private func allOpenInOptions(context: AccountContext, item: OpenInItem) -> [Ope
                     }))
                 }
             }
-            
-            options.append(OpenInOption(identifier: "appleMaps", application: .maps, action: {
-                return .openLocation(latitude: lat, longitude: lon, directions: directions)
-            }))
 
-            let placeName = location.venue?.title ?? ""
-            let placeAddress = location.venue?.address ?? ""
-
-            // dev=1: the coordinate is WGS-84 and 高德 applies the GCJ-02 offset.
-            options.append(OpenInOption(identifier: "amap", application: .other(title: "高德地图", identifier: 461703208, scheme: "iosamap", store: "cn"), action: {
-                let latText = mapCoordinateText(lat)
-                let lonText = mapCoordinateText(lon)
-                if let directions = directions {
-                    let travel: String
-                    switch directions {
-                        case .driving:
-                            travel = "0"
-                        case .walking:
-                            travel = "2"
-                        case .transit:
-                            travel = "1"
-                    }
-                    var url = "iosamap://path?sourceApplication=Tellomi&dlat=\(latText)&dlon=\(lonText)"
-                    if !placeName.isEmpty {
-                        url += "&dname=\(mapQueryValue(placeName))"
-                    }
-                    url += "&dev=1&t=\(travel)"
-                    return .openUrl(url: url)
-                } else {
-                    var url = "iosamap://viewMap?sourceApplication=Tellomi"
-                    if !placeName.isEmpty {
-                        url += "&poiname=\(mapQueryValue(placeName))"
-                    }
-                    url += "&lat=\(latText)&lon=\(lonText)&dev=1"
-                    return .openUrl(url: url)
-                }
-            }))
-
-            // coord_type=wgs84: Baidu converts the Telegram coordinate itself.
-            options.append(OpenInOption(identifier: "baiduMaps", application: .other(title: "百度地图", identifier: 452186370, scheme: "baidumap", store: "cn"), action: {
-                let latText = mapCoordinateText(lat)
-                let lonText = mapCoordinateText(lon)
-                if let directions = directions {
-                    let mode: String
-                    switch directions {
-                        case .driving:
-                            mode = "driving"
-                        case .walking:
-                            mode = "walking"
-                        case .transit:
-                            mode = "transit"
-                    }
-                    let destination: String
-                    if placeName.isEmpty {
-                        destination = "\(latText),\(lonText)"
-                    } else {
-                        destination = "name:\(mapQueryValue(placeName))%7Clatlng:\(latText),\(lonText)"
-                    }
-                    return .openUrl(url: "baidumap://map/direction?destination=\(destination)&coord_type=wgs84&mode=\(mode)&src=ios.tellomi.chat")
-                } else {
-                    let title = placeName.isEmpty ? "\(latText),\(lonText)" : placeName
-                    let content = placeAddress.isEmpty ? title : placeAddress
-                    return .openUrl(url: "baidumap://map/marker?location=\(latText),\(lonText)&title=\(mapQueryValue(title))&content=\(mapQueryValue(content))&coord_type=wgs84&src=ios.tellomi.chat")
-                }
-            }))
-
-            // qqmap has no coordinate-type parameter and takes GCJ-02 only.
-            options.append(OpenInOption(identifier: "tencentMaps", application: .other(title: "腾讯地图", identifier: 481623196, scheme: "qqmap", store: "cn"), action: {
-                let gcj = wgs84ToGcj02(latitude: lat, longitude: lon)
-                let latText = mapCoordinateText(gcj.latitude)
-                let lonText = mapCoordinateText(gcj.longitude)
-                if let directions = directions {
-                    let type: String
-                    switch directions {
-                        case .driving:
-                            type = "drive"
-                        case .walking:
-                            type = "walk"
-                        case .transit:
-                            type = "bus"
-                    }
-                    var url = "qqmap://map/routeplan?type=\(type)&fromcoord=CurrentLocation"
-                    if !placeName.isEmpty {
-                        url += "&to=\(mapQueryValue(placeName))"
-                    }
-                    url += "&tocoord=\(latText),\(lonText)&referer=Tellomi"
-                    return .openUrl(url: url)
-                } else if placeName.isEmpty {
-                    return .openUrl(url: "qqmap://map/geocoder?coord=\(latText),\(lonText)&referer=Tellomi")
-                } else {
-                    var marker = "coord:\(latText),\(lonText);title:\(mapQueryValue(placeName))"
-                    if !placeAddress.isEmpty {
-                        marker += ";addr:\(mapQueryValue(placeAddress))"
-                    }
-                    return .openUrl(url: "qqmap://map/marker?marker=\(marker)&referer=Tellomi")
-                }
-            }))
-        
-            options.append(OpenInOption(identifier: "googleMaps", application: .other(title: "Google Maps", identifier: 585027354, scheme: "comgooglemaps-x-callback", store: nil), action: {
+            options.append(OpenInOption(identifier: "googleMaps", application: .other(title: tellomiOpenInMapAppTitle(.google, languageCode: languageCode), identifier: 585027354, scheme: "comgooglemaps-x-callback", store: nil), action: {
                 let coordinates = "\(lat),\(lon)"
                 if let directions = directions {
                     let directionsMode: String
@@ -447,62 +408,4 @@ private func allOpenInOptions(context: AccountContext, item: OpenInItem) -> [Ope
             }))
     }
     return options
-}
-
-private func mapCoordinateText(_ value: Double) -> String {
-    return String(format: "%.6f", locale: Locale(identifier: "en_US_POSIX"), value)
-}
-
-private func mapQueryValue(_ value: String) -> String {
-    var allowed = CharacterSet.urlQueryValueAllowed
-    allowed.remove(charactersIn: " |/?\\")
-    return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-}
-
-/// WGS-84 → GCJ-02. Outside the China box the input is returned unchanged.
-/// Published check: (longitude 116.404, latitude 39.915) → (116.41024449916938, 39.91640428150164).
-private func wgs84ToGcj02(latitude: Double, longitude: Double) -> (latitude: Double, longitude: Double) {
-    if gcjOutOfChina(latitude: latitude, longitude: longitude) {
-        return (latitude, longitude)
-    }
-    let pi = 3.1415926535897932384626
-    let a = 6378245.0
-    let ee = 0.00669342162296594323
-    var dLat = gcjTransformLatitude(longitude - 105.0, latitude - 35.0)
-    var dLon = gcjTransformLongitude(longitude - 105.0, latitude - 35.0)
-    let radLat = latitude / 180.0 * pi
-    var magic = sin(radLat)
-    magic = 1 - ee * magic * magic
-    let sqrtMagic = sqrt(magic)
-    dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * pi)
-    dLon = (dLon * 180.0) / (a / sqrtMagic * cos(radLat) * pi)
-    return (latitude + dLat, longitude + dLon)
-}
-
-private func gcjOutOfChina(latitude: Double, longitude: Double) -> Bool {
-    if longitude < 72.004 || longitude > 137.8347 {
-        return true
-    }
-    if latitude < 0.8293 || latitude > 55.8271 {
-        return true
-    }
-    return false
-}
-
-private func gcjTransformLatitude(_ longitude: Double, _ latitude: Double) -> Double {
-    let pi = 3.1415926535897932384626
-    var ret = -100.0 + 2.0 * longitude + 3.0 * latitude + 0.2 * latitude * latitude + 0.1 * longitude * latitude + 0.2 * sqrt(abs(longitude))
-    ret += (20.0 * sin(6.0 * longitude * pi) + 20.0 * sin(2.0 * longitude * pi)) * 2.0 / 3.0
-    ret += (20.0 * sin(latitude * pi) + 40.0 * sin(latitude / 3.0 * pi)) * 2.0 / 3.0
-    ret += (160.0 * sin(latitude / 12.0 * pi) + 320.0 * sin(latitude * pi / 30.0)) * 2.0 / 3.0
-    return ret
-}
-
-private func gcjTransformLongitude(_ longitude: Double, _ latitude: Double) -> Double {
-    let pi = 3.1415926535897932384626
-    var ret = 300.0 + longitude + 2.0 * latitude + 0.1 * longitude * longitude + 0.1 * longitude * latitude + 0.1 * sqrt(abs(longitude))
-    ret += (20.0 * sin(6.0 * longitude * pi) + 20.0 * sin(2.0 * longitude * pi)) * 2.0 / 3.0
-    ret += (20.0 * sin(longitude * pi) + 40.0 * sin(longitude / 3.0 * pi)) * 2.0 / 3.0
-    ret += (150.0 * sin(longitude / 12.0 * pi) + 300.0 * sin(longitude / 30.0 * pi)) * 2.0 / 3.0
-    return ret
 }

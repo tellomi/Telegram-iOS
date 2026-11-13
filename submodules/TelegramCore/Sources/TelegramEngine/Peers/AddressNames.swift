@@ -5,13 +5,16 @@ internal import TelegramApi
 import MtProtoKit
 
 
-public enum AddressNameFormatError {
+public enum AddressNameFormatError: Equatable {
     case startsWithUnderscore
     case endsWithUnderscore
     case startsWithDigit
     case tooShort
     case invalidCharacters
 }
+
+/// Shortest public username the server accepts. Teamgram #182 lowered this from 5 to 4.
+let addressNameMinimumLength = 4
 
 public enum AddressNameAvailability: Equatable {
     case available
@@ -35,7 +38,7 @@ func _internal_checkAddressNameFormat(_ value: String, canEmpty: Bool = false) -
             if index == 0 {
                 return .startsWithUnderscore
             } else if index == length - 1 {
-                return length < 4 ? .tooShort : .endsWithUnderscore
+                return length < addressNameMinimumLength ? .tooShort : .endsWithUnderscore
             }
         }
         if index == 0 && char >= "0" && char <= "9" {
@@ -47,7 +50,7 @@ func _internal_checkAddressNameFormat(_ value: String, canEmpty: Bool = false) -
         index += 1
     }
     
-    if length < 4 && (!canEmpty || length != 0) {
+    if length < addressNameMinimumLength && (!canEmpty || length != 0) {
         return .tooShort
     }
     return nil

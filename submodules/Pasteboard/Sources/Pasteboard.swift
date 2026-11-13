@@ -277,7 +277,7 @@ public func chatInputStateStringFromRTF(_ data: Data, type: NSAttributedString.D
     if let attributedString = try? NSAttributedString(data: data, options: [NSAttributedString.DocumentReadingOptionKey.documentType: type], documentAttributes: nil) {
         let updatedString = NSMutableAttributedString(attributedString: attributedString)
         updatedString.enumerateAttribute(NSAttributedString.Key.link, in: NSRange(location: 0, length: attributedString.length), using: { value, range, _ in
-            if let url = value as? URL, url.scheme == "tg", url.host == "emoji" {
+            if let url = value as? URL, TellomiLinks.isDeepLinkScheme(url.scheme), url.host == "emoji" {
                 var emojiId: Int64?
                 if let queryItems = URLComponents(string: url.absoluteString)?.queryItems {
                     for item in queryItems {

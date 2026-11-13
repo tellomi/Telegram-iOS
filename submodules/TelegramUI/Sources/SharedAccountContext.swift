@@ -674,37 +674,8 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                                 }
                             case let .upgrading(progress):
                                 return .single(.upgrading(progress))
-                            case let .unauthorized(unauthorizedAccount):
-                                // signUp can move the record out of the auth slot before this open sees
-                                // AuthorizedAccountState. Deleting it here called beginNewAuth: the old
-                                // connection closed and a new temp key was created, with no updates.getState.
-                                return unauthorizedAccount.postbox.transaction { transaction -> Bool in
-                                    return transaction.getState() is AuthorizedAccountState
-                                }
-                                |> mapToSignal { isAuthorized -> Signal<AddedAccountResult, NoError> in
-                                    let empty = EngineAvailableColorOptions(hash: 0, options: [])
-                                    let discarded = AddedAccountResult.ready(id, nil, attributes.sortIndex, (nil, nil, nil, empty, empty))
-                                    guard isAuthorized else {
-                                        return .single(discarded)
-                                    }
-                                    return accountWithId(accountManager: accountManager, networkArguments: networkArguments, id: id, encryptionParameters: encryptionParameters, supplementary: !applicationBindings.isMainApp, isSupportUser: attributes.isSupportUser, rootPath: rootPath, beginWithTestingEnvironment: attributes.isTestingEnvironment, backupData: attributes.backupData, auxiliaryMethods: makeTelegramAccountAuxiliaryMethods(uploadInBackground: appDelegate?.uploadInBackround))
-                                    |> mapToSignal { retried -> Signal<AddedAccountResult, NoError> in
-                                        guard case let .authorized(account) = retried else {
-                                            return .single(discarded)
-                                        }
-                                        setupAccount(account, fetchCachedResourceRepresentation: fetchCachedResourceRepresentation, transformOutgoingMessageMedia: transformOutgoingMessageMedia)
-                                        return TelegramEngine(account: account).data.get(
-                                            TelegramEngine.EngineData.Item.Configuration.Limits(),
-                                            TelegramEngine.EngineData.Item.Configuration.ContentSettings(),
-                                            TelegramEngine.EngineData.Item.Configuration.App(),
-                                            TelegramEngine.EngineData.Item.Configuration.AvailableColorOptions(scope: .replies),
-                                            TelegramEngine.EngineData.Item.Configuration.AvailableColorOptions(scope: .profile)
-                                        )
-                                        |> map { limitsConfiguration, contentSettings, appConfiguration, availableReplyColors, availableProfileColors -> AddedAccountResult in
-                                            return .ready(id, account, attributes.sortIndex, (limitsConfiguration._asLimits(), contentSettings, appConfiguration, availableReplyColors, availableProfileColors))
-                                        }
-                                    }
-                                }
+                            default:
+                                return .single(.ready(id, nil, attributes.sortIndex, (nil, nil, nil, EngineAvailableColorOptions(hash: 0, options: []), EngineAvailableColorOptions(hash: 0, options: []))))
                         }
                     })
                 }
@@ -771,17 +742,33 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                     let isTestingEnvironment: Bool
                 }
                 
-                var existingAccountPeerKeys = Set<AccountPeerKey>()
+                var existingAccountPeerKeys: [AccountPeerKey: AccountRecordId] = [:]
+                for (id, context, _) in self.activeAccountsValue?.accounts ?? [] {
+                    existingAccountPeerKeys[AccountPeerKey(peerId: context.account.peerId, isTestingEnvironment: context.account.testingEnvironment)] = id
+                }
                 for accountRecord in addedAccounts {
                     if let account = accountRecord.1 {
-                        if existingAccountPeerKeys.contains(AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment)) {
+                        let peerKey = AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment)
+                        if let existingId = existingAccountPeerKeys[peerKey] {
+                            // Already signed in on this device. Log the new authorization out
+                            // before the local record is dropped, so the server does not keep it.
+                            let engine = TelegramEngine(account: account)
+                            let accountId = account.id
+                            self.managedAccountDisposables.set((engine.auth.logOut()
+                            |> deliverOnMainQueue).start(completed: { [engine] in
+                                withExtendedLifetime(engine) {}
+                                self.managedAccountDisposables.set(nil, forKey: accountId)
+                            }), forKey: accountId)
                             let _ = accountManager.transaction({ transaction in
+                                if transaction.getCurrent()?.0 == accountRecord.0 {
+                                    transaction.setCurrentId(existingId)
+                                }
                                 transaction.updateRecord(accountRecord.0, { _ in
                                     return nil
                                 })
                             }).start()
                         } else {
-                            existingAccountPeerKeys.insert(AccountPeerKey(peerId: account.peerId, isTestingEnvironment: account.testingEnvironment))
+                            existingAccountPeerKeys[peerKey] = accountRecord.0
                             if let index = self.activeAccountsValue?.accounts.firstIndex(where: { $0.0 == account.id }) {
                                 self.activeAccountsValue?.accounts.remove(at: index)
                                 self.managedAccountDisposables.set(nil, forKey: account.id)
@@ -2903,7 +2890,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     }
     
     public func makeBusinessSetupScreen(context: AccountContext) -> ViewController {
-        return PremiumIntroScreen(context: context, mode: .business, source: .settings, modal: false, forceDark: false)
+        return PremiumIntroScreen(context: context, mode: .business, source: .settings, modal: false, forceDark: false, forceHasPremium: context.isPremium)
     }
     
     public func makeChatbotSetupScreen(context: AccountContext, initialData: ChatbotSetupScreenInitialData) -> ViewController {
@@ -4908,7 +4895,6 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         initialUsername: String?,
         initialTitle: String?,
         openAutomatically: Bool,
-        viaDeeplink: Bool,
         completion: @escaping (EnginePeer.Id?) -> Void
     ) async -> ViewController? {
         return await CreateBotScreen(
@@ -4917,7 +4903,6 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             initialUsername: initialUsername,
             initialTitle: initialTitle,
             openAutomatically: openAutomatically,
-            viaDeeplink: viaDeeplink,
             completion: completion
         )
     }

@@ -11,7 +11,6 @@ NS_ASSUME_NONNULL_BEGIN
 NSDictionary<NSNumber *, NSArray<NSString *> *> *TellomiSeedAddresses(bool testingEnvironment);
 
 /// TCP ports in dial preference order. Index 0 is `seed_port` (tried first).
-/// Later entries are `seed_fallback_ports`, tried after the preferred port fails.
 NSArray<NSNumber *> *TellomiSeedPorts(void);
 
 /// Preferred TCP port. Equals `TellomiSeedPorts()[0]`. Teamgram's docker gnetway publishes 10443.

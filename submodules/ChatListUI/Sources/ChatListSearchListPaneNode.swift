@@ -1819,8 +1819,6 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
             tagMask = .voiceOrInstantVideo
         case .instantVideo:
             tagMask = .roundVideo
-        case .moments:
-            tagMask = nil
         }
         self.tagMask = tagMask
 
@@ -5976,7 +5974,7 @@ public final class ChatListSearchShimmerNode: ASDisplayNode {
 
             let items = (0 ..< 2).compactMap { _ -> ListViewItem? in
                 switch key {
-                    case .chats, .topics, .channels, .apps, .globalPosts, .downloads, .publicPosts, .moments:
+                    case .chats, .topics, .channels, .apps, .globalPosts, .downloads, .publicPosts:
                         let message = EngineMessage(
                             stableId: 0,
                             stableVersion: 0,
