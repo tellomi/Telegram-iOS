@@ -1,11 +1,14 @@
 import Foundation
 import Postbox
 
-/// Tellomi hides Telegram features the Teamgram server does not implement.
+/// Tellomi hides Telegram features the Teamgram server does not implement, plus
+/// purchase, Fragment, and TON.
 ///
-/// Official keys keep their names: `premium_purchase_blocked` and `stars_purchase_blocked`
-/// (server S1). A missing key is treated as blocked. Everything else is a Tellomi key and
-/// stays off until the server sends `true`. Stories are not gated here.
+/// Official keys keep their names: `premium_purchase_blocked` and `stars_purchase_blocked`.
+/// A missing key is treated as blocked. `tellomi_business_enabled`,
+/// `tellomi_passport_enabled`, and `tellomi_boosts_enabled` default on: teamgram-server
+/// implements those methods and does not send the keys. Sending `false` still hides them.
+/// The other Tellomi keys stay off until the server sends `true`. Stories are not gated here.
 public struct TellomiFeatureGate: Equatable {
     public static let aiComposeKey = "tellomi_ai_compose_enabled"
     public static let translateKey = "tellomi_translate_enabled"
@@ -59,9 +62,9 @@ public struct TellomiFeatureGate: Equatable {
             walletEnabled: flag(fields[walletKey], default: false),
             fragmentEnabled: flag(fields[fragmentKey], default: false),
             channelAdsEnabled: flag(fields[channelAdsKey], default: false),
-            businessEnabled: flag(fields[businessKey], default: false),
-            boostsEnabled: flag(fields[boostsKey], default: false),
-            passportEnabled: flag(fields[passportKey], default: false),
+            businessEnabled: flag(fields[businessKey], default: true),
+            boostsEnabled: flag(fields[boostsKey], default: true),
+            passportEnabled: flag(fields[passportKey], default: true),
             aiSummaryEnabled: flag(fields[aiSummaryKey], default: false)
         )
     }
@@ -75,7 +78,9 @@ public struct TellomiFeatureGate: Equatable {
         guard let peerId, peerId.namespace != Namespaces.Peer.SecretChat else {
             return false
         }
-        if let value = appConfiguration.data?[killSwitchKey] as? Double, value == 1.0 {
+        // Read the dictionary directly. `JSON.subscript` lives in Utils/JSON.swift and
+        // imports TelegramApi, which this file's host test does not compile.
+        if case let .dictionary(fields)? = appConfiguration.data, case let .number(value)? = fields[killSwitchKey], value == 1.0 {
             return false
         }
         return true

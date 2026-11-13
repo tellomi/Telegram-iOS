@@ -321,7 +321,9 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             }))
         }
     }
-    if featureGate.businessEnabled {
+    // Business settings are the perk list. The purchase screen stays closed unless the
+    // account is already Premium, which is what the server reports for TELLOMI_PREMIUM_EVERYONE.
+    if featureGate.businessEnabled && data.accountIsPremium {
         items[.payment]!.append(PeerInfoScreenDisclosureItem(id: 104, label: .text(""), additionalBadgeLabel: nil, text: presentationData.strings.Settings_Business, icon: PresentationResourcesSettings.business, action: {
             interaction.openSettings(.businessSetup)
         }))

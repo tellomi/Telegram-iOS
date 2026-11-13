@@ -2890,7 +2890,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     }
     
     public func makeBusinessSetupScreen(context: AccountContext) -> ViewController {
-        return PremiumIntroScreen(context: context, mode: .business, source: .settings, modal: false, forceDark: false)
+        return PremiumIntroScreen(context: context, mode: .business, source: .settings, modal: false, forceDark: false, forceHasPremium: context.isPremium)
     }
     
     public func makeChatbotSetupScreen(context: AccountContext, initialData: ChatbotSetupScreenInitialData) -> ViewController {

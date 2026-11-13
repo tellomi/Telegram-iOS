@@ -1,13 +1,12 @@
 import XCTest
 import Postbox
-@testable import TelegramCore
 
 final class TellomiFeatureGateTests: XCTestCase {
-    private func configuration(_ fields: [String: JSON]) -> AppConfiguration {
+    private func makeConfiguration(_ fields: [String: JSON]) -> AppConfiguration {
         return AppConfiguration(data: .dictionary(fields), hash: 0)
     }
 
-    func testMissingKeysHideEveryGatedFeature() {
+    func testMissingKeysHidePurchaseAndLeaveSupportedFeaturesOn() {
         let gate = TellomiFeatureGate.with(appConfiguration: AppConfiguration.defaultValue)
         XCTAssertFalse(gate.aiComposeEnabled)
         XCTAssertFalse(gate.translateEnabled)
@@ -17,14 +16,25 @@ final class TellomiFeatureGateTests: XCTestCase {
         XCTAssertFalse(gate.walletEnabled)
         XCTAssertFalse(gate.fragmentEnabled)
         XCTAssertFalse(gate.channelAdsEnabled)
-        XCTAssertFalse(gate.businessEnabled)
-        XCTAssertFalse(gate.boostsEnabled)
-        XCTAssertFalse(gate.passportEnabled)
+        XCTAssertTrue(gate.businessEnabled)
+        XCTAssertTrue(gate.boostsEnabled)
+        XCTAssertTrue(gate.passportEnabled)
         XCTAssertFalse(gate.aiSummaryEnabled)
     }
 
+    func testServerCanStillHideBusinessPassportAndBoosts() {
+        let hidden = TellomiFeatureGate.with(appConfiguration: makeConfiguration([
+            "tellomi_business_enabled": .bool(false),
+            "tellomi_passport_enabled": .string("disabled"),
+            "tellomi_boosts_enabled": .number(0)
+        ]))
+        XCTAssertFalse(hidden.businessEnabled)
+        XCTAssertFalse(hidden.passportEnabled)
+        XCTAssertFalse(hidden.boostsEnabled)
+    }
+
     func testOfficialPurchaseFlagsAndTellomiOptIns() {
-        let blocked = TellomiFeatureGate.with(appConfiguration: configuration([
+        let blocked = TellomiFeatureGate.with(appConfiguration: makeConfiguration([
             "premium_purchase_blocked": .bool(true),
             "stars_purchase_blocked": .number(1),
             "tellomi_ai_compose_enabled": .bool(true),
@@ -38,7 +48,7 @@ final class TellomiFeatureGateTests: XCTestCase {
         XCTAssertTrue(blocked.translateEnabled)
         XCTAssertFalse(blocked.giftsEnabled)
 
-        let open = TellomiFeatureGate.with(appConfiguration: configuration([
+        let open = TellomiFeatureGate.with(appConfiguration: makeConfiguration([
             "premium_purchase_blocked": .bool(false),
             "stars_purchase_blocked": .bool(false),
             "tellomi_gifts_enabled": .bool(true),
@@ -52,14 +62,14 @@ final class TellomiFeatureGateTests: XCTestCase {
     }
 
     func testAiComposeRespectsSecretChatsAndKillSwitch() {
-        let configuration = configuration(["tellomi_ai_compose_enabled": .bool(true)])
+        let enabled = makeConfiguration(["tellomi_ai_compose_enabled": .bool(true)])
         let user = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(1))
         let secret = PeerId(namespace: Namespaces.Peer.SecretChat, id: PeerId.Id._internalFromInt64Value(2))
-        XCTAssertTrue(TellomiFeatureGate.aiComposeEnabled(appConfiguration: configuration, peerId: user, killSwitchKey: "ios_disable_ai_chat"))
-        XCTAssertFalse(TellomiFeatureGate.aiComposeEnabled(appConfiguration: configuration, peerId: secret, killSwitchKey: "ios_disable_ai_chat"))
-        XCTAssertFalse(TellomiFeatureGate.aiComposeEnabled(appConfiguration: configuration, peerId: nil, killSwitchKey: "ios_disable_ai_chat"))
+        XCTAssertTrue(TellomiFeatureGate.aiComposeEnabled(appConfiguration: enabled, peerId: user, killSwitchKey: "ios_disable_ai_chat"))
+        XCTAssertFalse(TellomiFeatureGate.aiComposeEnabled(appConfiguration: enabled, peerId: secret, killSwitchKey: "ios_disable_ai_chat"))
+        XCTAssertFalse(TellomiFeatureGate.aiComposeEnabled(appConfiguration: enabled, peerId: nil, killSwitchKey: "ios_disable_ai_chat"))
 
-        let killed = configuration(["tellomi_ai_compose_enabled": .bool(true), "ios_disable_ai_chat": .number(1)])
+        let killed = makeConfiguration(["tellomi_ai_compose_enabled": .bool(true), "ios_disable_ai_chat": .number(1)])
         XCTAssertFalse(TellomiFeatureGate.aiComposeEnabled(appConfiguration: killed, peerId: user, killSwitchKey: "ios_disable_ai_chat"))
         XCTAssertFalse(TellomiFeatureGate.aiComposeEnabled(appConfiguration: AppConfiguration.defaultValue, peerId: user, killSwitchKey: "ios_disable_ai_chat"))
     }

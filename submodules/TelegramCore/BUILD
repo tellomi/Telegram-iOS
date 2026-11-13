@@ -44,7 +44,10 @@ swift_library(
     testonly = True,
     srcs = glob(
         ["Tests/**/*.swift"],
-        exclude = ["Tests/TellomiSignUpAvatarTests.swift"],
+        exclude = [
+            "Tests/TellomiSignUpAvatarTests.swift",
+            "Tests/TellomiFeatureGateTests.swift",
+        ],
     ),
     deps = [
         ":TelegramCore",
@@ -86,6 +89,26 @@ swift_test(
     ],
     copts = [
         "-warnings-as-errors",
+    ],
+)
+
+# Host test. Compiles the gate with the SyncCore types it names.
+# `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/TelegramCore:TellomiFeatureGateTests`
+swift_test(
+    name = "TellomiFeatureGateTests",
+    srcs = [
+        "Sources/TellomiFeatureGate.swift",
+        "Sources/SyncCore/SyncCore_AppConfiguration.swift",
+        "Sources/SyncCore/SyncCore_JSON.swift",
+        "Sources/SyncCore/SyncCore_Namespaces.swift",
+        "Sources/TelegramEngine/Utils/StringCodingKey.swift",
+        "Tests/TellomiFeatureGateTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
+    ],
+    deps = [
+        "//submodules/Postbox:Postbox",
     ],
 )
 

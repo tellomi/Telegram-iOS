@@ -38,6 +38,17 @@ import PremiumStarComponent
 import PremiumCoinComponent
 import EdgeEffect
 
+/// Business mode must not draw App Store plans or call `buy()` while Premium purchase is blocked.
+private func tellomiBusinessPurchaseBlocked(screenContext: PremiumIntroScreen.ScreenContext, mode: PremiumIntroScreen.Mode) -> Bool {
+    guard case .business = mode else {
+        return false
+    }
+    guard let context = screenContext.context else {
+        return true
+    }
+    return !TellomiFeatureGate.with(appConfiguration: context.currentAppConfiguration.with { $0 }).premiumEnabled
+}
+
 public enum PremiumIntroEntryTag {
     case doNotHideAds
 }
@@ -2009,8 +2020,9 @@ private final class PremiumIntroScreenContentComponent: CombinedComponent {
             let buy = context.component.buy
             let updateIsFocused = context.component.updateIsFocused
             
+            let businessPurchaseBlocked = tellomiBusinessPurchaseBlocked(screenContext: context.component.screenContext, mode: context.component.mode)
             let layoutOptions = {
-                if let products = state.products, products.count > 1, state.isPremium == false || (!context.component.justBought && state.canUpgrade) {
+                if !businessPurchaseBlocked, let products = state.products, products.count > 1, state.isPremium == false || (!context.component.justBought && state.canUpgrade) {
                     var optionsItems: [SectionGroupComponent.Item] = []
                     
                     let shortestProductPrice: (Int64, NSDecimalNumber)
@@ -2467,6 +2479,8 @@ private final class PremiumIntroScreenContentComponent: CombinedComponent {
                                 default:
                                     fatalError()
                                 }
+                            } else if businessPurchaseBlocked {
+                                return
                             } else {
                                 var demoSubject: PremiumDemoScreen.Subject
                                 switch perk {
@@ -3729,7 +3743,8 @@ private final class PremiumIntroScreenComponent: CombinedComponent {
             let buttonInsets = ContainerViewLayout.concentricInsets(bottomInset: environment.safeInsets.bottom, innerDiameter: 52.0, sideInset: 30.0)
             let bottomPanelPadding: CGFloat = 12.0
             let bottomInset: CGFloat = environment.safeInsets.bottom > 0.0 ? environment.safeInsets.bottom + 5.0 : bottomPanelPadding
-            let bottomPanelHeight: CGFloat = state.isPremium == true && !state.canUpgrade ? bottomInset : bottomPanelPadding + 52.0 + bottomInset
+            let businessPurchaseBlockedForInset = tellomiBusinessPurchaseBlocked(screenContext: context.component.screenContext, mode: context.component.mode)
+            let bottomPanelHeight: CGFloat = (state.isPremium == true && !state.canUpgrade) || businessPurchaseBlockedForInset ? bottomInset : bottomPanelPadding + 52.0 + bottomInset
                        
             let scrollContent = scrollContent.update(
                 component: ScrollComponent<EnvironmentType>(
@@ -3751,6 +3766,9 @@ private final class PremiumIntroScreenComponent: CombinedComponent {
                             state?.selectProduct(productId)
                         },
                         buy: { [weak state] in
+                            if tellomiBusinessPurchaseBlocked(screenContext: context.component.screenContext, mode: context.component.mode) {
+                                return
+                            }
                             state?.buy()
                         },
                         updateIsFocused: { [weak state] isFocused in
@@ -3868,7 +3886,8 @@ private final class PremiumIntroScreenComponent: CombinedComponent {
             }
             
             var buttonIsHidden = true
-            if !state.justBought {
+            let businessPurchaseBlocked = tellomiBusinessPurchaseBlocked(screenContext: context.component.screenContext, mode: context.component.mode)
+            if !state.justBought && !businessPurchaseBlocked {
                 if isUnusedGift {
                     buttonIsHidden = false
                 } else if state.canUpgrade {
