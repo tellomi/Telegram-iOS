@@ -1,5 +1,4 @@
 
-load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_cc//cc:objc_library.bzl", "objc_library")
 
 objc_library(
@@ -8,7 +7,6 @@ objc_library(
     module_name = "MtProtoKit",
     srcs = glob([
         "Sources/**/*.m",
-        "Sources/**/*.c",
         "Sources/**/*.h",
     ]),
     copts = [
