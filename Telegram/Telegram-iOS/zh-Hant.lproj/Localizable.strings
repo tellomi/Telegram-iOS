@@ -108,8 +108,9 @@
 "Tellomi.Discover.Notifications" = "發現的互動";
 "Tellomi.Discover.NotificationsInfo" = "讚、留言和轉發。關掉後不再收到這些推播。";
 "Tellomi.Discover.Feed" = "發現";
-"Tellomi.Discover.HideFeed" = "隱藏發現";
-"Tellomi.Discover.HideContacts" = "隱藏聯絡人";
+"Tellomi.Discover.HideFeed" = "隱藏";
+"Tellomi.Discover.HideContacts" = "隱藏";
+"Tellomi.Tabs.Hide" = "隱藏";
 "Tellomi.Discover.NavigationTitle" = "導覽列";
 "Tellomi.Discover.NavigationFooter" = "聊天和設定始終顯示，不能關閉。";
 "Tellomi.Discover.FeedEmptyTitle" = "還沒有內容";

@@ -6,8 +6,8 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertEqual(chinese.feed, "发现")
         XCTAssertEqual(chinese.chats, "聊天")
         XCTAssertEqual(chinese.me, "我")
-        XCTAssertEqual(chinese.hideFeed, "隐藏发现")
-        XCTAssertEqual(chinese.hideContacts, "隐藏联系人")
+        XCTAssertEqual(chinese.hideFeed, "隐藏")
+        XCTAssertEqual(chinese.hideContacts, "隐藏")
         XCTAssertEqual(chinese.navigationTitle, "导航栏")
         XCTAssertEqual(chinese.feedEmptyTitle, "还没有内容")
         XCTAssertEqual(chinese.feedEmptyText, "帖子会显示在这里。")
@@ -17,8 +17,8 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertEqual(english.feed, "Discover")
         XCTAssertEqual(english.chats, "Chats")
         XCTAssertEqual(english.me, "Me")
-        XCTAssertEqual(english.hideFeed, "Hide Discover")
-        XCTAssertEqual(english.hideContacts, "Hide Contacts")
+        XCTAssertEqual(english.hideFeed, "Hide")
+        XCTAssertEqual(english.hideContacts, "Hide")
         XCTAssertEqual(english.navigationTitle, "Navigation Bar")
         XCTAssertEqual(english.navigationFooter, "Chats and Settings always stay in the bar.")
         XCTAssertEqual(english.feedEmptyTitle, "Nothing here yet")
@@ -32,11 +32,49 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").feed, "發現")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").chats, "聊天")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").me, "我")
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").hideFeed, "隱藏")
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant").hideContacts, "隱藏")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hans").navigationFooter, "聊天和设置始终显示，不能关闭。")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "ja").feed, "Discover")
         let japanese = ["Tellomi.Discover.Feed": "発見"]
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "ja", pack: japanese).feed, "発見")
         XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hans", pack: japanese).navigationTitle, "导航栏")
+    }
+
+    func testTabLongPressHideTitleStaysTheShortWord() {
+        XCTAssertEqual(tellomiTabHideTitle(languageCode: "zh-Hans"), "隐藏")
+        XCTAssertEqual(tellomiTabHideTitle(languageCode: "zh-CN"), "隐藏")
+        XCTAssertEqual(tellomiTabHideTitle(languageCode: "zh"), "隐藏")
+        XCTAssertEqual(tellomiTabHideTitle(languageCode: "zh-Hant"), "隱藏")
+        XCTAssertEqual(tellomiTabHideTitle(languageCode: "zh-HK"), "隱藏")
+        XCTAssertEqual(tellomiTabHideTitle(languageCode: "zh-TW"), "隱藏")
+        XCTAssertEqual(tellomiTabHideTitle(languageCode: "zh-MO"), "隱藏")
+        XCTAssertEqual(tellomiTabHideTitle(languageCode: "en"), "Hide")
+        XCTAssertEqual(tellomiTabHideTitle(languageCode: "en-US"), "Hide")
+        XCTAssertEqual(tellomiTabHideTitle(languageCode: "de"), "Hide")
+
+        let staleChinese: [String: String] = [
+            "Tellomi.Discover.HideFeed": "隐藏发现",
+            "Tellomi.Discover.HideContacts": "隐藏联系人",
+            "Tellomi.Tabs.Hide": "隐藏此标签",
+            "Calls.HideCallsTab": "隐藏通话标签"
+        ]
+        let chinese = TellomiTabCopy.resolve(languageCode: "zh-Hans", pack: staleChinese)
+        XCTAssertEqual(chinese.hideFeed, "隐藏")
+        XCTAssertEqual(chinese.hideContacts, "隐藏")
+        XCTAssertEqual(chinese.feed, "发现")
+
+        let staleEnglish: [String: String] = [
+            "Tellomi.Discover.HideFeed": "Hide Discover",
+            "Tellomi.Discover.HideContacts": "Hide Contacts",
+            "Tellomi.Tabs.Hide": "Hide this tab",
+            "Calls.HideCallsTab": "Hide Calls Tab"
+        ]
+        let english = TellomiTabCopy.resolve(languageCode: "en", pack: staleEnglish)
+        XCTAssertEqual(english.hideFeed, "Hide")
+        XCTAssertEqual(english.hideContacts, "Hide")
+        XCTAssertEqual(english.navigationTitle, "Navigation Bar")
+        XCTAssertEqual(TellomiTabCopy.resolve(languageCode: "zh-Hant", pack: staleChinese).hideFeed, "隱藏")
     }
 
     func testAPostLinkIsNotHandledWhenTheBarIsOff() {
