@@ -18,16 +18,30 @@ enum TellomiAccountLookup {
 }
 
 enum TellomiTestAccounts {
-    /// Production fixed code for `99966XYYYY` (the digit after `99966`, five times).
-    /// `99966170xx` is datacenter digit 1, so the code is `11111`.
+    /// Dedicated numbers for this suite. Other parallel testers use 7001–7089.
+    static let dedicatedA = "9996617090"
+    static let dedicatedB = "9996617091"
+
+    /// `99966170xx` only. The server's code is the digit after `99966` five times, so these are `11111`.
+    /// A number outside this range is refused and no code is sent. An empty secret uses the dedicated number.
     static func lookup(_ name: String) -> TellomiAccountLookup {
-        guard let raw = ProcessInfo.processInfo.environment[name]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty else {
+        let fallback: String
+        switch name {
+        case "TELLOMI_TEST_PHONE_A":
+            fallback = dedicatedA
+        case "TELLOMI_TEST_PHONE_B":
+            fallback = dedicatedB
+        default:
+            fallback = ""
+        }
+        let raw = ProcessInfo.processInfo.environment[name]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let source = raw.isEmpty ? fallback : raw
+        guard !source.isEmpty else {
             return .unset
         }
-        let digits = raw.filter(\.isNumber)
-        guard digits.count == 10, digits.hasPrefix("99966"), let dc = digits.dropFirst(5).first, dc.isNumber else {
-            return .refused("\(name) is not a 99966XYYYY test number; this run will not send it a code")
+        let digits = source.filter(\.isNumber)
+        guard digits.count == 10, digits.hasPrefix("99966170") else {
+            return .refused("\(name) is outside 99966170xx; this run will not send it a code")
         }
         let national = String(digits.dropFirst(3))
         let code: String
@@ -35,7 +49,7 @@ enum TellomiTestAccounts {
            !override.isEmpty {
             code = override
         } else {
-            code = String(repeating: String(dc), count: 5)
+            code = "11111"
         }
         return .ready(countryCode: "999", nationalNumber: national, code: code)
     }

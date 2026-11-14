@@ -73,20 +73,37 @@ if [[ -z "${xctestrun}" ]]; then
   echo "xcodebuild did not write an xctestrun" >&2
   exit 1
 fi
-python3 "${root}/tools/inject_test_env.py" "${xctestrun}"
-
-if [[ -n "${TELLOMI_TEST_PHONE_A:-}" ]]; then
-  export TEST_RUNNER_TELLOMI_TEST_PHONE_A="${TELLOMI_TEST_PHONE_A}"
-fi
-if [[ -n "${TELLOMI_TEST_PHONE_B:-}" ]]; then
-  export TEST_RUNNER_TELLOMI_TEST_PHONE_B="${TELLOMI_TEST_PHONE_B}"
-fi
+# Empty secrets use this suite's numbers. 7001–7089 belong to other testers.
+# Anything outside 99966170xx is refused and is not printed.
+resolve_test_phone() {
+  local name="$1"
+  local value="$2"
+  local fallback="$3"
+  local digits
+  if [[ -z "${value}" ]]; then
+    echo "${name} unset; using dedicated ${fallback}" >&2
+    value="${fallback}"
+  fi
+  digits="$(printf '%s' "${value}" | tr -cd '0-9')"
+  if [[ ! "${digits}" =~ ^99966170[0-9]{2}$ ]]; then
+    echo "${name} is outside 99966170xx; refusing to send a code" >&2
+    exit 1
+  fi
+  printf '%s' "${digits}"
+}
+TELLOMI_TEST_PHONE_A="$(resolve_test_phone TELLOMI_TEST_PHONE_A "${TELLOMI_TEST_PHONE_A:-}" 9996617090)"
+TELLOMI_TEST_PHONE_B="$(resolve_test_phone TELLOMI_TEST_PHONE_B "${TELLOMI_TEST_PHONE_B:-}" 9996617091)"
+export TELLOMI_TEST_PHONE_A TELLOMI_TEST_PHONE_B
+export TEST_RUNNER_TELLOMI_TEST_PHONE_A="${TELLOMI_TEST_PHONE_A}"
+export TEST_RUNNER_TELLOMI_TEST_PHONE_B="${TELLOMI_TEST_PHONE_B}"
 if [[ -n "${TELLOMI_TEST_CODE:-}" ]]; then
   export TEST_RUNNER_TELLOMI_TEST_CODE="${TELLOMI_TEST_CODE}"
 fi
 if [[ -n "${TELLOMI_TEST_PASSWORD:-}" ]]; then
   export TEST_RUNNER_TELLOMI_TEST_PASSWORD="${TELLOMI_TEST_PASSWORD}"
 fi
+
+python3 "${root}/tools/inject_test_env.py" "${xctestrun}"
 
 bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${app}/Info.plist")"
 status=0

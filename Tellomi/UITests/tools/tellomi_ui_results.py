@@ -53,6 +53,19 @@ def load_coverage(sources: Path) -> dict[str, list[str]]:
     return coverage
 
 
+# This suite's numbers. Other parallel testers use YYYY 7001–7089.
+DEDICATED_TEST_PHONE_A = "9996617090"
+DEDICATED_TEST_PHONE_B = "9996617091"
+
+
+def ui_test_phone(raw: str) -> str | None:
+    """Digits this UI run may send a code to: exactly `99966170xx`."""
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) == 10 and digits.startswith("99966170"):
+        return digits
+    return None
+
+
 def test_phone_code(digits: str) -> str | None:
     """Code for the server's default test range.
 

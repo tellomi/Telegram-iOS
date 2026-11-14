@@ -168,8 +168,16 @@ jobs:
           fi
           sudo xcode-select -s "${CANDIDATE}/Contents/Developer"
           xcodebuild -version
-          if [[ -n "${TELLOMI_TEST_PHONE_A}" ]]; then echo "phone A is set"; else echo "phone A is unset"; fi
-          if [[ -n "${TELLOMI_TEST_PHONE_B}" ]]; then echo "phone B is set"; else echo "phone B is unset"; fi
+          if [[ -n "${TELLOMI_TEST_PHONE_A}" ]]; then
+            echo "phone A is set from the environment"
+          else
+            echo "phone A will use dedicated 9996617090"
+          fi
+          if [[ -n "${TELLOMI_TEST_PHONE_B}" ]]; then
+            echo "phone B is set from the environment"
+          else
+            echo "phone B will use dedicated 9996617091"
+          fi
 
       - name: Download the simulator app
         uses: actions/download-artifact@v4

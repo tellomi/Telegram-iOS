@@ -1,7 +1,7 @@
 import XCTest
 
-/// Production test numbers in `99966XYYYY`. The code is the server's fixed
-/// test-range code, not the dev provider code `12345`.
+/// Signs in with `99966170xx` only. Empty secrets use 9996617090 and 9996617091.
+/// The code is `11111`, not the dev provider code `12345`.
 final class TellomiLoginFlowUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false

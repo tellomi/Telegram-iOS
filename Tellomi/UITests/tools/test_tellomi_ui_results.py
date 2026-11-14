@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from tellomi_ui_results import (  # noqa: E402
+    DEDICATED_TEST_PHONE_A,
+    DEDICATED_TEST_PHONE_B,
     classify,
     counts_by_status,
     device_only_reason,
@@ -19,6 +21,7 @@ from tellomi_ui_results import (  # noqa: E402
     merge,
     parse_result_log,
     test_phone_code,
+    ui_test_phone,
 )
 
 
@@ -37,6 +40,19 @@ class PhoneCodeTests(unittest.TestCase):
             self.assertEqual(len(digits), 10)
             self.assertEqual(test_phone_code(digits), "11111")
         self.assertNotEqual(test_phone_code("9996617001"), "12345")
+
+    def test_ui_run_accepts_only_99966170xx(self):
+        self.assertEqual(ui_test_phone(DEDICATED_TEST_PHONE_A), "9996617090")
+        self.assertEqual(ui_test_phone("+999 661 7091"), DEDICATED_TEST_PHONE_B)
+        self.assertEqual(ui_test_phone("9996617001"), "9996617001")
+        self.assertIsNone(ui_test_phone("9996612345"))
+        self.assertIsNone(ui_test_phone("9996620001"))
+        self.assertIsNone(ui_test_phone("8613800138000"))
+        self.assertIsNone(ui_test_phone("999661709"))
+        self.assertIsNone(ui_test_phone("99966170900"))
+        for dedicated in (DEDICATED_TEST_PHONE_A, DEDICATED_TEST_PHONE_B):
+            suffix = int(dedicated[-4:])
+            self.assertFalse(7001 <= suffix <= 7089)
 
 
 class ClassifyTests(unittest.TestCase):
