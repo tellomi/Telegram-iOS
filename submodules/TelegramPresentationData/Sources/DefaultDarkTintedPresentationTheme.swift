@@ -2,9 +2,8 @@ import Foundation
 import UIKit
 import TelegramCore
 import TelegramUIPreferences
-import TellomiWallpapers
 
-private let defaultDarkTintedAccentColor = UIColor(rgb: 0xffffff)
+private let defaultDarkTintedAccentColor = UIColor(rgb: 0x2ea6ff)
 public let defaultDarkTintedPresentationTheme = makeDefaultDarkTintedPresentationTheme(preview: false)
 
 private extension PresentationThemeBaseColor {
@@ -313,7 +312,7 @@ public func customizeDefaultDarkTintedPresentationTheme(theme: PresentationTheme
                         fill: incomingFillColor.flatMap({ [$0] }),
                         highlightedFill: highlightedIncomingBubbleColor,
                         stroke: mainBackgroundColor,
-                        reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
+                        reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
                         reactionInactiveForeground: UIColor(rgb: 0xffffff),
                         reactionActiveBackground: accentColor,
                         reactionActiveForeground: UIColor(rgb: 0xffffff),
@@ -324,7 +323,7 @@ public func customizeDefaultDarkTintedPresentationTheme(theme: PresentationTheme
                         fill: incomingFillColor.flatMap({ [$0] }),
                         highlightedFill: highlightedIncomingBubbleColor,
                         stroke: mainBackgroundColor,
-                        reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
+                        reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
                         reactionInactiveForeground: UIColor(rgb: 0xffffff),
                         reactionActiveBackground: accentColor,
                         reactionActiveForeground: UIColor(rgb: 0xffffff),
@@ -739,8 +738,8 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
                     fill: [incomingFillColor.withAlphaComponent(incomingBubbleAlpha)],
                     highlightedFill: highlightedIncomingBubbleColor,
                     stroke: mainBackgroundColor,
-                    shadow: tellomiSolidWallpaperBubbleShadow,
-                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
+                    shadow: nil,
+                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
                     reactionInactiveForeground: UIColor(rgb: 0xffffff, alpha: 1.0),
                     reactionActiveBackground: accentColor,
                     reactionActiveForeground: UIColor(rgb: 0xffffff, alpha: 1.0),
@@ -755,8 +754,8 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
                     fill: [incomingFillColor.withAlphaComponent(incomingBubbleAlpha)],
                     highlightedFill: highlightedIncomingBubbleColor,
                     stroke: mainBackgroundColor,
-                    shadow: tellomiSolidWallpaperBubbleShadow,
-                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkIncomingInactive),
+                    shadow: nil,
+                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.07),
                     reactionInactiveForeground: UIColor(rgb: 0xffffff, alpha: 1.0),
                     reactionActiveBackground: accentColor,
                     reactionActiveForeground: UIColor(rgb: 0xffffff, alpha: 1.0),
@@ -775,10 +774,10 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
                     fill: outgoingBubbleFillColors,
                     highlightedFill: highlightedOutgoingBubbleColor,
                     stroke: outgoingBubbleFillColors[0],
-                    shadow: tellomiSolidWallpaperBubbleShadow,
-                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkOutgoingInactive),
+                    shadow: nil,
+                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.1),
                     reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                    reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkActive),
+                    reactionActiveBackground: UIColor(rgb: 0xffffff, alpha: 1.0),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xFEF1D4, alpha: 1.0),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xD3720A),
@@ -791,10 +790,10 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
                     fill: outgoingBubbleFillColors,
                     highlightedFill: highlightedOutgoingBubbleColor,
                     stroke: outgoingBubbleFillColors[0],
-                    shadow: tellomiSolidWallpaperBubbleShadow,
-                    reactionInactiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkOutgoingInactive),
+                    shadow: nil,
+                    reactionInactiveBackground: UIColor(rgb: 0xffffff, alpha: 0.1),
                     reactionInactiveForeground: UIColor(rgb: 0xffffff),
-                    reactionActiveBackground: tellomiReactionCapsuleColor(TellomiReactionCapsules.darkActive),
+                    reactionActiveBackground: UIColor(rgb: 0xffffff, alpha: 1.0),
                     reactionActiveForeground: .clear,
                     reactionStarsInactiveBackground: UIColor(rgb: 0xFEF1D4, alpha: 1.0),
                     reactionStarsInactiveForeground: UIColor(rgb: 0xD3720A),
@@ -810,7 +809,7 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
                 fill: [mainBackgroundColor],
                 highlightedFill: highlightedIncomingBubbleColor,
                 stroke: mainBackgroundColor,
-                shadow: tellomiSolidWallpaperBubbleShadow,
+                shadow: nil,
                 reactionInactiveBackground: incomingFillColor.withAlphaComponent(incomingBubbleAlpha),
                 reactionInactiveForeground: UIColor(rgb: 0xffffff),
                 reactionActiveBackground: accentColor,
@@ -826,7 +825,7 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
                 fill: [mainBackgroundColor],
                 highlightedFill: highlightedIncomingBubbleColor,
                 stroke: mainBackgroundColor,
-                shadow: tellomiSolidWallpaperBubbleShadow,
+                shadow: nil,
                 reactionInactiveBackground: incomingFillColor.withAlphaComponent(incomingBubbleAlpha),
                 reactionInactiveForeground: UIColor(rgb: 0xffffff),
                 reactionActiveBackground: accentColor,
@@ -937,7 +936,7 @@ public func makeDefaultDarkTintedPresentationTheme(extendingThemeReference: Pres
     )
 
     let chat = PresentationThemeChat(
-        defaultWallpaper: .gradient(TelegramWallpaper.Gradient(id: nil, colors: defaultDarkWallpaperGradientColors.map(\.rgb), settings: WallpaperSettings())),
+        defaultWallpaper: defaultBuiltinWallpaper(data: .default, colors: [0x1b2836, 0x121a22, 0x1b2836, 0x121a22]),
         animateMessageColors: false,
         message: message,
         serviceMessage: serviceMessage,

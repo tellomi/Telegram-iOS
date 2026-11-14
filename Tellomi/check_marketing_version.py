@@ -6,7 +6,7 @@ CFBundleShortVersionString on the app and every extension, via Tellomi/version.
 
 A push to master, a workflow_dispatch from a branch, and a local run are not
 tags. Those ship Tellomi/version as-is. The TestFlight build number is chosen
-later, one above the latest App Store Connect build.
+later, one above every App Store Connect build of this app.
 """
 
 import os

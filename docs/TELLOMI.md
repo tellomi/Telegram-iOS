@@ -130,7 +130,7 @@ The main app's associated-domains entitlement is `applinks:tell.cc` and `webcred
 
 `.github/workflows/testflight.yml` runs on the `xcode-27` GitHub-hosted image (Xcode 27.1, the version in `versions.json`). It uploads when commits are pushed to the `release/ios` branch. A push to `master` does not upload, so later v2 work can merge there without a TestFlight build. `workflow_dispatch` is still in the file; the integration account gets 403 if it tries to start that event, so do not rely on it. Docs-only pushes (`**/*.md`, `docs/**`) are ignored. It does not run on every pull request.
 
-To ship the current master: `git push origin master:release/ios`. That push is the release. It has to add a commit that was not already on `release/ios`; moving the branch onto a commit it already has does not start the workflow. A newer push to `release/ios` cancels an in-progress upload.
+Ship by opening a pull request into `release/ios` and waiting for the owner to merge it. That merge is the push that starts this workflow. Do not run `git push origin master:release/ios`, and do not replace the `release/ios` tree with `master`. `release/ios` keeps Telegram's original UI; `master` is a different tree. Agents do not merge. The push has to add a commit that was not already on `release/ios`; moving the branch onto a commit it already has does not start the workflow. A newer push to `release/ios` cancels an in-progress upload.
 
 `CFBundleShortVersionString` for the app and every extension is `Tellomi/version` (also `versions.json` key `app`). A tag `v0.1.0-tf9` is marketing version `0.1.0`; the workflow refuses to build when that does not match `Tellomi/version`. `CFBundleVersion` stays the auto-incremented build number.
 
@@ -172,7 +172,7 @@ Keychain group used by `BuildConfig.keychainAccessGroup`: `{TEAMID}.app.tellomi.
 
 iCloud container: none. `enable_icloud` is false, so `TelegramEntitlements` does not contain `com.apple.developer.icloud-container-identifiers`. Turning the flag on would add container `iCloud.app.tellomi.chat` and ubiquity key-value store `{TEAMID}.app.tellomi.chat`.
 
-Also absent with this bundle id and these flags: Sign in with Apple, Apple Pay, CarPlay, unrestricted VoIP, notification filtering, and the continued-processing GPU entitlement. Those fragments in `Telegram/BUILD` are empty unless the bundle id is an official Telegram id. Communication notifications and Siri are the exceptions: each is included for Tellomi when the matching profile flag is true (`telegram_communication_notifications`, `telegram_enable_siri` on the app, `telegram_siri_extension_entitlement` on SiriIntents only). Associated domains are present and name `tell.cc` only.
+Also absent with this bundle id and these flags: Sign in with Apple, Apple Pay, CarPlay, unrestricted VoIP, notification filtering, and the continued-processing GPU entitlement. Those fragments in `Telegram/BUILD` are empty unless the bundle id is an official Telegram id. Communication notifications stay on for `app.tellomi.chat`. Siri is included when the matching profile flag is true (`telegram_enable_siri` on the app, `telegram_siri_extension_entitlement` on SiriIntents only). Associated domains are present and name `tell.cc` only.
 
 The main app's Info.plist background modes, which are not separate App IDs, are `audio`, `fetch`, `location`, `remote-notification`, `voip`, and `processing`.
 

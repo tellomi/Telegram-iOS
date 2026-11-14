@@ -807,10 +807,6 @@ public extension TelegramEngine {
         public func transcribeAudio(messageId: MessageId) -> Signal<EngineAudioTranscriptionResult, NoError> {
             return _internal_transcribeAudio(postbox: self.account.postbox, network: self.account.network, messageId: messageId)
         }
-
-        public func transcribeDraft(audio: Data, fileExtension: String) -> Signal<String, TellomiDraftTranscriptionError> {
-            return _internal_transcribeDraft(network: self.account.network, audio: audio, fileExtension: fileExtension)
-        }
                 
         public func storeLocallyTranscribedAudio(messageId: MessageId, text: String, isFinal: Bool, error: AudioTranscriptionMessageAttribute.TranscriptionError?) -> Signal<Never, NoError> {
             return self.account.postbox.transaction { transaction -> Void in

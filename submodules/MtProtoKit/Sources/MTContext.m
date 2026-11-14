@@ -496,9 +496,36 @@ static void copyKeychainDictionaryKey(NSString * _Nonnull group, NSString * _Non
                 }
             }
             
+            NSMutableSet<NSNumber *> *overriddenDatacenterIds = [[NSMutableSet alloc] init];
             [_apiEnvironment.datacenterAddressOverrides enumerateKeysAndObjectsUsingBlock:^(NSNumber *nDatacenterId, MTDatacenterAddress *address, __unused BOOL *stop) {
                 _datacenterAddressSetById[nDatacenterId] = [[MTDatacenterAddressSet alloc] initWithAddressList:@[address]];
+                [overriddenDatacenterIds addObject:nDatacenterId];
             }];
+
+            // A datacenter list saved before a fallback port existed would otherwise
+            // keep dialing only that saved port. Fold the seed endpoints in and
+            // write them back so the next launch already has them.
+            bool seedMergeChanged = false;
+            for (NSNumber *nDatacenterId in _datacenterSeedAddressSetById) {
+                if ([overriddenDatacenterIds containsObject:nDatacenterId]) {
+                    continue;
+                }
+                MTDatacenterAddressSet *stored = _datacenterAddressSetById[nDatacenterId];
+                if (stored.addressList.count == 0) {
+                    continue;
+                }
+                MTDatacenterAddressSet *merged = [self mergedAddressSetForDatacenterId:nDatacenterId.integerValue stored:stored];
+                if (merged != nil && ![merged isEqual:stored]) {
+                    if (_datacenterAddressSetById == nil) {
+                        _datacenterAddressSetById = [[NSMutableDictionary alloc] init];
+                    }
+                    _datacenterAddressSetById[nDatacenterId] = merged;
+                    seedMergeChanged = true;
+                }
+            }
+            if (seedMergeChanged) {
+                [_keychain setObject:_datacenterAddressSetById forKey:@"datacenterAddressSetById" group:@"persistent"];
+            }
             
             NSDictionary *datacenterAuthInfoById = [keychain dictionaryForKey:@"datacenterAuthInfoById" group:@"persistent"];
             if (datacenterAuthInfoById != nil) {
@@ -670,6 +697,27 @@ static void copyKeychainDictionaryKey(NSString * _Nonnull group, NSString * _Non
     }];
 }
 
+- (MTDatacenterAddressSet *)mergedAddressSetForDatacenterId:(NSInteger)datacenterId stored:(MTDatacenterAddressSet *)stored
+{
+    NSAssert([[MTContext contextQueue] isCurrentQueue], @"mergedAddressSetForDatacenterId");
+    // An explicit address override is the only scheme transportSchemesForDatacenterWithId
+    // dials. Leave that stored list alone.
+    if (_apiEnvironment.datacenterAddressOverrides[@(datacenterId)] != nil) {
+        if (stored.addressList.count != 0) {
+            return stored;
+        }
+        return _datacenterSeedAddressSetById[@(datacenterId)];
+    }
+    MTDatacenterAddressSet *seed = _datacenterSeedAddressSetById[@(datacenterId)];
+    if (stored.addressList.count == 0) {
+        return seed.addressList.count == 0 ? stored : seed;
+    }
+    if (seed.addressList.count == 0) {
+        return stored;
+    }
+    return [stored addressSetByAddingSeedAddresses:seed.addressList];
+}
+
 - (void)setSeedAddressSetForDatacenterWithId:(NSInteger)datacenterId seedAddressSet:(MTDatacenterAddressSet *)seedAddressSet
 {
     [[MTContext contextQueue] dispatchOnQueue:^
@@ -684,6 +732,12 @@ static void copyKeychainDictionaryKey(NSString * _Nonnull group, NSString * _Non
     {
         if (addressSet != nil && datacenterId != 0)
         {
+            // help.getConfig replaces the whole list. A dc_options payload that
+            // names only the preferred port must not drop the seed fallback.
+            MTDatacenterAddressSet *mergedAddressSet = [self mergedAddressSetForDatacenterId:datacenterId stored:addressSet];
+            if (mergedAddressSet == nil) {
+                mergedAddressSet = addressSet;
+            }
             if (MTLogEnabled()) {
                 MTLog(@"[MTContext#%" PRIxPTR ": address set updated for %d]", (intptr_t)self, datacenterId);
             }
@@ -692,7 +746,7 @@ static void copyKeychainDictionaryKey(NSString * _Nonnull group, NSString * _Non
             
             bool previousAddressSetWasEmpty = ((MTDatacenterAddressSet *)_datacenterAddressSetById[@(datacenterId)]).addressList.count == 0;
             
-            _datacenterAddressSetById[@(datacenterId)] = addressSet;
+            _datacenterAddressSetById[@(datacenterId)] = mergedAddressSet;
             [_keychain setObject:_datacenterAddressSetById forKey:@"datacenterAddressSetById" group:@"persistent"];
             
             NSArray<MTWeakContextChangeListener *> *changeListeners = [[NSArray alloc] initWithArray:_changeListeners];
@@ -701,7 +755,7 @@ static void copyKeychainDictionaryKey(NSString * _Nonnull group, NSString * _Non
                 id<MTContextChangeListener> listener = listenerWrapper.target;
                 if (listener) {
                     if ([listener respondsToSelector:@selector(contextDatacenterAddressSetUpdated:datacenterId:addressSet:)]) {
-                        [listener contextDatacenterAddressSetUpdated:self datacenterId:datacenterId addressSet:addressSet];
+                        [listener contextDatacenterAddressSetUpdated:self datacenterId:datacenterId addressSet:mergedAddressSet];
                     }
                 }
             }
@@ -1038,12 +1092,7 @@ static void copyKeychainDictionaryKey(NSString * _Nonnull group, NSString * _Non
     __block MTDatacenterAddressSet *result = nil;
     [[MTContext contextQueue] dispatchOnQueue:^
     {
-        MTDatacenterAddressSet *addressSet = _datacenterAddressSetById[@(datacenterId)];
-        if (addressSet != nil && addressSet.addressList.count != 0) {
-            result = _datacenterAddressSetById[@(datacenterId)];
-        } else {
-            result = _datacenterSeedAddressSetById[@(datacenterId)];
-        }
+        result = [self mergedAddressSetForDatacenterId:datacenterId stored:_datacenterAddressSetById[@(datacenterId)]];
     } synchronous:true];
     
     return result;
@@ -1449,6 +1498,20 @@ static void copyKeychainDictionaryKey(NSString * _Nonnull group, NSString * _Non
             return [current withUpdatedLastResponseTimestamp:(int32_t)CFAbsoluteTimeGetCurrent()];
         }];
     }];
+}
+
+- (bool)transportSchemeHasReceivedResponseForDatacenterId:(NSInteger)datacenterId transportScheme:(MTTransportScheme *)transportScheme {
+    __block bool result = false;
+    [[MTContext contextQueue] dispatchOnQueue:^{
+        if (transportScheme == nil) {
+            return;
+        }
+        [self _withTransportSchemeStatsForDatacenterId:datacenterId transportScheme:transportScheme process:^MTTransportSchemeStats *(MTTransportSchemeStats *current) {
+            result = current.lastResponseTimestamp > 0;
+            return current;
+        }];
+    } synchronous:true];
+    return result;
 }
 
 - (void)invalidateTransportSchemesForDatacenterIds:(NSArray<NSNumber *> * _Nonnull)datacenterIds {

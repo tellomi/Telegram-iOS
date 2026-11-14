@@ -290,13 +290,7 @@ public final class PhoneInputNode: ASDisplayNode, UITextFieldDelegate {
             if !text.hasPrefix("+") {
                 text = "+" + text
             }
-            // `endIndex` of another string is not an index of `text`. A hand-edited
-            // country code made the prefix longer than the field and trapped here.
-            if text.hasPrefix(realRegionPrefix) {
-                numberText = cleanPrefix(String(text.dropFirst(realRegionPrefix.count)))
-            } else {
-                numberText = cleanPrefix(text)
-            }
+            numberText = cleanPrefix(String(text[realRegionPrefix.endIndex...]))
         } else {
             realRegionPrefix = text
             if !realRegionPrefix.hasPrefix("+") {

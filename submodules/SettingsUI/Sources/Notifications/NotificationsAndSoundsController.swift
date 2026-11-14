@@ -5,7 +5,6 @@ import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
 import TelegramUIPreferences
-import TellomiDiscover
 import DeviceAccess
 import ItemListUI
 import PresentationDataUtils
@@ -80,9 +79,8 @@ private final class NotificationsAndSoundsArguments {
     let openAppSettings: () -> Void
     
     let updateNotificationsFromAllAccounts: (Bool) -> Void
-    let updateDiscoverNotifications: (Bool) -> Void
     
-    init(context: AccountContext, presentController: @escaping (ViewController, ViewControllerPresentationArguments?) -> Void, pushController: @escaping(ViewController)->Void, soundSelectionDisposable: MetaDisposable, authorizeNotifications: @escaping () -> Void, suppressWarning: @escaping () -> Void, openPeerCategory: @escaping (NotificationsPeerCategory) -> Void, openReactions: @escaping () -> Void, updateInAppSounds: @escaping (Bool) -> Void, updateInAppVibration: @escaping (Bool) -> Void, updateInAppPreviews: @escaping (Bool) -> Void, updateDisplayNameOnLockscreen: @escaping (Bool) -> Void, updateIncludeTag: @escaping (CounterTagSettings, Bool) -> Void, updateTotalUnreadCountCategory: @escaping (Bool) -> Void, resetNotifications: @escaping () -> Void, openAppSettings: @escaping () -> Void, updateJoinedNotifications: @escaping (Bool) -> Void, updateNotificationsFromAllAccounts: @escaping (Bool) -> Void, updateDiscoverNotifications: @escaping (Bool) -> Void) {
+    init(context: AccountContext, presentController: @escaping (ViewController, ViewControllerPresentationArguments?) -> Void, pushController: @escaping(ViewController)->Void, soundSelectionDisposable: MetaDisposable, authorizeNotifications: @escaping () -> Void, suppressWarning: @escaping () -> Void, openPeerCategory: @escaping (NotificationsPeerCategory) -> Void, openReactions: @escaping () -> Void, updateInAppSounds: @escaping (Bool) -> Void, updateInAppVibration: @escaping (Bool) -> Void, updateInAppPreviews: @escaping (Bool) -> Void, updateDisplayNameOnLockscreen: @escaping (Bool) -> Void, updateIncludeTag: @escaping (CounterTagSettings, Bool) -> Void, updateTotalUnreadCountCategory: @escaping (Bool) -> Void, resetNotifications: @escaping () -> Void, openAppSettings: @escaping () -> Void, updateJoinedNotifications: @escaping (Bool) -> Void, updateNotificationsFromAllAccounts: @escaping (Bool) -> Void) {
         self.context = context
         self.presentController = presentController
         self.pushController = pushController
@@ -101,7 +99,6 @@ private final class NotificationsAndSoundsArguments {
         self.openAppSettings = openAppSettings
         self.updateJoinedNotifications = updateJoinedNotifications
         self.updateNotificationsFromAllAccounts = updateNotificationsFromAllAccounts
-        self.updateDiscoverNotifications = updateDiscoverNotifications
     }
 }
 
@@ -109,7 +106,6 @@ private enum NotificationsAndSoundsSection: Int32 {
     case accounts
     case permission
     case categories
-    case discover
     case inApp
     case displayNamesOnLockscreen
     case badge
@@ -151,8 +147,6 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
     case channels(PresentationTheme, String, String, String)
     case stories(PresentationTheme, String, String, String)
     case reactions(PresentationTheme, String, String, String)
-    case discoverNotifications(PresentationTheme, String, Bool)
-    case discoverNotificationsInfo(PresentationTheme, String)
     
     case inAppHeader(PresentationTheme, String)
     case inAppSounds(PresentationTheme, String, Bool)
@@ -181,8 +175,6 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
                 return NotificationsAndSoundsSection.permission.rawValue
             case .categoriesHeader, .privateChats, .groupChats, .channels, .stories, .reactions:
                 return NotificationsAndSoundsSection.categories.rawValue
-            case .discoverNotifications, .discoverNotificationsInfo:
-                return NotificationsAndSoundsSection.discover.rawValue
             case .inAppHeader, .inAppSounds, .inAppVibrate, .inAppPreviews:
                 return NotificationsAndSoundsSection.inApp.rawValue
             case .displayNamesOnLockscreen, .displayNamesOnLockscreenInfo:
@@ -220,10 +212,6 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
                 return 9
             case .reactions:
                 return 10
-            case .discoverNotifications:
-                return 11
-            case .discoverNotificationsInfo:
-                return 12
             case .inAppHeader:
                 return 14
             case .inAppSounds:
@@ -344,18 +332,6 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
                 }
             case let .reactions(lhsTheme, lhsTitle, lhsSubtitle, lhsLabel):
                 if case let .reactions(rhsTheme, rhsTitle, rhsSubtitle, rhsLabel) = rhs, lhsTheme === rhsTheme, lhsTitle == rhsTitle, lhsSubtitle == rhsSubtitle, lhsLabel == rhsLabel {
-                    return true
-                } else {
-                    return false
-                }
-            case let .discoverNotifications(lhsTheme, lhsText, lhsValue):
-                if case let .discoverNotifications(rhsTheme, rhsText, rhsValue) = rhs, lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue {
-                    return true
-                } else {
-                    return false
-                }
-            case let .discoverNotificationsInfo(lhsTheme, lhsText):
-                if case let .discoverNotificationsInfo(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
                     return true
                 } else {
                     return false
@@ -492,12 +468,6 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
                 return NotificationsCategoryItemListItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.reactions, title: title, subtitle: subtitle, label: label, sectionId: self.section, style: .blocks, action: {
                     arguments.openReactions()
                 })
-            case let .discoverNotifications(_, text, value):
-                return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: text, value: value, sectionId: self.section, style: .blocks, updated: { updatedValue in
-                    arguments.updateDiscoverNotifications(updatedValue)
-                })
-            case let .discoverNotificationsInfo(_, text):
-                return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
             case let .inAppHeader(_, text):
                 return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
             case let .inAppSounds(_, text, value):
@@ -556,7 +526,7 @@ private func filteredGlobalSound(_ sound: PeerMessageSound) -> PeerMessageSound 
     }
 }
 
-private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warningSuppressed: Bool, globalSettings: GlobalNotificationSettingsSet, inAppSettings: InAppNotificationSettings, exceptions: (users: NotificationExceptionMode, groups: NotificationExceptionMode, channels: NotificationExceptionMode, stories: NotificationExceptionMode), presentationData: PresentationData, hasMoreThanOneAccount: Bool, discoverNotificationsEnabled: Bool) -> [NotificationsAndSoundsEntry] {
+private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warningSuppressed: Bool, globalSettings: GlobalNotificationSettingsSet, inAppSettings: InAppNotificationSettings, exceptions: (users: NotificationExceptionMode, groups: NotificationExceptionMode, channels: NotificationExceptionMode, stories: NotificationExceptionMode), presentationData: PresentationData, hasMoreThanOneAccount: Bool) -> [NotificationsAndSoundsEntry] {
     var entries: [NotificationsAndSoundsEntry] = []
     
     if hasMoreThanOneAccount {
@@ -629,9 +599,6 @@ private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warn
         reactionsValue.append(presentationData.strings.Notifications_Reactions_SubtitleStories)
     }
     entries.append(.reactions(presentationData.theme, presentationData.strings.Notifications_Reactions, reactionsValue, hasReactionNotifications ? presentationData.strings.Notifications_On : presentationData.strings.Notifications_Off))
-    let discoverCopy = TellomiDiscoverCopy.resolve(languageCode: presentationData.strings.primaryComponent.languageCode, pack: tellomiStringPack(primary: presentationData.strings.primaryComponent.dict, secondary: presentationData.strings.secondaryComponent?.dict))
-    entries.append(.discoverNotifications(presentationData.theme, discoverCopy.notifications, discoverNotificationsEnabled))
-    entries.append(.discoverNotificationsInfo(presentationData.theme, discoverCopy.notificationsInfo))
     
     entries.append(.inAppHeader(presentationData.theme, presentationData.strings.Notifications_InAppNotifications.uppercased()))
     entries.append(.inAppSounds(presentationData.theme, presentationData.strings.Notifications_InAppNotificationsSounds, inAppSettings.playSounds))
@@ -660,7 +627,6 @@ private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warn
 public func notificationsAndSoundsController(context: AccountContext, exceptionsList: NotificationExceptionsList?, focusOnItemTag: NotificationsAndSoundsEntryTag? = nil) -> ViewController {
     var presentControllerImpl: ((ViewController, ViewControllerPresentationArguments?) -> Void)?
     var pushControllerImpl: ((ViewController) -> Void)?
-    let discoverSwitchGate = TellomiDiscoverSwitchGate()
     
     let notificationExceptions: Promise<(users: NotificationExceptionMode, groups: NotificationExceptionMode, channels: NotificationExceptionMode, stories: NotificationExceptionMode)> = Promise()
     
@@ -786,11 +752,6 @@ public func notificationsAndSoundsController(context: AccountContext, exceptions
                 let reset = resetPeerNotificationSettings(network: context.account.network)
                 let signal = combineLatest(modifyPeers, updateGlobal, reset)
                 let _ = signal.start()
-                discoverSwitchGate.changed = true
-                let _ = updateTellomiDiscoverNotificationSettings(engine: context.engine, { _ in
-                    return TellomiDiscoverNotificationSettings(enabled: true)
-                }).start()
-                let _ = tellomiPushDiscoverNotificationEnabled(account: context.account, enabled: true).start()
             })
         ]), ActionSheetItemGroup(items: [
             ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
@@ -812,17 +773,9 @@ public func notificationsAndSoundsController(context: AccountContext, exceptions
             settings.displayNotificationsFromAllAccounts = value
             return settings
         }).start()
-    }, updateDiscoverNotifications: { value in
-        discoverSwitchGate.changed = true
-        let _ = updateTellomiDiscoverNotificationSettings(engine: context.engine, { _ in
-            return TellomiDiscoverNotificationSettings(enabled: value)
-        }).start()
-        let _ = tellomiPushDiscoverNotificationEnabled(account: context.account, enabled: value).start()
     })
     
-    let inAppSharedData = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.inAppNotificationSettings])
-    let discoverNotificationSettings = context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.ApplicationSpecificPreference(key: ApplicationSpecificPreferencesKeys.tellomiDiscoverNotificationSettings))
-    let sharedData = combineLatest(inAppSharedData, discoverNotificationSettings)
+    let sharedData = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.inAppNotificationSettings])
     let preferences = context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.ApplicationSpecificPreference(key: PreferencesKeys.globalNotifications))
     
     let exceptionsSignal = Signal<NotificationExceptionsList?, NoError>.single(exceptionsList) |> then(context.engine.peers.notificationExceptionsList() |> map(Optional.init))
@@ -899,9 +852,7 @@ public func notificationsAndSoundsController(context: AccountContext, exceptions
     |> distinctUntilChanged
     
     let signal = combineLatest(context.sharedContext.presentationData, sharedData, preferences, notificationExceptions.get(), DeviceAccess.authorizationStatus(applicationInForeground: context.sharedContext.applicationBindings.applicationInForeground, subject: .notifications), notificationsWarningSuppressed.get(), hasMoreThanOneAccount)
-        |> map { presentationData, sharedAndDiscover, view, exceptions, authorizationStatus, warningSuppressed, hasMoreThanOneAccount -> (ItemListControllerState, (ItemListNodeState, Any)) in
-            let (sharedData, discoverEntry) = sharedAndDiscover
-            let discoverNotificationsEnabled = tellomiDiscoverNotificationSettings(entry: discoverEntry).enabled
+        |> map { presentationData, sharedData, view, exceptions, authorizationStatus, warningSuppressed, hasMoreThanOneAccount -> (ItemListControllerState, (ItemListNodeState, Any)) in
             
             let viewSettings: GlobalNotificationSettingsSet
             if let settings = view?.get(GlobalNotificationSettings.self) {
@@ -917,7 +868,7 @@ public func notificationsAndSoundsController(context: AccountContext, exceptions
                 inAppSettings = InAppNotificationSettings.defaultSettings
             }
             
-            let entries = notificationsAndSoundsEntries(authorizationStatus: authorizationStatus, warningSuppressed: warningSuppressed, globalSettings: viewSettings, inAppSettings: inAppSettings, exceptions: exceptions, presentationData: presentationData, hasMoreThanOneAccount: hasMoreThanOneAccount, discoverNotificationsEnabled: discoverNotificationsEnabled)
+            let entries = notificationsAndSoundsEntries(authorizationStatus: authorizationStatus, warningSuppressed: warningSuppressed, globalSettings: viewSettings, inAppSettings: inAppSettings, exceptions: exceptions, presentationData: presentationData, hasMoreThanOneAccount: hasMoreThanOneAccount)
             
             var index = 0
             var scrollToItem: ListViewScrollToItem?
@@ -936,16 +887,6 @@ public func notificationsAndSoundsController(context: AccountContext, exceptions
             return (controllerState, (listState, arguments))
     }
     
-    let _ = (tellomiFetchDiscoverNotificationEnabled(account: context.account)
-    |> deliverOnMainQueue).start(next: { enabled in
-        guard !discoverSwitchGate.changed, let enabled else {
-            return
-        }
-        let _ = updateTellomiDiscoverNotificationSettings(engine: context.engine, { _ in
-            return TellomiDiscoverNotificationSettings(enabled: enabled)
-        }).start()
-    })
-
     let controller = ItemListController(context: context, state: signal)
     presentControllerImpl = { [weak controller] c, a in
         controller?.present(c, in: .window(.root), with: a)
@@ -969,8 +910,4 @@ public func notificationsAndSoundsController(context: AccountContext, exceptions
     }
     
     return controller
-}
-
-private final class TellomiDiscoverSwitchGate {
-    var changed = false
 }

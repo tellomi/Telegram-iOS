@@ -139,10 +139,8 @@ extension NavigationBarComponent {
         public let staysInRow: Bool
         public let action: (UIView) -> Void
         public let contextAction: ((UIView, ContextGesture?) -> Void)?
-        /// Copied onto the button view. `UIBarButtonItem.accessibilityIdentifier` does not reach XCUITest; the bar draws its own button.
-        public let accessibilityIdentifier: String?
 
-        public init(id: AnyHashable, content: Content, isEnabled: Bool = true, tint: Tint = .generic, overflow: OverflowInfo? = nil, requiresOwnSection: Bool = false, staysInRow: Bool = false, action: @escaping (UIView) -> Void, contextAction: ((UIView, ContextGesture?) -> Void)? = nil, accessibilityIdentifier: String? = nil) {
+        public init(id: AnyHashable, content: Content, isEnabled: Bool = true, tint: Tint = .generic, overflow: OverflowInfo? = nil, requiresOwnSection: Bool = false, staysInRow: Bool = false, action: @escaping (UIView) -> Void, contextAction: ((UIView, ContextGesture?) -> Void)? = nil) {
             self.id = id
             self.content = content
             self.isEnabled = isEnabled
@@ -152,11 +150,10 @@ extension NavigationBarComponent {
             self.staysInRow = staysInRow
             self.action = action
             self.contextAction = contextAction
-            self.accessibilityIdentifier = accessibilityIdentifier
         }
 
         public func withOverflow(_ overflow: OverflowInfo?) -> Button {
-            return Button(id: self.id, content: self.content, isEnabled: self.isEnabled, tint: self.tint, overflow: overflow, requiresOwnSection: self.requiresOwnSection, staysInRow: self.staysInRow, action: self.action, contextAction: self.contextAction, accessibilityIdentifier: self.accessibilityIdentifier)
+            return Button(id: self.id, content: self.content, isEnabled: self.isEnabled, tint: self.tint, overflow: overflow, requiresOwnSection: self.requiresOwnSection, staysInRow: self.staysInRow, action: self.action, contextAction: self.contextAction)
         }
 
         /// Actions are not compared: they are recreated on every update.
@@ -180,9 +177,6 @@ extension NavigationBarComponent {
                 return false
             }
             if lhs.staysInRow != rhs.staysInRow {
-                return false
-            }
-            if lhs.accessibilityIdentifier != rhs.accessibilityIdentifier {
                 return false
             }
             return true

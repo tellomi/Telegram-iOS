@@ -313,12 +313,6 @@ private final class AlertScreenComponent: Component {
             let environment = environment[ViewControllerComponentContainer.Environment.self].value
             self.environment = environment
             self.state = state
-            if let identifier = component.configuration.accessibilityIdentifier {
-                self.accessibilityIdentifier = identifier
-                self.isAccessibilityElement = true
-                self.accessibilityTraits = [.staticText]
-                self.accessibilityLabel = component.configuration.accessibilityLabel
-            }
             
             if self.component == nil {
                 self.disposable = (combineLatest(
@@ -604,21 +598,15 @@ open class AlertScreen: ViewControllerComponentContainer, KeyShortcutResponder {
         let actionAlignment: ActionAligmnent
         let dismissOnOutsideTap: Bool
         let allowInputInset: Bool
-        let accessibilityIdentifier: String?
-        let accessibilityLabel: String?
         
         public init(
             actionAlignment: ActionAligmnent = .default,
             dismissOnOutsideTap: Bool = true,
-            allowInputInset: Bool = false,
-            accessibilityIdentifier: String? = nil,
-            accessibilityLabel: String? = nil
+            allowInputInset: Bool = false
         ) {
             self.actionAlignment = actionAlignment
             self.dismissOnOutsideTap = dismissOnOutsideTap
             self.allowInputInset = allowInputInset
-            self.accessibilityIdentifier = accessibilityIdentifier
-            self.accessibilityLabel = accessibilityLabel
         }
     }
     

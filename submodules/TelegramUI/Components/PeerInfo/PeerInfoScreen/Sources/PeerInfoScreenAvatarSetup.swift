@@ -922,9 +922,6 @@ extension PeerInfoScreenImpl {
                     }
                 })
             }
-        }, error: { [weak self] error in
-            dismissStatus?()
-            self?.tellomiNoteAvatarUploadFailure(error)
         }))
     }
     
@@ -1125,9 +1122,6 @@ extension PeerInfoScreenImpl {
                     }
                 })
             }
-        }, error: { [weak self] error in
-            dismissStatus?()
-            self?.tellomiNoteAvatarUploadFailure(error)
         }))
     }
     
@@ -1337,9 +1331,6 @@ extension PeerInfoScreenImpl {
                     }
                 })
             }
-        }, error: { [weak self] error in
-            dismissStatus?()
-            self?.tellomiNoteAvatarUploadFailure(error)
         }))
     }
 }
