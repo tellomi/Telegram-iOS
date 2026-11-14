@@ -79,19 +79,22 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
         XCTAssertFalse(tellomiFeedPostLinkEscapesPeerResolution("not a url", navigationEnabled: true))
     }
 
-    func testTheContactsGetterDoesNotPush() {
+    func testTheContactsGetterPushesOnlyWhenTheTabIsHiddenAndNothingIsPushed() {
         XCTAssertEqual(
             tellomiContactsControllerRead(navigationEnabled: true, tabBarReady: true, tabVisible: false, pushedPageExists: false),
             .none
         )
+        XCTAssertEqual(tellomiContactsGetterAction(.none), .push)
         XCTAssertEqual(
             tellomiContactsControllerRead(navigationEnabled: true, tabBarReady: true, tabVisible: false, pushedPageExists: true),
             .pushed
         )
+        XCTAssertEqual(tellomiContactsGetterAction(.pushed), .usePushed)
         XCTAssertEqual(
             tellomiContactsControllerRead(navigationEnabled: true, tabBarReady: true, tabVisible: true, pushedPageExists: false),
             .tab
         )
+        XCTAssertEqual(tellomiContactsGetterAction(.tab), .useTab)
         XCTAssertEqual(
             tellomiContactsControllerRead(navigationEnabled: true, tabBarReady: true, tabVisible: true, pushedPageExists: true),
             .tab
@@ -100,6 +103,7 @@ final class TellomiTabNavigationDecisionsTests: XCTestCase {
             tellomiContactsControllerRead(navigationEnabled: false, tabBarReady: true, tabVisible: false, pushedPageExists: false),
             .owned
         )
+        XCTAssertEqual(tellomiContactsGetterAction(.owned), .keepOwned)
         XCTAssertEqual(
             tellomiContactsControllerRead(navigationEnabled: false, tabBarReady: true, tabVisible: true, pushedPageExists: true),
             .owned

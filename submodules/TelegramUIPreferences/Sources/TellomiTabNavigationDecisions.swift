@@ -207,8 +207,7 @@ public func tellomiFeedPostLinkEscapesPeerResolution(_ url: String, navigationEn
     return tellomiFeedPostIdIfHandled(in: parsed, navigationEnabled: navigationEnabled) != nil
 }
 
-/// What `getContactsController` may return. None of these create or push a page.
-/// Opening Contacts while the tab is hidden is `openContacts`.
+/// What `getContactsController` sees before it returns a page.
 public enum TellomiContactsControllerRead: Equatable {
     /// The bar is off, or it is not built yet. The getter keeps the controller it already holds.
     case owned
@@ -216,8 +215,29 @@ public enum TellomiContactsControllerRead: Equatable {
     case tab
     /// The tab is hidden and a contacts page is already on the stack.
     case pushed
-    /// The tab is hidden and nothing is pushed. The getter must not create a page.
+    /// The tab is hidden and nothing is pushed. The getter pushes a page.
     case none
+}
+
+/// What `getContactsController` does with that read. Only `.none` pushes (M2).
+public enum TellomiContactsGetterAction: Equatable {
+    case keepOwned
+    case useTab
+    case usePushed
+    case push
+}
+
+public func tellomiContactsGetterAction(_ read: TellomiContactsControllerRead) -> TellomiContactsGetterAction {
+    switch read {
+    case .owned:
+        return .keepOwned
+    case .tab:
+        return .useTab
+    case .pushed:
+        return .usePushed
+    case .none:
+        return .push
+    }
 }
 
 public func tellomiContactsControllerRead(navigationEnabled: Bool, tabBarReady: Bool, tabVisible: Bool, pushedPageExists: Bool) -> TellomiContactsControllerRead {
