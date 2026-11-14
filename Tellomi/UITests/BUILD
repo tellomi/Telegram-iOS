@@ -21,7 +21,7 @@ swift_library(
 ios_ui_test(
     name = "TellomiClientUITests",
     bundle_id = "app.tellomi.chat.uitests",
-    minimum_os_version = "15.0",
+    minimum_os_version = "16.4",
     runner = ":TellomiUITestRunner",
     tags = ["manual"],
     test_host = "//Telegram:Telegram",

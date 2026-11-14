@@ -23,7 +23,6 @@ final class TellomiLoggedInShellUITests: XCTestCase {
     }
 
     private func openSignedInApp() throws -> XCUIApplication {
-        _ = try requireAccount()
         let app = TellomiApp.launch()
         let outcome = TellomiSession.signIn(app, account: TellomiTestAccounts.lookup("TELLOMI_TEST_PHONE_A"), test: self)
         guard outcome.signedIn else {
