@@ -14,6 +14,7 @@ Long-press on Discover, Calls, or Contacts still hides that tab. The menu item i
 | `Telegram/Telegram-iOS/zh-Hant.lproj/Localizable.strings` | The three hide keys are 隱藏. |
 | `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | `tellomiTabHideTitle`. Discover and Contacts read it. The pack is not consulted. |
 | `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | The short word, and a pack that still has the longer wording. |
+| `submodules/MtProtoKit/Tests/MTDiscoverConnectionSignalsTests.m` | The dispose-during-backoff case disposes before the 0.1 s timer can fire. A 30 ms sleep on a loaded simulator let that timer start a second round. |
 
 ## Login restored to Telegram's phone flow (2026-11-13)
 
