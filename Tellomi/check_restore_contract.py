@@ -47,15 +47,19 @@ def check_server() -> None:
         fail("443 is not a seed fallback port")
     if config["disable_telegram_backup_discovery"] is not True:
         fail("Telegram backup discovery is not disabled")
+    relay = ["8.137.198.240", "api.tellomi.cn"]
+    if config.get("seed_address_a_record") != "8.137.198.240":
+        fail("seed_address_a_record is not the 8.137.198.240 relay")
     for environment in ("production", "testing"):
-        if config["seeds"][environment]["1"] != ["api.tellomi.cn"]:
-            fail(f"{environment} seed is not api.tellomi.cn")
+        for datacenter in ("1", "2"):
+            if config["seeds"][environment][datacenter] != relay:
+                fail(f"{environment} DC {datacenter} seed is not the relay then api.tellomi.cn")
     fingerprints = [item["little_endian"] for item in config["rsa_fingerprints"]]
     if fingerprints != ["4381149949997195609", "12240908862933197005"]:
         fail(f"RSA fingerprints are {fingerprints}")
     header = read("submodules/MtProtoKit/Sources/TellomiServerConfigJSON.h")
-    if "api.tellomi.cn" not in header or "149.154." in header:
-        fail("generated handshake header does not carry only the Tellomi seed")
+    if "8.137.198.240" not in header or "api.tellomi.cn" not in header or "149.154." in header:
+        fail("generated handshake header does not carry the relay seed")
     network = read("submodules/TelegramCore/Sources/Network/Network.swift")
     if "TellomiSeedAddressSets" not in network or "149.154.175.50" in network:
         fail("Network.swift is not installing the Tellomi seed")
@@ -100,8 +104,8 @@ def check_released_identity() -> None:
             fail(f"{key} is {config.get(key)}, 14.0.4 used {expected}")
     version = read("Tellomi/version").strip()
     versions = json.loads(read("versions.json"))
-    if version != "14.0.5" or versions.get("app") != "14.0.5":
-        fail(f"marketing version is {version} / {versions.get('app')}, expected 14.0.5")
+    if version != "14.0.6" or versions.get("app") != "14.0.6":
+        fail(f"marketing version is {version} / {versions.get('app')}, expected 14.0.6")
     blob = subprocess.check_output(
         ["git", "hash-object", "submodules/BuildConfig/Sources/BuildConfig.m"],
         cwd=ROOT,

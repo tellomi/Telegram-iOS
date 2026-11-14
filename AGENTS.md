@@ -3,6 +3,12 @@
 Guidance for coding agents working in this repository. The project guide is [`CLAUDE.md`](CLAUDE.md): how to build,
 which simulators to use, how to drive them (XcodeBuildMCP) and the invariants of each subsystem. Read it first.
 
+## Owner rule: the UI stays Telegram's
+
+UI must stay Telegram original (upstream Telegram-iOS); only data within 动态 may be custom. Any PR touching UI (assets, theme, tab bar, login, settings, chat list, profile) requires the owner's explicit approval after seeing screenshots. Never replace release/ios with master (no `git push origin master:release/ios`, no whole-tree syncs). Agents must never merge their own PRs; merges require owner approval.
+
+动态 is `submodules/TelegramUI/Components/Moments`. A release is a pull request into `release/ios` that the owner merges. That merge starts TestFlight. The same rule is in `.cursor/rules/telegram-native-first.mdc`.
+
 ## Visual features and animations: judge them from recorded frames
 
 A green build and passing unit tests say nothing about how a change looks or moves. For any visual change, and always

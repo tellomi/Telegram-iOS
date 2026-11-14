@@ -1,0 +1,12 @@
+---
+description: UI must stay Telegram original. Only 动态 data may be custom. Agents do not merge and do not replace release/ios with master.
+alwaysApply: true
+---
+
+# Telegram UI stays original
+
+UI must stay Telegram original (upstream Telegram-iOS); only data within 动态 may be custom. Any PR touching UI (assets, theme, tab bar, login, settings, chat list, profile) requires the owner's explicit approval after seeing screenshots. Never replace release/ios with master (no `git push origin master:release/ios`, no whole-tree syncs). Agents must never merge their own PRs; merges require owner approval.
+
+This file and the "Owner rule: the UI stays Telegram's" section of `AGENTS.md` are the same rule. Do not weaken either copy.
+
+动态 is `submodules/TelegramUI/Components/Moments`. Propose a release as a pull request into `release/ios`. The owner merges it. Agents do not merge, and they do not push `master` onto `release/ios`.
