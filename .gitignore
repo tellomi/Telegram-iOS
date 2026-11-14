@@ -35,6 +35,9 @@ AppBundle.xcworkspace/*
 *.xcworkspace
 *.xcodeproj
 !*_Xcode.xcodeproj
+# The Tellomi UI-test host is an Xcode project. The app itself stays on Bazel.
+!Tellomi/UITests/TellomiClientUITests.xcodeproj/
+!Tellomi/UITests/TellomiClientUITests.xcodeproj/**
 .idea
 */.idea/*
 submodules/MtProtoKit/TON/macOS/lib/libtonlibjson.0.5.dylib

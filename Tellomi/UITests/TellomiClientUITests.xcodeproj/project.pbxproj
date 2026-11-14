@@ -1,0 +1,317 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		79B4BBA56FA32FA2D984C388 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F1420CBCD46BAA7BFA645F /* main.swift */; };
+		2593E1B29D3E54ABC7DA1580 /* Coverage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F295AC6C8B71D7162D6967B /* Coverage.swift */; };
+		0A67BBD69B46FA22F2D4E888 /* TellomiComposerEntryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C837F9BA1FFA66A1F1D5BBDF /* TellomiComposerEntryUITests.swift */; };
+		30831AF1EFB44C4551039411 /* TellomiDiscoverUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF32C2DA8417A219DA61A9A6 /* TellomiDiscoverUITests.swift */; };
+		CB78FCCEB1D55EAAF97AB314 /* TellomiLoggedInShellUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 881051700A72ECDE047CE3BA /* TellomiLoggedInShellUITests.swift */; };
+		8729AD04B205336FCC5F100F /* TellomiLoggedOutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFEDB9FE559533DF72A5DDA3 /* TellomiLoggedOutUITests.swift */; };
+		0892537E63ED84F735C81DC5 /* TellomiLoginFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18EED61FD988B3430404D9D6 /* TellomiLoginFlowUITests.swift */; };
+		838A1541C8A72BAF73A9796F /* TellomiSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4A61F0EC5C7426B2DF864D /* TellomiSession.swift */; };
+		E2A748DAD57278C4F931946C /* TellomiUISupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFC53348A3DCAB95C321B333 /* TellomiUISupport.swift */; };
+		DF738DB2A79152CF8BCB5D0E /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A08675197E6B11600DA3D50E /* XCTest.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B3F1420CBCD46BAA7BFA645F /* main.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		C1BABA1D0DC46F3B09D8807B /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A08675197E6B11600DA3D50E /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		0F295AC6C8B71D7162D6967B /* Coverage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Coverage.swift; sourceTree = "<group>"; };
+		C837F9BA1FFA66A1F1D5BBDF /* TellomiComposerEntryUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TellomiComposerEntryUITests.swift; sourceTree = "<group>"; };
+		DF32C2DA8417A219DA61A9A6 /* TellomiDiscoverUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TellomiDiscoverUITests.swift; sourceTree = "<group>"; };
+		881051700A72ECDE047CE3BA /* TellomiLoggedInShellUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TellomiLoggedInShellUITests.swift; sourceTree = "<group>"; };
+		EFEDB9FE559533DF72A5DDA3 /* TellomiLoggedOutUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TellomiLoggedOutUITests.swift; sourceTree = "<group>"; };
+		18EED61FD988B3430404D9D6 /* TellomiLoginFlowUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TellomiLoginFlowUITests.swift; sourceTree = "<group>"; };
+		DC4A61F0EC5C7426B2DF864D /* TellomiSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TellomiSession.swift; sourceTree = "<group>"; };
+		EFC53348A3DCAB95C321B333 /* TellomiUISupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TellomiUISupport.swift; sourceTree = "<group>"; };
+		FAEBA0991C67A79CE2317031 /* Telegram.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Telegram.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E19DE0FD1DEE6CD6F7E0E7E2 /* TellomiClientUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TellomiClientUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CC40A40B1A5630AD4E7C4B11 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DF738DB2A79152CF8BCB5D0E /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		344D4FE24AAC2F604F7FC1C8 /* Host */ = {
+			isa = PBXGroup;
+			children = (
+				B3F1420CBCD46BAA7BFA645F /* main.swift */,
+				C1BABA1D0DC46F3B09D8807B /* Info.plist */,
+			);
+			path = Host;
+			sourceTree = "<group>";
+		};
+		9642F1047C1002A1EE72F0DB /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				0F295AC6C8B71D7162D6967B /* Coverage.swift */,
+				C837F9BA1FFA66A1F1D5BBDF /* TellomiComposerEntryUITests.swift */,
+				DF32C2DA8417A219DA61A9A6 /* TellomiDiscoverUITests.swift */,
+				881051700A72ECDE047CE3BA /* TellomiLoggedInShellUITests.swift */,
+				EFEDB9FE559533DF72A5DDA3 /* TellomiLoggedOutUITests.swift */,
+				18EED61FD988B3430404D9D6 /* TellomiLoginFlowUITests.swift */,
+				DC4A61F0EC5C7426B2DF864D /* TellomiSession.swift */,
+				EFC53348A3DCAB95C321B333 /* TellomiUISupport.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		ED2F3B048716C9DC7573911C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A08675197E6B11600DA3D50E /* XCTest.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		00C45FD35CB0F9C5F764F070 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FAEBA0991C67A79CE2317031 /* Telegram.app */,
+				E19DE0FD1DEE6CD6F7E0E7E2 /* TellomiClientUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		ADCF10F76EBF2A74473E9DC4 = {
+			isa = PBXGroup;
+			children = (
+				344D4FE24AAC2F604F7FC1C8 /* Host */,
+				9642F1047C1002A1EE72F0DB /* Sources */,
+				ED2F3B048716C9DC7573911C /* Frameworks */,
+				00C45FD35CB0F9C5F764F070 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2A415E131A52CDF8FFBD77D8 /* TellomiHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 431211D2B1CDCD9887C6EDBC /* Build configuration list for PBXNativeTarget "TellomiHost" */;
+			buildPhases = (
+				C6FFFD4918C97C92675F42E2 /* Sources */,
+				F8100A20274D3ED11AA94DC7 /* Replace with prebuilt app */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TellomiHost;
+			productName = Telegram;
+			productReference = FAEBA0991C67A79CE2317031 /* Telegram.app */;
+			productType = "com.apple.product-type.application";
+		};
+		702C95248914A35C1DC9A756 /* TellomiClientUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F3AD4C3BA58462581CAA087A /* Build configuration list for PBXNativeTarget "TellomiClientUITests" */;
+			buildPhases = (
+				283236DFCBED01B817B33E02 /* Sources */,
+				CC40A40B1A5630AD4E7C4B11 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TellomiClientUITests;
+			productName = TellomiClientUITests;
+			productReference = E19DE0FD1DEE6CD6F7E0E7E2 /* TellomiClientUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					702C95248914A35C1DC9A756 = {
+						TestTargetID = 2A415E131A52CDF8FFBD77D8;
+					};
+				};
+			};
+			buildConfigurationList = 247BF104A9AD002C539DA531 /* Build configuration list for PBXProject "TellomiClientUITests" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = ADCF10F76EBF2A74473E9DC4;
+			productRefGroup = 00C45FD35CB0F9C5F764F070 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				2A415E131A52CDF8FFBD77D8 /* TellomiHost */,
+				702C95248914A35C1DC9A756 /* TellomiClientUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		F8100A20274D3ED11AA94DC7 /* Replace with prebuilt app */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Replace with prebuilt app";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nif [[ -z \"${TELLOMI_PREBUILT_APP:-}\" ]]; then\n  echo \"TELLOMI_PREBUILT_APP must point at the simulator Telegram.app\"\n  exit 1\nfi\nif [[ ! -d \"${TELLOMI_PREBUILT_APP}\" ]]; then\n  echo \"TELLOMI_PREBUILT_APP is not a directory\"\n  exit 1\nfi\ndest=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}\"\nrm -rf \"${dest}\"\nditto \"${TELLOMI_PREBUILT_APP}\" \"${dest}\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C6FFFD4918C97C92675F42E2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				79B4BBA56FA32FA2D984C388 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		283236DFCBED01B817B33E02 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2593E1B29D3E54ABC7DA1580 /* Coverage.swift in Sources */,
+				0A67BBD69B46FA22F2D4E888 /* TellomiComposerEntryUITests.swift in Sources */,
+				30831AF1EFB44C4551039411 /* TellomiDiscoverUITests.swift in Sources */,
+				CB78FCCEB1D55EAAF97AB314 /* TellomiLoggedInShellUITests.swift in Sources */,
+				8729AD04B205336FCC5F100F /* TellomiLoggedOutUITests.swift in Sources */,
+				0892537E63ED84F735C81DC5 /* TellomiLoginFlowUITests.swift in Sources */,
+				838A1541C8A72BAF73A9796F /* TellomiSession.swift in Sources */,
+				E2A748DAD57278C4F931946C /* TellomiUISupport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		877A6BA951A2EA0025A2ABE8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = 1;
+				SWIFT_VERSION = 5.0;
+
+			};
+			name = Debug;
+		};
+		959134B361DD7E21ADEA3164 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = 1;
+				SWIFT_VERSION = 5.0;
+
+			};
+			name = Release;
+		};
+		FC6CEE4C244DA96EC0D0CFEB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Host/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.tellomi.chat;
+				PRODUCT_NAME = Telegram;
+			};
+			name = Debug;
+		};
+		F12D2303F90AA67BBACBBBDE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Host/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.tellomi.chat;
+				PRODUCT_NAME = Telegram;
+			};
+			name = Release;
+		};
+		B41A663912C5AD2A1D96567A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = app.tellomi.chat.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = TellomiHost;
+			};
+			name = Debug;
+		};
+		116C7F1B65D647B9F0FAA412 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = app.tellomi.chat.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = TellomiHost;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		247BF104A9AD002C539DA531 /* Build configuration list for PBXProject "TellomiClientUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				877A6BA951A2EA0025A2ABE8 /* Debug */,
+				959134B361DD7E21ADEA3164 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		431211D2B1CDCD9887C6EDBC /* Build configuration list for PBXNativeTarget "TellomiHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FC6CEE4C244DA96EC0D0CFEB /* Debug */,
+				F12D2303F90AA67BBACBBBDE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F3AD4C3BA58462581CAA087A /* Build configuration list for PBXNativeTarget "TellomiClientUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B41A663912C5AD2A1D96567A /* Debug */,
+				116C7F1B65D647B9F0FAA412 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+}
