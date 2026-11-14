@@ -1,0 +1,289 @@
+# Tellomi client UI tests for the untested backlog.
+#
+# One macOS job builds the unsigned simulator app. Up to five jobs then
+# compile only the XCUITest bundle and run a shard. The merge job writes
+# ui-results.json (backlog id to pass, fail, blocked, or device_only).
+# A failing assertion is recorded in that file. The merge fails only when
+# a shard artifact is missing or an id was dropped.
+#
+# This file is not on release/ios. A push to release/ios does not start it.
+# Nightly runs from the default branch. workflow_dispatch runs the ref
+# you name.
+
+name: Tellomi UI tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *"
+  pull_request:
+    branches: [master]
+    paths:
+      - "Tellomi/UITests/**"
+      - ".github/workflows/tellomi-ui-tests.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tellomi-ui-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Check classification and result merging
+        run: python3 Tellomi/UITests/tools/test_tellomi_ui_results.py
+
+  build:
+    needs: manifest
+    runs-on: xcode-27
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Checkout submodules
+        run: bash .github/checkout-submodules.sh
+
+      - name: Check Tellomi DC seeds
+        run: |
+          python3 Tellomi/check_server_config.py --seeds
+          python3 Tellomi/test_server_config.py
+
+      - name: Select Xcode from versions.json
+        run: |
+          set -euo pipefail
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [[ ! -d "${CANDIDATE}" ]]; then
+            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
+            ls -1 /Applications | grep -E '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select -s "${CANDIDATE}/Contents/Developer"
+          echo "DEVELOPER_DIR=${CANDIDATE}/Contents/Developer" >> "${GITHUB_ENV}"
+          export DEVELOPER_DIR="${CANDIDATE}/Contents/Developer"
+          xcodebuild -version
+          echo "BAZEL_CACHE_DIR=${HOME}/telegram-bazel-cache" >> "${GITHUB_ENV}"
+
+      - name: Pin Bazel from versions.json
+        run: |
+          set -euo pipefail
+          spec="$(python3 -c 'import json; print(json.load(open("versions.json"))["bazel"])')"
+          version="${spec%%:*}"
+          sha="${spec##*:}"
+          name="bazel-${version}-darwin-arm64"
+          url="https://github.com/bazelbuild/bazel/releases/download/${version}/${name}"
+          mkdir -p build-input
+          bash .github/fetch_pinned.sh "$url" "build-input/${name}" "${sha}"
+          chmod +x "build-input/${name}"
+
+      - name: Build the unsigned simulator app
+        run: |
+          set -euo pipefail
+          offset="$(tr -d '[:space:]' < build_number_offset)"
+          count="$(git rev-list --count HEAD)"
+          BUILD_NUMBER="$((count + offset))"
+          APP_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')"
+          export APP_VERSION BUILD_NUMBER
+          printf 'APP_VERSION=%s\n' "${APP_VERSION}" >> "${GITHUB_ENV}"
+          printf 'BUILD_NUMBER=%s\n' "${BUILD_NUMBER}" >> "${GITHUB_ENV}"
+          bash .github/retry_external_fetch.sh -- \
+            python3 -u build-system/Make/Make.py \
+            --bazelUserRoot="/private/var/tmp/_bazel_tellomi_ui" \
+            --cacheDir "${BAZEL_CACHE_DIR}" \
+            build \
+            --configurationPath="build-system/appstore-configuration.json" \
+            --xcodeManagedCodesigning \
+            --disableProvisioningProfiles \
+            --configuration=release_sim_arm64 \
+            --buildNumber="${BUILD_NUMBER}"
+          test -e bazel-bin/Telegram/Telegram.ipa
+
+      - name: Package Telegram.app
+        run: |
+          set -euo pipefail
+          stage="$(mktemp -d)"
+          unzip -q -o bazel-bin/Telegram/Telegram.ipa -d "${stage}"
+          app="${stage}/Payload/Telegram.app"
+          test -d "${app}"
+          bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${app}/Info.plist")"
+          if [[ "${bundle}" != "app.tellomi.chat" ]]; then
+            echo "unexpected bundle id ${bundle}"
+            exit 1
+          fi
+          exe="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${app}/Info.plist")"
+          test -x "${app}/${exe}"
+          mkdir -p sim-dist
+          ditto -c -k --keepParent "${app}" sim-dist/Telegram.app.zip
+          test -s sim-dist/Telegram.app.zip
+
+      - name: Upload the simulator app
+        uses: actions/upload-artifact@v4
+        with:
+          name: tellomi-sim-app
+          path: sim-dist/Telegram.app.zip
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 1
+
+  test:
+    needs: build
+    runs-on: xcode-27
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    env:
+      TELLOMI_TEST_PHONE_A: ${{ secrets.TELLOMI_TEST_PHONE_A }}
+      TELLOMI_TEST_PHONE_B: ${{ secrets.TELLOMI_TEST_PHONE_B }}
+      TELLOMI_TEST_CODE: ${{ secrets.TELLOMI_TEST_CODE }}
+      TELLOMI_TEST_PASSWORD: ${{ secrets.TELLOMI_TEST_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Select Xcode from versions.json
+        run: |
+          set -euo pipefail
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          CANDIDATE="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [[ ! -d "${CANDIDATE}" ]]; then
+            echo "Xcode ${XCODE_VERSION} is not installed on this runner."
+            exit 1
+          fi
+          sudo xcode-select -s "${CANDIDATE}/Contents/Developer"
+          xcodebuild -version
+          if [[ -n "${TELLOMI_TEST_PHONE_A}" ]]; then
+            echo "phone A is set from the environment"
+          else
+            echo "phone A will use dedicated 9996617090"
+          fi
+          if [[ -n "${TELLOMI_TEST_PHONE_B}" ]]; then
+            echo "phone B is set from the environment"
+          else
+            echo "phone B will use dedicated 9996617091"
+          fi
+
+      - name: Download the simulator app
+        uses: actions/download-artifact@v4
+        with:
+          name: tellomi-sim-app
+          path: sim-dist
+
+      - name: Run shard ${{ matrix.shard }}
+        id: shard
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ditto -x -k sim-dist/Telegram.app.zip sim-dist
+          test -d sim-dist/Telegram.app
+          bash Tellomi/UITests/tools/run_shard.sh \
+            "${{ matrix.shard }}" \
+            "${PWD}/sim-dist/Telegram.app" \
+            "${PWD}/shard-out"
+
+      - name: Keep a results file when the shard aborts
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p shard-out/screenshots
+          if [[ ! -f shard-out/results.json ]]; then
+            printf '%s\n' "{\"shard\":\"${{ matrix.shard }}\",\"results\":{}}" > shard-out/results.json
+          fi
+
+      - name: Upload shard results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tellomi-ui-shard-${{ matrix.shard }}
+          path: |
+            shard-out/results.json
+            shard-out/screenshots/**
+            shard-out/logs/**
+          retention-days: 14
+          if-no-files-found: error
+
+  merge:
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Download shard results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tellomi-ui-shard-*
+          path: shards
+
+      - name: Merge ui-results.json
+        run: |
+          set -euo pipefail
+          found="$(find shards -name results.json | wc -l | tr -d '[:space:]')"
+          echo "shard files: ${found}"
+          if [[ "${found}" -lt 5 ]]; then
+            echo "expected 5 shard results, found ${found}"
+            find shards -type f -print
+            exit 1
+          fi
+          python3 Tellomi/UITests/tools/merge_results.py \
+            --backlog Tellomi/UITests/backlog.csv \
+            --sources Tellomi/UITests/Sources \
+            --shards shards \
+            --out ui-results/ui-results.json
+          python3 - << 'PY'
+          import json
+          payload = json.load(open("ui-results/ui-results.json"))
+          counts = payload["counts"]
+          total = sum(counts.values())
+          if total != payload["backlog_rows"] or total != 928:
+              raise SystemExit(f"merged {total} ids, backlog has {payload['backlog_rows']}")
+          print(json.dumps(counts, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Publish the summary
+        if: always()
+        run: |
+          python3 - << 'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          path = Path("ui-results/ui-results.json")
+          if not path.is_file():
+              print("ui-results.json was not written")
+              raise SystemExit(0)
+          payload = json.loads(path.read_text())
+          print("### Tellomi UI results")
+          print("")
+          for status, count in payload["counts"].items():
+              print(f"- {status}: {count}")
+          print("")
+          print("Artifact: `ui-results` (`ui-results.json`).")
+          PY
+
+      - name: Upload ui-results.json
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-results
+          path: ui-results/**
+          retention-days: 14
+          if-no-files-found: error
