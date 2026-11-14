@@ -9,6 +9,19 @@ import TelegramPresentationData
 import LegacyComponents
 import SolidRoundedButtonNode
 import RMIntro
+import TellomiDiscover
+
+/// Saved login choice, then a Chinese system language, then the device language.
+/// The welcome button can follow that language before a pack has been downloaded.
+private func tellomiSplashLanguageCode() -> String {
+    if let stored = UserDefaults.standard.string(forKey: tellomiPreferredInterfaceLanguageKey)?.trimmingCharacters(in: .whitespacesAndNewlines), !stored.isEmpty {
+        return stored
+    }
+    if let system = tellomiSystemLangPackCode() {
+        return system
+    }
+    return tellomiDevicePreferredLanguages().first ?? "en"
+}
 
 public final class AuthorizationSequenceSplashController: ViewController {
     private var controllerNode: AuthorizationSequenceSplashControllerNode {
@@ -45,7 +58,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
                     return
                 }
                 
-                var continueWithLanguageString: String = "Continue"
+                var continueWithLanguageString = tellomiBundledString(languageCode: tellomiSplashLanguageCode(), key: "Login.Continue") ?? "Continue"
                 for entry in localization.extractedEntries {
                     switch entry {
                         case let .string(key, value):
@@ -58,7 +71,8 @@ public final class AuthorizationSequenceSplashController: ViewController {
                 }
                 
                 if let available = localization.availableLocalizations.first, available.languageCode != "en" {
-                    let value = TGSuggestedLocalization(info: TGAvailableLocalization(title: available.title, localizedTitle: available.localizedTitle, code: available.languageCode), continueWithLanguageString: continueWithLanguageString, chooseLanguageString: "Choose Language", chooseLanguageOtherString: "Choose Language", englishLanguageNameString: "English")
+                    let chooseLanguage = tellomiBundledString(languageCode: tellomiSplashLanguageCode(), key: "Localization.ChooseLanguage") ?? "Choose Your Language"
+                    let value = TGSuggestedLocalization(info: TGAvailableLocalization(title: available.title, localizedTitle: available.localizedTitle, code: available.languageCode), continueWithLanguageString: continueWithLanguageString, chooseLanguageString: chooseLanguage, chooseLanguageOtherString: chooseLanguage, englishLanguageNameString: "English")
                     subscriber.putNext(value)
                 }
             }, completed: {
@@ -72,7 +86,8 @@ public final class AuthorizationSequenceSplashController: ViewController {
         
         self.controller = RMIntroViewController(backgroundColor: theme.list.plainBackgroundColor, primaryColor: theme.list.itemPrimaryTextColor, buttonColor: theme.intro.startButtonColor, accentColor: theme.list.itemAccentColor, regularDotColor: theme.intro.dotColor, highlightedDotColor: theme.list.itemAccentColor, suggestedLocalizationSignal: localizationSignal)
         
-        self.startButton = SolidRoundedButtonNode(title: "Start Messaging", theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
+        let startTitle = tellomiBundledString(languageCode: tellomiSplashLanguageCode(), key: "Tour.StartButton") ?? "Start Messaging"
+        self.startButton = SolidRoundedButtonNode(title: startTitle, theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
         self.startButton.accessibilityIdentifier = "Auth.Welcome.StartButton"
 
         super.init(navigationBarPresentationData: nil)

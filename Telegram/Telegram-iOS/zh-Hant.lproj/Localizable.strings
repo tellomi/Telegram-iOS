@@ -81,11 +81,11 @@
 "Tellomi.Discover.UserBlocked" = "名單裡有人已互相封鎖。";
 "Tellomi.Discover.Disabled" = "發現暫時無法使用。";
 "Tellomi.Discover.NearbyEmpty" = "這個城市還沒有貼文。";
-"Tellomi.Discover.NearbyUnavailable" = "同城暂时还不能刷新。";
-"Tellomi.Discover.NearbyUnavailableHint" = "仍可以选城市。帖子只记录城市，不记录位置。";
-"Tellomi.Discover.ChangeCity" = "更换城市";
-"Tellomi.Discover.ComposeCity" = "发布到 %@";
-"Tellomi.Discover.ComposeCityNone" = "这条不标注城市";
+"Tellomi.Discover.NearbyUnavailable" = "同城暫時還不能重新整理。";
+"Tellomi.Discover.NearbyUnavailableHint" = "仍可以選城市。貼文只記錄城市，不記錄位置。";
+"Tellomi.Discover.ChangeCity" = "更換城市";
+"Tellomi.Discover.ComposeCity" = "發布到 %@";
+"Tellomi.Discover.ComposeCityNone" = "這條不標註城市";
 "Tellomi.Discover.InvalidCity" = "這個城市不能用，請重新選擇。";
 "Tellomi.Discover.AiGenerated" = "AI 生成";
 "Tellomi.Discover.QuoteDeleted" = "原動態已被作者刪除";
@@ -217,3 +217,29 @@
 "Tellomi.Settings.PremiumGraceTitle" = "你的會員即將到期。";
 "Tellomi.Settings.PremiumGraceText" = "最近一次付款沒有成功。要繼續使用這些功能，請續訂。";
 "Tellomi.Settings.PremiumGraceAction" = "恢復訂閱";
+
+/* Tellomi keys added so every bundled language has them. */
+"Tellomi.Discover.LinkPreviewLoading" = "正在取得連結預覽。";
+"Tellomi.Discover.Mention" = "提及";
+"Tellomi.Discover.MentionEmpty" = "沒有符合的使用者名稱";
+"Tellomi.Discover.MentionHint" = "寫點什麼，用 @ 提及使用者";
+"Tellomi.Discover.MentionInvalid" = "%s 不是有效使用者名稱，對方收不到提及。";
+"Tellomi.Discover.VideoAdd" = "新增影片";
+"Tellomi.Discover.VideoHint" = "影片最長 60 秒。";
+"Tellomi.Discover.VideoNotUploaded" = "發現還不能上傳影片，移除後可以發布文字。";
+"Tellomi.Discover.VideoReading" = "正在讀取時長…";
+"Tellomi.Discover.VideoRemove" = "移除";
+"Tellomi.Discover.VideoReplace" = "更換";
+"Tellomi.Discover.VideoSelected" = "已選擇 · %s";
+"Tellomi.Discover.VideoTooLong" = "這段影片超過 60 秒，請換一段更短的。";
+"Tellomi.Discover.VideoUnknown" = "讀不到這段影片的時長，請換一個。";
+"Tellomi.Login.BindAction" = "綁定";
+"Tellomi.Login.BindPhone" = "綁定手機號";
+"Tellomi.Login.BindPhoneNotice" = "綁定後可使用手機號登入";
+"Tellomi.Settings.BindEmail" = "綁定電子郵件";
+"Tellomi.Settings.SignInEmailBody" = "這是登入這個帳號的電子郵件，不是雲端密碼的救援信箱。這裡不會改帳號，也不會再要求綁定一次。";
+"Tellomi.Settings.SignInEmailMaskBody" = "伺服器只返回了遮罩。這不是完整地址，也不是雲端密碼的救援信箱。這裡不會改帳號。";
+"Tellomi.Settings.SignInEmailTitle" = "登入電子郵件";
+"Tellomi.Tabs.Chats" = "聊天";
+"Tellomi.Tabs.HideLabels" = "隱藏底欄文字";
+"Tellomi.Tabs.Me" = "我";
