@@ -5,6 +5,12 @@
 3. 模块边界：https://github.com/tellomi/tellomi/blob/main/docs/MODULE_BOUNDARIES.md
 4. 本仓：`CLAUDE.md`（构建、模拟器、子系统不变量）；改动记入 `Tellomi/UPSTREAM_PATCHES.md`
 
+## Owner rule: the UI stays Telegram's
+
+UI must stay Telegram original (upstream Telegram-iOS); only data within 动态 may be custom. Any PR touching UI (assets, theme, tab bar, login, settings, chat list, profile) requires the owner's explicit approval after seeing screenshots. Never replace release/ios with master (no `git push origin master:release/ios`, no whole-tree syncs). Agents must never merge their own PRs; merges require owner approval.
+
+动态 is `submodules/TelegramUI/Components/Moments`. A release is a pull request into `release/ios` that the owner merges. That merge starts TestFlight. The same rule is in `.cursor/rules/telegram-native-first.mdc`.
+
 ## 永久开发规范（Telegram Native-First）
 
 本规范对所有为 Tellomi 写代码的人与 AI **永久生效**。仓库内的权威版本是**本仓根目录 `AGENTS.md` 的「永久开发规范」章节**。`docs/TELLOMI_RULES.md`（如有）同步收录原则与检查清单。改本规范必须开 PR，不要只改聊天记忆。
@@ -75,7 +81,7 @@ Telegram 的设计是：安装包保持精简，贴纸、主题、文案、配�
 - 媒体缓存与自动清理：`submodules/Postbox/Sources/MediaBox.swift`（及相关 `MediaBoxFile*.swift`）。新下载必须走 MediaBox，禁止自建不受管目录。
 - 动态扩展代码在 `submodules/TelegramUI/Components/Moments/`。注意：这条目录在 `release/ios` 发布线上；当前 `master` 可能没有 Moments 源码，改资料页动态不要只在缺该目录的 `master` 上开工。
 - 原版改动登记：`Tellomi/UPSTREAM_PATCHES.md`。
-- 合入 `release/ios` 会触发 TestFlight，必须攒批、独立复审 PASS、CI 绿后再合，并立刻汇报构建号。本规范的文档 PR 只打到 `master`，不要打到 `release/ios`。
+- 合入 `release/ios` 会触发 TestFlight。合入必须由所有者批准。不要用 `git push origin master:release/ios` 或整树同步替换 `release/ios`。界面改动（资源、主题、标签栏、登录、设置、聊天列表、资料页）必须先给所有者看截图并得到明确同意。代理不得自行合并 PR。
 
 
 # AGENTS.md
