@@ -121,6 +121,9 @@ swift_test(
     copts = [
         "-warnings-as-errors",
     ],
+    deps = [
+        "//submodules/TellomiDiscover:TellomiDiscover",
+    ],
 )
 
 ios_unit_test(

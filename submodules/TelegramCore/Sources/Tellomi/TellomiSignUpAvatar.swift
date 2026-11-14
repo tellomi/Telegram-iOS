@@ -1,4 +1,5 @@
 import Foundation
+import TellomiDiscover
 
 public struct TellomiSignUpAvatarFailure: Equatable {
     public var code: Int32
@@ -64,15 +65,5 @@ private func tellomiSignUpAvatarTemplate(languageCode: String, pack: [String: St
 }
 
 private func tellomiSignUpAvatarPackString(languageCode: String, pack: [String: String], key: String, english: String, simplified: String, traditional: String) -> String {
-    if let value = pack[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty, value != key {
-        return value
-    }
-    let code = languageCode.lowercased()
-    if code == "zh-hant" || code.hasPrefix("zh-hant") || code == "zh-tw" || code.hasPrefix("zh-tw") || code == "zh-hk" || code.hasPrefix("zh-hk") || code == "zh-mo" || code.hasPrefix("zh-mo") {
-        return traditional
-    }
-    if code == "zh" || code.hasPrefix("zh") {
-        return simplified
-    }
-    return english
+    return tellomiLocalizedPackString(languageCode: languageCode, pack: pack, key: key, english: english, simplified: simplified, traditional: traditional)
 }

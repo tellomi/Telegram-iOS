@@ -99,8 +99,9 @@ func tellomiStopTabObservation(rootController: TelegramRootController) {
     objc_setAssociatedObject(rootController, &tellomiTabObservationKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 }
 
-/// Hidden Contacts tab: `openContacts` pushes a page (M2). This lookup is what
-/// `getContactsController` calls, so it never creates or pushes a controller.
+/// What `getContactsController` returns. A hidden Contacts tab with nothing on
+/// the stack pushes a page, the same path as `openContacts` (M2). The kill
+/// switch and a bar that is not built yet do not push.
 func tellomiResolvedContactsController(root: TelegramRootController, context: AccountContext, tabContacts: ContactsController?) -> ViewController? {
     let tabs = root.rootTabController
     let pushed = root.viewControllers.compactMap { $0 as? ContactsController }.first { $0 !== tabContacts }
@@ -110,18 +111,23 @@ func tellomiResolvedContactsController(root: TelegramRootController, context: Ac
     } else {
         tabVisible = false
     }
-    switch tellomiContactsControllerRead(
+    switch tellomiContactsGetterAction(tellomiContactsControllerRead(
         navigationEnabled: tellomiBottomNavigationEnabled(appConfiguration: context.currentAppConfiguration.with { $0 }),
         tabBarReady: tabs != nil,
         tabVisible: tabVisible,
         pushedPageExists: pushed != nil
-    ) {
-    case .owned, .none:
+    )) {
+    case .keepOwned:
         return nil
-    case .tab:
+    case .useTab:
         return tabContacts
-    case .pushed:
+    case .usePushed:
         return pushed
+    case .push:
+        guard tellomiOpenContacts(root: root, context: context) else {
+            return nil
+        }
+        return root.viewControllers.compactMap { $0 as? ContactsController }.first { $0 !== tabContacts }
     }
 }
 

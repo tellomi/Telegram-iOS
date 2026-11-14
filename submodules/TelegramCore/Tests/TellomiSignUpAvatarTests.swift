@@ -28,7 +28,7 @@ final class TellomiSignUpAvatarTests: XCTestCase {
             "Couldn't upload the profile photo (500 INTERNAL_SERVER_ERROR)"
         )
         XCTAssertEqual(tellomiSignUpAvatarRetryTitle(languageCode: "zh"), "重试")
-        XCTAssertEqual(tellomiSignUpAvatarRetryTitle(languageCode: "ja"), "Retry")
+        XCTAssertEqual(tellomiSignUpAvatarRetryTitle(languageCode: "ja"), "再試行")
     }
 
     func testALanguagePackReplacesTheFallback() {

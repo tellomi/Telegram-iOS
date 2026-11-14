@@ -1,10 +1,14 @@
 import Foundation
 
-/// A language-pack value wins when the pack has the key. Simplified and traditional
-/// Chinese are the fallback for `zh*`. Every other language falls back to English.
+/// A language-pack value wins when the pack has the key. Otherwise the bundled
+/// string for that langpack language is used. The three literals are only the
+/// last resort when a key is absent from both.
 public func tellomiLocalizedPackString(languageCode: String, pack: [String: String], key: String, english: String, simplified: String, traditional: String) -> String {
     if let value = pack[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty, value != key {
         return value
+    }
+    if let bundled = tellomiBundledString(languageCode: languageCode, key: key) {
+        return bundled
     }
     let code = languageCode.lowercased()
     if code == "zh-hant" || code.hasPrefix("zh-hant") || code == "zh-tw" || code.hasPrefix("zh-tw") || code == "zh-hk" || code.hasPrefix("zh-hk") || code == "zh-mo" || code.hasPrefix("zh-mo") {

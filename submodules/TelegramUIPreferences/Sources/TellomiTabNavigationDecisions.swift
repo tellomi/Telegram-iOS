@@ -1,4 +1,5 @@
 import Foundation
+import TellomiDiscover
 import TellomiLinks
 
 public struct TellomiTabCopy: Equatable {
@@ -22,8 +23,8 @@ public struct TellomiTabCopy: Equatable {
             feed: text("Tellomi.Discover.Feed", "Discover", "发现", "發現"),
             chats: text("Tellomi.Tabs.Chats", "Chats", "聊天", "聊天"),
             me: text("Tellomi.Tabs.Me", "Me", "我", "我"),
-            hideFeed: text("Tellomi.Discover.HideFeed", "Hide Discover", "隐藏发现", "隱藏發現"),
-            hideContacts: text("Tellomi.Discover.HideContacts", "Hide Contacts", "隐藏联系人", "隱藏聯絡人"),
+            hideFeed: tellomiTabHideTitle(languageCode: languageCode),
+            hideContacts: tellomiTabHideTitle(languageCode: languageCode),
             navigationTitle: text("Tellomi.Discover.NavigationTitle", "Navigation Bar", "导航栏", "導覽列"),
             navigationFooter: text("Tellomi.Discover.NavigationFooter", "Chats and Settings always stay in the bar.", "聊天和设置始终显示，不能关闭。", "聊天和設定始終顯示，不能關閉。"),
             feedEmptyTitle: text("Tellomi.Discover.FeedEmptyTitle", "Nothing here yet", "还没有内容", "還沒有內容"),
@@ -139,18 +140,16 @@ public func tellomiProductTabLabels(copy: TellomiTabCopy) -> [(title: String, ac
     }
 }
 
+/// Long-press title for a tab that can leave the bar. Discover, Calls, and Contacts use it.
+/// Chats, Settings, and Me do not. The language choice is `tellomiTabPackString` with an empty
+/// pack: a downloaded pack can still contain "Hide Discover", "隐藏发现", "Hide Contacts",
+/// "隐藏联系人", or "Hide Calls Tab", and those values must not replace this word.
+public func tellomiTabHideTitle(languageCode: String) -> String {
+    return tellomiTabPackString(languageCode: languageCode, pack: [:], key: "Tellomi.Tabs.Hide", english: "Hide", simplified: "隐藏", traditional: "隱藏")
+}
+
 func tellomiTabPackString(languageCode: String, pack: [String: String], key: String, english: String, simplified: String, traditional: String) -> String {
-    if let value = pack[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty, value != key {
-        return value
-    }
-    let code = languageCode.lowercased()
-    if code == "zh-hant" || code.hasPrefix("zh-hant") || code == "zh-tw" || code.hasPrefix("zh-tw") || code == "zh-hk" || code.hasPrefix("zh-hk") || code == "zh-mo" || code.hasPrefix("zh-mo") {
-        return traditional
-    }
-    if code == "zh" || code.hasPrefix("zh") {
-        return simplified
-    }
-    return english
+    return tellomiLocalizedPackString(languageCode: languageCode, pack: pack, key: key, english: english, simplified: simplified, traditional: traditional)
 }
 
 public func tellomiStringPack(primary: [String: String], secondary: [String: String]?) -> [String: String] {
@@ -207,8 +206,7 @@ public func tellomiFeedPostLinkEscapesPeerResolution(_ url: String, navigationEn
     return tellomiFeedPostIdIfHandled(in: parsed, navigationEnabled: navigationEnabled) != nil
 }
 
-/// What `getContactsController` may return. None of these create or push a page.
-/// Opening Contacts while the tab is hidden is `openContacts`.
+/// What `getContactsController` sees before it returns a page.
 public enum TellomiContactsControllerRead: Equatable {
     /// The bar is off, or it is not built yet. The getter keeps the controller it already holds.
     case owned
@@ -216,8 +214,29 @@ public enum TellomiContactsControllerRead: Equatable {
     case tab
     /// The tab is hidden and a contacts page is already on the stack.
     case pushed
-    /// The tab is hidden and nothing is pushed. The getter must not create a page.
+    /// The tab is hidden and nothing is pushed. The getter pushes a page.
     case none
+}
+
+/// What `getContactsController` does with that read. Only `.none` pushes (M2).
+public enum TellomiContactsGetterAction: Equatable {
+    case keepOwned
+    case useTab
+    case usePushed
+    case push
+}
+
+public func tellomiContactsGetterAction(_ read: TellomiContactsControllerRead) -> TellomiContactsGetterAction {
+    switch read {
+    case .owned:
+        return .keepOwned
+    case .tab:
+        return .useTab
+    case .pushed:
+        return .usePushed
+    case .none:
+        return .push
+    }
 }
 
 public func tellomiContactsControllerRead(navigationEnabled: Bool, tabBarReady: Bool, tabVisible: Bool, pushedPageExists: Bool) -> TellomiContactsControllerRead {

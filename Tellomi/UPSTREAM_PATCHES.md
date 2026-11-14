@@ -1,5 +1,21 @@
 # Upstream patches for the Tellomi fork
 
+## Tab long-press hide label (2026-11-14)
+
+Long-press on Discover, Calls, or Contacts still hides that tab. The menu item is only 隐藏 / Hide / 隱藏. It is not 隐藏发现, 隐藏联系人, Hide Discover, Hide Contacts, or `Calls.HideCallsTab` ("Hide Calls Tab"). Chats, Settings, and the last tab (我) do not gain a hide item. Their long-press menus stay the folder list and the account list.
+
+`tellomiTabHideTitle` uses the same language choice as the other Tellomi tab strings and passes an empty pack. A downloaded pack can still hold the longer wording, and that value is not shown. The bundled `Tellomi.Discover.HideFeed`, `Tellomi.Discover.HideContacts`, and `Tellomi.Tabs.Hide` entries match the short word. Hiding still writes the same settings (`showFeedTab`, `showContactsTab`, `CallListSettings.showTab`).
+
+| File | Change |
+| --- | --- |
+| `submodules/CallListUI/Sources/CallListController.swift` | The hide item reads `tellomiTabHideTitle`. The action is unchanged. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | The three hide keys are "Hide". |
+| `Telegram/Telegram-iOS/zh-Hans.lproj/Localizable.strings` | The three hide keys are 隐藏. |
+| `Telegram/Telegram-iOS/zh-Hant.lproj/Localizable.strings` | The three hide keys are 隱藏. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | `tellomiTabHideTitle`. Discover and Contacts read it. The pack is not consulted. |
+| `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | The short word, and a pack that still has the longer wording. |
+| `submodules/MtProtoKit/Tests/MTDiscoverConnectionSignalsTests.m` | The dispose-during-backoff case disposes before the 0.1 s timer can fire. A 30 ms sleep on a loaded simulator let that timer start a second round. |
+
 ## Login restored to Telegram's phone flow (2026-11-13)
 
 The custom login skin (邮箱登录 on the phone page, agreement checkbox, gray fields, bundled titles) is removed. Phone, code, password, recovery, reset, and sign-up screens are Telegram's again. The welcome carousel stays out of the stack (`tellomiSkipsWelcomeSplash`).
@@ -646,7 +662,7 @@ The list is built on a background queue and cached. The phone screen starts that
 
 ## Bottom navigation (M2)
 
-Fresh install shows Discover, Chats, and Settings (D-5). Calls and Contacts start hidden. Chats and Settings cannot be hidden (D-7). The app opens on Chats (D-8). There is no migration. `ios_killswitch_disable_tellomi_tabs` = `1` puts the upstream tab order back. The Calls nil-default below is not behind that switch: a missing `CallListSettings` hides Calls either way. `getContactsController` only returns a controller that already exists; it does not push. `openContacts` pushes a contacts page when that tab is hidden. A `tell.cc/m#<id>` link is handled only while the Tellomi bar is on. The kill switch returns it to the normal opener. A tap in a chat resolves that address before the external opener: the path `/m` is the username `m`, so Discover stayed hidden and the post never opened (D-57). `resolveUrlImpl` now returns that address as an external URL when the bar is on, before autologin can rewrite the fragment, and the existing opener turns Discover back on and opens the post. If the feed screen is not in a navigation stack yet (the chat is still closing), the post stays pending and is presented again for about a second.
+Fresh install shows Discover, Chats, and Settings (D-5). Calls and Contacts start hidden. Chats and Settings cannot be hidden (D-7). The app opens on Chats (D-8). There is no migration. `ios_killswitch_disable_tellomi_tabs` = `1` puts the upstream tab order back. The Calls nil-default below is not behind that switch: a missing `CallListSettings` hides Calls either way. `getContactsController` pushes a contacts page when that tab is hidden and nothing is already on the stack, using the same path as `openContacts`. A page that is already pushed is returned. The kill switch, and a bar that is not built yet, do not push. A `tell.cc/m#<id>` link is handled only while the Tellomi bar is on. The kill switch returns it to the normal opener. A tap in a chat resolves that address before the external opener: the path `/m` is the username `m`, so Discover stayed hidden and the post never opened (D-57). `resolveUrlImpl` now returns that address as an external URL when the bar is on, before autologin can rewrite the fragment, and the existing opener turns Discover back on and opens the post. If the feed screen is not in a navigation stack yet (the chat is still closing), the post stays pending and is presented again for about a second.
 
 The Calls tab already hides from a long-press on its icon (`CallListController.tabBarItemContextAction`, `Calls_HideCallsTab`). The calls list opened from Settings still has the Show Calls Tab switch (`showSettings` on `.navigation`). Both write `CallListSettings`. New Message uses `ContactSelectionController`, not the Contacts tab, so hiding Contacts leaves that list in place.
 
@@ -655,14 +671,14 @@ The Calls tab already hides from a long-press on its icon (`CallListController.t
 | `submodules/TelegramUIPreferences/Sources/CallListSettings.swift` | `showTab` is false when `_showTab` is nil (one line). An explicit true or false is unchanged. |
 | `submodules/TelegramUIPreferences/Sources/PostboxKeys.swift` | `ApplicationSpecificSharedDataKeyValues.tellomiTabSettings = 100`, stored with `applicationSpecificSharedDataKey` (the stored id is 1100). Upstream's highest shared-data id here is 22. |
 | `submodules/TelegramUIPreferences/Sources/TellomiTabSettings.swift` | New. `showFeedTab` defaults true, `showContactsTab` defaults false. Tab order and the kill switch. |
-| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | New. Tab copy, the `tell.cc/m#` post id, and the two rules the root controller calls. A post link is not consumed when the kill switch is on. The contacts getter never pushes. `tellomiFeedPostLinkEscapesPeerResolution` is the chat-tap rule: that address must not become the user `m`. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | New. Tab copy, the `tell.cc/m#` post id, and the two rules the root controller calls. A post link is not consumed when the kill switch is on. `.none` is the read that makes the contacts getter push. `tellomiFeedPostLinkEscapesPeerResolution` is the chat-tap rule: that address must not become the user `m`. |
 | `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | Host tests for that copy, the post-link kill switch, the contacts lookup, and the chat-tap rule. |
 | `submodules/UrlHandling/Sources/UrlHandling.swift` | `resolveUrlImpl` returns a post link as an external URL when the bar is on, before autologin. The external opener already reopens Discover (D-57). `/m/<slug>` is unchanged. |
 | `submodules/TelegramUI/Sources/AppDelegate.swift` | The existing calls-settings transaction also calls `tellomiCaptureLaunchTabs` (one line) so the first tab bar matches the saved record. |
 | `submodules/TelegramUI/Sources/ApplicationContext.swift` | `tellomiStartTabObservation` / `tellomiStopTabObservation`, same shape as the calls-tab subscription at the lines above it. |
-| `submodules/TelegramUI/Sources/TelegramRootController.swift` | `addRootControllers` and `updateRootControllers` call `tellomiAppendRootTabs`. When that returns false the original appends run. `getContactsController` looks up a contacts page and does not push. `openContacts` pushes one when the tab is hidden. |
+| `submodules/TelegramUI/Sources/TelegramRootController.swift` | `addRootControllers` and `updateRootControllers` call `tellomiAppendRootTabs`. When that returns false the original appends run. `getContactsController` calls `tellomiResolvedContactsController`. When the tab is hidden and nothing is pushed, that lookup pushes a page. `openContacts` uses the same push. |
 | `submodules/TelegramUI/Sources/OpenUrl.swift` | `continueHandling` returns early on `tell.cc/m#<id>` (`tellomiHandleFeedPostLink`). The kill switch makes that function return false, so the link is not swallowed. A `/m/<slug>` path is still a message link. |
-| `submodules/TelegramUI/Sources/TellomiBottomNavigation.swift` | New. Order, observation, the hidden-contacts push from `openContacts`, and re-enabling Discover for a post link (D-57). The observation compares `TellomiTabSettings`. A `(Bool, Bool)` does not satisfy `Equatable`, so `distinctUntilChanged` does not accept it. |
+| `submodules/TelegramUI/Sources/TellomiBottomNavigation.swift` | New. Order, observation, the hidden-contacts push from `openContacts` and from `getContactsController`, and re-enabling Discover for a post link (D-57). The observation compares `TellomiTabSettings`. A `(Bool, Bool)` does not satisfy `Equatable`, so `distinctUntilChanged` does not accept it. |
 | `submodules/ContactListUI/Sources/ContactsController.swift` | One call, `tellomiAppendHideContactsTabItem`, on the existing tab-icon long-press. |
 | `submodules/ContactListUI/Sources/TellomiContactsTabMenu.swift` | New. Hide Contacts, same menu as Hide Calls. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` | One call, `tellomiAppendNavigationSettingsEntry`, after Language. |
@@ -670,6 +686,16 @@ The Calls tab already hides from a long-press on its icon (`CallListController.t
 | `submodules/SettingsUI/Sources/TellomiNavigationSettingsController.swift` | New. Discover, Calls, and Contacts switches. Chats and Settings are on and disabled (D-7). Calls uses `CallListSettings`, so the old Show Calls Tab switch still works. |
 | `submodules/TelegramUI/Components/Tellomi/FeedScreen/` | New module `TellomiFeedScreen`. Empty Discover tab (D-37). Not `NewsScreen`. Long-press hides it (D-38). `TellomiFeedScreenNode` imports `TelegramUIPreferences` so it can read `TellomiTabCopy`. Opening a post from a link retries for about a second when the screen is not in a navigation stack yet. |
 | `submodules/TelegramUI/BUILD` | Depends on that module. |
+
+## Contacts getter pushes when the tab is hidden (M2)
+
+`getContactsController` returned the contacts controller the root keeps even when that controller is not in the bar. Callers then activated search or sort on a page that was not on screen. The hidden-tab, nothing-pushed read (`.none`) now pushes, through `tellomiOpenContacts`, and returns that page. A tab that is showing, a page already on the stack, the kill switch, and a bar that is not built yet do not push. No upstream file changed: `TelegramRootController.getContactsController` already called `tellomiResolvedContactsController`.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | `tellomiContactsGetterAction`. Only `.none` is `.push`. |
+| `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | The hidden-and-empty read is the only one that pushes. |
+| `submodules/TelegramUI/Sources/TellomiBottomNavigation.swift` | `.push` calls `tellomiOpenContacts` and returns the page it pushed. |
 
 ## Main tab bar: Discover, Chats, Me
 
@@ -1432,3 +1458,20 @@ The main App ID now requests `SIRIKIT` as well. Upstream puts the entitlement on
 | `Tellomi/prepare_appstore_signing.py` | Prints whether the main and SiriIntents profiles contain the key. |
 | `Tellomi/check_server_config.py`, `Tellomi/test_siri_entitlements.py` | The gate, the host id, and the BUILD split. |
 | `docs/TELLOMI.md` | The signed Siri key follows the profile. |
+
+## Tellomi strings for every langpack language
+
+`langpack.getLanguages` serves 32 languages: `en`, `zh-hans`, `zh-hant`, and 29 others (`ar`, `be`, `ca`, `cs`, `de`, `el`, `es`, `fa`, `fi`, `fr`, `he`, `hi`, `id`, `it`, `ja`, `ko`, `ms`, `nb`, `nl`, `pl`, `pt-br`, `ro`, `ru`, `sv`, `th`, `tr`, `uk`, `uz`, `vi`). Tellomi keys previously existed only in English and the two Chinese `Localizable.strings` files, and the copy helpers fell back to English for every other code. Hardcoded login, tab, and settings sentences did the same.
+
+Each of those keys now has a string for all 32 languages in `Tellomi/i18n/<code>.strings`, loaded by `tellomiBundledString`. Where the English matches an upstream key (`Settings.PrivacySettings`, `DialogList.Title`, `Common.Done`, `Tour.StartButton`, and the same kind of settings and login keys), the other languages use that key's wording from the public iOS export. Existing values of upstream keys in `en.lproj`, `zh-Hans.lproj`, and `zh-Hant.lproj` are unchanged. A downloaded pack still wins when it already has the key. `tellomiPrimaryStringsDictionary` fills only missing keys, so `presentationData.strings` returns the bundled sentence. Five Traditional strings that were still simplified (`更換城市`, `發布到 %@`, and the city-feed sentences) are corrected. The server langpack is not edited.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/i18n/*.strings`, `Tellomi/i18n/audit-ios.csv`, `Tellomi/i18n/test_audit.py` | 187 keys, 32 languages, and the audit. |
+| `submodules/TellomiDiscover/Sources/TellomiBundledLocalizations.swift` | Lookup used by the copy helpers and by `presentationData`. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverStrings.swift` | Pack, then the bundled language, then the old three-way fallback. |
+| `submodules/TelegramPresentationData/Sources/PresentationData.swift` | Missing keys are filled from the bundle. Present pack values stay. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | Start, Continue, and Choose Your Language use `Tour.StartButton`, `Login.Continue`, and `Localization.ChooseLanguage`. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | Country title, search, and the bind-phone sentences use those keys. |
+| `submodules/SettingsUI/Sources/TellomiNavigationSettingsController.swift`, `TellomiOpenSourceLicensesController.swift` | `Tellomi.Tabs.HideLabels` and `Tellomi.Settings.OpenSource`. |
+| `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | New Tellomi keys only. Five Traditional Tellomi values corrected. No upstream value edited. |

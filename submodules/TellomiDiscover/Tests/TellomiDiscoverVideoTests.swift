@@ -122,7 +122,7 @@ final class TellomiDiscoverVideoTests: XCTestCase {
         XCTAssertEqual(english.videoTooLong, "This video is longer than 60 seconds. Pick a shorter one.")
         XCTAssertEqual(english.videoUnknown, "Couldn't read how long this video is. Pick another.")
         XCTAssertEqual(english.videoNotUploaded, "Video upload isn't available yet. Remove it to post the text.")
-        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "ja").videoHint, "Videos can be up to 60 seconds.")
+        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "ja").videoHint, "動画は60秒までです。")
 
         let kept = TellomiDiscoverVideo.statusText(busy: false, decision: .accept, hasVideo: true, durationMs: 60_000, copy: simplified)
         XCTAssertEqual(kept?.text, "已选择 · 1:00\n发现还不能上传视频，移除后可以发布文字。")

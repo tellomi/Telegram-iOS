@@ -834,7 +834,7 @@ public final class CallListController: TelegramBaseController {
                 self.callPressed()
             })
         })))
-        items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.Calls_HideCallsTab, icon: { theme in
+        items.append(.action(ContextMenuActionItem(text: tellomiTabHideTitle(languageCode: self.presentationData.strings.primaryComponent.languageCode), icon: { theme in
             return generateTintedImage(image: UIImage(bundleImageName: "Peer Info/HideIcon"), color: theme.contextMenu.primaryColor)
         }, action: { [weak self] c, f in
             c?.dismiss(completion: { [weak self] in
