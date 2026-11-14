@@ -503,8 +503,8 @@ final class TellomiDiscoverLocalizationAndReportTests: XCTestCase {
     func testLanguagePackReplacesHardcodedCopy() {
         XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "zh-Hans").recommend, "推荐")
         XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "zh-Hant").recommend, "推薦")
-        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "ja").recommend, "For You")
-        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "de").invalidCity, "That city can't be used. Choose another.")
+        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "ja").recommend, "おすすめ")
+        XCTAssertEqual(TellomiDiscoverCopy.resolve(languageCode: "de").invalidCity, "Diese Stadt kann nicht verwendet werden. Wähle eine andere.")
         let japanese = [
             "Tellomi.Discover.Recommend": "おすすめ",
             "Tellomi.Discover.Likes": "%d いいね",
@@ -512,9 +512,9 @@ final class TellomiDiscoverLocalizationAndReportTests: XCTestCase {
         ]
         let copy = TellomiDiscoverCopy.resolve(languageCode: "ja", pack: japanese)
         XCTAssertEqual(copy.recommend, "おすすめ")
-        XCTAssertEqual(copy.following, "Following")
+        XCTAssertEqual(copy.following, "フォロー中")
         XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chengdu", languageCode: "ja", pack: japanese), "成都")
-        XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chengdu", languageCode: "ja"), "Chengdu")
+        XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chengdu", languageCode: "ja"), "成都")
         XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chengdu", languageCode: "zh-Hant"), "成都")
         XCTAssertEqual(tellomiDiscoverCityName(code: "cn:chongqing", languageCode: "zh-HK"), "重慶")
         XCTAssertEqual(tellomiDiscoverCityStringKey("cn:hong-kong"), "Tellomi.Discover.City.cn_hong_kong")

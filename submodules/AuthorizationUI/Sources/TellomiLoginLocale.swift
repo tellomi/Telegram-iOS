@@ -2,6 +2,7 @@ import Foundation
 import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
+import TellomiDiscover
 
 /// Set after zh-hans / zh-hant has been applied once. A later choice in Settings is left alone.
 /// Reinstalling the app clears this key together with the saved langpack.
@@ -221,39 +222,10 @@ public func tellomiRegionLocale(languageCode: String) -> Locale {
 /// Title and search field for the login country list. The loaded Telegram pack can
 /// still be English while the login button has selected another language.
 public func tellomiCountryListChrome(languageCode: String) -> (title: String, search: String) {
-    let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode).lowercased().replacingOccurrences(of: "_", with: "-")
-    if code == "zh-hant" || code.hasPrefix("zh-hant") || code == "zh-tw" || code.hasPrefix("zh-tw") || code == "zh-hk" || code.hasPrefix("zh-hk") || code == "zh-mo" || code.hasPrefix("zh-mo") {
-        return (title: "國家/地區", search: "搜尋")
-    }
-    if code == "zh" || code.hasPrefix("zh-") {
-        return (title: "国家/地区", search: "搜索")
-    }
-    let key = code.split(separator: "-").first.map(String.init) ?? code
-    let table: [String: (String, String)] = [
-        "en": ("Country", "Search"),
-        "ar": ("البلد", "بحث"),
-        "be": ("Краіна", "Пошук"),
-        "ca": ("País", "Cerca"),
-        "de": ("Land", "Suchen"),
-        "es": ("País", "Buscar"),
-        "fa": ("کشور", "جستجو"),
-        "fr": ("Pays", "Rechercher"),
-        "id": ("Negara", "Cari"),
-        "it": ("Paese", "Cerca"),
-        "ko": ("국가", "검색"),
-        "ms": ("Negara", "Cari"),
-        "nl": ("Land", "Zoeken"),
-        "pl": ("Kraj", "Szukaj"),
-        "pt": ("País", "Buscar"),
-        "ru": ("Страна", "Поиск"),
-        "tr": ("Ülke", "Ara"),
-        "uk": ("Країна", "Пошук"),
-        "uz": ("Mamlakat", "Qidirish")
-    ]
-    if let pair = table[key] {
-        return (title: pair.0, search: pair.1)
-    }
-    return (title: "Country", search: "Search")
+    let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode)
+    let title = tellomiBundledString(languageCode: code, key: "Login.SelectCountry.Title") ?? "Country"
+    let search = tellomiBundledString(languageCode: code, key: "Common.Search") ?? "Search"
+    return (title, search)
 }
 
 private let tellomiBundledLanguageNames: [String: String] = [
@@ -327,12 +299,15 @@ public func tellomiBindPhoneCopy(languageCode: String) -> (title: String, notice
 }
 
 private func tellomiBindAccountCopy(languageCode: String) -> (email: String, bindPhone: String, bindPhoneNotice: String, bindAction: String, bindEmail: String) {
-    switch tellomiLoginScript(languageCode: tellomiChromeLanguageCode(savedLanguageCode: languageCode)) {
-    case .hant:
-        return ("郵箱", "綁定手機號", "綁定後可使用手機號登入", "綁定", "綁定郵箱")
-    case .hans:
-        return ("邮箱", "绑定手机号", "绑定后可使用手机号登录", "绑定", "绑定邮箱")
-    case .english:
-        return ("Email", "Link a phone number", "You can sign in with this number after linking it.", "Link", "Link an email")
+    let code = tellomiChromeLanguageCode(savedLanguageCode: languageCode)
+    func text(_ key: String, _ english: String) -> String {
+        return tellomiBundledString(languageCode: code, key: key) ?? english
     }
+    return (
+        text("Tellomi.Settings.Email", "Email"),
+        text("Tellomi.Login.BindPhone", "Link a phone number"),
+        text("Tellomi.Login.BindPhoneNotice", "You can sign in with this number after linking it."),
+        text("Tellomi.Login.BindAction", "Link"),
+        text("Tellomi.Settings.BindEmail", "Link an email")
+    )
 }

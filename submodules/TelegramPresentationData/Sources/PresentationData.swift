@@ -6,6 +6,7 @@ import TelegramCore
 import Contacts
 import Display
 import TelegramUIPreferences
+import TellomiDiscover
 import TellomiWallpapers
 import AppBundle
 import Sunrise
@@ -156,6 +157,11 @@ public func dictFromLocalization(_ value: Localization) -> [String: String] {
 func tellomiPrimaryStringsDictionary(languageCode: String, localization: Localization) -> [String: String] {
     var dict = dictFromLocalization(localization)
     for (key, value) in tellomiChineseGapDictionary(languageCode: languageCode) where dict[key] == nil {
+        dict[key] = value
+    }
+    // Tellomi keys are not in the upstream pack. Fill only keys the pack did not send,
+    // so an existing upstream translation is left as the pack wrote it.
+    for (key, value) in tellomiBundledStrings(languageCode: languageCode) where dict[key] == nil {
         dict[key] = value
     }
     return dict

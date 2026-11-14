@@ -218,3 +218,29 @@
 "Tellomi.Settings.PremiumGraceTitle" = "你的会员即将到期。";
 "Tellomi.Settings.PremiumGraceText" = "最近一次付款没有成功。要继续使用这些功能，请续订。";
 "Tellomi.Settings.PremiumGraceAction" = "恢复订阅";
+
+/* Tellomi keys added so every bundled language has them. */
+"Tellomi.Discover.LinkPreviewLoading" = "正在获取链接预览。";
+"Tellomi.Discover.Mention" = "提及";
+"Tellomi.Discover.MentionEmpty" = "没有匹配的用户名";
+"Tellomi.Discover.MentionHint" = "写点什么，用 @ 提及用户";
+"Tellomi.Discover.MentionInvalid" = "%s 不是有效用户名，对方收不到提及。";
+"Tellomi.Discover.VideoAdd" = "添加视频";
+"Tellomi.Discover.VideoHint" = "视频最长 60 秒。";
+"Tellomi.Discover.VideoNotUploaded" = "发现还不能上传视频，移除后可以发布文字。";
+"Tellomi.Discover.VideoReading" = "正在读取时长…";
+"Tellomi.Discover.VideoRemove" = "移除";
+"Tellomi.Discover.VideoReplace" = "更换";
+"Tellomi.Discover.VideoSelected" = "已选择 · %s";
+"Tellomi.Discover.VideoTooLong" = "这段视频超过 60 秒，请换一段更短的。";
+"Tellomi.Discover.VideoUnknown" = "读不到这段视频的时长，请换一个。";
+"Tellomi.Login.BindAction" = "绑定";
+"Tellomi.Login.BindPhone" = "绑定手机号";
+"Tellomi.Login.BindPhoneNotice" = "绑定后可使用手机号登录";
+"Tellomi.Settings.BindEmail" = "绑定邮箱";
+"Tellomi.Settings.SignInEmailBody" = "这是登录这个账号的邮箱，不是云密码的恢复邮箱。这里不会改账号，也不会再要求绑定一次。";
+"Tellomi.Settings.SignInEmailMaskBody" = "服务器只返回了掩码。这不是完整地址，也不是云密码的恢复邮箱。这里不会改账号。";
+"Tellomi.Settings.SignInEmailTitle" = "登录邮箱";
+"Tellomi.Tabs.Chats" = "聊天";
+"Tellomi.Tabs.HideLabels" = "隐藏底栏文字";
+"Tellomi.Tabs.Me" = "我";

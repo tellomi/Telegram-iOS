@@ -41,7 +41,7 @@ public func tellomiOpenSourceLicensesController(context: AccountContext) -> View
     let signal = context.sharedContext.presentationData
     |> deliverOnMainQueue
     |> map { presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let title = presentationData.strings.primaryComponent.languageCode.lowercased().hasPrefix("zh") ? "开源许可" : "Open Source Licenses"
+        let title = presentationData.strings.Tellomi_Settings_OpenSource
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: [TellomiOpenSourceLicensesEntry.notice(TellomiOpenSourceNotices.text)], style: .blocks, animateChanges: false)
         return (controllerState, (listState, ()))

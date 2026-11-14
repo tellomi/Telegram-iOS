@@ -10,6 +10,7 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
+        "//submodules/TellomiDiscover:TellomiDiscover",
         "//submodules/TellomiLinks:TellomiLinks",
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
@@ -45,6 +46,7 @@ swift_test(
         "-warnings-as-errors",
     ],
     deps = [
+        "//submodules/TellomiDiscover:TellomiDiscover",
         "//submodules/TellomiLinks:TellomiLinks",
     ],
 )

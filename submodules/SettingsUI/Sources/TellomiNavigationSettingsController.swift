@@ -131,16 +131,9 @@ private func tellomiNavigationSettingsEntries(presentationData: PresentationData
         .calls(presentationData.strings.Calls_TabTitle, calls.showTab),
         .contacts(presentationData.strings.Contacts_Title, tabs.showContactsTab),
         .settings(presentationData.strings.Settings_Title),
-        .hideTitles(tellomiHideTabTitlesTitle(languageCode: presentationData.strings.primaryComponent.languageCode), tabs.hideTabTitles),
+        .hideTitles(presentationData.strings.Tellomi_Tabs_HideLabels, tabs.hideTabTitles),
         .footer(copy.navigationFooter)
     ]
-}
-
-private func tellomiHideTabTitlesTitle(languageCode: String) -> String {
-    if languageCode.lowercased().hasPrefix("zh") {
-        return "隐藏底栏文字"
-    }
-    return "Hide Tab Labels"
 }
 
 public func tellomiNavigationSettingsController(context: AccountContext) -> ViewController {

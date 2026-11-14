@@ -1,4 +1,5 @@
 import Foundation
+import TellomiDiscover
 import TellomiLinks
 
 public struct TellomiTabCopy: Equatable {
@@ -148,17 +149,7 @@ public func tellomiTabHideTitle(languageCode: String) -> String {
 }
 
 func tellomiTabPackString(languageCode: String, pack: [String: String], key: String, english: String, simplified: String, traditional: String) -> String {
-    if let value = pack[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty, value != key {
-        return value
-    }
-    let code = languageCode.lowercased()
-    if code == "zh-hant" || code.hasPrefix("zh-hant") || code == "zh-tw" || code.hasPrefix("zh-tw") || code == "zh-hk" || code.hasPrefix("zh-hk") || code == "zh-mo" || code.hasPrefix("zh-mo") {
-        return traditional
-    }
-    if code == "zh" || code.hasPrefix("zh") {
-        return simplified
-    }
-    return english
+    return tellomiLocalizedPackString(languageCode: languageCode, pack: pack, key: key, english: english, simplified: simplified, traditional: traditional)
 }
 
 public func tellomiStringPack(primary: [String: String], secondary: [String: String]?) -> [String: String] {

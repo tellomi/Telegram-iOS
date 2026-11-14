@@ -1458,3 +1458,20 @@ The main App ID now requests `SIRIKIT` as well. Upstream puts the entitlement on
 | `Tellomi/prepare_appstore_signing.py` | Prints whether the main and SiriIntents profiles contain the key. |
 | `Tellomi/check_server_config.py`, `Tellomi/test_siri_entitlements.py` | The gate, the host id, and the BUILD split. |
 | `docs/TELLOMI.md` | The signed Siri key follows the profile. |
+
+## Tellomi strings for every langpack language
+
+`langpack.getLanguages` serves 32 languages: `en`, `zh-hans`, `zh-hant`, and 29 others (`ar`, `be`, `ca`, `cs`, `de`, `el`, `es`, `fa`, `fi`, `fr`, `he`, `hi`, `id`, `it`, `ja`, `ko`, `ms`, `nb`, `nl`, `pl`, `pt-br`, `ro`, `ru`, `sv`, `th`, `tr`, `uk`, `uz`, `vi`). Tellomi keys previously existed only in English and the two Chinese `Localizable.strings` files, and the copy helpers fell back to English for every other code. Hardcoded login, tab, and settings sentences did the same.
+
+Each of those keys now has a string for all 32 languages in `Tellomi/i18n/<code>.strings`, loaded by `tellomiBundledString`. Where the English matches an upstream key (`Settings.PrivacySettings`, `DialogList.Title`, `Common.Done`, `Tour.StartButton`, and the same kind of settings and login keys), the other languages use that key's wording from the public iOS export. Existing values of upstream keys in `en.lproj`, `zh-Hans.lproj`, and `zh-Hant.lproj` are unchanged. A downloaded pack still wins when it already has the key. `tellomiPrimaryStringsDictionary` fills only missing keys, so `presentationData.strings` returns the bundled sentence. Five Traditional strings that were still simplified (`更換城市`, `發布到 %@`, and the city-feed sentences) are corrected. The server langpack is not edited.
+
+| File | Change |
+| --- | --- |
+| `Tellomi/i18n/*.strings`, `Tellomi/i18n/audit-ios.csv`, `Tellomi/i18n/test_audit.py` | 187 keys, 32 languages, and the audit. |
+| `submodules/TellomiDiscover/Sources/TellomiBundledLocalizations.swift` | Lookup used by the copy helpers and by `presentationData`. |
+| `submodules/TellomiDiscover/Sources/TellomiDiscoverStrings.swift` | Pack, then the bundled language, then the old three-way fallback. |
+| `submodules/TelegramPresentationData/Sources/PresentationData.swift` | Missing keys are filled from the bundle. Present pack values stay. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceSplashController.swift` | Start, Continue, and Choose Your Language use `Tour.StartButton`, `Login.Continue`, and `Localization.ChooseLanguage`. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginLocale.swift` | Country title, search, and the bind-phone sentences use those keys. |
+| `submodules/SettingsUI/Sources/TellomiNavigationSettingsController.swift`, `TellomiOpenSourceLicensesController.swift` | `Tellomi.Tabs.HideLabels` and `Tellomi.Settings.OpenSource`. |
+| `Telegram/Telegram-iOS/{en,zh-Hans,zh-Hant}.lproj/Localizable.strings` | New Tellomi keys only. Five Traditional Tellomi values corrected. No upstream value edited. |
