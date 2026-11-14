@@ -22,8 +22,8 @@ public struct TellomiTabCopy: Equatable {
             feed: text("Tellomi.Discover.Feed", "Discover", "发现", "發現"),
             chats: text("Tellomi.Tabs.Chats", "Chats", "聊天", "聊天"),
             me: text("Tellomi.Tabs.Me", "Me", "我", "我"),
-            hideFeed: text("Tellomi.Discover.HideFeed", "Hide Discover", "隐藏发现", "隱藏發現"),
-            hideContacts: text("Tellomi.Discover.HideContacts", "Hide Contacts", "隐藏联系人", "隱藏聯絡人"),
+            hideFeed: tellomiTabHideTitle(languageCode: languageCode),
+            hideContacts: tellomiTabHideTitle(languageCode: languageCode),
             navigationTitle: text("Tellomi.Discover.NavigationTitle", "Navigation Bar", "导航栏", "導覽列"),
             navigationFooter: text("Tellomi.Discover.NavigationFooter", "Chats and Settings always stay in the bar.", "聊天和设置始终显示，不能关闭。", "聊天和設定始終顯示，不能關閉。"),
             feedEmptyTitle: text("Tellomi.Discover.FeedEmptyTitle", "Nothing here yet", "还没有内容", "還沒有內容"),
@@ -137,6 +137,14 @@ public func tellomiProductTabLabels(copy: TellomiTabCopy) -> [(title: String, ac
     return [copy.feed, copy.chats, copy.me].map { title in
         return (title, tellomiTabBarAccessibilityLabel(title: title))
     }
+}
+
+/// Long-press title for a tab that can leave the bar. Discover, Calls, and Contacts use it.
+/// Chats, Settings, and Me do not. The language choice is `tellomiTabPackString` with an empty
+/// pack: a downloaded pack can still contain "Hide Discover", "隐藏发现", "Hide Contacts",
+/// "隐藏联系人", or "Hide Calls Tab", and those values must not replace this word.
+public func tellomiTabHideTitle(languageCode: String) -> String {
+    return tellomiTabPackString(languageCode: languageCode, pack: [:], key: "Tellomi.Tabs.Hide", english: "Hide", simplified: "隐藏", traditional: "隱藏")
 }
 
 func tellomiTabPackString(languageCode: String, pack: [String: String], key: String, english: String, simplified: String, traditional: String) -> String {

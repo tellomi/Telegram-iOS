@@ -1,5 +1,21 @@
 # Upstream patches for the Tellomi fork
 
+## Tab long-press hide label (2026-11-14)
+
+Long-press on Discover, Calls, or Contacts still hides that tab. The menu item is only 隐藏 / Hide / 隱藏. It is not 隐藏发现, 隐藏联系人, Hide Discover, Hide Contacts, or `Calls.HideCallsTab` ("Hide Calls Tab"). Chats, Settings, and the last tab (我) do not gain a hide item. Their long-press menus stay the folder list and the account list.
+
+`tellomiTabHideTitle` uses the same language choice as the other Tellomi tab strings and passes an empty pack. A downloaded pack can still hold the longer wording, and that value is not shown. The bundled `Tellomi.Discover.HideFeed`, `Tellomi.Discover.HideContacts`, and `Tellomi.Tabs.Hide` entries match the short word. Hiding still writes the same settings (`showFeedTab`, `showContactsTab`, `CallListSettings.showTab`).
+
+| File | Change |
+| --- | --- |
+| `submodules/CallListUI/Sources/CallListController.swift` | The hide item reads `tellomiTabHideTitle`. The action is unchanged. |
+| `Telegram/Telegram-iOS/en.lproj/Localizable.strings` | The three hide keys are "Hide". |
+| `Telegram/Telegram-iOS/zh-Hans.lproj/Localizable.strings` | The three hide keys are 隐藏. |
+| `Telegram/Telegram-iOS/zh-Hant.lproj/Localizable.strings` | The three hide keys are 隱藏. |
+| `submodules/TelegramUIPreferences/Sources/TellomiTabNavigationDecisions.swift` | `tellomiTabHideTitle`. Discover and Contacts read it. The pack is not consulted. |
+| `submodules/TelegramUIPreferences/Tests/TellomiTabNavigationDecisionsTests.swift` | The short word, and a pack that still has the longer wording. |
+| `submodules/MtProtoKit/Tests/MTDiscoverConnectionSignalsTests.m` | The dispose-during-backoff case disposes before the 0.1 s timer can fire. A 30 ms sleep on a loaded simulator let that timer start a second round. |
+
 ## Login restored to Telegram's phone flow (2026-11-13)
 
 The custom login skin (邮箱登录 on the phone page, agreement checkbox, gray fields, bundled titles) is removed. Phone, code, password, recovery, reset, and sign-up screens are Telegram's again. The welcome carousel stays out of the stack (`tellomiSkipsWelcomeSplash`).

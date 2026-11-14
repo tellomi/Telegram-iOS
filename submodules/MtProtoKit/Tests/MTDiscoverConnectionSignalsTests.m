@@ -260,9 +260,11 @@ static MTSocksProxySettings *makeWebProxy(void) {
     NSLock *lock = [[NSLock alloc] init];
     MTSignal *round = [self roundRecordingInto:starts lock:lock emitAfter:0];
 
+    // The first round runs before startWithNext returns and arms the backoff timer.
+    // Dispose on this thread, before that timer can fire. Sleeping first lost the race
+    // on a loaded simulator: the 0.1 s timer ran and a second round was recorded.
     id<MTDisposable> disposable = [[MTDiscoverConnectionSignals repeatSignal:round withBackoffFrom:0.1 upTo:0.1 onQueue:[MTQueue concurrentDefaultQueue]] startWithNext:^(__unused id next) {
     }];
-    [NSThread sleepForTimeInterval:0.03];
     [disposable dispose];
     [NSThread sleepForTimeInterval:0.4];
 
