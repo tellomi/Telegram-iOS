@@ -73,9 +73,7 @@ public func textAlertController(
         configuration: AlertScreen.Configuration(
             actionAlignment: actionLayout == .vertical ? .vertical : .default,
             dismissOnOutsideTap: dismissOnOutsideTap,
-            allowInputInset: allowInputInset,
-            accessibilityIdentifier: accessibilityIdentifier,
-            accessibilityLabel: accessibilityIdentifier == nil ? nil : text
+            allowInputInset: allowInputInset
         ),
         title: title,
         text: text,
@@ -85,6 +83,9 @@ public func textAlertController(
         actions: mappedActions,
         updatedPresentationData: (initial: presentationData, signal: updatedPresentationDataSignal)
     )
+    if let accessibilityIdentifier {
+        controller.view.accessibilityIdentifier = accessibilityIdentifier
+    }
     return controller
 }
 

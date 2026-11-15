@@ -12,7 +12,9 @@
 @property (nonatomic, readonly) bool cdn;
 @property (nonatomic, readonly) bool preferForProxy;
 @property (nonatomic, readonly) NSData * _Nullable secret;
-/// When true, connection discovery does not probe any port other than `port`.
+// `thisPortOnly` is `dcOption.this_port_only` (flags bit 5). The address is still
+// used for its own connection, including a media connection. Discovery does not
+// add ports 80 and 5222 for it.
 @property (nonatomic, readonly) bool thisPortOnly;
 
 - (instancetype _Nonnull)initWithIp:(NSString * _Nonnull)ip port:(uint16_t)port preferForMedia:(bool)preferForMedia restrictToTcp:(bool)restrictToTcp cdn:(bool)cdn preferForProxy:(bool)preferForProxy secret:(NSData * _Nullable)secret;

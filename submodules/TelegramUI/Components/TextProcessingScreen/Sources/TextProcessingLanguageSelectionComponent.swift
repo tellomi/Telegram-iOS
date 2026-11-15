@@ -428,9 +428,6 @@ final class TextProcessingLanguageSelectionComponent: Component {
             
             if self.mainItems.isEmpty {
                 self.mainItems = supportedTranslationLanguages.compactMap { item in
-                    guard tellomiTranslationTargetAccepted(item) else {
-                        return nil
-                    }
                     return Language(id: item, languageCode: item, name: localizedLanguageName(strings: component.strings, language: item, kind: .neutral))
                 }
                 var topIds: [String] = []

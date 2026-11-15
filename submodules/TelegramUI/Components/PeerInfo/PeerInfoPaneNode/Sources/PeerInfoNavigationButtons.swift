@@ -21,14 +21,13 @@ public enum PeerInfoHeaderNavigationButtonKey {
     case qrCode
     case moreSearchSort
     case postStory
-    case settings
 }
 
 /// iPhone Duo: whether a navigation button is an icon (it goes into the side column); text buttons stay in the row
 /// (Apple: text-only items stay horizontal).
 public func peerInfoNavigationButtonIsIcon(_ key: PeerInfoHeaderNavigationButtonKey) -> Bool {
     switch key {
-    case .back, .qrCode, .search, .searchWithTags, .standaloneSearch, .more, .sort, .moreSearchSort, .postStory, .settings:
+    case .back, .qrCode, .search, .searchWithTags, .standaloneSearch, .more, .sort, .moreSearchSort, .postStory:
         return true
     case .edit, .done, .cancel, .select, .selectionDone, .editPhoto, .editVideo:
         return false
@@ -74,8 +73,6 @@ public struct PeerInfoNavigationFlags: Equatable {
     public var canEditBotPreviews = false
     /// The stories pane shows the account's own stories.
     public var isOwnStories = false
-    /// The product Me tab. Its profile is the existing My Profile screen and offers Settings.
-    public var tellomiTabRoot = false
 
     public init() {
     }
@@ -100,9 +97,6 @@ public func peerInfoNavigationButtonSets(_ flags: PeerInfoNavigationFlags) -> (n
     }
     if flags.channelCanPostStories || flags.isMyProfile {
         normal.right.insert(.postStory, at: 0)
-    }
-    if flags.tellomiTabRoot && flags.isMyProfile && !flags.isSettings {
-        normal.left.append(.settings)
     }
     if flags.isSelectingOrReordering {
         expanded.right.append(.selectionDone)

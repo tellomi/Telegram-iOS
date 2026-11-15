@@ -15,7 +15,6 @@ import TelegramPresentationData
 import TelegramStringFormatting
 import ChatTimerScreen
 import NotificationPeerExceptionController
-import TelegramUIPreferences
 
 func archiveContextMenuItems(context: AccountContext, group: EngineChatList.Group, chatListController: ChatListControllerImpl?) -> Signal<[ContextMenuItem], NoError> {
     let presentationData = context.sharedContext.currentPresentationData.with({ $0 })
@@ -387,20 +386,6 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                             }
                         }
                         
-                        let privacyLanguage = strings.primaryComponent.languageCode
-                        items.append(.action(ContextMenuActionItem(text: tellomiSecretViewMenuTitle(languageCode: privacyLanguage), icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Eye"), color: theme.contextMenu.primaryColor) }, action: { _, f in
-                            if let navigationController = (chatListController?.navigationController as? NavigationController) {
-                                context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), useExisting: false, tellomiSecretView: true))
-                            }
-                            f(.default)
-                        })))
-                        items.append(.action(ContextMenuActionItem(text: tellomiChatLockMenuTitle(languageCode: privacyLanguage, isLocked: TellomiChatLockDirectory.shared.isLocked(accountPeerId: context.account.peerId.toInt64(), chatPeerId: peer.id.toInt64())), icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Restrict"), color: theme.contextMenu.primaryColor) }, action: { _, f in
-                            if let host = chatListController?.view.window?.rootViewController {
-                                tellomiPresentChatLock(context: context, host: host, peerId: peer.id)
-                            }
-                            f(.default)
-                        })))
-
                         let archiveEnabled = !isSavedMessages && peerId != EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(777000)) && peerId == context.account.peerId
                         if let group = peerGroup {
                             if archiveEnabled {

@@ -365,8 +365,6 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
     public var chatIsRotated: Bool = true
     public var canReadHistory: Bool = false
     public var summarizedMessageIds: Set<EngineMessage.Id> = Set()
-    public var translatedMessageIds: Set<EngineMessage.Id> = Set()
-    public var tellomiShowsSideTranslate: Bool = false
     public var focusedTextInputIsMedia: Bool = false
     public var focusedPollAddOptionMessageId: EngineMessage.Id?
     public var isAwaitingWalletTransferFlight: ((EngineRawMessage) -> Bool)?

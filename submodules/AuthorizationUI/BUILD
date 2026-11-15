@@ -18,7 +18,6 @@ swift_library(
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/TextFormat:TextFormat",
         "//submodules/Markdown:Markdown",
-        "//submodules/TellomiDiscover:TellomiDiscover",
         "//submodules/TelegramPresentationData:TelegramPresentationData",
         "//submodules/AccountContext:AccountContext",
         "//submodules/CountrySelectionUI:CountrySelectionUI",

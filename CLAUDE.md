@@ -1,10 +1,6 @@
-先读 [`AGENTS.md`](AGENTS.md)。与本文冲突时以 AGENTS.md 为准。
-
 # CLAUDE.md
 
 This file provides guidance to AI assistants when working with code in this repository.
-
-This checkout is the Tellomi fork. The app name, bundle id (`app.tellomi.chat`), API credentials and MTProto server are described in [`docs/TELLOMI.md`](docs/TELLOMI.md). Simulator recipes below that mention `ph.telegra.Telegraph` are the upstream bundle id; a Tellomi build uses `app.tellomi.chat`.
 
 ## Build
 

@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
 
 swift_library(
     name = "MediaEditorScreen",
@@ -76,18 +76,5 @@ swift_library(
     ],
     visibility = [
         "//visibility:public",
-    ],
-)
-
-# Host test of the sticker-upload terminal states. It does not link the editor.
-# Run with the darwin bazel: `test //submodules/TelegramUI/Components/MediaEditorScreen:StickerUploadOutcomeTests`.
-swift_test(
-    name = "StickerUploadOutcomeTests",
-    srcs = [
-        "Sources/StickerUploadOutcome.swift",
-        "Tests/StickerUploadOutcomeTests.swift",
-    ],
-    copts = [
-        "-warnings-as-errors",
     ],
 )

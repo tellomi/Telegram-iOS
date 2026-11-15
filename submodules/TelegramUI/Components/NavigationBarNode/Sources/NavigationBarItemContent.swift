@@ -56,8 +56,7 @@ func navigationBarButton(for item: UIBarButtonItem) -> NavigationBarComponent.Bu
         staysInRow: item.staysInRow,
         action: { _ in
             item.performActionOnTarget()
-        },
-        accessibilityIdentifier: item.accessibilityIdentifier
+        }
     )
 }
 

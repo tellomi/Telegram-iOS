@@ -23,6 +23,7 @@ public enum PeerInfoPaneKey: Int32 {
     case similarChannels
     case similarBots
     case storyArchive
+    case moments
     
     public init(tab: TelegramProfileTab) {
         switch tab {

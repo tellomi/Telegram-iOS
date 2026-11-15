@@ -548,7 +548,7 @@ private final class FeaturedStickersScreenNode: ViewControllerTracingNode {
                                             })
                                         }
                                     })),
-                                    .action(ContextMenuActionItem(text: strongSelf.presentationData.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
+                                    .action(ContextMenuActionItem(text: strongSelf.presentationData.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
                                         f(.default)
                                         
                                         if let strongSelf = self {
@@ -647,7 +647,7 @@ private final class FeaturedStickersScreenNode: ViewControllerTracingNode {
                                     })
                                 }
                             })),
-                            .action(ContextMenuActionItem(text: strongSelf.presentationData.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
+                            .action(ContextMenuActionItem(text: strongSelf.presentationData.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
                                 f(.default)
                                 
                                 if let strongSelf = self {
