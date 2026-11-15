@@ -1,5 +1,34 @@
 # Upstream patches
 
+## First login 2FA drops the permanent key, and Siri intents traps — 2026-11-15
+
+TestFlight 14.0.6 (97), commit `6626dde7399e55c7f9dc5e7cf2f22634a1269430`, dSYM artifact `dsym-97` from TestFlight run 43657562468. The crash is `app.tellomi.chat.SiriIntents`, `EXC_BREAKPOINT` / `SIGTRAP`. Text-segment offsets (framework `__TEXT` vmaddr `0`, extension `__TEXT` vmaddr `0x100000000`):
+
+| Binary | Offset | Symbol |
+| --- | --- | --- |
+| TelegramCoreFramework `609F819A-62B7-3AD3-8CA4-F68D3632D408` | 315784 | `AccountManagerImpl.getCurrentRecords` `AccountManagerImpl.swift:107` `preconditionFailure` |
+| TelegramCoreFramework | 338060 | `AccountManager.getCurrentRecords` `AccountManagerImpl.swift:724` |
+| IntentsExtension `038D5EF0-72BE-39BC-8A3D-FEB05F24543E` | 134496 | `WidgetIntentHandler.init` `IntentHandler.swift:1016` |
+| IntentsExtension | 82124 / 82196 | `IntentHandler.handler(for:)` |
+
+The other thread is `BuildConfig.deviceSpecificEncryptionParameters` (the `.tempkey` lock), called from the same initializer. `getCurrentRecords` trapped when `atomic-state` was missing or not valid JSON. A fresh install has no file yet, and the main app replaces that file atomically while `auth.checkPassword` moves the record out of the auth slot. The extension now returns no records. A process that is not allowed to repair the file does not trap and does not write over it. A key that is not 32 bytes, or a salt that is not 16, no longer force-unwraps in the intent handlers.
+
+The login failure is the same shape as the earlier `auth.signUp` race, on the password path. `auth.checkPassword` returned `auth.authorization` and the server bound the permanent key. About 63 ms later the client closed that connection. New unauthorized keys called only `help.getConfig` and then went quiet. The next login used another new key. `SharedAccountContext` treated an open that still saw an unauthorized postbox as a record to delete, then `beginNewAuth` minted a new permanent key. That delete is the Tellomi change added for the sign-up race. It still deleted when the re-read missed `AuthorizedAccountState`. The open now waits and reads the postbox again before it builds a network. An authorized postbox is adopted, so the main UI uses the same record and the same permanent key. A postbox that is still unauthorized keeps that record (it is put back in the auth slot) instead of starting a new login. `beginNewAuth` runs only when there is no record and no auth slot.
+
+The proxy alert is the existing phone-screen path: `sendAuthorizationCode` fails with `.timeout` after 20 seconds (`Authorization.swift`), and `AuthorizationSequenceController` adds `ChatSettings_ConnectionType_UseProxy`. That is what the second code request showed, because the screen was talking to a network that had just been replaced. It is not a rejected code.
+
+| File | Change |
+| --- | --- |
+| `submodules/TelegramCore/Sources/AccountManager/AccountManagerImpl.swift` | `getCurrentRecords` returns no records instead of trapping. An extension that cannot read the file does not replace it. `restoreAuth` puts a record back in the auth slot without a new id. |
+| `submodules/TelegramCore/Sources/AccountManager/TellomiAtomicStateLoad.swift` | Missing, empty, and non-JSON atomic-state bytes are unusable. |
+| `submodules/TelegramCore/Sources/Account/Account.swift` | A promoted record waits and re-reads `AuthorizedAccountState` before a second network is built. |
+| `submodules/TelegramUI/Sources/SharedAccountContext.swift` | Does not delete the record or call `beginNewAuth` while that record still exists. An authorized auth-slot postbox is moved back onto the signed-in list. |
+| `Telegram/SiriIntents/IntentHandler.swift` | Intent handlers return no account when the device key is not ready. |
+| `submodules/AuthorizationUI/Sources/TellomiLoginDecisions.swift` | Handoff decision and the proxy-offer decision. |
+| `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | The phone screen uses the proxy-offer decision. |
+| `submodules/TelegramUI/Components/TabBarLayout/BUILD` | The PR test runner is iPhone 17 / 27.0. That image has no 26.5 simulator, and iOS 27.1 there only has iPhone Duo. |
+| `submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode/BUILD` | Same runner pin. |
+
 ## Profile Moments tab is not latched for the process — 2026-11-13
 
 A failed first page was kept as a final empty result, and `openProfilePosts` returned that opening until the process ended. The tab is inserted only for a non-empty page, and the retry row is inside the tab, so an offline visit or a profile that had no posts yet hid 动态 until relaunch. Publishing did not refresh the opening.

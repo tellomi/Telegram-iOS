@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
 load("@build_bazel_rules_apple//apple:ios.bzl", "ios_unit_test")
 load("@build_bazel_rules_apple//apple/testing/default_runner:ios_test_runner.bzl", "ios_test_runner")
 
@@ -60,6 +60,18 @@ ios_test_runner(
     name = "TelegramCoreTestRunner",
     device_type = "iPhone 17",
     os_version = "26.5",
+)
+
+# Host test. The intents extension must not trap when atomic-state is missing.
+swift_test(
+    name = "TellomiAtomicStateLoadTests",
+    srcs = [
+        "Sources/AccountManager/TellomiAtomicStateLoad.swift",
+        "HostTests/TellomiAtomicStateLoadTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
+    ],
 )
 
 ios_unit_test(
