@@ -27,6 +27,23 @@ final class TellomiLoginFlowDecisionsTests: XCTestCase {
         XCTAssertEqual(tellomiChromeLanguageCode(savedLanguageCode: "zh-hans", preferredInterfaceLanguage: nil, systemPackApplied: false, systemLangPackCode: "zh-hant"), "zh-hans")
     }
 
+    func testFirstLoginPasswordKeepsThePermanentKey() {
+        // SMS accepted, cloud password still required. The login record exists.
+        XCTAssertEqual(tellomiAccountHandoff(postboxIsAuthorized: false, promotedRecordExists: true), .keepSameRecord)
+
+        // checkPassword stored AuthorizedAccountState and the record left the auth slot.
+        // Enter the main UI on that same record. Do not start a new permanent key.
+        XCTAssertEqual(tellomiAccountHandoff(postboxIsAuthorized: true, promotedRecordExists: true), .adoptAuthorized)
+
+        // A new login, and therefore a new permanent key, only happens with no record left.
+        XCTAssertEqual(tellomiAccountHandoff(postboxIsAuthorized: false, promotedRecordExists: false), .beginNewLogin)
+        XCTAssertNotEqual(tellomiAccountHandoff(postboxIsAuthorized: true, promotedRecordExists: true), .beginNewLogin)
+
+        // Asking for a code again offers proxy settings only when sendCode times out.
+        XCTAssertTrue(tellomiPhoneEntryOffersProxy(sendCodeTimedOut: true))
+        XCTAssertFalse(tellomiPhoneEntryOffersProxy(sendCodeTimedOut: false))
+    }
+
     func testEmailLoginUsesTheOfficialSentCodeSteps() {
         XCTAssertEqual(tellomiOfficialEmailLoginStep(.setupRequired), .setupEmail)
         XCTAssertEqual(tellomiOfficialEmailLoginStep(.email(setup: true)), .verifySetupEmail)

@@ -301,7 +301,35 @@ public enum AccountResult {
     case authorized(Account)
 }
 
-public func accountWithId(accountManager: AccountManager<TelegramAccountManagerTypes>, networkArguments: NetworkInitializationArguments, id: AccountRecordId, encryptionParameters: ValueBoxEncryptionParameters, supplementary: Bool, isSupportUser: Bool, rootPath: String, beginWithTestingEnvironment: Bool, backupData: AccountBackupData?, auxiliaryMethods: AccountAuxiliaryMethods, shouldKeepAutoConnection: Bool = true) -> Signal<AccountResult, NoError> {
+/// Reads the postbox now, then again after a short wait. `auth.checkPassword`
+/// commits `AuthorizedAccountState` immediately before the account record moves,
+/// and the open can still observe the previous unauthorized state.
+private func tellomiConfirmAuthorized(_ postbox: Postbox) -> Signal<Bool, NoError> {
+    let read = postbox.transaction { transaction -> Bool in
+        return transaction.getState() is AuthorizedAccountState
+    }
+    return read
+    |> mapToSignal { first -> Signal<Bool, NoError> in
+        if first {
+            return .single(true)
+        }
+        return read
+        |> delay(0.05, queue: Queue.concurrentDefaultQueue())
+        |> mapToSignal { second -> Signal<Bool, NoError> in
+            if second {
+                return .single(true)
+            }
+            return read
+            |> delay(0.2, queue: Queue.concurrentDefaultQueue())
+        }
+    }
+}
+
+/// `confirmAuthorization` waits briefly before opening a record as unauthorized.
+/// `auth.checkPassword` writes `AuthorizedAccountState` and then moves the record
+/// out of the auth slot. An open that still sees the old state must not build a
+/// second network (and a new permanent key) for that same postbox.
+public func accountWithId(accountManager: AccountManager<TelegramAccountManagerTypes>, networkArguments: NetworkInitializationArguments, id: AccountRecordId, encryptionParameters: ValueBoxEncryptionParameters, supplementary: Bool, isSupportUser: Bool, rootPath: String, beginWithTestingEnvironment: Bool, backupData: AccountBackupData?, auxiliaryMethods: AccountAuxiliaryMethods, shouldKeepAutoConnection: Bool = true, confirmAuthorization: Bool = false) -> Signal<AccountResult, NoError> {
     let path = "\(rootPath)/\(accountRecordIdPathName(id))"
     
     let postbox = openPostbox(
@@ -374,10 +402,20 @@ public func accountWithId(accountManager: AccountManager<TelegramAccountManagerT
                         if let accountState = accountState {
                             switch accountState {
                                 case let unauthorizedState as UnauthorizedAccountState:
-                                    return initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: Int(unauthorizedState.masterDatacenterId), keychain: keychain, basePath: path, testingEnvironment: unauthorizedState.isTestingEnvironment, languageCode: tellomiNetworkLanguageCode(savedLanguageCode: localizationSettings?.primaryComponent.languageCode), proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
+                                    let openUnauthorized = initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: Int(unauthorizedState.masterDatacenterId), keychain: keychain, basePath: path, testingEnvironment: unauthorizedState.isTestingEnvironment, languageCode: tellomiNetworkLanguageCode(savedLanguageCode: localizationSettings?.primaryComponent.languageCode), proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
                                         |> map { network -> AccountResult in
                                             return .unauthorized(UnauthorizedAccount(accountManager: accountManager, networkArguments: networkArguments, id: id, rootPath: rootPath, basePath: path, testingEnvironment: unauthorizedState.isTestingEnvironment, postbox: postbox, network: network, shouldKeepAutoConnection: shouldKeepAutoConnection))
                                         }
+                                    guard confirmAuthorization else {
+                                        return openUnauthorized
+                                    }
+                                    return tellomiConfirmAuthorized(postbox)
+                                    |> mapToSignal { isAuthorized -> Signal<AccountResult, NoError> in
+                                        guard isAuthorized else {
+                                            return openUnauthorized
+                                        }
+                                        return accountWithId(accountManager: accountManager, networkArguments: networkArguments, id: id, encryptionParameters: encryptionParameters, supplementary: supplementary, isSupportUser: isSupportUser, rootPath: rootPath, beginWithTestingEnvironment: beginWithTestingEnvironment, backupData: backupData, auxiliaryMethods: auxiliaryMethods, shouldKeepAutoConnection: shouldKeepAutoConnection, confirmAuthorization: false)
+                                    }
                                 case let authorizedState as AuthorizedAccountState:
                                     return postbox.transaction { transaction -> String? in
                                         return (transaction.getPeer(authorizedState.peerId) as? TelegramUser)?.phone
