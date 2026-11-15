@@ -26,7 +26,7 @@ The proxy alert is the existing phone-screen path: `sendAuthorizationCode` fails
 | `Telegram/SiriIntents/IntentHandler.swift` | Intent handlers return no account when the device key is not ready. |
 | `submodules/AuthorizationUI/Sources/TellomiLoginDecisions.swift` | Handoff decision and the proxy-offer decision. |
 | `submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift` | The phone screen uses the proxy-offer decision. |
-| `submodules/TelegramUI/Components/TabBarLayout/BUILD` | The PR test runner is iPhone 17 / 27.1. The xcode-27 image has no 26.5 simulator. |
+| `submodules/TelegramUI/Components/TabBarLayout/BUILD` | The PR test runner is iPhone 17 / 27.0. That image has no 26.5 simulator, and iOS 27.1 there only has iPhone Duo. |
 | `submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode/BUILD` | Same runner pin. |
 
 ## Profile Moments tab is not latched for the process — 2026-11-13
