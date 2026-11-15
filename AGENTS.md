@@ -3,11 +3,11 @@
 Guidance for coding agents working in this repository. The project guide is [`CLAUDE.md`](CLAUDE.md): how to build,
 which simulators to use, how to drive them (XcodeBuildMCP) and the invariants of each subsystem. Read it first.
 
-## Owner rule: the UI stays Telegram's
+## Owner rule
 
-UI must stay Telegram original (upstream Telegram-iOS); only data within 动态 may be custom. Any PR touching UI (assets, theme, tab bar, login, settings, chat list, profile) requires the owner's explicit approval after seeing screenshots. Never replace release/ios with master (no `git push origin master:release/ios`, no whole-tree syncs). Agents must never merge their own PRs; merges require owner approval.
+界面以完整恢复原版那次为基准（iOS #138 / 构建 94；安卓 #111 / 14.0.8），之后经用户认可的修改都算正常需求，例如"发现"导航、去掉搜索、隐藏导航栏、跳过欢迎页、默认 +86；动态的数据可以自定义；禁止用 master 或任何分支整树覆盖发布分支，不能用 `git push origin master:release/ios`；发版只在 release/ios 上通过 PR 进行；AI 只有在用户于 PR 里明确批准后才能合并；改界面的 PR 需要附截图，并得到用户批准。
 
-动态 is `submodules/TelegramUI/Components/Moments`. A release is a pull request into `release/ios` that the owner merges. That merge starts TestFlight. The same rule is in `.cursor/rules/telegram-native-first.mdc`.
+The same wording is in `.cursor/rules/telegram-native-first.mdc` and `docs/TELLOMI.md`. 动态 is `submodules/TelegramUI/Components/Moments`.
 
 ## Visual features and animations: judge them from recorded frames
 

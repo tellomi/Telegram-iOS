@@ -130,7 +130,9 @@ The main app's associated-domains entitlement is `applinks:tell.cc` and `webcred
 
 `.github/workflows/testflight.yml` runs on the `xcode-27` GitHub-hosted image (Xcode 27.1, the version in `versions.json`). It uploads when commits are pushed to the `release/ios` branch. A push to `master` does not upload, so later v2 work can merge there without a TestFlight build. `workflow_dispatch` is still in the file; the integration account gets 403 if it tries to start that event, so do not rely on it. Docs-only pushes (`**/*.md`, `docs/**`) are ignored. It does not run on every pull request.
 
-Ship by opening a pull request into `release/ios` and waiting for the owner to merge it. That merge is the push that starts this workflow. Do not run `git push origin master:release/ios`, and do not replace the `release/ios` tree with `master`. `release/ios` keeps Telegram's original UI; `master` is a different tree. Agents do not merge. The push has to add a commit that was not already on `release/ios`; moving the branch onto a commit it already has does not start the workflow. A newer push to `release/ios` cancels an in-progress upload.
+界面以完整恢复原版那次为基准（iOS #138 / 构建 94；安卓 #111 / 14.0.8），之后经用户认可的修改都算正常需求，例如"发现"导航、去掉搜索、隐藏导航栏、跳过欢迎页、默认 +86；动态的数据可以自定义；禁止用 master 或任何分支整树覆盖发布分支，不能用 `git push origin master:release/ios`；发版只在 release/ios 上通过 PR 进行；AI 只有在用户于 PR 里明确批准后才能合并；改界面的 PR 需要附截图，并得到用户批准。
+
+The owner's merge is what pushes `release/ios` and starts this workflow. The push has to add a commit that was not already on `release/ios`. A newer push to `release/ios` cancels an in-progress upload.
 
 `CFBundleShortVersionString` for the app and every extension is `Tellomi/version` (also `versions.json` key `app`). A tag `v0.1.0-tf9` is marketing version `0.1.0`; the workflow refuses to build when that does not match `Tellomi/version`. `CFBundleVersion` stays the auto-incremented build number.
 
