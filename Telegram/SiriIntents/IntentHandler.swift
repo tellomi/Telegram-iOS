@@ -174,7 +174,13 @@ class DefaultIntentHandler: INExtension, INSendMessageIntentHandling, INSearchFo
         self.accountManager = accountManager
         
         let deviceSpecificEncryptionParameters = BuildConfig.deviceSpecificEncryptionParameters(rootPath, baseAppBundleId: baseAppBundleId)
-        let encryptionParameters = ValueBoxEncryptionParameters(forceEncryptionIfNoSet: false, key: ValueBoxEncryptionParameters.Key(data: deviceSpecificEncryptionParameters.key)!, salt: ValueBoxEncryptionParameters.Salt(data: deviceSpecificEncryptionParameters.salt)!)
+        guard let key = ValueBoxEncryptionParameters.Key(data: deviceSpecificEncryptionParameters.key),
+              let salt = ValueBoxEncryptionParameters.Salt(data: deviceSpecificEncryptionParameters.salt) else {
+            self.accountPromise.set(.single(nil))
+            self.allAccounts.set(.single([]))
+            return
+        }
+        let encryptionParameters = ValueBoxEncryptionParameters(forceEncryptionIfNoSet: false, key: key, salt: salt)
         self.encryptionParameters = encryptionParameters
         
         // One read of the account records serves both the account list and the choice of the
@@ -1010,7 +1016,12 @@ private final class WidgetIntentHandler {
         initializeAccountManagement()
         
         let deviceSpecificEncryptionParameters = BuildConfig.deviceSpecificEncryptionParameters(rootPath, baseAppBundleId: baseAppBundleId)
-        let encryptionParameters = ValueBoxEncryptionParameters(forceEncryptionIfNoSet: false, key: ValueBoxEncryptionParameters.Key(data: deviceSpecificEncryptionParameters.key)!, salt: ValueBoxEncryptionParameters.Salt(data: deviceSpecificEncryptionParameters.salt)!)
+        guard let key = ValueBoxEncryptionParameters.Key(data: deviceSpecificEncryptionParameters.key),
+              let salt = ValueBoxEncryptionParameters.Salt(data: deviceSpecificEncryptionParameters.salt) else {
+            self.allAccounts.set(.single([]))
+            return
+        }
+        let encryptionParameters = ValueBoxEncryptionParameters(forceEncryptionIfNoSet: false, key: key, salt: salt)
         self.encryptionParameters = encryptionParameters
         
         let view = AccountManager<TelegramAccountManagerTypes>.getCurrentRecords(basePath: rootPath + "/accounts-metadata")

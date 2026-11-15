@@ -86,6 +86,32 @@ public enum TellomiOfficialEmailLoginStep: Equatable {
     case signInWithEmailCode
 }
 
+/// What to do with an account record after `auth.checkPassword` succeeds.
+/// Adopting it enters the main UI and keeps that record's permanent key.
+/// Keeping it leaves the key in place when the postbox read has not caught up.
+/// A new login is only for when there is no record left to keep.
+public enum TellomiAccountHandoff: Equatable {
+    case adoptAuthorized
+    case keepSameRecord
+    case beginNewLogin
+}
+
+public func tellomiAccountHandoff(postboxIsAuthorized: Bool, promotedRecordExists: Bool) -> TellomiAccountHandoff {
+    if postboxIsAuthorized {
+        return .adoptAuthorized
+    }
+    if promotedRecordExists {
+        return .keepSameRecord
+    }
+    return .beginNewLogin
+}
+
+/// The phone screen offers proxy settings when `auth.sendCode` times out.
+/// A rejected code does not.
+public func tellomiPhoneEntryOffersProxy(sendCodeTimedOut: Bool) -> Bool {
+    return sendCodeTimedOut
+}
+
 public func tellomiOfficialEmailLoginStep(_ kind: TellomiSentCodeEmailKind) -> TellomiOfficialEmailLoginStep? {
     switch kind {
     case .setupRequired:

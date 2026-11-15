@@ -11,6 +11,7 @@ import TelegramAudio
 import TelegramUIPreferences
 import TelegramStringFormatting
 import AccountContext
+import AuthorizationUI
 import DeviceLocationManager
 import ItemListUI
 import LegacyUI
@@ -149,6 +150,8 @@ private struct AccountAttributes: Equatable {
 private enum AddedAccountResult {
     case upgrading(Float)
     case ready(AccountRecordId, Account?, Int32, AccountInitialData)
+    /// The record stays. It is not deleted and it does not start a new login.
+    case retain(AccountRecordId)
 }
 
 private enum AddedAccountsResult {
@@ -657,7 +660,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             var addedAuthSignal: Signal<UnauthorizedAccount?, NoError> = .single(nil)
             for (id, attributes) in records {
                 if self.activeAccountsValue?.accounts.firstIndex(where: { $0.0 == id}) == nil {
-                    addedSignals.append(accountWithId(accountManager: accountManager, networkArguments: networkArguments, id: id, encryptionParameters: encryptionParameters, supplementary: !applicationBindings.isMainApp, isSupportUser: attributes.isSupportUser, rootPath: rootPath, beginWithTestingEnvironment: attributes.isTestingEnvironment, backupData: attributes.backupData, auxiliaryMethods: makeTelegramAccountAuxiliaryMethods(uploadInBackground: appDelegate?.uploadInBackround))
+                    addedSignals.append(accountWithId(accountManager: accountManager, networkArguments: networkArguments, id: id, encryptionParameters: encryptionParameters, supplementary: !applicationBindings.isMainApp, isSupportUser: attributes.isSupportUser, rootPath: rootPath, beginWithTestingEnvironment: attributes.isTestingEnvironment, backupData: attributes.backupData, auxiliaryMethods: makeTelegramAccountAuxiliaryMethods(uploadInBackground: appDelegate?.uploadInBackround), confirmAuthorization: true)
                     |> mapToSignal { result -> Signal<AddedAccountResult, NoError> in
                         switch result {
                             case let .authorized(account):
@@ -675,33 +678,37 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                             case let .upgrading(progress):
                                 return .single(.upgrading(progress))
                             case let .unauthorized(unauthorizedAccount):
-                                // signUp can move the record out of the auth slot before this open sees
-                                // AuthorizedAccountState. Deleting it here called beginNewAuth: the old
-                                // connection closed and a new temp key was created, with no updates.getState.
+                                // checkPassword (and signUp) move the record out of the auth slot in
+                                // the same moment the postbox becomes authorized. Deleting that record
+                                // called beginNewAuth: the bound permanent key was dropped, a new
+                                // unauthorized key called only getConfig, and the phone screen came back.
                                 return unauthorizedAccount.postbox.transaction { transaction -> Bool in
                                     return transaction.getState() is AuthorizedAccountState
                                 }
                                 |> mapToSignal { isAuthorized -> Signal<AddedAccountResult, NoError> in
-                                    let empty = EngineAvailableColorOptions(hash: 0, options: [])
-                                    let discarded = AddedAccountResult.ready(id, nil, attributes.sortIndex, (nil, nil, nil, empty, empty))
-                                    guard isAuthorized else {
-                                        return .single(discarded)
-                                    }
-                                    return accountWithId(accountManager: accountManager, networkArguments: networkArguments, id: id, encryptionParameters: encryptionParameters, supplementary: !applicationBindings.isMainApp, isSupportUser: attributes.isSupportUser, rootPath: rootPath, beginWithTestingEnvironment: attributes.isTestingEnvironment, backupData: attributes.backupData, auxiliaryMethods: makeTelegramAccountAuxiliaryMethods(uploadInBackground: appDelegate?.uploadInBackround))
-                                    |> mapToSignal { retried -> Signal<AddedAccountResult, NoError> in
-                                        guard case let .authorized(account) = retried else {
-                                            return .single(discarded)
-                                        }
-                                        setupAccount(account, fetchCachedResourceRepresentation: fetchCachedResourceRepresentation, transformOutgoingMessageMedia: transformOutgoingMessageMedia)
-                                        return TelegramEngine(account: account).data.get(
-                                            TelegramEngine.EngineData.Item.Configuration.Limits(),
-                                            TelegramEngine.EngineData.Item.Configuration.ContentSettings(),
-                                            TelegramEngine.EngineData.Item.Configuration.App(),
-                                            TelegramEngine.EngineData.Item.Configuration.AvailableColorOptions(scope: .replies),
-                                            TelegramEngine.EngineData.Item.Configuration.AvailableColorOptions(scope: .profile)
-                                        )
-                                        |> map { limitsConfiguration, contentSettings, appConfiguration, availableReplyColors, availableProfileColors -> AddedAccountResult in
-                                            return .ready(id, account, attributes.sortIndex, (limitsConfiguration._asLimits(), contentSettings, appConfiguration, availableReplyColors, availableProfileColors))
+                                    switch tellomiAccountHandoff(postboxIsAuthorized: isAuthorized, promotedRecordExists: true) {
+                                    case .beginNewLogin:
+                                        let empty = EngineAvailableColorOptions(hash: 0, options: [])
+                                        return .single(.ready(id, nil, attributes.sortIndex, (nil, nil, nil, empty, empty)))
+                                    case .keepSameRecord:
+                                        return .single(.retain(id))
+                                    case .adoptAuthorized:
+                                        return accountWithId(accountManager: accountManager, networkArguments: networkArguments, id: id, encryptionParameters: encryptionParameters, supplementary: !applicationBindings.isMainApp, isSupportUser: attributes.isSupportUser, rootPath: rootPath, beginWithTestingEnvironment: attributes.isTestingEnvironment, backupData: attributes.backupData, auxiliaryMethods: makeTelegramAccountAuxiliaryMethods(uploadInBackground: appDelegate?.uploadInBackround), confirmAuthorization: true)
+                                        |> mapToSignal { retried -> Signal<AddedAccountResult, NoError> in
+                                            guard case let .authorized(account) = retried else {
+                                                return .single(.retain(id))
+                                            }
+                                            setupAccount(account, fetchCachedResourceRepresentation: fetchCachedResourceRepresentation, transformOutgoingMessageMedia: transformOutgoingMessageMedia)
+                                            return TelegramEngine(account: account).data.get(
+                                                TelegramEngine.EngineData.Item.Configuration.Limits(),
+                                                TelegramEngine.EngineData.Item.Configuration.ContentSettings(),
+                                                TelegramEngine.EngineData.Item.Configuration.App(),
+                                                TelegramEngine.EngineData.Item.Configuration.AvailableColorOptions(scope: .replies),
+                                                TelegramEngine.EngineData.Item.Configuration.AvailableColorOptions(scope: .profile)
+                                            )
+                                            |> map { limitsConfiguration, contentSettings, appConfiguration, availableReplyColors, availableProfileColors -> AddedAccountResult in
+                                                return .ready(id, account, attributes.sortIndex, (limitsConfiguration._asLimits(), contentSettings, appConfiguration, availableReplyColors, availableProfileColors))
+                                            }
                                         }
                                     }
                                 }
@@ -717,15 +724,27 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                             return .single(account)
                         case .upgrading:
                             return .complete()
-                        default:
+                        case .authorized:
+                            // The postbox is already signed in. Put the same record back on the
+                            // signed-in list so the next update adopts it, instead of minting a key.
+                            let recordId = authRecord.0
+                            let _ = accountManager.transaction { transaction -> Void in
+                                let attributes = transaction.getCurrentAuth()?.attributes ?? []
+                                transaction.updateRecord(recordId, { _ in
+                                    return AccountRecord(id: recordId, attributes: attributes, temporarySessionId: nil)
+                                })
+                                transaction.setCurrentId(recordId)
+                                transaction.removeAuth()
+                            }.start()
                             return .single(nil)
                     }
                 }
             }
             
             let mappedAddedAccounts = combineLatest(queue: .mainQueue(), addedSignals)
-            |> map { results -> AddedAccountsResult in
+            |> map { results -> (AddedAccountsResult, [AccountRecordId]) in
                 var readyAccounts: [(AccountRecordId, Account?, Int32, AccountInitialData)] = []
+                var retainedIds: [AccountRecordId] = []
                 var totalProgress: Float = 0.0
                 var hasItemsWithProgress = false
                 for result in results {
@@ -733,20 +752,24 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                         case let .ready(id, account, sortIndex, initialData):
                             readyAccounts.append((id, account, sortIndex, initialData))
                             totalProgress += 1.0
+                        case let .retain(id):
+                            retainedIds.append(id)
+                            totalProgress += 1.0
                         case let .upgrading(progress):
                             hasItemsWithProgress = true
                             totalProgress += progress
                     }
                 }
                 if hasItemsWithProgress, !results.isEmpty {
-                    return .upgrading(totalProgress / Float(results.count))
+                    return (.upgrading(totalProgress / Float(results.count)), [])
                 } else {
-                    return .ready(readyAccounts)
+                    return (.ready(readyAccounts), retainedIds)
                 }
             }
             
             differenceDisposable.set((combineLatest(queue: .mainQueue(), mappedAddedAccounts, addedAuthSignal)
-            |> deliverOnMainQueue).start(next: { mappedAddedAccounts, authAccount in
+            |> deliverOnMainQueue).start(next: { mappedAddedAccountsAndRetained, authAccount in
+                let (mappedAddedAccounts, retainedIds) = mappedAddedAccountsAndRetained
                 print("SharedAccountContextImpl: accounts processed in \(CFAbsoluteTimeGetCurrent() - startTime)")
                 
                 var addedAccounts: [(AccountRecordId, Account?, Int32, AccountInitialData)] = []
@@ -848,8 +871,13 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                     self.performAccountSettingsImportIfNecessary()
                 }
                 
-                if self.activeAccountsValue!.primary == nil && self.activeAccountsValue!.currentAuth == nil {
+                if self.activeAccountsValue!.primary == nil && self.activeAccountsValue!.currentAuth == nil && retainedIds.isEmpty && records.isEmpty && authRecord == nil {
                     self.beginNewAuth(testingEnvironment: self.testingEnvironment)
+                }
+                for id in retainedIds {
+                    let _ = self.accountManager.transaction({ transaction in
+                        transaction.restoreAuth(id)
+                    }).start()
                 }
             }))
         })
