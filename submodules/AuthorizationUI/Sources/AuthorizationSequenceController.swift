@@ -47,8 +47,12 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     
     private var stateDisposable: Disposable?
     private let actionDisposable = MetaDisposable()
-    private var applicationStateDisposable: Disposable?
+    private let tellomiLanguageDisposable = MetaDisposable()
+    private let tellomiLanguageStringsDisposable = MetaDisposable()
+    private var tellomiLanguageGate = 0
+    private var tellomiLatestState: InnerState?
     private var tellomiDidAuthorize = false
+    private var applicationStateDisposable: Disposable?
     
     private var didPlayPresentationAnimation = false
     
@@ -70,13 +74,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         self.otherAccountPhoneNumbers = otherAccountPhoneNumbers
         self.apiId = apiId
         self.apiHash = apiHash
-        let resolvedLanguage = tellomiNetworkLanguageCode(savedLanguageCode: presentationData.strings.primaryComponent.languageCode)
-        let bundled = tellomiBundledPresentationStrings(languageCode: resolvedLanguage)
-        if bundled.primaryComponent.languageCode != presentationData.strings.primaryComponent.languageCode {
-            self.presentationData = presentationData.withStrings(bundled)
-        } else {
-            self.presentationData = presentationData
-        }
+        self.presentationData = presentationData
         self.openUrl = openUrl
         self.authorizationCompleted = authorizationCompleted
         
@@ -127,6 +125,8 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     deinit {
         self.stateDisposable?.dispose()
         self.actionDisposable.dispose()
+        self.tellomiLanguageDisposable.dispose()
+        self.tellomiLanguageStringsDisposable.dispose()
         self.applicationStateDisposable?.dispose()
     }
     
@@ -183,12 +183,15 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let strongSelf = self else {
                     return
                 }
-                if !strongSelf.otherAccountPhoneNumbers.1.isEmpty {
+                switch tellomiPhoneRootBack(hasOtherAccounts: !strongSelf.otherAccountPhoneNumbers.1.isEmpty, skipsWelcome: tellomiSkipsWelcomeSplash) {
+                case .dismissAddAccount:
                     let _ = (strongSelf.sharedContext.accountManager.transaction { transaction -> Void in
                         transaction.removeAuth()
                     }).startStandalone()
-                } else {
+                case .showWelcome:
                     let _ = strongSelf.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: strongSelf.account.testingEnvironment, masterDatacenterId: strongSelf.account.masterDatacenterId, contents: .empty)).startStandalone()
+                case .stayOnPhone:
+                    break
                 }
             })
             if let splashController = splashController {
@@ -238,7 +241,10 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 var actions: [TextAlertAction] = []
                                 switch error {
                                     case .limitExceeded:
-                                        text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
+                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                        actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
+                                    case .floodWait:
+                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
                                     case .invalidPhoneNumber:
                                         text = strongSelf.presentationData.strings.Login_InvalidPhoneError
@@ -307,12 +313,14 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                     case .timeout:
                                         text = strongSelf.presentationData.strings.Login_NetworkError
                                         actions.append(TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {}))
-                                        actions.append(TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.ChatSettings_ConnectionType_UseProxy, action: { [weak controller] in
-                                            guard let strongSelf = self, let controller = controller else {
-                                                return
-                                            }
-                                            controller.present(strongSelf.sharedContext.makeProxySettingsController(sharedContext: strongSelf.sharedContext, account: strongSelf.account), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
-                                        }))
+                                        if tellomiPhoneEntryOffersProxy(sendCodeTimedOut: true) {
+                                            actions.append(TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.ChatSettings_ConnectionType_UseProxy, action: { [weak controller] in
+                                                guard let strongSelf = self, let controller = controller else {
+                                                    return
+                                                }
+                                                controller.present(strongSelf.sharedContext.makeProxySettingsController(sharedContext: strongSelf.sharedContext, account: strongSelf.account), in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
+                                            }))
+                                        }
                                 }
                                 (controller.navigationController as? NavigationController)?.presentOverlay(controller: textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: actions), inGlobal: true, blockInteraction: true)
                                 
@@ -354,7 +362,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             let text: String
                             switch error {
                             case .limitExceeded:
-                                text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
+                                text = strongSelf.presentationData.strings.Login_CodeFloodError
                             case .generic, .invalidEmailAddress, .codeExpired, .invalidEmailToken, .invalidCode:
                                 text = strongSelf.presentationData.strings.Login_UnknownError
                             }
@@ -449,7 +457,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                              let text: String
                                              switch error {
                                              case .limitExceeded:
-                                                 text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: self.presentationData.strings)
+                                                 text = self.presentationData.strings.Login_CodeFloodError
                                              case .generic, .alreadyInProgress:
                                                  text = self.presentationData.strings.Login_UnknownError
                                              case .codeExpired:
@@ -480,7 +488,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             authorizationCode = .phoneCode(code)
                     }
                     
-                    if case let .email(_, _, _, _, _, setup) = type, setup, case let .emailVerification(emailCode) = authorizationCode {
+                    if case let .email(_, _, _, _, _, setup) = type, tellomiOfficialEmailLoginStep(.email(setup: setup)) == .verifySetupEmail, case let .emailVerification(emailCode) = authorizationCode {
                         strongSelf.actionDisposable.set(((verifyLoginEmailSetup(account: strongSelf.account, code: emailCode))
                         |> deliverOnMainQueue).startStrict(error: { error in
                             Queue.mainQueue().async {
@@ -495,7 +503,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         switch error {
                                             case .limitExceeded:
                                                 resetCode = true
-                                                text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
+                                                text = strongSelf.presentationData.strings.Login_CodeFloodError
                                             case .invalidCode:
                                                 resetCode = true
                                                 text = strongSelf.presentationData.strings.Login_InvalidCodeError
@@ -610,7 +618,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                         switch error {
                                             case .limitExceeded:
                                                 resetCode = true
-                                                text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
+                                                text = strongSelf.presentationData.strings.Login_CodeFloodError
                                             case .invalidCode:
                                                 resetCode = true
                                                 text = strongSelf.presentationData.strings.Login_InvalidCodeError
@@ -668,7 +676,9 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             let text: String
                             switch error {
                                 case .limitExceeded:
-                                    text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
+                                    text = strongSelf.presentationData.strings.Login_CodeFloodError
+                                case .floodWait:
+                                    text = strongSelf.presentationData.strings.Login_CodeFloodError
                                 case .invalidPhoneNumber:
                                     text = strongSelf.presentationData.strings.Login_InvalidPhoneError
                                 case .phoneLimitExceeded:
@@ -776,7 +786,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     let text: String
                     switch error {
                         case .limitExceeded:
-                            text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
+                            text = strongSelf.presentationData.strings.Login_CodeFloodError
                         case .generic, .codeExpired:
                             text = strongSelf.presentationData.strings.Login_UnknownError
                         case .timeout:
@@ -845,7 +855,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         let text: String
                         switch error {
                             case .limitExceeded:
-                                text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
+                                text = strongSelf.presentationData.strings.Login_CodeFloodError
                             case .generic, .codeExpired:
                                 text = strongSelf.presentationData.strings.Login_UnknownError
                             case .invalidCode:
@@ -883,7 +893,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                                 let text: String
                                 switch error {
                                     case .limitExceeded:
-                                        text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
+                                        text = strongSelf.presentationData.strings.Login_CodeFloodError
                                     case .invalidCode:
                                         text = strongSelf.presentationData.strings.Login_InvalidCodeError
                                     case .generic:
@@ -1175,12 +1185,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             }
                             
                             let tempFile = EngineTempBox.shared.tempFile(fileName: "video.mp4")
-                            guard let signal = TGMediaVideoConverter.convert(avatarAsset, adjustments: avatarAdjustments, path: tempFile.path, watcher: nil, entityRenderer: entityRenderer) else {
-                                EngineTempBox.shared.dispose(tempFile)
-                                subscriber.putNext(nil)
-                                subscriber.putCompletion()
-                                return EmptyDisposable
-                            }
+                            let signal = TGMediaVideoConverter.convert(avatarAsset, adjustments: avatarAdjustments, path: tempFile.path, watcher: nil, entityRenderer: entityRenderer)!
                             
                             let signalDisposable = signal.start(next: { next in
                                 if let result = next as? TGMediaVideoConversionResult {
@@ -1218,6 +1223,24 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                         avatarVideo = nil
                     }
                     
+                    var retryAvatar: (() -> Void)?
+                    retryAvatar = { [weak self, weak controller] in
+                        guard let strongSelf = self, let controller else {
+                            return
+                        }
+                        controller.inProgress = true
+                        strongSelf.actionDisposable.set((tellomiRetrySignUpAvatar(account: strongSelf.account, avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp)
+                        |> deliverOnMainQueue).startStrict(error: { error in
+                            Queue.mainQueue().async {
+                                controller.inProgress = false
+                                strongSelf.tellomiPresentSignUpError(controller: controller, error: error, retry: { retryAvatar?() })
+                            }
+                        }, completed: {
+                            Queue.mainQueue().async {
+                                controller.inProgress = false
+                            }
+                        }))
+                    }
                     strongSelf.actionDisposable.set((signUpWithName(accountManager: strongSelf.sharedContext.accountManager, account: strongSelf.account, firstName: firstName, lastName: lastName, avatarData: avatarData, avatarVideo: avatarVideo, videoStartTimestamp: videoStartTimestamp, disableJoinNotifications: !announceSignUp, forcedPasswordSetupNotice: { value in
                         guard let entry = EngineCodableEntry(ApplicationSpecificCounterNotice(value: value)) else {
                             return nil
@@ -1229,21 +1252,7 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                             if let strongSelf = self, let controller = controller {
                                 controller.inProgress = false
                                 
-                                let text: String
-                                switch error {
-                                    case .limitExceeded:
-                                        text = tellomiLocalizedLoginFloodWait(seconds: TellomiAuthorizationFloodWait.consume(), strings: strongSelf.presentationData.strings)
-                                    case .codeExpired:
-                                        text = strongSelf.presentationData.strings.Login_CodeExpiredError
-                                    case .invalidFirstName:
-                                        text = strongSelf.presentationData.strings.Login_InvalidFirstNameError
-                                    case .invalidLastName:
-                                        text = strongSelf.presentationData.strings.Login_InvalidLastNameError
-                                    case .generic:
-                                        text = strongSelf.presentationData.strings.Login_UnknownError
-                                }
-                                
-                                controller.present(textAlertController(sharedContext: strongSelf.sharedContext, title: nil, text: text, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                strongSelf.tellomiPresentSignUpError(controller: controller, error: error, retry: { retryAvatar?() })
                             }
                         }
                     }))
@@ -1254,16 +1263,103 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         return controller
     }
     
+
+    private func tellomiSentCodeEmailKind(_ type: SentAuthorizationCodeType) -> TellomiSentCodeEmailKind {
+        switch type {
+        case .emailSetupRequired:
+            return .setupRequired
+        case let .email(_, _, _, _, _, setup):
+            return .email(setup: setup)
+        default:
+            return .other
+        }
+    }
+
+    /// Screens under a logged-out flow. The welcome carousel is omitted while `tellomiSkipsWelcomeSplash` is set.
+    private func tellomiLoggedOutStackPrefix() -> [ViewController] {
+        if tellomiSkipsWelcomeSplash {
+            return []
+        }
+        if !self.otherAccountPhoneNumbers.1.isEmpty {
+            return [self.splashController()]
+        }
+        return []
+    }
+
+    private func tellomiPresentSignUpError(controller: AuthorizationSequenceSignUpController, error: SignUpError, retry: @escaping () -> Void) {
+        let text: String
+        var actions = [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]
+        switch error {
+        case .limitExceeded:
+            text = self.presentationData.strings.Login_CodeFloodError
+        case .codeExpired:
+            text = self.presentationData.strings.Login_CodeExpiredError
+        case .invalidFirstName:
+            text = self.presentationData.strings.Login_InvalidFirstNameError
+        case .invalidLastName:
+            text = self.presentationData.strings.Login_InvalidLastNameError
+        case .generic:
+            text = self.presentationData.strings.Login_UnknownError
+        case let .avatarUploadFailed(code, description):
+            let languageCode = self.presentationData.strings.primaryComponent.languageCode
+            text = tellomiSignUpAvatarFailureText(code: code, description: description, languageCode: languageCode)
+            actions = [
+                TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_OK, action: {}),
+                TextAlertAction(type: .defaultAction, title: tellomiSignUpAvatarRetryTitle(languageCode: languageCode), action: retry)
+            ]
+        }
+        controller.present(textAlertController(sharedContext: self.sharedContext, title: nil, text: text, actions: actions), in: .window(.root))
+    }
+
     private func updateState(state: InnerState) {
         if self.tellomiDidAuthorize {
             return
         }
+        self.tellomiLatestState = state
         if case .authorized = state {
-            // auth.signUp writes AuthorizedAccountState, then the postbox state view can emit nil
-            // while the account record is switched. Treating that nil as .empty rebuilt the welcome
-            // carousel on this same controller.
             self.tellomiDidAuthorize = true
             self.authorizationCompleted()
+            return
+        }
+        if self.tellomiLanguageGate == 1 {
+            return
+        } else if self.tellomiLanguageGate == 0, let code = tellomiLangPackCodePendingApplication(currentLanguageCode: self.presentationData.strings.primaryComponent.languageCode) {
+            self.tellomiLanguageGate = 1
+            let accountManager = self.sharedContext.accountManager
+            let signal = TelegramEngineUnauthorized(account: self.account).localization.downloadAndApplyLocalization(accountManager: accountManager, languageCode: code)
+            |> timeout(12.0, queue: .mainQueue(), alternate: .fail(.generic))
+            self.tellomiLanguageDisposable.set(signal.start(error: { [weak self] _ in
+                Queue.mainQueue().async {
+                    guard let self else {
+                        return
+                    }
+                    self.tellomiLanguageGate = 2
+                    self.updateState(state: self.tellomiLatestState ?? state)
+                }
+            }, completed: { [weak self] in
+                Queue.mainQueue().async {
+                    guard let self else {
+                        return
+                    }
+                    tellomiMarkSystemLangPackApplied()
+                    self.tellomiLanguageStringsDisposable.set((accountManager.transaction { transaction -> PresentationStrings? in
+                        guard let localizationSettings = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self) else {
+                            return nil
+                        }
+                        return PresentationStrings(primaryComponent: PresentationStrings.Component(languageCode: localizationSettings.primaryComponent.languageCode, localizedName: localizationSettings.primaryComponent.localizedName, pluralizationRulesCode: localizationSettings.primaryComponent.customPluralizationCode, dict: dictFromLocalization(localizationSettings.primaryComponent.localization)), secondaryComponent: localizationSettings.secondaryComponent.flatMap({ PresentationStrings.Component(languageCode: $0.languageCode, localizedName: $0.localizedName, pluralizationRulesCode: $0.customPluralizationCode, dict: dictFromLocalization($0.localization)) }), groupingSeparator: "")
+                    }
+                    |> deliverOnMainQueue).start(next: { [weak self] strings in
+                        guard let self else {
+                            return
+                        }
+                        if let strings {
+                            self.presentationData = self.presentationData.withStrings(strings)
+                        }
+                        self.tellomiLanguageGate = 2
+                        self.updateState(state: self.tellomiLatestState ?? state)
+                    }))
+                }
+            }))
             return
         }
         switch state {
@@ -1272,21 +1368,25 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         case let .state(state):
             switch state {
                 case .empty:
-                    if let _ = self.viewControllers.last as? AuthorizationSequenceSplashController {
-                    } else {
-                        var controllers: [ViewController] = []
-                        if self.otherAccountPhoneNumbers.1.isEmpty {
-                            controllers.append(self.splashController())
+                    let countryCode = AuthorizationSequenceCountrySelectionController.defaultCountryCode()
+                    switch tellomiLoggedOutRoot(skipsWelcome: tellomiSkipsWelcomeSplash, countryCode: countryCode) {
+                    case .phoneEntry:
+                        let _ = self.engine.auth.setState(state: UnauthorizedAccountState(isTestingEnvironment: self.account.testingEnvironment, masterDatacenterId: self.account.masterDatacenterId, contents: .phoneEntry(countryCode: countryCode, number: ""))).startStandalone()
+                    case .welcome:
+                        if let _ = self.viewControllers.last as? AuthorizationSequenceSplashController {
                         } else {
-                            controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: "", splashController: nil))
+                            var controllers: [ViewController] = []
+                            if self.otherAccountPhoneNumbers.1.isEmpty {
+                                controllers.append(self.splashController())
+                            } else {
+                                controllers.append(self.phoneEntryController(countryCode: countryCode, number: "", splashController: nil))
+                            }
+                            self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                         }
-                        self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                     }
                 case let .phoneEntry(countryCode, number):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                     var previousSplashController: AuthorizationSequenceSplashController?
                     for c in self.viewControllers {
                         if let c = c as? AuthorizationSequenceSplashController {
@@ -1298,21 +1398,25 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     if let validLayout = self.validLayout, case .tablet = validLayout.deviceMetrics.type {
                         previousSplashController = nil
                     }
+                    if tellomiSkipsWelcomeSplash {
+                        previousSplashController = nil
+                    }
                 
                     controllers.append(self.phoneEntryController(countryCode: countryCode, number: number, splashController: previousSplashController))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty && (previousSplashController == nil || self.viewControllers.count > 2))
                 case let .confirmationCodeEntry(number, type, phoneCodeHash, timeout, nextType, _, previousCodeEntry, usePrevious):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                     controllers.append(self.phoneEntryController(countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(), number: "", splashController: nil))
                 
                     var isGoingBack = false
-                    if case let .emailSetupRequired(appleSignInAllowed) = type {
-                        self.appleSignInAllowed = appleSignInAllowed
-                        controllers.append(self.emailSetupController(number: number, appleSignInAllowed: appleSignInAllowed))
-                    } else {
+                    switch tellomiOfficialEmailLoginStep(self.tellomiSentCodeEmailKind(type)) {
+                    case .setupEmail:
+                        if case let .emailSetupRequired(appleSignInAllowed) = type {
+                            self.appleSignInAllowed = appleSignInAllowed
+                            controllers.append(self.emailSetupController(number: number, appleSignInAllowed: appleSignInAllowed))
+                        }
+                    case .verifySetupEmail, .signInWithEmailCode, nil:
                         if let _ = self.currentEmail {
                             controllers.append(self.emailSetupController(number: number, appleSignInAllowed: self.appleSignInAllowed))
                         }
@@ -1341,40 +1445,32 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                     }
                 case let .passwordEntry(hint, _, _, suggestReset, syncContacts):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                     controllers.append(self.passwordEntryController(hint: hint, suggestReset: suggestReset, syncContacts: syncContacts))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .passwordRecovery(_, _, _, emailPattern, syncContacts):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                     controllers.append(self.passwordRecoveryController(emailPattern: emailPattern, syncContacts: syncContacts))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .awaitingAccountReset(protectedUntil, number, _):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                     controllers.append(self.awaitingAccountResetController(protectedUntil: protectedUntil, number: number))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .signUp(_, _, firstName, lastName, termsOfService, _):
                     var controllers: [ViewController] = []
                     var displayCancel = false
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    } else {
+                    if tellomiSkipsWelcomeSplash || self.otherAccountPhoneNumbers.1.isEmpty {
                         displayCancel = true
+                    } else {
+                        controllers.append(self.splashController())
                     }
                     controllers.append(self.signUpController(firstName: firstName, lastName: lastName, termsOfService: termsOfService, displayCancel: displayCancel))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
                 case let .payment(number, codeHash, storeProduct, premiumDays, supportEmailAddress, supportEmailSubject, _):
                     var controllers: [ViewController] = []
-                    if !self.otherAccountPhoneNumbers.1.isEmpty {
-                        controllers.append(self.splashController())
-                    }
+                    controllers.append(contentsOf: self.tellomiLoggedOutStackPrefix())
                 controllers.append(self.paymentController(number: number, phoneCodeHash: codeHash, storeProduct: storeProduct, premiumDays: premiumDays, supportEmailAddress: supportEmailAddress, supportEmailSubject: supportEmailSubject))
                     self.setViewControllers(controllers, animated: !self.viewControllers.isEmpty)
             }

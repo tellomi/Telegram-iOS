@@ -151,7 +151,9 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
         
         super.init()
         
-        self.provider.setDelegate(self, queue: nil)
+        // A nil queue is also the main queue. Name it: answer, end, mute, and the
+        // audio-session callbacks must not run on a private CallKit queue.
+        self.provider.setDelegate(self, queue: DispatchQueue.main)
     }
     
     func setup(audioSessionActivePromise: ValuePromise<Bool>, startCall: @escaping (AccountContext, UUID, EnginePeer.Id?, String, Bool) -> Signal<Bool, NoError>, answerCall: @escaping (UUID) -> Void, endCall: @escaping (UUID) -> Signal<Bool, NoError>, setCallMuted: @escaping (UUID, Bool) -> Void, audioSessionActivationChanged: @escaping (Bool) -> Void, hasActiveCallsValue: ValuePromise<Bool>) {
@@ -185,7 +187,13 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
                 let nsError = error as NSError
                 Logger.shared.log("CallKitIntegration", "error in requestTransaction \(transaction): \(nsError.domain) \(nsError.code) \(error)")
             }
-            completion?(error)
+            // This block runs on com.apple.callkit.callcontroller.completion.
+            // The success branch updates call state. The failure branch presents an alert.
+            // Voice and video, and every refusal (unavailable, duplicate, cancel,
+            // an existing system call), share this completion.
+            CallKitCompletionThread.run {
+                completion?(error)
+            }
         }
     }
     
@@ -241,7 +249,7 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
             guard let self else {
                 return
             }
-            if let error {
+            applyOutgoingCallKitTransactionResult(error: error, abandonAttempt: {
                 // The system refused the action, so `provider(_:perform: CXStartCallAction)` will
                 // never run for this uuid. Drop the bookkeeping for it instead of reporting an
                 // update on a call that does not exist.
@@ -249,22 +257,18 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
                     self.currentStartCallAccount = nil
                 }
                 self.uuidToPeerIdMapping.removeValue(forKey: uuid)
-                completion(error)
-                return
-            }
-            
-            let update = CXCallUpdate()
-            update.remoteHandle = handle
-            update.localizedCallerName = displayTitle
-            update.supportsHolding = false
-            update.supportsGrouping = false
-            update.supportsUngrouping = false
-            update.supportsDTMF = false
-            
-            self.provider.reportCall(with: uuid, updated: update)
-            
-            self.activeCalls.insert(uuid)
-            completion(nil)
+            }, reportAccepted: {
+                let update = CXCallUpdate()
+                update.remoteHandle = handle
+                update.localizedCallerName = displayTitle
+                update.supportsHolding = false
+                update.supportsGrouping = false
+                update.supportsUngrouping = false
+                update.supportsDTMF = false
+                
+                self.provider.reportCall(with: uuid, updated: update)
+                self.activeCalls.insert(uuid)
+            }, completion: completion)
         })
     }
     
@@ -295,11 +299,13 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
         OngoingCallContext.setupAudioSession()
         
         self.provider.reportNewIncomingCall(with: uuid, update: update, completion: { error in
-            if error == nil {
-                self.activeCalls.insert(uuid)
+            // Apple calls this completion on an arbitrary queue.
+            CallKitCompletionThread.run {
+                if error == nil {
+                    self.activeCalls.insert(uuid)
+                }
+                completion?(error as NSError?)
             }
-            
-            completion?(error as NSError?)
         })
     }
     

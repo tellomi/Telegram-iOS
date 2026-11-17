@@ -36,7 +36,16 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     private let hapticFeedback = HapticFeedback()
     
     private var appleSignInAllowed = false
+    private var tellomiPrimaryActionTitle: String?
     
+    /// Bind-phone uses this for the code screen's button. Login keeps `Login_Continue`.
+    public func setTellomiPrimaryActionTitle(_ title: String?) {
+        self.tellomiPrimaryActionTitle = title
+        if self.isNodeLoaded {
+            self.controllerNode.setTellomiPrimaryActionTitle(title)
+        }
+    }
+
     public var inProgress: Bool = false {
         didSet {
             self.updateNavigationItems()
@@ -95,6 +104,9 @@ public final class AuthorizationSequenceCodeEntryController: ViewController {
     
     override public func loadDisplayNode() {
         self.displayNode = AuthorizationSequenceCodeEntryControllerNode(strings: self.strings, theme: self.theme)
+        if let title = self.tellomiPrimaryActionTitle {
+            self.controllerNode.setTellomiPrimaryActionTitle(title)
+        }
         self.displayNodeDidLoad()
         
         self.controllerNode.view.disableAutomaticKeyboardHandling = [.forward, .backward]

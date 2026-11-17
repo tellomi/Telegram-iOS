@@ -40,6 +40,14 @@ final class AuthorizationSequenceCodeEntryControllerNode: ASDisplayNode, UITextF
     private let dividerNode: AuthorizationDividerNode
     private var signInWithAppleButton: UIControl?
     private let proceedNode: SolidRoundedButtonNode
+    private var tellomiPrimaryActionTitle: String?
+
+    func setTellomiPrimaryActionTitle(_ title: String?) {
+        self.tellomiPrimaryActionTitle = title
+        if let title = self.tellomiPrimaryActionTitle {
+            self.proceedNode.title = title
+        }
+    }
     
     private let textField: TextFieldNode
     private let textSeparatorNode: ASDisplayNode

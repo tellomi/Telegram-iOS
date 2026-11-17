@@ -9,7 +9,14 @@ name: Moments compile
 
 on:
   pull_request:
-    branches: [release/ios]
+    branches: [release/ios, cursor/release-ios-merge-master-b62c]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  # Pushes onto this stacked branch were not opening a pull_request run.
+  # A push uses the workflow in the commit itself, so the compile still starts.
+  push:
+    branches: [cursor/moments-profile-pane-b62c]
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -23,7 +30,7 @@ concurrency:
 
 jobs:
   app:
-    if: startsWith(github.head_ref, 'cursor/')
+    if: startsWith(github.head_ref, 'cursor/') || github.ref == 'refs/heads/cursor/moments-profile-pane-b62c'
     runs-on: xcode-27
     timeout-minutes: 360
     env:

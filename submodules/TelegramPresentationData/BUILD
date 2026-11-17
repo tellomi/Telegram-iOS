@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
 
 swift_library(
     name = "TelegramPresentationData",
@@ -25,5 +25,16 @@ swift_library(
     ],
     visibility = [
         "//visibility:public",
+    ],
+)
+
+swift_test(
+    name = "TellomiBrandRewriteTests",
+    srcs = [
+        "Sources/TellomiBrandRewrite.swift",
+        "Tests/TellomiBrandRewriteTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
     ],
 )

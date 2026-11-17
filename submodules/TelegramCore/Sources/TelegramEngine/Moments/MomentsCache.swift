@@ -10,6 +10,7 @@ private enum MomentsCacheKind: UInt8 {
     case outbox = 6
     case audience = 7
     case preferences = 8
+    case profilePosts = 9
 }
 
 private func momentsCacheId(_ kind: MomentsCacheKind, extra: UInt8 = 0) -> ItemCacheEntryId {
@@ -78,4 +79,14 @@ func momentsAudienceCacheId() -> ItemCacheEntryId {
 
 func momentsPreferencesCacheId() -> ItemCacheEntryId {
     return momentsCacheId(.preferences)
+}
+
+func momentsProfilePostsCacheId(_ profileId: String) -> ItemCacheEntryId {
+    let payload = Data(profileId.utf8)
+    let key = ValueBoxKey(length: 1 + payload.count)
+    key.setUInt8(0, value: MomentsCacheKind.profilePosts.rawValue)
+    if !payload.isEmpty {
+        key.setData(1, value: payload)
+    }
+    return ItemCacheEntryId(collectionId: Namespaces.CachedItemCollection.moments, key: key)
 }

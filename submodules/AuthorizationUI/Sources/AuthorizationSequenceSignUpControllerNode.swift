@@ -49,19 +49,16 @@ final class AuthorizationSequenceSignUpControllerNode: ASDisplayNode, UITextFiel
     
     var currentPhoto: UIImage? = nil {
         didSet {
-            if let currentPhoto = self.currentPhoto, let cgImage = currentPhoto.cgImage {
-                let mask = roundCorners(diameter: 110.0).cgImage
+            if let currentPhoto = self.currentPhoto {
                 self.currentPhotoNode.image = generateImage(CGSize(width: 110.0, height: 110.0), contextGenerator: { size, context in
                     context.clear(CGRect(origin: CGPoint(), size: size))
                     context.setBlendMode(.copy)
-                    context.draw(cgImage, in: CGRect(origin: CGPoint(), size: size))
-                    if let mask {
-                        context.setBlendMode(.destinationOut)
-                        context.draw(mask, in: CGRect(origin: CGPoint(), size: size))
-                    }
+                    context.draw(currentPhoto.cgImage!, in: CGRect(origin: CGPoint(), size: size))
+                    context.setBlendMode(.destinationOut)
+                    context.draw(roundCorners(diameter: size.width).cgImage!, in: CGRect(origin: CGPoint(), size: size))
                 })
             } else {
-                self.currentPhotoNode.image = self.currentPhoto
+                self.currentPhotoNode.image = nil
             }
         }
     }

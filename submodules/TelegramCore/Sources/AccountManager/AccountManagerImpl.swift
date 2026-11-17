@@ -46,6 +46,9 @@ public struct AccountManagerModifier<Types: AccountManagerTypes> {
     public let getCurrentAuth: () -> AuthAccountRecord<Types.Attribute>?
     public let createAuth: ([Types.Attribute]) -> AuthAccountRecord<Types.Attribute>?
     public let removeAuth: () -> Void
+    /// Puts `id` back in the auth slot and takes it out of the signed-in list.
+    /// The postbox directory stays, so the permanent key is the same one.
+    public let restoreAuth: (AccountRecordId) -> Void
     public let createRecord: ([Types.Attribute]) -> AccountRecordId
     public let getSharedData: (ValueBoxKey) -> PreferencesEntry?
     public let updateSharedData: (ValueBoxKey, (PreferencesEntry?) -> PreferencesEntry?) -> Void
@@ -75,6 +78,9 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
     
     private var currentAtomicState: AccountManagerAtomicState<Types>
     private var currentAtomicStateUpdated = false
+    /// False when this process could not read atomic-state. It must not replace
+    /// a file the main app is writing.
+    private var mayWriteAtomicState = true
     
     private let legacyMetadataTable: AccountManagerMetadataTable<Types.Attribute>
     private let legacyRecordTable: AccountManagerRecordTable<Types.Attribute>
@@ -97,15 +103,19 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
     
     static func getCurrentRecords(basePath: String) -> (records: [AccountRecord<Types.Attribute>], currentId: AccountRecordId?) {
         let atomicStatePath = "\(basePath)/atomic-state"
-        do {
-            let data = try Data(contentsOf: URL(fileURLWithPath: atomicStatePath))
-            let atomicState = try JSONDecoder().decode(AccountManagerAtomicState<Types>.self, from: data)
-            return (atomicState.records.sorted(by: { $0.key.int64 < $1.key.int64 }).map({ $1 }), atomicState.currentRecordId)
-        } catch let e {
-            postboxLog("decode atomic state error: \(e)")
-            postboxLogSync()
-            preconditionFailure()
+        let data = try? Data(contentsOf: URL(fileURLWithPath: atomicStatePath))
+        // Missing on a fresh install, or unreadable while the main app replaces
+        // the file during unauthorized → authorized. The intents extension used
+        // to trap here (preconditionFailure) and Siri killed the process.
+        guard let payload = tellomiAtomicStatePayload(data),
+              let atomicState = try? JSONDecoder().decode(AccountManagerAtomicState<Types>.self, from: payload) else {
+            if data != nil {
+                postboxLog("atomic state is not usable")
+                postboxLogSync()
+            }
+            return (records: [], currentId: nil)
         }
+        return (atomicState.records.sorted(by: { $0.key.int64 < $1.key.int64 }).map({ $1 }), atomicState.currentRecordId)
     }
     
     fileprivate init?(queue: Queue, basePath: String, isTemporary: Bool, isReadOnly: Bool, useCaches: Bool, removeDatabaseOnError: Bool, temporarySessionId: Int64, accessChallenge: AccountManagerAccessChallenge) {
@@ -171,8 +181,12 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
                 
                 if removeDatabaseOnError {
                     let _ = try? FileManager.default.removeItem(atPath: self.atomicStatePath)
+                    preconditionFailure()
+                } else {
+                    // An extension must not trap, and must not replace the file.
+                    self.mayWriteAtomicState = false
+                    self.currentAtomicState = AccountManagerAtomicState()
                 }
-                preconditionFailure()
             }
         } catch let e {
             postboxLog("load atomic state error: \(e)")
@@ -186,7 +200,8 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
                 self.currentAtomicState = AccountManagerAtomicState(records: legacyRecordDict, currentRecordId: self.legacyMetadataTable.getCurrentAccountId(), currentAuthRecord: self.legacyMetadataTable.getCurrentAuthAccount(), accessChallengeData: self.legacyMetadataTable.getAccessChallengeData())
                 self.syncAtomicStateToFile()
             } else {
-                preconditionFailure()
+                self.mayWriteAtomicState = false
+                self.currentAtomicState = AccountManagerAtomicState()
             }
         }
         
@@ -275,6 +290,19 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
         }, removeAuth: {
             self.currentAtomicState.currentAuthRecord = nil
             self.currentMetadataOperations.append(.updateCurrentAuthAccountRecord(nil))
+            self.currentAtomicStateUpdated = true
+        }, restoreAuth: { id in
+            guard let record = self.currentAtomicState.records[id] else {
+                return
+            }
+            let auth = AuthAccountRecord<Types.Attribute>(id: record.id, attributes: record.attributes)
+            self.currentAtomicState.currentAuthRecord = auth
+            self.currentMetadataOperations.append(.updateCurrentAuthAccountRecord(auth))
+            if self.currentAtomicState.currentRecordId == id {
+                self.currentAtomicState.currentRecordId = nil
+            }
+            self.currentAtomicState.records.removeValue(forKey: id)
+            self.currentRecordOperations.append(.set(id: id, record: nil))
             self.currentAtomicStateUpdated = true
         }, createRecord: { attributes in
             let id = generateAccountRecordId()
@@ -417,6 +445,9 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
     }
 
     private func syncAtomicStateToFile() {
+        guard self.mayWriteAtomicState else {
+            return
+        }
         if let data = try? JSONEncoder().encode(self.currentAtomicState) {
             if let _ = try? data.write(to: URL(fileURLWithPath: self.atomicStatePath), options: [.atomic]) {
             } else {

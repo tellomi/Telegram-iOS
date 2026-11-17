@@ -610,10 +610,13 @@ func initializedNetwork(accountId: AccountRecordId, arguments: NetworkInitializa
             }
             
             // Hosts, ports and the RSA key live in Tellomi/tellomi-server.json.
-            // Production Telegram addresses are not installed. The preferred port
-            // is last in each set, so the first dial uses it and a timeout moves
-            // to the fallback. thisPortOnly keeps discovery from adding 80 and
-            // 5222. Media addresses come from dc options.
+            // The built-in relay is the first seed on datacenters 1 and 2, and
+            // api.tellomi.cn is the DNS fallback, used when no learned address
+            // list exists. A non-empty help.getConfig list replaces it and is
+            // dialed in the order it was saved. The preferred seed port is
+            // last in the seed set, so the first launch dials it first and a
+            // timeout moves to the fallback. thisPortOnly keeps discovery
+            // from adding another port.
             for (id, addressSet) in TellomiSeedAddressSets(testingEnvironment) {
                 context.setSeedAddressSetForDatacenterWithId(id.intValue, seedAddressSet: addressSet)
             }

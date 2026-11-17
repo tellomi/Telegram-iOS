@@ -57,10 +57,13 @@ objc_library(
 objc_library(
     name = "MtProtoKitTestsLib",
     testonly = True,
-    srcs = glob([
-        "Tests/**/*.m",
-        "Tests/**/*.h",
-    ]),
+    srcs = glob(
+        [
+            "Tests/**/*.m",
+            "Tests/**/*.h",
+        ],
+        exclude = ["Tests/GCDAsyncSocketCloseTests.m"],
+    ),
     deps = [
         ":MtProtoKit",
         ":MtProtoKitPrivateHeaders",
@@ -73,7 +76,38 @@ objc_library(
 ios_test_runner(
     name = "MtProtoKitTestRunner",
     device_type = "iPhone 17",
-    os_version = "26.5",
+    os_version = "27.0",
+)
+
+objc_library(
+    name = "GCDAsyncSocketCloseTestsLib",
+    testonly = True,
+    srcs = ["Tests/GCDAsyncSocketCloseTests.m"],
+    deps = [
+        ":MtProtoKit",
+        ":MtProtoKitPrivateHeaders",
+    ],
+    sdk_frameworks = [
+        "XCTest",
+    ],
+)
+
+ios_test_runner(
+    name = "GCDAsyncSocketCloseTestRunner",
+    device_type = "iPhone 17",
+    os_version = "27.0",
+)
+
+ios_unit_test(
+    name = "GCDAsyncSocketCloseTests",
+    minimum_os_version = "15.0",
+    runner = ":GCDAsyncSocketCloseTestRunner",
+    deps = [
+        ":GCDAsyncSocketCloseTestsLib",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
 )
 
 ios_unit_test(

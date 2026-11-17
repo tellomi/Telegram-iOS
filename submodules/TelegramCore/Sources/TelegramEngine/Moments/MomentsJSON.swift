@@ -432,6 +432,26 @@ public func momentsListEdit(previousIds: [String], nextIds: [String]) -> (delete
     return (deletes, inserts, [])
 }
 
+struct MomentsProfilePostsCacheBody: Codable {
+    var items: [MomentsCard]
+    var nextCursor: String?
+}
+
+func momentsProfilePostsPayload(_ page: MomentsPage) -> String? {
+    let body = MomentsProfilePostsCacheBody(items: page.items, nextCursor: page.nextCursor)
+    guard let data = try? JSONEncoder().encode(body) else {
+        return nil
+    }
+    return String(data: data, encoding: .utf8)
+}
+
+func momentsProfilePostsPage(_ data: Data) -> MomentsPage? {
+    guard let body = try? JSONDecoder().decode(MomentsProfilePostsCacheBody.self, from: data) else {
+        return nil
+    }
+    return MomentsPage(items: body.items, nextCursor: body.nextCursor)
+}
+
 func momentsPage(data: Data, mediaBaseURL: String? = nil) -> MomentsPage? {
     guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
         return nil

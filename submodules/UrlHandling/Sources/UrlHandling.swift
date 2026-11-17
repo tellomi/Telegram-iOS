@@ -9,24 +9,13 @@ import TelegramNotices
 import AccountContext
 import WalletContext
 
-private let baseTelegramMePaths = [
-    "tell.cc",
-    "telegram.me",
-    "t.me", "telegram.dog"
-]
-private let telegramWebShortLinkHosts = [
-    "a.tell.cc",
-    "k.tell.cc",
-    "z.tell.cc",
-    "a.t.me", 
-    "k.t.me",
-    "z.t.me"
-]
+private let baseTelegramMePaths = TellomiLinks.linkHosts
+private let telegramWebShortLinkHosts = TellomiLinks.shortLinkHosts
 private let baseTelegraPhPaths = [
     "telegra.ph/",
     "te.legra.ph/",
     "graph.org/",
-    "tell.cc/iv?",
+    "\(TellomiLinks.host)/iv?",
     "t.me/iv?",
     "telegram.org/blog/",
     "telegram.org/tour/"

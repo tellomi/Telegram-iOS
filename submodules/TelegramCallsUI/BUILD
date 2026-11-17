@@ -1,4 +1,4 @@
-load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library", "swift_test")
 load("@build_bazel_rules_apple//apple:ios.bzl", "ios_unit_test")
 load("@build_bazel_rules_apple//apple/testing/default_runner:ios_test_runner.bzl", "ios_test_runner")
 load(
@@ -143,12 +143,29 @@ swift_library(
     ],
 )
 
+# Host test. It compiles only the delivery helper, not the CallKit module.
+# `./build-input/bazel-9.2.0-darwin-arm64 test //submodules/TelegramCallsUI:CallKitCompletionThreadTests`
+swift_test(
+    name = "CallKitCompletionThreadTests",
+    srcs = [
+        "Sources/CallKitCompletionThread.swift",
+        "Tests/CallKitCompletionThreadTests.swift",
+    ],
+    copts = [
+        "-warnings-as-errors",
+    ],
+    deps = [
+        "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
+    ],
+)
+
 swift_library(
     name = "TelegramCallsUITestsLib",
     testonly = True,
-    srcs = glob([
-        "Tests/**/*.swift",
-    ]),
+    srcs = glob(
+        ["Tests/**/*.swift"],
+        exclude = ["Tests/CallKitCompletionThreadTests.swift"],
+    ),
     deps = [
         ":TelegramCallsUI",
         "//submodules/TelegramAudio:TelegramAudio",

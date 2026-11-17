@@ -63,6 +63,7 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     private let termsDisposable = MetaDisposable()
     
     private let hapticFeedback = HapticFeedback()
+    private var tellomiBindPhone = false
     
     public init(sharedContext: SharedAccountContext, account: UnauthorizedAccount?, countriesConfiguration: CountriesConfiguration? = nil, apiId: Int32, apiHash: String, isTestingEnvironment: Bool, otherAccountPhoneNumbers: ((String, AccountRecordId, Bool)?, [(String, AccountRecordId, Bool)]), network: Network, presentationData: PresentationData, openUrl: @escaping (String) -> Void, back: @escaping () -> Void) {
         self.sharedContext = sharedContext
@@ -105,6 +106,17 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
     
     deinit {
         self.termsDisposable.dispose()
+    }
+
+    /// Change Phone, when the account is linking a number rather than replacing one.
+    public func setTellomiBindPhone(_ bind: Bool) {
+        self.tellomiBindPhone = bind
+        if self.isNodeLoaded {
+            self.controllerNode.setTellomiBindPhone(bind)
+            if let layout = self.validLayout {
+                self.controllerNode.containerLayoutUpdated(layout, navigationBarHeight: self.navigationLayout(layout: layout).navigationFrame.maxY, transition: .immediate)
+            }
+        }
     }
     
     @objc private func cancelPressed() {
@@ -166,6 +178,9 @@ public final class AuthorizationSequencePhoneEntryController: ViewController, MF
         
         if let (code, name, number) = self.currentData {
             self.controllerNode.codeAndNumber = (code, name, number)
+        }
+        if self.tellomiBindPhone {
+            self.controllerNode.setTellomiBindPhone(true)
         }
         self.displayNodeDidLoad()
         

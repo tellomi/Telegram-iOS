@@ -109,7 +109,7 @@ jobs:
         run: |
           set -euo pipefail
           export APP_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')"
-          test "$APP_VERSION" = "14.0.5"
+          test "$APP_VERSION" = "14.0.6"
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="/private/var/tmp/_bazel_official_sim" \
             --cacheDir "${HOME}/telegram-bazel-cache" \

@@ -513,16 +513,20 @@ public final class PresentationCallManagerImpl: PresentationCallManager {
                         phoneNumber = formatPhoneNumber(context: context, number: phone)
                     }
                     strongSelf.callKitIntegration?.startCall(context: context, peerId: peerId, phoneNumber: phoneNumber, localContactId: localContactId, isVideo: isVideo, displayTitle: peer.debugDisplayTitle, completion: { [weak self] error in
-                        guard error != nil, let strongSelf = self else {
-                            return
+                        // Same completion for voice and video. A nil error is the accepted
+                        // branch (state only; the call screen is presented from the provider
+                        // perform callback). Any error is the alert, including CallKit
+                        // unavailable, a duplicate start, a cancelled transaction, and an
+                        // existing system call the system rejects.
+                        CallKitCompletionThread.run {
+                            guard error != nil, let strongSelf = self else {
+                                return
+                            }
+                            let (presentationData, present, _) = strongSelf.getDeviceAccessData()
+                            present(textAlertController(sharedContext: context.sharedContext, title: presentationData.strings.Call_StatusFailed, text: presentationData.strings.Call_SystemStartErrorMessage, actions: [
+                                TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
+                            ]), nil)
                         }
-                        // CallKit refused the start action: the provider never performs it, so no
-                        // call object and no call screen ever appear. Without this the tap is a
-                        // silent no-op. The error itself is in the log ("error in requestTransaction").
-                        let (presentationData, present, _) = strongSelf.getDeviceAccessData()
-                        present(textAlertController(sharedContext: context.sharedContext, title: presentationData.strings.Call_StatusFailed, text: presentationData.strings.Call_SystemStartErrorMessage, actions: [
-                            TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
-                        ]), nil)
                     })
                 }))
             }

@@ -1,0 +1,54 @@
+# Required check for pull requests into release/ios.
+#
+# The GitHub check name is the job name: release-guard.
+# A ruleset should require the status check "release-guard".
+#
+# Fails when the pull request:
+# - deletes either Moments directory
+# - sets Tellomi/version or versions.json app lower than the base
+# - uses master as the head branch
+# - has the same tree as origin/master (a whole-tree replacement, including
+#   one whose diff is huge because the head tree is master's)
+
+name: Release guard
+
+on:
+  pull_request:
+    branches:
+      - release/ios
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  release-guard:
+    name: release-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch the base, the head, and master
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}"
+          git fetch --no-tags origin master
+
+      - name: Run the release guard
+        run: |
+          set -euo pipefail
+          python3 Tellomi/check_release_guard.py --self-test
+          python3 Tellomi/check_release_guard.py \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --head-ref "${{ github.event.pull_request.head.ref }}" \
+            --master-tree "$(git rev-parse 'origin/master^{tree}')"

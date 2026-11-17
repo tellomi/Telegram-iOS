@@ -273,6 +273,32 @@ public func momentsShouldLoadFeedPage(loaded: Bool, cursor: String?, refresh: Bo
     return false
 }
 
+/// The profile Moments pane reports ready immediately so the existing
+/// PeerInfoScreen shell can appear while posts are still loading.
+public func momentsProfilePaneReadyAtInit() -> Bool {
+    return true
+}
+
+public enum MomentsProfilePostsState: Equatable {
+    case loading
+    case failed
+    case empty
+    case posts
+}
+
+public func momentsProfilePostsState(itemCount: Int, loading: Bool, loaded: Bool, failed: Bool) -> MomentsProfilePostsState {
+    if itemCount > 0 {
+        return .posts
+    }
+    if failed {
+        return .failed
+    }
+    if loading || !loaded {
+        return .loading
+    }
+    return .empty
+}
+
 private func momentsWireAudience(_ audience: MomentsAudience) -> Result<(visibility: String, tokenKind: String?, userIds: [Int64]), MomentsPostEncodeError> {
     if audience.kind == .selected || !audience.include.isEmpty {
         if audience.include.isEmpty {

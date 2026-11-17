@@ -216,7 +216,12 @@ static NSData *concat(NSArray<NSData *> *parts) {
         CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();
         [self deliver:[[MTResPqMessage alloc] initWithNonce:_nonce serverNonce:_serverNonce pq:pq serverPublicKeyFingerprints:@[@(0)]]];
         XCTAssertLessThan(CFAbsoluteTimeGetCurrent() - start, 1.0, @"%@", pq);
-        XCTAssertEqual(_provider.bignumContextRequests, 1, @"%@ went past the pq checks", pq);
+        __block NSInteger keys = 0;
+        MTTestOnManagerQueue(^{
+            keys = [[self->_service valueForKey:@"_publicKeys"] count];
+        });
+        XCTAssertGreaterThan(keys, 0);
+        XCTAssertEqual(_provider.bignumContextRequests, keys, @"%@ should fingerprint each key and stop before factorizing", pq);
         XCTAssertEqual([self stage], kStagePQ);
     }
 }

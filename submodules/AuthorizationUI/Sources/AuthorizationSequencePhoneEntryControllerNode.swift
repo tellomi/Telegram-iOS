@@ -317,6 +317,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
     private let phoneAndCountryNode: PhoneAndCountryNode
     private let contactSyncNode: ContactSyncNode
     private let proceedNode: SolidRoundedButtonNode
+    private var tellomiBindPhone = false
     
     private var qrNode: ASImageNode?
     private let exportTokenDisposable = MetaDisposable()
@@ -570,6 +571,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         }
     }
     
+    func setTellomiBindPhone(_ bind: Bool) {
+        self.tellomiBindPhone = bind
+    }
+
     func updateCountryCode() {
         self.phoneAndCountryNode.phoneInputNode.codeAndNumber = self.codeAndNumber
         let _ = self.phoneAndCountryNode.processNumberChange(number: self.phoneAndCountryNode.phoneInputNode.number)
@@ -607,6 +612,12 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let additionalBottomInset: CGFloat = layout.size.width > 320.0 ? 80.0 : 10.0
         
         self.titleNode.attributedText = NSAttributedString(string: self.account == nil ? self.strings.Login_NewNumber : self.strings.Login_PhoneTitle, font: Font.bold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+        if self.account == nil, self.tellomiBindPhone {
+            let copy = tellomiBindPhoneCopy(languageCode: tellomiInterfaceLanguageCode(self.strings))
+            self.titleNode.attributedText = NSAttributedString(string: copy.title, font: Font.bold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
+            self.noticeNode.attributedText = NSAttributedString(string: copy.notice, font: Font.regular(17.0), textColor: self.theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+            self.proceedNode.title = copy.action
+        }
         self.titleActivateAreaNode.accessibilityLabel = self.titleNode.attributedText?.string ?? ""
         
         // iPhone Duo: beside a side strip the content keeps to the band between the side insets. With equal

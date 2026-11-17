@@ -6,7 +6,7 @@
       "name": "Tellomi",
       "asc_profile_name": "tellomi-ios-app",
       "profile_file": "Telegram",
-      "capabilities": ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS", "USERNOTIFICATIONS_COMMUNICATION"],
+      "capabilities": ["PUSH_NOTIFICATIONS", "APP_GROUPS", "ASSOCIATED_DOMAINS", "USERNOTIFICATIONS_COMMUNICATION", "SIRIKIT"],
       "register": true
     },
     {

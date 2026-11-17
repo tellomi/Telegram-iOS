@@ -33,7 +33,7 @@ build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
 } | tee "${out}/identity.txt"
 test "$bundle" = "app.tellomi.chat"
 test "$name" = "Tellomi"
-test "$version" = "14.0.5"
+test "$version" = "14.0.6"
 plutil -extract CFBundleIcons xml1 -o - "$plist" > "${out}/icons.plist" || true
 find "$app" -name 'TellomiHomeIpad*.png' -o -name '*Alternate*' -o -name '*.alticon' | tee "${out}/brand-files.txt"
 
