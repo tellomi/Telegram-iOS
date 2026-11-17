@@ -70,12 +70,19 @@ objc_library(
     sdk_frameworks = ["UIKit"],
 )
 
+# rules_apple plisttool sets version_keys_required for ios_application and
+# checks CFBundleVersion first, then CFBundleShortVersionString. "1" and "1.0"
+# match the validators in tools/plisttool/plisttool.py.
 plist_fragment(
     name = "ListViewReorderTestHostInfo",
     extension = "plist",
     template = """
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
     """,
