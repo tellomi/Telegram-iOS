@@ -107,10 +107,17 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
 
     private func makeInstalledNode(enabled: Bool) -> ChatListNode {
         let frame = CGRect(x: 0, y: 0, width: self.width, height: self.height)
-        let window = UIWindow(frame: frame)
+        let window: UIWindow
+        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+            window = UIWindow(windowScene: scene)
+            window.frame = frame
+        } else {
+            window = UIWindow(frame: frame)
+        }
         let root = UIViewController()
         window.rootViewController = root
         window.makeKeyAndVisible()
+        root.view.layoutIfNeeded()
         self.hosts.append(window)
         ChatListTopReorderPreservation.enabled = enabled
         ChatListTopReorderPreservation.returnAfterInstall = true

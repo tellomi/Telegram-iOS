@@ -210,8 +210,7 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
 
     private let infiniteScrollSize: CGFloat
     
-    private final var displayLink: CADisplayLink?
-    private final var displayLinkProxy: DisplayLinkProxy?
+    private final var displayLink: CADisplayLink!
     private final var needsAnimations = false
     
     public final var rotated = false
@@ -487,21 +486,18 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
         }
     }*/
 
-    private final class DisplayLinkProxy: NSObject {
-        weak var target: ListViewImpl?
-
-        init(target: ListViewImpl) {
-            self.target = target
-        }
-
-        /// iOS 27's display-link constructors return nil unless the selector takes the link.
-        @objc func displayLinkEvent(_ displayLink: CADisplayLink) {
-            _ = displayLink
-            self.target?.displayLinkEvent()
-        }
-    }
-
     override public init() {
+        class DisplayLinkProxy: NSObject {
+            weak var target: ListViewImpl?
+            init(target: ListViewImpl) {
+                self.target = target
+            }
+            
+            @objc func displayLinkEvent() {
+                self.target?.displayLinkEvent()
+            }
+        }
+        
         self.transactionQueue = ListViewTransactionQueue()
         
         self.scroller = ListViewScroller()
@@ -574,35 +570,20 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
         self.view.addGestureRecognizer(tapGestureRecognizer)
         self.tapGestureRecognizer = tapGestureRecognizer
         
-        let proxy = DisplayLinkProxy(target: self)
-        self.displayLinkProxy = proxy
-        let selector = #selector(DisplayLinkProxy.displayLinkEvent(_:))
-        // The class constructor is nil on the iOS 27 unit-test host. The screen
-        // constructor is the same link when a screen exists. A missing link leaves
-        // insertion animations unticked; it must not trap init.
-        let created = CADisplayLink(target: proxy, selector: selector)
-        let displayLink: CADisplayLink?
-        if let created {
-            displayLink = created
-        } else {
-            displayLink = UIScreen.main.displayLink(withTarget: proxy, selector: selector)
+        self.displayLink = CADisplayLink(target: DisplayLinkProxy(target: self), selector: #selector(DisplayLinkProxy.displayLinkEvent))
+        self.displayLink.add(to: RunLoop.main, forMode: RunLoop.Mode.common)
+        
+        if #available(iOS 15.0, iOSApplicationExtension 15.0, *) {
+            self.displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: 60.0, maximum: 120.0, preferred: 120.0)
         }
-        self.displayLink = displayLink
-        if let displayLink {
-            displayLink.add(to: RunLoop.main, forMode: RunLoop.Mode.common)
-            if #available(iOS 15.0, iOSApplicationExtension 15.0, *) {
-                displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60.0, maximum: 120.0, preferred: 120.0)
-            }
-            displayLink.isPaused = true
-        }
+        
+        self.displayLink.isPaused = true
     }
     
     deinit {
         let _ = { () -> Void in
             self.pauseAnimations()
-            self.displayLink?.invalidate()
-            self.displayLink = nil
-            self.displayLinkProxy = nil
+            self.displayLink.invalidate()
             
             for i in (0 ..< self.itemNodes.count).reversed() {
                 var itemNode: AnyObject? = self.itemNodes[i]
@@ -631,14 +612,14 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
     private func setNeedsAnimations() {
         if !self.needsAnimations {
             self.needsAnimations = true
-            self.displayLink?.isPaused = false
+            self.displayLink.isPaused = false
         }
     }
     
     private func pauseAnimations() {
         if self.needsAnimations {
             self.needsAnimations = false
-            self.displayLink?.isPaused = true
+            self.displayLink.isPaused = true
         }
     }
     
