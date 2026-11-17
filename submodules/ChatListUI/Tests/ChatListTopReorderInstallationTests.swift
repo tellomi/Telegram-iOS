@@ -103,7 +103,15 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
         }
     }
 
-    private func makeInstalledNode(enabled: Bool) -> (ChatListNode, UIWindow) {
+    private var hosts: [UIWindow] = []
+
+    private func makeInstalledNode(enabled: Bool) -> ChatListNode {
+        let frame = CGRect(x: 0, y: 0, width: self.width, height: self.height)
+        let window = UIWindow(frame: frame)
+        let root = UIViewController()
+        window.rootViewController = root
+        window.makeKeyAndVisible()
+        self.hosts.append(window)
         ChatListTopReorderPreservation.enabled = enabled
         ChatListTopReorderPreservation.returnAfterInstall = true
         let node = ChatListNode(
@@ -126,13 +134,10 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
             isMainTab: nil
         )
         node.useMainQueueTransactions = true
-        node.frame = CGRect(x: 0, y: 0, width: self.width, height: self.height)
-        let window = UIWindow(frame: node.frame)
-        window.rootViewController = UIViewController()
-        window.rootViewController?.view.addSubview(node.view)
+        node.frame = frame
+        root.view.addSubview(node.view)
         node.view.frame = window.bounds
-        window.makeKeyAndVisible()
-        return (node, window)
+        return node
     }
 
     private func perform(_ list: ChatListNode, delete: [ListViewDeleteItem] = [], insert: [ListViewInsertItem] = [], size: ListViewUpdateSizeAndInsets? = nil) {
@@ -195,13 +200,14 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
     }
 
     override func tearDown() {
+        self.hosts.removeAll()
         ChatListTopReorderPreservation.returnAfterInstall = false
         ChatListTopReorderPreservation.enabled = true
         super.tearDown()
     }
 
     func testInstalledNodeKeepsTheCollapsedAnchor() {
-        let (node, _) = self.makeInstalledNode(enabled: true)
+        let node = self.makeInstalledNode(enabled: true)
         XCTAssertTrue(node.preservesTopDownInsert)
         self.populate(node)
         let anchor = self.scroll(node, by: 54)
@@ -212,7 +218,7 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
     }
 
     func testNodeInstalledWhileDisabledFollowsTheUpstreamJump() {
-        let (node, _) = self.makeInstalledNode(enabled: false)
+        let node = self.makeInstalledNode(enabled: false)
         XCTAssertFalse(node.preservesTopDownInsert)
         self.populate(node)
         let anchor = self.scroll(node, by: 54)

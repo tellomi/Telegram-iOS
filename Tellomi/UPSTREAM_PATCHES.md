@@ -33,7 +33,7 @@ Every `ChatListNode` sets `preservesTopDownInsert`: the main list, a folder, the
 | --- | --- |
 | `submodules/Display/Source/ListViewTopDownInsert.swift` | The removed-maxY decision, shared with `removeNodeAtIndex`. |
 | `submodules/Display/Source/ListViewIntermediateState.swift` | `removeNodeAtIndex` uses that comparison. `insertionPoint` keeps index-0 `.Down` when the transaction says `forceIndexZeroDown`. |
-| `submodules/Display/Source/ListView.swift` | `preservesTopDownInsert`. The transaction calls `listViewTopDownInsert` before the delete. |
+| `submodules/Display/Source/ListView.swift` | `preservesTopDownInsert`. The transaction calls `listViewTopDownInsert` before the delete. The display link is optional: iOS 27's unit-test host returns nil from `CADisplayLink(target:selector:)`, and init used to trap on that implicit unwrap (`ListView.swift:574` on head `8a4821da89`). |
 | `submodules/Display/Tests/ListViewTopReorderTests.swift` | Enters `ListView.transaction` with `preservesTopDownInsert` on and off. It does not sample maxY or choose the direction. Upstream: the first two promotions each move the edge by one row, the third does not. Opted in: short lists, unequal heights, a collapsed search, 2pt, 20pt, 20.5pt, one row, and an index-4 promotion stay on the anchor. Two rows and a fully off-screen top match the upstream edge. A new-peer insert, two deletes, and an insert that is not index 0 are not forced. |
 | `submodules/Display/BUILD` | `//submodules/Display:ListViewTopReorderTests`, iPhone 17 / iOS 27.0. |
 | `submodules/ChatListUI/Sources/Node/ChatListTopReorderPreservation.swift` | `install(on:)` writes the static onto the list. Not a server flag. |

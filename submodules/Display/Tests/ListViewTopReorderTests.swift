@@ -30,19 +30,28 @@ final class ListViewTopReorderTests: XCTestCase {
     private let width: CGFloat = 390
     private let height: CGFloat = 800
     private let insetTop: CGFloat = 200
+    private var hosts: [UIWindow] = []
 
-    private func makeList(preserves: Bool) -> (ListViewImpl, UIWindow) {
+    override func tearDown() {
+        self.hosts.removeAll()
+        super.tearDown()
+    }
+
+    private func makeList(preserves: Bool) -> ListViewImpl {
+        let frame = CGRect(x: 0, y: 0, width: self.width, height: self.height)
+        let window = UIWindow(frame: frame)
+        let root = UIViewController()
+        window.rootViewController = root
+        window.makeKeyAndVisible()
+        self.hosts.append(window)
         let list = ListViewImpl()
         list.preservesTopDownInsert = preserves
         list.useMainQueueTransactions = true
         list.keepMinimalScrollHeightWithTopInset = 400
-        list.frame = CGRect(x: 0, y: 0, width: self.width, height: self.height)
-        let window = UIWindow(frame: list.frame)
-        window.rootViewController = UIViewController()
-        window.rootViewController?.view.addSubview(list.view)
+        list.frame = frame
+        root.view.addSubview(list.view)
         list.view.frame = window.bounds
-        window.makeKeyAndVisible()
-        return (list, window)
+        return list
     }
 
     private func perform(_ list: ListViewImpl, delete: [ListViewDeleteItem] = [], insert: [ListViewInsertItem] = [], options: ListViewDeleteAndInsertOptions = [.Synchronous], size: ListViewUpdateSizeAndInsets? = nil) {
@@ -114,7 +123,7 @@ final class ListViewTopReorderTests: XCTestCase {
     }
 
     func testUpstreamMovesTheFirstTwoPromotionsThenStops() {
-        let (list, _) = self.makeList(preserves: false)
+        let list = self.makeList(preserves: false)
         let row: CGFloat = 76
         self.populate(list, heights: Array(repeating: row, count: 8))
         let collapsed = self.scroll(list, by: 54)
@@ -136,7 +145,7 @@ final class ListViewTopReorderTests: XCTestCase {
         let scrolls: [CGFloat] = [54, 56, 74, 54 + 20.5, 54 + row]
         for count in [2, 4, 8, 12] {
             for delta in scrolls {
-                let (list, _) = self.makeList(preserves: true)
+                let list = self.makeList(preserves: true)
                 self.populate(list, heights: Array(repeating: row, count: count))
                 let anchor = self.scroll(list, by: delta)
                 self.promote(list, from: 1, height: row, hint: .Down)
@@ -149,8 +158,8 @@ final class ListViewTopReorderTests: XCTestCase {
 
     func testTwoRowScrollMatchesTheUnpreservedList() {
         let row: CGFloat = 76
-        let (kept, _) = self.makeList(preserves: true)
-        let (plain, _) = self.makeList(preserves: false)
+        let kept = self.makeList(preserves: true)
+        let plain = self.makeList(preserves: false)
         self.populate(kept, heights: Array(repeating: row, count: 20))
         self.populate(plain, heights: Array(repeating: row, count: 20))
         let keptAnchor = self.scroll(kept, by: 54 + (2 * row))
@@ -164,8 +173,8 @@ final class ListViewTopReorderTests: XCTestCase {
 
     func testSearchExpandedAlreadyStays() {
         let row: CGFloat = 76
-        let (kept, _) = self.makeList(preserves: true)
-        let (plain, _) = self.makeList(preserves: false)
+        let kept = self.makeList(preserves: true)
+        let plain = self.makeList(preserves: false)
         self.populate(kept, heights: Array(repeating: row, count: 4))
         self.populate(plain, heights: Array(repeating: row, count: 4))
         let anchor = self.topMinY(kept)
@@ -178,7 +187,7 @@ final class ListViewTopReorderTests: XCTestCase {
 
     func testUnequalHeightsKeepTheEdge() {
         let heights: [CGFloat] = [90, 40, 110, 55, 76]
-        let (list, _) = self.makeList(preserves: true)
+        let list = self.makeList(preserves: true)
         self.populate(list, heights: heights)
         let anchor = self.scroll(list, by: 54 + 20)
         self.promote(list, from: 1, height: heights[1], hint: .Down)
@@ -189,7 +198,7 @@ final class ListViewTopReorderTests: XCTestCase {
 
     func testIndexFourPromotionKeepsTheEdge() {
         let row: CGFloat = 76
-        let (list, _) = self.makeList(preserves: true)
+        let list = self.makeList(preserves: true)
         self.populate(list, heights: Array(repeating: row, count: 8))
         let anchor = self.scroll(list, by: 54)
         self.promote(list, from: 4, height: row, hint: .Down)
@@ -198,7 +207,7 @@ final class ListViewTopReorderTests: XCTestCase {
 
     func testThirdRowPromotionKeepsTheEdge() {
         let row: CGFloat = 64
-        let (list, _) = self.makeList(preserves: true)
+        let list = self.makeList(preserves: true)
         self.populate(list, heights: Array(repeating: row, count: 6))
         let anchor = self.scroll(list, by: 54)
         self.promote(list, from: 2, height: row, hint: .Down)
@@ -208,8 +217,8 @@ final class ListViewTopReorderTests: XCTestCase {
 
     func testOffScreenTopMatchesTheUnpreservedList() {
         let row: CGFloat = 76
-        let (kept, _) = self.makeList(preserves: true)
-        let (plain, _) = self.makeList(preserves: false)
+        let kept = self.makeList(preserves: true)
+        let plain = self.makeList(preserves: false)
         self.populate(kept, heights: Array(repeating: row, count: 20))
         self.populate(plain, heights: Array(repeating: row, count: 20))
         let delta = self.topMinY(kept) + row + 30
@@ -225,8 +234,8 @@ final class ListViewTopReorderTests: XCTestCase {
 
     func testNewPeerInsertWithoutADeleteIsNotForced() {
         let row: CGFloat = 76
-        let (kept, _) = self.makeList(preserves: true)
-        let (plain, _) = self.makeList(preserves: false)
+        let kept = self.makeList(preserves: true)
+        let plain = self.makeList(preserves: false)
         self.populate(kept, heights: Array(repeating: row, count: 4))
         self.populate(plain, heights: Array(repeating: row, count: 4))
         let _ = self.scroll(kept, by: 54)
@@ -239,8 +248,8 @@ final class ListViewTopReorderTests: XCTestCase {
 
     func testTwoDeletesAreNotForced() {
         let row: CGFloat = 76
-        let (kept, _) = self.makeList(preserves: true)
-        let (plain, _) = self.makeList(preserves: false)
+        let kept = self.makeList(preserves: true)
+        let plain = self.makeList(preserves: false)
         self.populate(kept, heights: Array(repeating: row, count: 6))
         self.populate(plain, heights: Array(repeating: row, count: 6))
         let _ = self.scroll(kept, by: 54)
@@ -257,8 +266,8 @@ final class ListViewTopReorderTests: XCTestCase {
 
     func testInsertBelowTheTopDoesNotMoveTheFirstRow() {
         let row: CGFloat = 76
-        let (kept, _) = self.makeList(preserves: true)
-        let (plain, _) = self.makeList(preserves: false)
+        let kept = self.makeList(preserves: true)
+        let plain = self.makeList(preserves: false)
         self.populate(kept, heights: Array(repeating: row, count: 8))
         self.populate(plain, heights: Array(repeating: row, count: 8))
         let keptTop = self.scroll(kept, by: 54 + 20)
@@ -273,7 +282,7 @@ final class ListViewTopReorderTests: XCTestCase {
 
     func testAnimatedInsertionStillCompletes() {
         let row: CGFloat = 76
-        let (list, _) = self.makeList(preserves: true)
+        let list = self.makeList(preserves: true)
         self.populate(list, heights: Array(repeating: row, count: 4))
         let _ = self.scroll(list, by: 54)
         self.promote(list, from: 1, height: row, hint: .Down, animated: true)
