@@ -17,17 +17,6 @@ import TextFormat
 import AppBundle
 import AnimatedTextComponent
 
-private func reactionIconKind(_ reaction: MessageReaction.Reaction) -> ReactionIconKind {
-    switch reaction {
-    case .builtin:
-        return .builtin
-    case .custom:
-        return .custom
-    case .stars:
-        return .stars
-    }
-}
-
 private let tagImage: UIImage? = {
     return generateTintedImage(image: UIImage(bundleImageName: "Chat/Message/ReactionTagBackground"), color: .white)?.stretchableImage(withLeftCapWidth: 8, topCapHeight: 15)
 }()
@@ -178,17 +167,23 @@ public final class ReactionIconView: PortalSourceView {
         }
         
         if let animationLayer = self.animationLayer {
-            let iconMetrics = reactionIconMetrics(slot: size, kind: reactionIconKind(reaction))
-            let iconSize = iconMetrics.size
-            animationLayer.masksToBounds = iconMetrics.clipsToBounds
+            let iconSize: CGSize
             switch reaction {
+            case .builtin:
+                iconSize = CGSize(width: floor(size.width * 2.0), height: floor(size.height * 2.0))
+                animationLayer.masksToBounds = false
+                animationLayer.cornerRadius = 0.0
             case .custom:
+                iconSize = CGSize(width: floor(size.width * 1.25), height: floor(size.height * 1.25))
+                animationLayer.masksToBounds = true
                 animationLayer.cornerRadius = floor(size.width * 0.2)
-            case .builtin, .stars:
+            case .stars:
+                iconSize = CGSize(width: floor(size.width * 1.25), height: floor(size.height * 1.25))
+                animationLayer.masksToBounds = false
                 animationLayer.cornerRadius = 0.0
             }
             
-            transition.updateFrame(layer: animationLayer, frame: CGRect(origin: iconMetrics.origin, size: iconSize))
+            transition.updateFrame(layer: animationLayer, frame: CGRect(origin: CGPoint(x: floor((size.width - iconSize.width) / 2.0), y: floor((size.height - iconSize.height) / 2.0)), size: iconSize))
         }
         
         self.updateTintColor()
@@ -235,8 +230,15 @@ public final class ReactionIconView: PortalSourceView {
         self.animationLayer?.removeFromSuperlayer()
         self.animationLayer = nil
         
-        let iconMetrics = reactionIconMetrics(slot: size, kind: reactionIconKind(reaction))
-        let iconSize = iconMetrics.size
+        let iconSize: CGSize
+        switch reaction {
+        case .builtin:
+            iconSize = CGSize(width: floor(size.width * 2.0), height: floor(size.height * 2.0))
+        case .custom:
+            iconSize = CGSize(width: floor(size.width * 1.25), height: floor(size.height * 1.25))
+        case .stars:
+            iconSize = CGSize(width: floor(size.width * 1.25), height: floor(size.height * 1.25))
+        }
         
         let animationLayer = InlineStickerItemLayer(
             context: .account(context),
@@ -257,15 +259,19 @@ public final class ReactionIconView: PortalSourceView {
         self.animationLayer = animationLayer
         self.layer.addSublayer(animationLayer)
         
-        animationLayer.masksToBounds = iconMetrics.clipsToBounds
         switch reaction {
+        case .builtin:
+            animationLayer.masksToBounds = false
+            animationLayer.cornerRadius = 0.0
         case .custom:
+            animationLayer.masksToBounds = true
             animationLayer.cornerRadius = floor(size.width * 0.3)
-        case .builtin, .stars:
+        case .stars:
+            animationLayer.masksToBounds = false
             animationLayer.cornerRadius = 0.0
         }
         
-        animationLayer.frame = CGRect(origin: iconMetrics.origin, size: iconSize)
+        animationLayer.frame = CGRect(origin: CGPoint(x: floor((size.width - iconSize.width) / 2.0), y: floor((size.height - iconSize.height) / 2.0)), size: iconSize)
         
         animationLayer.isVisibleForAnimations = !self.isPaused && animateIdle && context.sharedContext.energyUsageSettings.loopEmoji
         self.updateTintColor()

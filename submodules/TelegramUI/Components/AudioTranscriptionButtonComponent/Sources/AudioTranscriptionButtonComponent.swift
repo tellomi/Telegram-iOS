@@ -7,29 +7,6 @@ import TelegramPresentationData
 import LottieAnimationComponent
 import BundleIconComponent
 
-/// Letter drawn on the transcribe button. Latin, Cyrillic and Greek keep "A".
-/// `primaryComponent.languageCode` is the app language. `baseLanguageCode` is the
-/// English fallback pack once a translation is applied, so it stays "en" for zh-hans.
-private let transcriptionGlyphSuffixByLanguage: [String: String] = [
-    "zh": "zh",
-    "ja": "ja",
-    "ko": "ko",
-    "ar": "ar",
-    "fa": "fa",
-    "he": "he",
-    "iw": "he",
-    "hi": "hi",
-    "th": "th"
-]
-
-private func transcriptionGlyphSuffix(languageCode: String) -> String {
-    let primary = languageCode.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init) ?? ""
-    if let suffix = transcriptionGlyphSuffixByLanguage[primary], !suffix.isEmpty {
-        return "_" + suffix
-    }
-    return ""
-}
-
 public final class AudioTranscriptionButtonComponent: Component {
     public enum Theme: Equatable {
         public static func == (lhs: AudioTranscriptionButtonComponent.Theme, rhs: AudioTranscriptionButtonComponent.Theme) -> Bool {
@@ -69,18 +46,15 @@ public final class AudioTranscriptionButtonComponent: Component {
     
     public let theme: AudioTranscriptionButtonComponent.Theme
     public let transcriptionState: TranscriptionState
-    public let languageCode: String
     public let pressed: () -> Void
     
     public init(
         theme: AudioTranscriptionButtonComponent.Theme,
         transcriptionState: TranscriptionState,
-        languageCode: String,
         pressed: @escaping () -> Void
     ) {
         self.theme = theme
         self.transcriptionState = transcriptionState
-        self.languageCode = languageCode
         self.pressed = pressed
     }
     
@@ -89,9 +63,6 @@ public final class AudioTranscriptionButtonComponent: Component {
             return false
         }
         if lhs.transcriptionState != rhs.transcriptionState {
-            return false
-        }
-        if lhs.languageCode != rhs.languageCode {
             return false
         }
         return true
@@ -112,9 +83,6 @@ public final class AudioTranscriptionButtonComponent: Component {
             self.backgroundLayer = SimpleLayer()
             
             super.init(frame: frame)
-            
-            // The letter is drawn for the language. A right-to-left layout must not mirror it.
-            self.semanticContentAttribute = .forceLeftToRight
             
             self.backgroundLayer.masksToBounds = true
             self.backgroundLayer.cornerRadius = 10.0
@@ -176,7 +144,7 @@ public final class AudioTranscriptionButtonComponent: Component {
                     let iconSize = iconView.update(
                         transition: transition,
                         component: AnyComponent(BundleIconComponent(
-                            name: "Chat/Message/TranscriptionLocked" + transcriptionGlyphSuffix(languageCode: component.languageCode),
+                            name: "Chat/Message/TranscriptionLocked",
                             tintColor: foregroundColor
                         )),
                         environment: {},
@@ -228,17 +196,16 @@ public final class AudioTranscriptionButtonComponent: Component {
                         }
                     }
                     
-                    let glyphSuffix = transcriptionGlyphSuffix(languageCode: component.languageCode)
                     let animationName: String
                     switch component.transcriptionState {
                     case .inProgress:
-                        animationName = "voiceToText" + glyphSuffix
+                        animationName = "voiceToText"
                     case .collapsed:
-                        animationName = "voiceToText" + glyphSuffix
+                        animationName = "voiceToText"
                     case .expanded:
-                        animationName = "textToVoice" + glyphSuffix
+                        animationName = "textToVoice"
                     case .locked:
-                        animationName = "voiceToText" + glyphSuffix
+                        animationName = "voiceToText"
                     }
                     let animationSize = animationView.update(
                         transition: transition,

@@ -18,48 +18,6 @@ final class TabBarItemsLayoutTests: XCTestCase {
         ])
     }
 
-    func test_threeShortTabsStayEqualOnANarrowPhone() {
-        let result = tabBarItemsLayout(axis: .horizontal, isCompact: false, unboundItemWidths: [40.0, 36.0, 28.0], availableLength: 320.0)
-        XCTAssertEqual(result.itemFrames.map(\.width), [104.0, 104.0, 104.0])
-        XCTAssertEqual(result.itemFrames.map(\.minY), [4.0, 4.0, 4.0])
-        XCTAssertEqual(result.itemFrames.map(\.minX), [4.0, 108.0, 212.0])
-    }
-
-    func test_sharedTitleScaleKeepsEqualSlots() {
-        XCTAssertEqual(tabBarEqualTitleScale(titleWidths: [40.0, 36.0, 28.0], equalSlotWidth: 100.0), 1)
-        let scale = tabBarEqualTitleScale(titleWidths: [120.0, 40.0, 30.0], equalSlotWidth: 100.0)
-        XCTAssertEqual(scale ?? 0, 100.0 / 120.0, accuracy: 0.0001)
-        XCTAssertNil(tabBarEqualTitleScale(titleWidths: [200.0], equalSlotWidth: 100.0, minimumScale: 0.7))
-        XCTAssertEqual(tabBarClampedTitlePointSize(dynamicPointSize: 8.0), 8.0)
-        XCTAssertEqual(tabBarClampedTitlePointSize(dynamicPointSize: 10.0), 10.0)
-        XCTAssertEqual(tabBarClampedTitlePointSize(dynamicPointSize: 22.0), 13.0)
-    }
-
-    func test_iconsFitTheUpstreamThirtyPointSlotAndTitlesSitUnderThem() {
-        let chats = tabBarUpstreamIconFrame(itemWidth: 104.0, imageSize: CGSize(width: 30.0, height: 30.0))
-        let discover = tabBarUpstreamIconFrame(itemWidth: 104.0, imageSize: CGSize(width: 48.0, height: 48.0))
-        XCTAssertEqual(chats, CGRect(x: 37.0, y: 3.0, width: 30.0, height: 30.0))
-        XCTAssertEqual(discover.size, CGSize(width: 30.0, height: 30.0))
-        XCTAssertEqual(discover.minY, chats.minY)
-        let title = tabBarUpstreamTitleFrame(itemWidth: 104.0, titleSize: CGSize(width: 24.0, height: 12.0))
-        XCTAssertEqual(title.minY, 35.0)
-        XCTAssertEqual(title.midX, 52.0, accuracy: 0.6)
-        XCTAssertEqual(tabBarUpstreamTitlePointSize, 10.0)
-    }
-
-    func test_titleFramesShareABaselineAndSelectionIsATrait() {
-        let item = CGSize(width: 104.0, height: 56.0)
-        let discover = tabBarTitleFrame(itemSize: item, titleSize: CGSize(width: 36.0, height: 12.0))
-        let me = tabBarTitleFrame(itemSize: item, titleSize: CGSize(width: 12.0, height: 12.0))
-        XCTAssertEqual(discover.minY, me.minY)
-        XCTAssertEqual(discover.maxY, me.maxY)
-        XCTAssertEqual(discover.midX, 52.0, accuracy: 0.6)
-        XCTAssertEqual(me.midX, 52.0, accuracy: 0.6)
-        XCTAssertTrue(tabBarItemAccessibilityTraits(isSelected: true).contains(.selected))
-        XCTAssertTrue(tabBarItemAccessibilityTraits(isSelected: true).contains(.button))
-        XCTAssertFalse(tabBarItemAccessibilityTraits(isSelected: false).contains(.selected))
-    }
-
     func test_horizontalRegular_weightedLengthsWhenAnItemDoesNotFit() {
         // 400 - 8 = 392; 392 > 392 / 3, so weights apply: 392 / 784 = 0.5 of each unbound width.
         let result = tabBarItemsLayout(axis: .horizontal, isCompact: false, unboundItemWidths: [98.0, 392.0, 294.0], availableLength: 400.0)

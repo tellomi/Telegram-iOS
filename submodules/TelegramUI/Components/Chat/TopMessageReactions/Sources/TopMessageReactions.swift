@@ -4,15 +4,6 @@ import TelegramCore
 import AccountContext
 import ReactionSelectionNode
 
-private func tellomiFilteredReactions(_ items: [ReactionItem]) -> [ReactionItem] {
-    return items.filter { item in
-        if case let .builtin(value) = item.reaction.rawValue {
-            return !TellomiEmojiBlocklist.isBlocked(value)
-        }
-        return true
-    }
-}
-
 public enum AllowedReactions {
     case set(Set<MessageReaction.Reaction>)
     case all
@@ -257,7 +248,7 @@ public func tagMessageReactions(context: AccountContext, subPeerId: EnginePeer.I
             }
         }
         
-        return tellomiFilteredReactions(result)
+        return result
     }
 }
 
@@ -481,7 +472,7 @@ public func topMessageReactions(context: AccountContext, message: EngineRawMessa
             }
         }
 
-        return tellomiFilteredReactions(result)
+        return result
     }
 }
 

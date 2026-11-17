@@ -86,12 +86,6 @@ public enum MediaResourceDataFetchError {
     case generic
 }
 
-/// Return true to decide later via `decision`. Return false to commit immediately;
-/// `decision` is not called. `decision(true)` links the partial file. `decision(false)`
-/// deletes it and fails the in-flight fetches. Used to check a finished download
-/// before the partial file becomes the file readers open.
-public typealias MediaBoxBeforeCompleteCommit = (_ resourceKey: String, _ partialPath: String, _ byteCount: Int64, _ decision: @escaping (Bool) -> Void) -> Bool
-
 public enum CachedMediaResourceRepresentationResult {
     case reset
     case data(Data)
@@ -165,23 +159,6 @@ public final class MediaBox {
     private var fileContexts: [MediaResourceId: MediaBoxFileContext] = [:]
     private var keepResourceContexts: [MediaResourceId: MediaBoxKeepResourceContext] = [:]
     
-    private let beforeCompleteCommitLock = NSLock()
-    private var beforeCompleteCommitValue: MediaBoxBeforeCompleteCommit?
-    /// Read at the moment a partial file would be linked. A context created before
-    /// this is set still sees the current value.
-    public var beforeCompleteCommit: MediaBoxBeforeCompleteCommit? {
-        get {
-            self.beforeCompleteCommitLock.lock()
-            defer { self.beforeCompleteCommitLock.unlock() }
-            return self.beforeCompleteCommitValue
-        }
-        set {
-            self.beforeCompleteCommitLock.lock()
-            self.beforeCompleteCommitValue = newValue
-            self.beforeCompleteCommitLock.unlock()
-        }
-    }
-
     private var wrappedFetchResource = Promise<(MediaResource, Signal<[(Range<Int64>, MediaBoxFetchPriority)], NoError>, MediaResourceFetchParameters?) -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError>>()
 
     public var fetchResource: ((MediaResource, Signal<[(Range<Int64>, MediaBoxFetchPriority)], NoError>, MediaResourceFetchParameters?) -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError>)? {
@@ -637,9 +614,7 @@ public final class MediaBox {
                 paths.partial + ".meta"
             ])
             
-            if let fileContext = MediaBoxFileContextV2Impl(queue: self.dataQueue, manager: self.dataFileManager, storageBox: self.storageBox, resourceId: id.stringRepresentation.data(using: .utf8)!, path: paths.complete, partialPath: paths.partial, metaPath: paths.partial + ".meta", beforeCompleteCommit: { [weak self] in
-                return self?.beforeCompleteCommit
-            }) {
+            if let fileContext = MediaBoxFileContextV2Impl(queue: self.dataQueue, manager: self.dataFileManager, storageBox: self.storageBox, resourceId: id.stringRepresentation.data(using: .utf8)!, path: paths.complete, partialPath: paths.partial, metaPath: paths.partial + ".meta") {
                 context = fileContext
                 self.fileContexts[resourceId] = fileContext
             } else {

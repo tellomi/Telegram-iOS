@@ -17,10 +17,8 @@ public struct PeerInfoNavigationItemResources: Equatable {
     public var searchWithTagsImage: UIImage?
     public var searchLabel: String
     public var moreLabel: String
-    public var settingsImage: UIImage?
-    public var settingsLabel: String
 
-    public init(edit: String, cancel: String, done: String, qrCodeImage: UIImage?, qrCodeLabel: String, postStoryImage: UIImage?, postStoryLabel: String, standaloneSearchImage: UIImage?, searchWithTagsImage: UIImage?, searchLabel: String, moreLabel: String, settingsImage: UIImage? = nil, settingsLabel: String = "") {
+    public init(edit: String, cancel: String, done: String, qrCodeImage: UIImage?, qrCodeLabel: String, postStoryImage: UIImage?, postStoryLabel: String, standaloneSearchImage: UIImage?, searchWithTagsImage: UIImage?, searchLabel: String, moreLabel: String) {
         self.edit = edit
         self.cancel = cancel
         self.done = done
@@ -32,8 +30,6 @@ public struct PeerInfoNavigationItemResources: Equatable {
         self.searchWithTagsImage = searchWithTagsImage
         self.searchLabel = searchLabel
         self.moreLabel = moreLabel
-        self.settingsImage = settingsImage
-        self.settingsLabel = settingsLabel
     }
 }
 
@@ -117,8 +113,6 @@ public final class PeerInfoNavigationItems {
             item = self.imageItem(resources.qrCodeImage, label: resources.qrCodeLabel)
         case .postStory:
             item = self.imageItem(resources.postStoryImage, label: resources.postStoryLabel)
-        case .settings:
-            item = self.imageItem(resources.settingsImage, label: resources.settingsLabel)
         case .standaloneSearch, .searchWithTags:
             item = self.imageItem(itemKey == .searchWithTags ? resources.searchWithTagsImage : resources.standaloneSearchImage, label: resources.searchLabel)
             // A pill of its own beside the "…": a pane without search (Media) keeps the "…" pill as it is, and only

@@ -419,37 +419,3 @@ private final class StarsView: UIView {
         self.bottomStar.position = CGPoint(x: size.width - 9.0, y: size.height - 9.0)
     }
 }
-
-public final class ChatMessageSideTranslateButton: ASDisplayNode {
-    private let buttonNode: HighlightTrackingButtonNode
-    private let iconNode: ASImageNode
-
-    public var pressed: (() -> Void)?
-
-    public override init() {
-        self.buttonNode = HighlightTrackingButtonNode()
-        self.iconNode = ASImageNode()
-        self.iconNode.displaysAsynchronously = false
-        self.iconNode.isUserInteractionEnabled = false
-        self.iconNode.contentMode = .scaleAspectFit
-
-        super.init()
-
-        self.addSubnode(self.iconNode)
-        self.addSubnode(self.buttonNode)
-        self.buttonNode.addTarget(self, action: #selector(self.buttonPressed), forControlEvents: .touchUpInside)
-    }
-
-    @objc private func buttonPressed() {
-        self.pressed?()
-    }
-
-    public func update(icon: UIImage?) -> CGSize {
-        let size = CGSize(width: 30.0, height: 30.0)
-        self.iconNode.image = icon
-        let iconSize = CGSize(width: 20.0, height: 20.0)
-        self.iconNode.frame = CGRect(origin: CGPoint(x: floor((size.width - iconSize.width) / 2.0), y: floor((size.height - iconSize.height) / 2.0)), size: iconSize)
-        self.buttonNode.frame = CGRect(origin: CGPoint(), size: size)
-        return size
-    }
-}

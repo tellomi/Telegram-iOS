@@ -11,11 +11,9 @@ swift_library(
     ],
     deps = [
         "//submodules/TelegramCore:TelegramCore",
-        "//submodules/TellomiWallpapers:TellomiWallpapers",
         "//submodules/Postbox:Postbox",
         "//submodules/Display:Display",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
-        "//submodules/TellomiDiscover:TellomiDiscover",
         "//submodules/TelegramUIPreferences:TelegramUIPreferences",
         "//submodules/MediaResources:MediaResources",
         "//submodules/AppBundle:AppBundle",

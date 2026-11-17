@@ -16,8 +16,7 @@ extension PeerInfoScreenNode {
         }
         
         let formattedPhoneNumber = formatPhoneNumber(context: self.context, number: value)
-        let fragmentNumbersEnabled = TellomiFeatureGate.with(appConfiguration: self.context.currentAppConfiguration.with { $0 }).fragmentEnabled
-        if gesture == nil, fragmentNumbersEnabled, formattedPhoneNumber.hasPrefix("+888") {
+        if gesture == nil, formattedPhoneNumber.hasPrefix("+888") {
             let collectibleInfo = Promise<CollectibleItemInfoScreenInitialData?>()
             collectibleInfo.set(self.context.sharedContext.makeCollectibleItemInfoScreenInitialData(context: self.context, peerId: self.peerId, subject: .phoneNumber(value)))
             
@@ -166,7 +165,7 @@ extension PeerInfoScreenNode {
                         if let initialData {
                             self.view.endEditing(true)
                             self.controller?.push(self.context.sharedContext.makeCollectibleItemInfoScreen(context: self.context, initialData: initialData))
-                        } else if TellomiFeatureGate.with(appConfiguration: self.context.currentAppConfiguration.with { $0 }).fragmentEnabled {
+                        } else {
                             self.context.sharedContext.openExternalUrl(context: strongSelf.context, urlContext: .generic, url: "https://fragment.com/numbers", forceExternal: true, presentationData: self.presentationData, navigationController: nil, dismissInput: {})
                         }
                     })

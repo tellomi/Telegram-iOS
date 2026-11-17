@@ -30,9 +30,6 @@ public enum TranslationTone: String {
 }
 
 func _internal_translate(network: Network, text: String, toLang: String, entities: [MessageTextEntity] = [], tone: TranslationTone = .neutral, peer: Api.InputPeer? = nil, messageId: Int32? = nil) -> Signal<(String, [MessageTextEntity])?, TranslationError> {
-    guard tellomiTranslationTargetAccepted(toLang) else {
-        return .fail(.invalidLanguage)
-    }
     var flags: Int32 = 0
 
     if tone != .neutral {
@@ -60,8 +57,8 @@ func _internal_translate(network: Network, text: String, toLang: String, entitie
             return .textTooLong
         } else if error.errorDescription == "TO_LANG_INVALID" {
             return .invalidLanguage
-        } else if error.errorDescription == "TRANSLATE_REQ_FAILED" || error.errorDescription == "TRANSLATIONS_DISABLED_ALT" {
-            return .generic
+        } else if error.errorDescription == "TRANSLATIONS_DISABLED_ALT" {
+            return .tryAlternative
         } else {
             return .generic
         }
@@ -81,9 +78,6 @@ func _internal_translate(network: Network, text: String, toLang: String, entitie
 }
 
 func _internal_composeMessageWithAI(account: Account, text: String, entities: [MessageTextEntity], proofread: Bool = false, translateToLang: String? = nil, changeStyle: TelegramComposeAIMessageMode.CloudStyle.Reference? = nil, emojify: Bool = false) -> Signal<(String, [MessageTextEntity]), TranslationError> {
-    if let translateToLang, !tellomiTranslationTargetAccepted(translateToLang) {
-        return .fail(.invalidLanguage)
-    }
     var flags: Int32 = 0
     if proofread {
         flags |= (1 << 0)
@@ -113,8 +107,6 @@ func _internal_composeMessageWithAI(account: Account, text: String, entities: [M
             return .textTooLong
         } else if error.errorDescription.hasPrefix("AICOMPOSE_FLOOD_PREMIUM ") {
             return .limitExceeded
-        } else if error.errorDescription == "AICOMPOSE_TIMEOUT" || error.errorDescription == "TRANSLATE_REQ_FAILED" || error.errorDescription == "TO_LANG_INVALID" {
-            return error.errorDescription == "TO_LANG_INVALID" ? .invalidLanguage : .generic
         } else {
             return .generic
         }
@@ -131,9 +123,6 @@ func _internal_composeMessageWithAI(account: Account, text: String, entities: [M
 }
 
 func _internal_composeRichMessageWithAI(account: Account, instantPage: InstantPage?, proofread: Bool = false, translateToLang: String? = nil, changeStyle: TelegramComposeAIMessageMode.CloudStyle.Reference? = nil, customPrompt: String? = nil, emojify: Bool = false) -> Signal<InstantPage, TranslationError> {
-    if let translateToLang, !tellomiTranslationTargetAccepted(translateToLang) {
-        return .fail(.invalidLanguage)
-    }
     var flags: Int32 = 0
     if proofread {
         flags |= (1 << 0)
@@ -170,8 +159,6 @@ func _internal_composeRichMessageWithAI(account: Account, instantPage: InstantPa
             return .textTooLong
         } else if error.errorDescription.hasPrefix("AICOMPOSE_FLOOD_PREMIUM ") {
             return .limitExceeded
-        } else if error.errorDescription == "AICOMPOSE_TIMEOUT" || error.errorDescription == "TRANSLATE_REQ_FAILED" || error.errorDescription == "TO_LANG_INVALID" {
-            return error.errorDescription == "TO_LANG_INVALID" ? .invalidLanguage : .generic
         } else {
             return .generic
         }
@@ -185,9 +172,6 @@ func _internal_composeRichMessageWithAI(account: Account, instantPage: InstantPa
 }
 
 func _internal_translateTexts(network: Network, texts: [(String, [MessageTextEntity])], toLang: String, tone: TranslationTone = .neutral) -> Signal<[(String, [MessageTextEntity])], TranslationError> {
-    guard tellomiTranslationTargetAccepted(toLang) else {
-        return .fail(.invalidLanguage)
-    }
     var flags: Int32 = 0
     flags |= (1 << 1)
     
@@ -212,8 +196,6 @@ func _internal_translateTexts(network: Network, texts: [(String, [MessageTextEnt
             return .textTooLong
         } else if error.errorDescription == "TO_LANG_INVALID" {
             return .invalidLanguage
-        } else if error.errorDescription == "TRANSLATE_REQ_FAILED" || error.errorDescription == "TRANSLATIONS_DISABLED_ALT" {
-            return .generic
         } else {
             return .generic
         }
@@ -235,9 +217,6 @@ func _internal_translateTexts(network: Network, texts: [(String, [MessageTextEnt
 }
 
 func _internal_translateMessages(account: Account, messageIds: [EngineMessage.Id], fromLang: String?, toLang: String, enableLocalIfPossible: Bool, tone: TranslationTone = .neutral) -> Signal<Never, TranslationError> {
-    guard tellomiTranslationTargetAccepted(toLang) else {
-        return .fail(.invalidLanguage)
-    }
     var signals: [Signal<Void, TranslationError>] = []
     for (peerId, messageIds) in messagesIdsGroupedByPeerId(messageIds) {
         signals.append(_internal_translateMessagesByPeerId(account: account, peerId: peerId, messageIds: messageIds, fromLang: fromLang, toLang: toLang, enableLocalIfPossible: enableLocalIfPossible, tone: tone))
@@ -256,9 +235,6 @@ public var engineExperimentalInternalTranslationService: ExperimentalInternalTra
 /// `messages.translateRichMessage`, stores each result as a `TranslationMessageAttribute` with the
 /// translated `InstantPage`, and returns the pages keyed by message id.
 func _internal_translateRichMessages(account: Account, inputPeer: Api.InputPeer, messageIds: [EngineMessage.Id], toLang: String, tone: TranslationTone = .neutral) -> Signal<[EngineMessage.Id: InstantPage], TranslationError> {
-    guard tellomiTranslationTargetAccepted(toLang) else {
-        return .fail(.invalidLanguage)
-    }
     var flags: Int32 = 0
     flags |= (1 << 0)
     if tone != .neutral {
@@ -276,8 +252,6 @@ func _internal_translateRichMessages(account: Account, inputPeer: Api.InputPeer,
             return .textTooLong
         } else if error.errorDescription == "TO_LANG_INVALID" {
             return .invalidLanguage
-        } else if error.errorDescription == "TRANSLATE_REQ_FAILED" || error.errorDescription == "TRANSLATIONS_DISABLED_ALT" {
-            return .generic
         } else {
             return .generic
         }
@@ -371,7 +345,7 @@ private func _internal_translateMessagesByPeerId(account: Account, peerId: Engin
         if id.isEmpty {
             msgs = .single(nil)
         } else {
-            if enableLocalIfPossible && tellomiTranslationAllowsLocalEngine(), let engineExperimentalInternalTranslationService, let fromLang {
+            if enableLocalIfPossible, let engineExperimentalInternalTranslationService, let fromLang {
                 msgs = account.postbox.transaction { transaction -> [MessageId: String] in
                     var texts: [MessageId: String] = [:]
                     for messageId in plainMessageIds {
@@ -420,8 +394,6 @@ private func _internal_translateMessagesByPeerId(account: Account, peerId: Engin
                         return .textTooLong
                     } else if error.errorDescription == "TO_LANG_INVALID" {
                         return .invalidLanguage
-                    } else if error.errorDescription == "TRANSLATE_REQ_FAILED" || error.errorDescription == "TRANSLATIONS_DISABLED_ALT" {
-                        return .generic
                     } else {
                         return .generic
                     }
@@ -878,22 +850,6 @@ extension TelegramComposeAIMessageMode.CloudStyle.Reference {
 public enum TelegramAIComposeMessageError {
     case generic
     case nonPremiumFlood
-    case unavailable
-    case invalidLanguage
-}
-
-private func tellomiComposeAIRequestError(_ description: String) -> TelegramAIComposeMessageError {
-    switch tellomiTranslateFailure(description) {
-    case .invalidLanguage:
-        return .invalidLanguage
-    case .unavailable:
-        return .unavailable
-    case .other:
-        if description == "AICOMPOSE_FLOOD_PREMIUM" || description.hasPrefix("AICOMPOSE_FLOOD_PREMIUM") {
-            return .nonPremiumFlood
-        }
-        return .generic
-    }
 }
 
 func _internal_composeAIMessage(account: Account, text: ComposedRichMessage, mode: TelegramComposeAIMessageMode) -> Signal<TelegramAIComposeMessageResult, TelegramAIComposeMessageError> {
@@ -932,7 +888,11 @@ func _internal_composeAIMessage(account: Account, text: ComposedRichMessage, mod
         flags |= (1 << 2)
         return account.network.request(Api.functions.messages.composeRichMessageWithAI(flags: flags, text: nil, translateToLang: nil, tone: .inputAiComposeToneSingleUse(Api.InputAiComposeTone.Cons_inputAiComposeToneSingleUse(customPrompt: prompt))))
         |> `catch` { error -> Signal<Api.messages.ComposedRichMessageWithAI, TelegramAIComposeMessageError> in
-            return .fail(tellomiComposeAIRequestError(error.errorDescription))
+            if error.errorDescription == "AICOMPOSE_FLOOD_PREMIUM" {
+                return .fail(.nonPremiumFlood)
+            } else {
+                return .fail(.generic)
+            }
         }
         |> mapToSignal { result -> Signal<TelegramAIComposeMessageResult, TelegramAIComposeMessageError> in
             switch result {
@@ -944,10 +904,6 @@ func _internal_composeAIMessage(account: Account, text: ComposedRichMessage, mod
                 ))
             }
         }
-    }
-
-    if let translateToLang, !tellomiTranslationTargetAccepted(translateToLang) {
-        return .fail(.invalidLanguage)
     }
     
     switch text {
@@ -961,7 +917,11 @@ func _internal_composeAIMessage(account: Account, text: ComposedRichMessage, mod
         
         return account.network.request(Api.functions.messages.composeMessageWithAI(flags: flags, text: inputText, translateToLang: translateToLang, tone: changeTone))
         |> `catch` { error -> Signal<Api.messages.ComposedMessageWithAI, TelegramAIComposeMessageError> in
-            return .fail(tellomiComposeAIRequestError(error.errorDescription))
+            if error.errorDescription == "AICOMPOSE_FLOOD_PREMIUM" {
+                return .fail(.nonPremiumFlood)
+            } else {
+                return .fail(.generic)
+            }
         }
         |> mapToSignal { result -> Signal<TelegramAIComposeMessageResult, TelegramAIComposeMessageError> in
             switch result {
@@ -998,7 +958,11 @@ func _internal_composeAIMessage(account: Account, text: ComposedRichMessage, mod
         let inputText = RichTextMessageAttribute(instantPage: instantPage, fullInstantPage: nil).apiInputRichMessage()
         return account.network.request(Api.functions.messages.composeRichMessageWithAI(flags: flags, text: inputText, translateToLang: translateToLang, tone: changeTone))
         |> `catch` { error -> Signal<Api.messages.ComposedRichMessageWithAI, TelegramAIComposeMessageError> in
-            return .fail(tellomiComposeAIRequestError(error.errorDescription))
+            if error.errorDescription == "AICOMPOSE_FLOOD_PREMIUM" {
+                return .fail(.nonPremiumFlood)
+            } else {
+                return .fail(.generic)
+            }
         }
         |> mapToSignal { result -> Signal<TelegramAIComposeMessageResult, TelegramAIComposeMessageError> in
             switch result {
