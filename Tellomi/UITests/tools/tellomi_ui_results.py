@@ -248,6 +248,30 @@ def merge(
     return {"counts": counts, "results": results}
 
 
+def result_gate(merged: dict, shard_payloads: list[dict] | None = None) -> str | None:
+    """Why the GitHub check must fail, or None when the reported run is clean.
+
+    An automated id with no shard line stays ``blocked`` in the artifact so
+    the gap is visible, and that gap fails the check. A recorded ``fail``
+    fails it too. An explicit ``blocked`` from a test (account unset, screen
+    not reached) does not.
+    """
+    fail_count = merged.get("counts", {}).get("fail", 0)
+    if fail_count:
+        return f"{fail_count} fail"
+    missing = [
+        backlog_id
+        for backlog_id, entry in merged.get("results", {}).items()
+        if entry.get("error") and "did not report" in str(entry.get("error"))
+    ]
+    if missing:
+        return f"{len(missing)} automated ids were not reported"
+    for payload in shard_payloads or []:
+        if payload.get("aborted") or payload.get("failed_without_ids"):
+            return f"shard {payload.get('shard')} aborted before reporting"
+    return None
+
+
 def counts_by_status(manifest: dict[str, dict]) -> dict[str, int]:
     counts = {"automated": 0, "blocked": 0, "device_only": 0}
     for entry in manifest.values():

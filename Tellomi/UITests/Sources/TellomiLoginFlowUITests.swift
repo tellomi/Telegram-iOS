@@ -10,10 +10,10 @@ final class TellomiLoginFlowUITests: XCTestCase {
     func testAccountASubmitsTheFixedTestCode() throws {
         switch TellomiTestAccounts.lookup("TELLOMI_TEST_PHONE_A") {
         case .unset:
-            TellomiUILog.report(Coverage.codeFlow, status: "blocked", error: "TELLOMI_TEST_PHONE_A is unset")
+            TellomiUILog.report(Coverage.codeFlow + Coverage.phoneSend, status: "blocked", error: "TELLOMI_TEST_PHONE_A is unset")
             throw XCTSkip("TELLOMI_TEST_PHONE_A is unset")
         case .refused(let reason):
-            TellomiUILog.report(Coverage.codeFlow, status: "blocked", error: reason)
+            TellomiUILog.report(Coverage.codeFlow + Coverage.phoneSend, status: "blocked", error: reason)
             throw XCTSkip(reason)
         case .ready:
             break
@@ -71,9 +71,23 @@ final class TellomiLoginFlowUITests: XCTestCase {
             TellomiUILog.report(["I-LOGIN-222"], status: "fail", error: outcome.detail)
         }
         if outcome.agreementVisible {
-            TellomiUILog.report(["I-LOGIN-173", "I-LOGIN-174", "I-LOGIN-212"], status: outcome.signedIn ? "pass" : "fail", error: outcome.detail)
+            TellomiUILog.report(["I-LOGIN-174"], status: outcome.termsURLOpened ? "pass" : "fail", error: outcome.termsURLOpened ? nil : "《用户服务协议》 did not open https://tellomi.cn/legal/terms/")
+            TellomiUILog.report(["I-LOGIN-173"], status: outcome.privacyURLOpened ? "pass" : "fail", error: outcome.privacyURLOpened ? nil : "《隐私政策》 did not open https://tellomi.cn/legal/privacy/")
+            let agreementReady = outcome.uncheckedContinueDisabled && outcome.termsURLOpened && outcome.privacyURLOpened
+            TellomiUILog.report(["I-LOGIN-212"], status: agreementReady ? "pass" : "fail", error: agreementReady ? nil : "unchecked continue disabled=\(outcome.uncheckedContinueDisabled); terms=\(outcome.termsURLOpened); privacy=\(outcome.privacyURLOpened)")
         } else {
             TellomiUILog.report(["I-LOGIN-173", "I-LOGIN-174", "I-LOGIN-212"], status: "blocked", error: "sign-up agreement was not shown")
+        }
+        if outcome.reachedCodeScreen {
+            TellomiUILog.report(["I-LOGIN-155"], status: "pass")
+        } else {
+            let detail = outcome.detail.isEmpty ? "auth.sendCode did not reach the code screen" : outcome.detail
+            TellomiUILog.report(["I-LOGIN-155"], status: "fail", error: detail)
+        }
+        if outcome.defaultCountryContains86 && outcome.reachedCodeScreen {
+            TellomiUILog.report(["I-LOGIN-067", "I-LOGIN-068", "I-LOGIN-167"], status: "pass")
+        } else {
+            TellomiUILog.report(["I-LOGIN-067", "I-LOGIN-068", "I-LOGIN-167"], status: "fail", error: "default country contains 86=\(outcome.defaultCountryContains86); code screen=\(outcome.reachedCodeScreen)")
         }
     }
 }

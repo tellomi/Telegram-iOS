@@ -35,23 +35,20 @@ final class TellomiLoggedOutUITests: XCTestCase {
         let send = app.buttons["Auth.PhoneEntry.ContinueButton"]
         tellomiScreenshot("phone-controls")
         guard country.exists, send.waitForExistence(timeout: 5) else {
-            TellomiUILog.report(Coverage.phoneField, status: "fail", error: "country code or continue is missing")
+            TellomiUILog.report(["I-LOGIN-121"], status: "fail", error: "country code or continue is missing")
             XCTFail("phone controls missing")
             return
         }
         let countryValue = country.value as? String ?? ""
         guard countryValue.contains("86") else {
-            TellomiUILog.report(Coverage.phoneField, status: "fail", error: "country code is \(countryValue)")
+            TellomiUILog.report(["I-LOGIN-121"], status: "fail", error: "country code is \(countryValue)")
             XCTFail("expected default country code 86, saw \(countryValue)")
             return
         }
         let label = send.label
-        let phoneVisible = phone.exists
-        if !phoneVisible {
-            TellomiUILog.report(["I-LOGIN-067", "I-LOGIN-068", "I-LOGIN-155", "I-LOGIN-167"], status: "fail", error: "phone field missing")
-        } else {
-            TellomiUILog.report(["I-LOGIN-067", "I-LOGIN-068", "I-LOGIN-155", "I-LOGIN-167"], status: "pass")
-        }
+        // I-LOGIN-067/068/155/167 are reported by the sign-in flow, which is
+        // the check that actually reaches auth.sendCode. A visible field is
+        // not that send.
         // The backlog's 登录 button submits this step. Record the real label.
         if label.contains("登录") {
             XCTAssertFalse(send.isEnabled)
@@ -87,7 +84,24 @@ final class TellomiLoggedOutUITests: XCTestCase {
             }
             TellomiApp.tap(button)
             let alert = app.alerts.firstMatch
-            if alert.waitForExistence(timeout: 3), alert.label.contains("暂未开放") || alert.staticTexts["暂未开放"].exists {
+            let closed = alert.waitForExistence(timeout: 3) && (alert.label.contains("暂未开放") || alert.staticTexts["暂未开放"].exists)
+            if id == "I-LOGIN-118" {
+                // The row enters email login and sends the address as phone_number.
+                // 暂未开放 is the opposite of that row.
+                let email = app.textFields["Auth.Login.Email"]
+                if email.exists {
+                    TellomiUILog.report([id], status: "fail", error: "email field is on screen; auth.sendCode with that address was not sent")
+                } else if closed {
+                    TellomiUILog.report([id], status: "fail", error: "邮箱登录 showed 暂未开放 instead of an email login that sends auth.sendCode")
+                } else {
+                    TellomiUILog.report([id], status: "fail", error: "邮箱登录 did not open an email entry")
+                }
+                if closed {
+                    alert.buttons.firstMatch.tap()
+                }
+                continue
+            }
+            if closed {
                 sawClosedAlert = true
                 TellomiUILog.report([id], status: "pass")
                 alert.buttons.firstMatch.tap()

@@ -8,9 +8,14 @@ enum Coverage {
     ]
 
     static let phoneField: [String] = [
+        "I-LOGIN-121",
+    ]
+
+    /// Default +86 is observed before the test number is typed, and the code
+    /// screen is the evidence that auth.sendCode ran. I-LOGIN-155 is that send.
+    static let phoneSend: [String] = [
         "I-LOGIN-067",
         "I-LOGIN-068",
-        "I-LOGIN-121",
         "I-LOGIN-155",
         "I-LOGIN-167",
     ]
@@ -52,6 +57,7 @@ enum Coverage {
         "I-SETTINGS-493",
         "I-SETTINGS-496",
         "I-SETTINGS-497",
+        "I-SETTINGS-500",
         "I-SETTINGS-501",
         "I-SETTINGS-503",
         "I-SETTINGS-508",
@@ -87,7 +93,6 @@ enum Coverage {
         "I-PREMIUM-307",
         "I-PREMIUM-308",
         "I-PREMIUM-309",
-        "I-SETTINGS-500",
     ]
 
     static let discover: [String] = [

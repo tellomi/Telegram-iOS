@@ -3,8 +3,9 @@
 # One macOS job builds the unsigned simulator app. Up to five jobs then
 # compile only the XCUITest bundle and run a shard. The merge job writes
 # ui-results.json (backlog id to pass, fail, blocked, or device_only).
-# A failing assertion is recorded in that file. The merge fails only when
-# a shard artifact is missing or an id was dropped.
+# A failing assertion is recorded in that file. The merge fails when a
+# shard artifact is missing, an id was dropped, any result is fail, an
+# automated id was not reported, or a shard aborted before reporting.
 #
 # This file is not on release/ios. A push to release/ios does not start it.
 # Nightly runs from the default branch. workflow_dispatch runs the ref
@@ -187,7 +188,6 @@ jobs:
 
       - name: Run shard ${{ matrix.shard }}
         id: shard
-        continue-on-error: true
         run: |
           set -euo pipefail
           ditto -x -k sim-dist/Telegram.app.zip sim-dist
@@ -203,7 +203,7 @@ jobs:
           set -euo pipefail
           mkdir -p shard-out/screenshots
           if [[ ! -f shard-out/results.json ]]; then
-            printf '%s\n' "{\"shard\":\"${{ matrix.shard }}\",\"results\":{}}" > shard-out/results.json
+            printf '%s\n' "{\"shard\":\"${{ matrix.shard }}\",\"aborted\":true,\"failed_without_ids\":true,\"results\":{}}" > shard-out/results.json
           fi
 
       - name: Upload shard results

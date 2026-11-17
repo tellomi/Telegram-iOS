@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from tellomi_ui_results import (  # noqa: E402
+from tellomi_ui_results import (
     DEDICATED_TEST_PHONE_A,
     DEDICATED_TEST_PHONE_B,
     classify,
@@ -20,6 +20,7 @@ from tellomi_ui_results import (  # noqa: E402
     load_coverage,
     merge,
     parse_result_log,
+    result_gate,
     test_phone_code,
     ui_test_phone,
 )
@@ -126,12 +127,58 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(merged["results"]["I-LOGIN-005"]["status"], "blocked")
         self.assertEqual(sum(merged["counts"].values()), 928)
 
-    def test_missing_automated_report_stays_blocked(self):
+    def test_missing_automated_report_stays_blocked_and_fails_the_gate(self):
         rows = load_backlog(ROOT / "backlog.csv")
         manifest = classify(rows, load_coverage(ROOT / "Sources"))
         merged = merge(manifest, [{"results": {}}])
         self.assertEqual(merged["results"]["I-LOGIN-191"]["status"], "blocked")
         self.assertIn("did not report", merged["results"]["I-LOGIN-191"]["error"])
+        self.assertIn("were not reported", result_gate(merged) or "")
+
+    def test_a_recorded_fail_fails_the_gate(self):
+        rows = load_backlog(ROOT / "backlog.csv")
+        manifest = classify(rows, load_coverage(ROOT / "Sources"))
+        coverage = load_coverage(ROOT / "Sources")
+        shard = {
+            "results": {
+                backlog_id: {"status": "pass", "test": name, "error": None}
+                for name, ids in coverage.items()
+                for backlog_id in ids
+            }
+        }
+        shard["results"]["I-LOGIN-121"] = {"status": "fail", "test": "phoneField", "error": "label is Next"}
+        merged = merge(manifest, [shard])
+        self.assertEqual(result_gate(merged), "1 fail")
+
+    def test_every_automated_pass_clears_the_gate(self):
+        rows = load_backlog(ROOT / "backlog.csv")
+        manifest = classify(rows, load_coverage(ROOT / "Sources"))
+        coverage = load_coverage(ROOT / "Sources")
+        shard = {
+            "results": {
+                backlog_id: {"status": "pass", "test": name, "error": None}
+                for name, ids in coverage.items()
+                for backlog_id in ids
+            }
+        }
+        merged = merge(manifest, [shard])
+        self.assertIsNone(result_gate(merged))
+
+    def test_aborted_shard_fails_the_gate(self):
+        rows = load_backlog(ROOT / "backlog.csv")
+        manifest = classify(rows, load_coverage(ROOT / "Sources"))
+        coverage = load_coverage(ROOT / "Sources")
+        shard = {
+            "shard": 2,
+            "aborted": True,
+            "results": {
+                backlog_id: {"status": "pass", "test": name, "error": None}
+                for name, ids in coverage.items()
+                for backlog_id in ids
+            },
+        }
+        merged = merge(manifest, [shard])
+        self.assertIn("aborted", result_gate(merged, [shard]) or "")
 
     def test_device_only_cannot_be_overwritten(self):
         rows = load_backlog(ROOT / "backlog.csv")

@@ -34,6 +34,7 @@ def main() -> int:
     # Array names are not test selectors. The log names are Class/method
     # with the slash turned into "__". Map by reading each log's printed ids.
     results: dict[str, dict] = {}
+    failed_quietly = False
     for log_path in sorted(args.logs.glob("*.log")):
         text = log_path.read_text(encoding="utf-8", errors="replace")
         parsed = parse_result_log(text)
@@ -50,25 +51,20 @@ def main() -> int:
                 "error": report["error"] or None,
             }
         if failed and not parsed:
-            results[f"shard-{args.shard}-{log_path.stem}"] = {
-                "status": "fail",
-                "test": log_path.stem.replace("__", "/"),
-                "screenshot": screenshot,
-                "error": "xcodebuild failed before any backlog id was reported",
-            }
-    # Drop synthetic keys that are not backlog ids. The merge rejects them.
+            failed_quietly = True
     results = {key: value for key, value in results.items() if key.startswith("I-")}
-    if failed_without_ids(args.logs) and not results:
-        print("shard produced no backlog ids", file=sys.stderr)
-    payload = {"shard": args.shard, "results": results, "coverage_arrays": sorted(coverage)}
+    if failed_quietly:
+        print("a test failed before reporting a backlog id", file=sys.stderr)
+    payload = {
+        "shard": args.shard,
+        "results": results,
+        "coverage_arrays": sorted(coverage),
+        "failed_without_ids": failed_quietly,
+    }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"reported {len(results)} ids")
-    return 0
-
-
-def failed_without_ids(logs: Path) -> bool:
-    return any(test_failed(path.read_text(encoding="utf-8", errors="replace")) for path in logs.glob("*.log"))
+    return 1 if failed_quietly else 0
 
 
 if __name__ == "__main__":

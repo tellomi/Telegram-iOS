@@ -78,10 +78,12 @@ final class TellomiComposerEntryUITests: XCTestCase {
             TellomiApp.tap(translate)
         }
         let show = tellomiScrollToLabel(app, "显示翻译按钮").exists || tellomiLabel(app, "显示翻译").exists
-        if show {
+        let wholeChat = tellomiLabel(app, "翻译整个聊天").exists
+        let doNotTranslate = tellomiLabel(app, "不翻译").exists
+        if show && wholeChat && doNotTranslate {
             TellomiUILog.report(["I-TRANSLATION-073"], status: "pass")
         } else {
-            TellomiUILog.report(["I-TRANSLATION-073"], status: "blocked", error: "显示翻译按钮 was not on the language screen")
+            TellomiUILog.report(["I-TRANSLATION-073"], status: "fail", error: "显示翻译=\(show) 翻译整个聊天=\(wholeChat) 不翻译=\(doNotTranslate)")
         }
         tellomiScreenshot("translate-rows")
     }

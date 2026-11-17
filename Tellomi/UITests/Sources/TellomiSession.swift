@@ -10,6 +10,10 @@ enum TellomiSession {
         var signedIn = false
         var signUp = false
         var agreementVisible = false
+        var defaultCountryContains86 = false
+        var uncheckedContinueDisabled = false
+        var termsURLOpened = false
+        var privacyURLOpened = false
         var detail = ""
     }
 
@@ -30,6 +34,8 @@ enum TellomiSession {
             outcome.detail = "country code field missing"
             return outcome
         }
+        let countryValue = country.value as? String ?? ""
+        outcome.defaultCountryContains86 = countryValue.contains("86")
         country.tap()
         for _ in 0..<8 {
             country.typeText(XCUIKeyboardKey.delete.rawValue)
@@ -89,9 +95,6 @@ enum TellomiSession {
             let privacy = test.tellomiLabel(app, "《隐私政策》")
             let checkbox = app.buttons["Auth.Agreement.Checkbox"]
             outcome.agreementVisible = terms.exists || privacy.exists || app.staticTexts.matching(NSPredicate(format: "label CONTAINS '用户服务协议'")).firstMatch.exists
-            if checkbox.exists {
-                TellomiApp.tap(checkbox)
-            }
             firstName.tap()
             firstName.typeText("UI")
             let lastName = app.textFields["Auth.SetName.LastNameField"]
@@ -100,6 +103,18 @@ enum TellomiSession {
                 lastName.typeText("Test")
             }
             let done = app.buttons["Auth.SetName.ContinueButton"]
+            if outcome.agreementVisible && checkbox.exists && done.exists {
+                outcome.uncheckedContinueDisabled = !done.isEnabled
+            }
+            if terms.exists {
+                outcome.termsURLOpened = legalPageOpened(app, row: terms, hostPath: "tellomi.cn/legal/terms")
+            }
+            if privacy.exists {
+                outcome.privacyURLOpened = legalPageOpened(app, row: privacy, hostPath: "tellomi.cn/legal/privacy")
+            }
+            if checkbox.exists {
+                TellomiApp.tap(checkbox)
+            }
             if done.exists && done.isEnabled {
                 TellomiApp.tap(done)
             }
@@ -112,5 +127,27 @@ enum TellomiSession {
         }
         outcome.detail = "code was submitted and neither the tab bar nor sign-up appeared"
         return outcome
+    }
+
+    /// Opens one agreement control and returns whether Safari shows that URL.
+    private static func legalPageOpened(_ app: XCUIApplication, row: XCUIElement, hostPath: String) -> Bool {
+        guard row.exists else {
+            return false
+        }
+        TellomiApp.tap(row)
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: 3) {
+            for label in ["打开", "Open", "允许", "Allow"] {
+                let button = alert.buttons[label]
+                if button.exists {
+                    button.tap()
+                    break
+                }
+            }
+        }
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        let opened = safari.wait(for: .runningForeground, timeout: 15) && safari.debugDescription.contains(hostPath)
+        app.activate()
+        return opened
     }
 }

@@ -43,21 +43,29 @@ final class TellomiLoggedInShellUITests: XCTestCase {
         }
         openSettings(app)
         tellomiScreenshot("settings-home")
-        let checks: [(String, [String])] = [
-            ("I-IDX-SETTINGS-001", ["账号", "通用", "帮助与关于"]),
-            ("I-SETTINGS-475", ["账号"]),
-            ("I-SETTINGS-501", ["隐私与安全"]),
-            ("I-SETTINGS-481", ["设备"]),
-            ("I-SETTINGS-503", ["资料"]),
-            ("I-SETTINGS-486", ["语言"]),
-            ("I-SETTINGS-496", ["发现"]),
-            ("I-SETTINGS-484", ["帮助与关于"]),
-            ("I-SETTINGS-487", ["协议与隐私"]),
-            ("I-SETTINGS-473", ["关于 Tellomi"]),
+        let groups = ["账号", "通用", "帮助与关于"]
+        let groupsFound = groups.allSatisfy { tellomiScrollToLabel(app, $0).exists }
+        TellomiUILog.report(["I-IDX-SETTINGS-001"], status: groupsFound ? "pass" : "fail", error: groupsFound ? nil : "missing \(groups.joined(separator: ", "))")
+        let navigationRows = [
+            ("I-SETTINGS-475", "账号"),
+            ("I-SETTINGS-501", "隐私与安全"),
+            ("I-SETTINGS-481", "设备"),
+            ("I-SETTINGS-503", "资料"),
+            ("I-SETTINGS-486", "语言"),
+            ("I-SETTINGS-496", "发现"),
+            ("I-SETTINGS-484", "帮助与关于"),
+            ("I-SETTINGS-487", "协议与隐私"),
+            ("I-SETTINGS-473", "关于 Tellomi"),
+            ("I-SETTINGS-500", "你的会员即将到期。"),
         ]
-        for (id, labels) in checks {
-            let found = labels.allSatisfy { tellomiScrollToLabel(app, $0).exists }
-            TellomiUILog.report([id], status: found ? "pass" : "fail", error: found ? nil : "missing \(labels.joined(separator: ", "))")
+        for (id, title) in navigationRows {
+            if openedNextPage(app, title: title) {
+                TellomiUILog.report([id], status: "pass")
+            } else if tellomiScrollToLabel(app, title).exists {
+                TellomiUILog.report([id], status: "fail", error: "\(title) did not open the next page")
+            } else {
+                TellomiUILog.report([id], status: "fail", error: "\(title) is not on the settings home")
+            }
         }
         if tellomiScrollToLabel(app, "账号与绑定").exists {
             TellomiApp.tap(tellomiLabel(app, "账号与绑定"))
@@ -99,10 +107,9 @@ final class TellomiLoggedInShellUITests: XCTestCase {
         }
         TellomiApp.tap(tellomiLabel(app, "导航栏"))
         tellomiScreenshot("navigation")
-        let feed = switchValue(app, "发现")
         let calls = switchValue(app, "通话")
         let contacts = switchValue(app, "联系人")
-        TellomiUILog.report(["I-SETTINGS-448"], status: feed != nil ? "pass" : "fail", error: feed == nil ? "发现 toggle missing" : nil)
+        TellomiUILog.report(["I-SETTINGS-448"], status: discoverToggleFollowsTheRow(app) ? "pass" : "fail", error: "发现 must toggle; 聊天 and 设置 stay on and cannot be turned off")
         TellomiUILog.report(["I-SETTINGS-449"], status: calls != nil ? "pass" : "fail", error: calls == nil ? "通话 toggle missing" : nil)
         if contacts == "0" {
             TellomiUILog.report(["I-SETTINGS-450"], status: "pass")
@@ -159,7 +166,6 @@ final class TellomiLoggedInShellUITests: XCTestCase {
             ("I-PREMIUM-307", "给自己买一份礼物"),
             ("I-PREMIUM-308", "发送自己一份礼物"),
             ("I-PREMIUM-309", "赠送星星"),
-            ("I-SETTINGS-500", "你的会员即将到期。"),
         ]
         openMe(app)
         openSettings(app)
@@ -212,6 +218,54 @@ final class TellomiLoggedInShellUITests: XCTestCase {
         if buttons.count > 0 {
             TellomiApp.tap(buttons.element(boundBy: buttons.count - 1))
         }
+    }
+
+    /// The row is a navigation row only when tapping it leaves the settings home.
+    private func openedNextPage(_ app: XCUIApplication, title: String) -> Bool {
+        let row = tellomiScrollToLabel(app, title)
+        guard row.exists else {
+            return false
+        }
+        let homeVisible = tellomiLabel(app, "账号").exists && tellomiLabel(app, "通用").exists
+        TellomiApp.tap(row)
+        let backToSettings = app.navigationBars.buttons["设置"]
+        let backToEnglish = app.navigationBars.buttons["Settings"]
+        let opened = backToSettings.waitForExistence(timeout: 5) || backToEnglish.exists || (homeVisible && !(tellomiLabel(app, "账号").exists && tellomiLabel(app, "通用").exists))
+        let back = backToSettings.exists ? backToSettings : (backToEnglish.exists ? backToEnglish : app.navigationBars.buttons.firstMatch)
+        if back.exists {
+            TellomiApp.tap(back)
+            _ = tellomiScrollToLabel(app, "账号").waitForExistence(timeout: 4)
+        }
+        return opened
+    }
+
+    /// 发现 can change. 聊天 and 设置 are on and do not accept a tap that turns them off.
+    private func discoverToggleFollowsTheRow(_ app: XCUIApplication) -> Bool {
+        guard let feed = switchControl(app, "发现"), let chats = switchControl(app, "聊天"), let settings = switchControl(app, "设置") else {
+            return false
+        }
+        let before = feed.value as? String
+        TellomiApp.tap(feed)
+        let after = feed.value as? String
+        let toggled = before != nil && after != nil && before != after
+        if toggled {
+            TellomiApp.tap(feed)
+        }
+        let chatsLocked = (chats.value as? String) == "1" && !chats.isEnabled
+        let settingsLocked = (settings.value as? String) == "1" && !settings.isEnabled
+        return toggled && chatsLocked && settingsLocked
+    }
+
+    private func switchControl(_ app: XCUIApplication, _ label: String) -> XCUIElement? {
+        let direct = app.switches[label]
+        if direct.exists {
+            return direct
+        }
+        let cell = app.cells.containing(.staticText, identifier: label).firstMatch
+        guard cell.waitForExistence(timeout: 2), cell.switches.firstMatch.exists else {
+            return nil
+        }
+        return cell.switches.firstMatch
     }
 
     private func switchValue(_ app: XCUIApplication, _ label: String) -> String? {

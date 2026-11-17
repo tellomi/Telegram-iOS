@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from tellomi_ui_results import classify, load_backlog, load_coverage, merge, write_json
+from tellomi_ui_results import classify, load_backlog, load_coverage, merge, result_gate, write_json
 
 
 def shard_payloads(directory: Path) -> list[dict]:
@@ -73,6 +73,13 @@ def main() -> int:
     merged["backlog_rows"] = len(rows)
     write_json(args.out, merged)
     print(json.dumps(merged["counts"], ensure_ascii=False))
+    reason = result_gate(merged, raw)
+    if reason:
+        print(reason, file=sys.stderr)
+        return 1
+    if merged["counts"] and sum(merged["counts"].values()) != len(rows):
+        print(f"merged {sum(merged['counts'].values())} ids, backlog has {len(rows)}", file=sys.stderr)
+        return 1
     return 0
 
 
