@@ -104,9 +104,12 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
     }
 
     private func hostContentView() -> UIView {
+        let delegateWindow = UIApplication.shared.delegate?.window ?? nil
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let window = scenes.flatMap { $0.windows }.first { $0.isKeyWindow } ?? scenes.flatMap { $0.windows }.first
-        XCTAssertNotNil(window, "ListViewReorderTestHost did not leave a window")
+        let sceneWindow = scenes.flatMap { $0.windows }.first { $0.isKeyWindow } ?? scenes.flatMap { $0.windows }.first
+        let window = delegateWindow ?? sceneWindow
+        XCTAssertNotNil(window, "host delegate window and scene windows are both nil")
+        XCTAssertTrue(window?.isKeyWindow == true)
         let view = window?.rootViewController?.view
         XCTAssertNotNil(view)
         return view!
@@ -114,6 +117,9 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
 
     private func makeInstalledNode(enabled: Bool) -> ChatListNode {
         let frame = CGRect(x: 0, y: 0, width: self.width, height: self.height)
+        let content = self.hostContentView()
+        fputs("reorder-diag: host window ready\n", stderr)
+        fflush(stderr)
         ChatListTopReorderPreservation.enabled = enabled
         ChatListTopReorderPreservation.returnAfterInstall = true
         fputs("reorder-diag: creating ChatListNode\n", stderr)
@@ -141,7 +147,6 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
         fflush(stderr)
         node.useMainQueueTransactions = true
         node.frame = frame
-        let content = self.hostContentView()
         content.addSubview(node.view)
         node.view.frame = frame
         return node
