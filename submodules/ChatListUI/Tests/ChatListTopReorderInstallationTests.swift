@@ -103,24 +103,21 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
         }
     }
 
-    private var hosts: [UIWindow] = []
+    private func hostContentView() -> UIView {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.flatMap { $0.windows }.first { $0.isKeyWindow } ?? scenes.flatMap { $0.windows }.first
+        XCTAssertNotNil(window, "ListViewReorderTestHost did not leave a window")
+        let view = window?.rootViewController?.view
+        XCTAssertNotNil(view)
+        return view!
+    }
 
     private func makeInstalledNode(enabled: Bool) -> ChatListNode {
         let frame = CGRect(x: 0, y: 0, width: self.width, height: self.height)
-        let window: UIWindow
-        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
-            window = UIWindow(windowScene: scene)
-            window.frame = frame
-        } else {
-            window = UIWindow(frame: frame)
-        }
-        let root = UIViewController()
-        window.rootViewController = root
-        window.makeKeyAndVisible()
-        root.view.layoutIfNeeded()
-        self.hosts.append(window)
         ChatListTopReorderPreservation.enabled = enabled
         ChatListTopReorderPreservation.returnAfterInstall = true
+        fputs("reorder-diag: creating ChatListNode\n", stderr)
+        fflush(stderr)
         let node = ChatListNode(
             context: ReorderProbeAccountContext(),
             location: .chatList(groupId: .root),
@@ -140,10 +137,13 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
             autoSetReady: false,
             isMainTab: nil
         )
+        fputs("reorder-diag: ChatListNode created\n", stderr)
+        fflush(stderr)
         node.useMainQueueTransactions = true
         node.frame = frame
-        root.view.addSubview(node.view)
-        node.view.frame = window.bounds
+        let content = self.hostContentView()
+        content.addSubview(node.view)
+        node.view.frame = frame
         return node
     }
 
@@ -207,7 +207,6 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
     }
 
     override func tearDown() {
-        self.hosts.removeAll()
         ChatListTopReorderPreservation.returnAfterInstall = false
         ChatListTopReorderPreservation.enabled = true
         super.tearDown()

@@ -1,6 +1,8 @@
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
-load("@build_bazel_rules_apple//apple:ios.bzl", "ios_unit_test")
+load("@build_bazel_rules_apple//apple:ios.bzl", "ios_application", "ios_unit_test")
 load("@build_bazel_rules_apple//apple/testing/default_runner:ios_test_runner.bzl", "ios_test_runner")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+load("//build-system/bazel-utils:plist_fragment.bzl", "plist_fragment")
 
 swift_library(
     name = "Display",
@@ -61,10 +63,42 @@ ios_test_runner(
     os_version = "27.0",
 )
 
+objc_library(
+    name = "ListViewReorderTestHostLib",
+    testonly = True,
+    srcs = ["Tests/Host/main.m"],
+    sdk_frameworks = ["UIKit"],
+)
+
+plist_fragment(
+    name = "ListViewReorderTestHostInfo",
+    extension = "plist",
+    template = """
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>UIApplicationSupportsIndirectInputEvents</key>
+    <true/>
+    """,
+)
+
+# No provisioning profile: PR CI's configuration exports an empty provisioning
+# package when profiles are disabled. Simulator signing does not need one.
+ios_application(
+    name = "ListViewReorderTestHost",
+    testonly = True,
+    bundle_id = "org.telegram.ListViewReorderTestHost",
+    families = ["iphone"],
+    minimum_os_version = "15.0",
+    infoplists = [":ListViewReorderTestHostInfo"],
+    deps = [":ListViewReorderTestHostLib"],
+    visibility = ["//visibility:public"],
+)
+
 ios_unit_test(
     name = "ListViewTopReorderTests",
     minimum_os_version = "15.0",
     runner = ":ListViewTopReorderTestRunner",
+    test_host = ":ListViewReorderTestHost",
     deps = [
         ":ListViewTopReorderTestsLib",
     ],

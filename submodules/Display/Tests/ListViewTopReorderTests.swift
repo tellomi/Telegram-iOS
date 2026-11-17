@@ -30,39 +30,30 @@ final class ListViewTopReorderTests: XCTestCase {
     private let width: CGFloat = 390
     private let height: CGFloat = 800
     private let insetTop: CGFloat = 200
-    private var hosts: [UIWindow] = []
 
-    override func tearDown() {
-        self.hosts.removeAll()
-        super.tearDown()
+    private func hostContentView() -> UIView {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.flatMap { $0.windows }.first { $0.isKeyWindow } ?? scenes.flatMap { $0.windows }.first
+        XCTAssertNotNil(window, "ListViewReorderTestHost did not leave a window")
+        let view = window?.rootViewController?.view
+        XCTAssertNotNil(view)
+        return view!
     }
 
-    /// The Xcode 27 SDK types `CADisplayLink(target:selector:)` as a non-optional
-    /// `CADisplayLink`. On the iOS 27 unit-test host that factory still returns nil
-    /// until a window is key on a scene, and assigning that nil into `CADisplayLink!`
-    /// traps on the next use (`ListView.swift:574` on `8a4821da89`). The link is
-    /// created by `ListView.init`, so the window has to be key first.
     private func makeList(preserves: Bool) -> ListViewImpl {
         let frame = CGRect(x: 0, y: 0, width: self.width, height: self.height)
-        let window: UIWindow
-        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
-            window = UIWindow(windowScene: scene)
-            window.frame = frame
-        } else {
-            window = UIWindow(frame: frame)
-        }
-        let root = UIViewController()
-        window.rootViewController = root
-        window.makeKeyAndVisible()
-        root.view.layoutIfNeeded()
-        self.hosts.append(window)
+        fputs("reorder-diag: creating ListViewImpl\n", stderr)
+        fflush(stderr)
         let list = ListViewImpl()
+        fputs("reorder-diag: ListViewImpl created\n", stderr)
+        fflush(stderr)
         list.preservesTopDownInsert = preserves
         list.useMainQueueTransactions = true
         list.keepMinimalScrollHeightWithTopInset = 400
         list.frame = frame
-        root.view.addSubview(list.view)
-        list.view.frame = window.bounds
+        let content = self.hostContentView()
+        content.addSubview(list.view)
+        list.view.frame = frame
         return list
     }
 

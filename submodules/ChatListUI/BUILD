@@ -224,6 +224,7 @@ ios_unit_test(
     name = "ChatListTopReorderInstallationTests",
     minimum_os_version = "15.0",
     runner = ":ChatListTopReorderInstallationTestRunner",
+    test_host = "//submodules/Display:ListViewReorderTestHost",
     resources = ["//Telegram:InstantPagePreviewTestStrings"],
     deps = [":ChatListTopReorderInstallationTestsLib"],
     visibility = ["//visibility:public"],
