@@ -1433,17 +1433,20 @@ public final class ChatListNode: ListViewImpl {
         self.scrollHeightTopInset = ChatListNavigationBar.searchScrollHeight
         
         super.init()
-        
-        if case .internal = context.sharedContext.applicationBindings.appBuildType {
-            //self.useMainQueueTransactions = true
-        }
-        
+
         self.verticalScrollIndicatorColor = theme.list.scrollIndicatorColor
         self.verticalScrollIndicatorFollowsOverscroll = true
         self.verticalScrollIndicatorRespectsSideInsets = true
-        
+
         self.keepMinimalScrollHeightWithTopInset = self.scrollHeightTopInset
-        self.preservesTopDownInsert = ChatListTopReorderPreservation.enabled
+        ChatListTopReorderPreservation.install(on: self)
+        if ChatListTopReorderPreservation.returnAfterInstall {
+            return
+        }
+
+        if case .internal = context.sharedContext.applicationBindings.appBuildType {
+            //self.useMainQueueTransactions = true
+        }
         
         let nodeInteraction = ChatListNodeInteraction(context: context, animationCache: self.animationCache, animationRenderer: self.animationRenderer, activateSearch: { [weak self] in
             if let strongSelf = self, let activateSearch = strongSelf.activateSearch {

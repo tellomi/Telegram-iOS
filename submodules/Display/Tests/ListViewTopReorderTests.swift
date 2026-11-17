@@ -1,198 +1,283 @@
+import UIKit
 import XCTest
 import SwiftSignalKit
 @testable import Display
 
-/// `deleteAndInsertItemsTransaction` for a normal chat-list message does not animate
-/// the insert. It calls `listViewTopDownInsert` on the pre-delete frames, then
-/// `removeNodeAtIndex`, then `insertionPoint`, then `insertNode`. This test calls
-/// those same functions. The index renumber only matches the transaction's index
-/// map so the hole is at item 0. It does not move frames.
+/// One row of fixed height. The list lays it out through the normal item path.
+private final class FixedHeightRow: ListViewItem {
+    let rowHeight: CGFloat
+    let neighborDescriptor: AnyEquatable = .noNeighborInfluence
+
+    init(rowHeight: CGFloat) {
+        self.rowHeight = rowHeight
+    }
+
+    func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
+        let node = ListViewItemNode(layerBacked: true)
+        node.contentSize = CGSize(width: params.width, height: self.rowHeight)
+        completion(node, { (nil, { _ in }) })
+    }
+
+    func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, neighbors: ListViewItemNeighbors, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
+        let layout = ListViewItemNodeLayout(contentSize: CGSize(width: params.width, height: self.rowHeight), insets: UIEdgeInsets())
+        completion(layout, { _ in })
+    }
+}
+
+/// Drives `ListView.transaction`, which is what calls `deleteAndInsertItemsTransaction`.
+/// The test does not sample maxY, choose `forceIndexZeroDown`, or renumber indices.
 final class ListViewTopReorderTests: XCTestCase {
+    private let width: CGFloat = 390
+    private let height: CGFloat = 800
     private let insetTop: CGFloat = 200
-    private let rowHeight: CGFloat = 76
-    private let viewportHeight: CGFloat = 800
-    private let collapsedRestingTop: CGFloat = 146
 
-    private func makeState(firstMinY: CGFloat, count: Int) -> ListViewState {
-        var nodes: [ListViewStateNode] = []
-        for index in 0 ..< count {
-            let frame = CGRect(x: 0, y: firstMinY + CGFloat(index) * self.rowHeight, width: 390, height: self.rowHeight)
-            nodes.append(.Node(index: index, frame: frame, referenceNode: nil, newNode: nil))
+    private func makeList(preserves: Bool) -> (ListViewImpl, UIWindow) {
+        let list = ListViewImpl()
+        list.preservesTopDownInsert = preserves
+        list.useMainQueueTransactions = true
+        list.keepMinimalScrollHeightWithTopInset = 400
+        list.frame = CGRect(x: 0, y: 0, width: self.width, height: self.height)
+        let window = UIWindow(frame: list.frame)
+        window.rootViewController = UIViewController()
+        window.rootViewController?.view.addSubview(list.view)
+        list.view.frame = window.bounds
+        window.makeKeyAndVisible()
+        return (list, window)
+    }
+
+    private func perform(_ list: ListViewImpl, delete: [ListViewDeleteItem] = [], insert: [ListViewInsertItem] = [], options: ListViewDeleteAndInsertOptions = [.Synchronous], size: ListViewUpdateSizeAndInsets? = nil) {
+        let done = expectation(description: "transaction")
+        list.transaction(
+            deleteIndices: delete,
+            insertIndicesAndItems: insert,
+            updateIndicesAndItems: [],
+            options: options,
+            updateSizeAndInsets: size,
+            updateOpaqueState: nil,
+            completion: { _ in
+                done.fulfill()
+            }
+        )
+        wait(for: [done], timeout: 5)
+        // endTransaction removes the queue entry on the next main turn. The next
+        // transaction is dropped if that turn has not run.
+        let drained = expectation(description: "transaction queue")
+        DispatchQueue.main.async {
+            drained.fulfill()
         }
-        return ListViewState(
+        wait(for: [drained], timeout: 5)
+    }
+
+    private func populate(_ list: ListViewImpl, heights: [CGFloat]) {
+        let rows = heights.map { FixedHeightRow(rowHeight: $0) }
+        let inserts = rows.enumerated().map { index, row in
+            ListViewInsertItem(index: index, previousIndex: nil, item: row, directionHint: nil)
+        }
+        let size = ListViewUpdateSizeAndInsets(
+            size: CGSize(width: self.width, height: self.height),
             insets: UIEdgeInsets(top: self.insetTop, left: 0, bottom: 0, right: 0),
-            itemOffsetInsets: UIEdgeInsets(top: self.insetTop, left: 0, bottom: 0, right: 0),
-            visibleSize: CGSize(width: 390, height: self.viewportHeight),
-            invisibleInset: 500,
-            nodes: nodes,
-            scrollPosition: nil,
-            stationaryOffset: nil,
-            stackFromBottom: false
+            duration: 0,
+            curve: .Default(duration: nil)
         )
+        self.perform(list, insert: inserts, size: size)
     }
 
-    private func renumberForDeleteThenInsert(_ state: inout ListViewState, deleted: Int, inserted: Int) {
-        for i in 0 ..< state.nodes.count {
-            guard case let .Node(index, frame, referenceNode, newNode) = state.nodes[i] else {
-                continue
-            }
-            var updated = index
-            if updated > deleted {
-                updated -= 1
-            }
-            if inserted <= updated {
-                updated += 1
-            }
-            if updated != index {
-                state.nodes[i] = .Node(index: updated, frame: frame, referenceNode: referenceNode, newNode: newNode)
-            }
+    private func topMinY(_ list: ListViewImpl) -> CGFloat {
+        guard let node = list.itemNodeAtIndex(0) else {
+            XCTFail("row 0 is missing")
+            return 0
         }
+        return node.frame.minY
     }
 
-    /// Same order as the transaction: read the removed maxY, decide, delete, renumber, insert.
-    private func promote(_ state: inout ListViewState, listOptsIn: Bool) {
-        let removedMaxY = state.nodes[1].frame.maxY
-        let decision = listViewTopDownInsert(
-            downHintAtIndexZero: true,
-            deletedItemIndices: [1],
-            deletedMaxYByIndex: [1: removedMaxY],
-            itemOffsetInsetTop: state.itemOffsetInsets.top,
-            listOptsIn: listOptsIn
-        )
-        var hints: [Int: ListViewItemOperationDirectionHint] = [0: .Down]
-        let forceIndexZeroDown: Bool
-        switch decision {
-        case .forceDown:
-            forceIndexZeroDown = true
-        case .dropHint:
-            forceIndexZeroDown = false
-            hints[0] = nil
-        case .upstream:
-            forceIndexZeroDown = false
+    /// Moves the rows up by `delta` through the scroll view. Returns the edge after the scroll.
+    private func scroll(_ list: ListViewImpl, by delta: CGFloat) -> CGFloat {
+        let before = self.topMinY(list)
+        let offset = list.scroller.contentOffset
+        list.scroller.setContentOffset(CGPoint(x: offset.x, y: offset.y + delta), animated: false)
+        let after = self.topMinY(list)
+        XCTAssertEqual(after, before - delta, accuracy: 0.5, "scroll by \(delta) did not move the rows")
+        return after
+    }
+
+    private func promote(_ list: ListViewImpl, from index: Int, height: CGFloat, hint: ListViewItemOperationDirectionHint?, animated: Bool = false) {
+        var options: ListViewDeleteAndInsertOptions = [.Synchronous]
+        if animated {
+            options.insert(.AnimateInsertion)
         }
-        var operations: [ListViewStateOperation] = []
-        state.removeNodeAtIndex(1, direction: nil, animated: false, operations: &operations)
-        self.renumberForDeleteThenInsert(&state, deleted: 1, inserted: 0)
-        let point = state.insertionPoint(hints, itemCount: state.nodes.count + 1, forceIndexZeroDown: forceIndexZeroDown)
-        let layout = ListViewItemNodeLayout(contentSize: CGSize(width: 390, height: self.rowHeight), insets: UIEdgeInsets())
-        let node = QueueLocalObject<ListViewItemNode>(queue: Queue.mainQueue(), generate: {
-            ListViewItemNode(layerBacked: true)
-        })
-        state.insertNode(
-            0,
-            node: node,
-            layout: layout,
-            apply: { (nil, { _ in }) },
-            offsetDirection: point?.direction ?? .Up,
-            animated: false,
-            operations: &operations,
-            itemCount: state.nodes.count + 1
+        self.perform(
+            list,
+            delete: [ListViewDeleteItem(index: index, directionHint: nil)],
+            insert: [ListViewInsertItem(index: 0, previousIndex: index, item: FixedHeightRow(rowHeight: height), directionHint: hint)],
+            options: options
         )
     }
 
-    func testUpstreamGateMovesTheEdgeForTheFirstTwoPromotionsThenStops() {
-        var state = self.makeState(firstMinY: self.collapsedRestingTop, count: 8)
-        var tops: [CGFloat] = [state.nodes[0].frame.minY]
+    func testUpstreamMovesTheFirstTwoPromotionsThenStops() {
+        let (list, _) = self.makeList(preserves: false)
+        let row: CGFloat = 76
+        self.populate(list, heights: Array(repeating: row, count: 8))
+        let collapsed = self.scroll(list, by: 54)
+        var tops = [collapsed]
         for _ in 0 ..< 4 {
-            self.promote(&state, listOptsIn: false)
-            tops.append(state.nodes[0].frame.minY)
+            self.promote(list, from: 1, height: row, hint: .Down)
+            tops.append(self.topMinY(list))
         }
-        XCTAssertEqual(tops[1], tops[0] - self.rowHeight, accuracy: 0.001)
-        XCTAssertEqual(tops[2], tops[1] - self.rowHeight, accuracy: 0.001)
-        XCTAssertEqual(tops[3], tops[2], accuracy: 0.001)
-        XCTAssertEqual(tops[4], tops[3], accuracy: 0.001)
+        XCTAssertEqual(tops[1], tops[0] - row, accuracy: 0.5)
+        XCTAssertEqual(tops[2], tops[1] - row, accuracy: 0.5)
+        XCTAssertEqual(tops[3], tops[2], accuracy: 0.5)
+        XCTAssertEqual(tops[4], tops[3], accuracy: 0.5)
     }
 
-    func testOptedInListKeepsTheAnchorAcrossTheReportedScrolls() {
-        let starts: [CGFloat] = [
-            self.collapsedRestingTop,
-            self.collapsedRestingTop - 2,
-            self.collapsedRestingTop - 20,
-            self.collapsedRestingTop - self.rowHeight,
-            self.collapsedRestingTop - (2 * self.rowHeight),
-            self.collapsedRestingTop - 20.5,
-            -200
-        ]
-        for start in starts {
-            var state = self.makeState(firstMinY: start, count: 8)
-            for _ in 0 ..< 4 {
-                self.promote(&state, listOptsIn: true)
-                XCTAssertEqual(state.nodes[0].frame.minY, start, accuracy: 0.001)
+    func testPreservingListKeepsTheAnchor() {
+        let row: CGFloat = 76
+        // These stay inside the scroll the short lists can actually hold. A two-row
+        // scroll and an off-screen top are on the long list below.
+        let scrolls: [CGFloat] = [54, 56, 74, 54 + 20.5, 54 + row]
+        for count in [2, 4, 8, 12] {
+            for delta in scrolls {
+                let (list, _) = self.makeList(preserves: true)
+                self.populate(list, heights: Array(repeating: row, count: count))
+                let anchor = self.scroll(list, by: delta)
+                self.promote(list, from: 1, height: row, hint: .Down)
+                XCTAssertEqual(self.topMinY(list), anchor, accuracy: 0.5)
+                self.promote(list, from: 1, height: row, hint: .Down)
+                XCTAssertEqual(self.topMinY(list), anchor, accuracy: 0.5)
             }
         }
     }
 
-    func testTwoPointsOutsideTheCollapsedRestStillJumpsUpstreamAndStaysWhenOptedIn() {
-        let start = self.collapsedRestingTop - 2
-        var upstream = self.makeState(firstMinY: start, count: 8)
-        var kept = self.makeState(firstMinY: start, count: 8)
-        self.promote(&upstream, listOptsIn: false)
-        self.promote(&kept, listOptsIn: true)
-        XCTAssertEqual(upstream.nodes[0].frame.minY, start - self.rowHeight, accuracy: 0.001)
-        XCTAssertEqual(kept.nodes[0].frame.minY, start, accuracy: 0.001)
-        XCTAssertGreaterThan(abs(kept.nodes[0].frame.minY - self.collapsedRestingTop), 1)
+    func testTwoRowScrollMatchesTheUnpreservedList() {
+        let row: CGFloat = 76
+        let (kept, _) = self.makeList(preserves: true)
+        let (plain, _) = self.makeList(preserves: false)
+        self.populate(kept, heights: Array(repeating: row, count: 20))
+        self.populate(plain, heights: Array(repeating: row, count: 20))
+        let keptAnchor = self.scroll(kept, by: 54 + (2 * row))
+        let plainAnchor = self.scroll(plain, by: 54 + (2 * row))
+        self.promote(kept, from: 1, height: row, hint: .Down)
+        self.promote(plain, from: 1, height: row, hint: .Down)
+        XCTAssertEqual(self.topMinY(kept), keptAnchor, accuracy: 0.5)
+        XCTAssertEqual(self.topMinY(plain), plainAnchor, accuracy: 0.5)
+        XCTAssertEqual(self.topMinY(kept), self.topMinY(plain), accuracy: 0.5)
     }
 
-    func testTwentyPointScrollStaysAtThatEdge() {
-        let start = self.collapsedRestingTop - 20
-        var kept = self.makeState(firstMinY: start, count: 8)
-        self.promote(&kept, listOptsIn: true)
-        XCTAssertEqual(kept.nodes[0].frame.minY, start, accuracy: 0.001)
-        XCTAssertGreaterThan(abs(kept.nodes[0].frame.minY - self.collapsedRestingTop), 1)
+    func testSearchExpandedAlreadyStays() {
+        let row: CGFloat = 76
+        let (kept, _) = self.makeList(preserves: true)
+        let (plain, _) = self.makeList(preserves: false)
+        self.populate(kept, heights: Array(repeating: row, count: 4))
+        self.populate(plain, heights: Array(repeating: row, count: 4))
+        let anchor = self.topMinY(kept)
+        XCTAssertEqual(anchor, self.insetTop, accuracy: 0.5)
+        self.promote(kept, from: 1, height: row, hint: .Down)
+        self.promote(plain, from: 1, height: row, hint: .Down)
+        XCTAssertEqual(self.topMinY(kept), anchor, accuracy: 0.5)
+        XCTAssertEqual(self.topMinY(plain), anchor, accuracy: 0.5)
     }
 
-    func testARowAlreadyAboveTheInsetIsNotForcedDown() {
-        let start: CGFloat = -200
-        let removedMaxY = start + (2 * self.rowHeight)
-        XCTAssertFalse(listViewNilHintRemovalMovesFollowingRows(removedMaxY: removedMaxY, itemOffsetInsetTop: self.insetTop))
-        XCTAssertEqual(
-            listViewTopDownInsert(
-                downHintAtIndexZero: true,
-                deletedItemIndices: [1],
-                deletedMaxYByIndex: [1: removedMaxY],
-                itemOffsetInsetTop: self.insetTop,
-                listOptsIn: true
-            ),
-            .dropHint
-        )
-        var upstream = self.makeState(firstMinY: start, count: 8)
-        var kept = self.makeState(firstMinY: start, count: 8)
-        self.promote(&upstream, listOptsIn: false)
-        self.promote(&kept, listOptsIn: true)
-        XCTAssertEqual(kept.nodes[0].frame.minY, upstream.nodes[0].frame.minY, accuracy: 0.001)
-        XCTAssertEqual(kept.nodes[0].frame.minY, start, accuracy: 0.001)
+    func testUnequalHeightsKeepTheEdge() {
+        let heights: [CGFloat] = [90, 40, 110, 55, 76]
+        let (list, _) = self.makeList(preserves: true)
+        self.populate(list, heights: heights)
+        let anchor = self.scroll(list, by: 54 + 20)
+        self.promote(list, from: 1, height: heights[1], hint: .Down)
+        XCTAssertEqual(self.topMinY(list), anchor, accuracy: 0.5)
+        self.promote(list, from: 2, height: heights[2], hint: .Down)
+        XCTAssertEqual(self.topMinY(list), anchor, accuracy: 0.5)
     }
 
-    func testNoDownHintAndANonZeroDeleteStayUpstream() {
-        XCTAssertEqual(
-            listViewTopDownInsert(
-                downHintAtIndexZero: false,
-                deletedItemIndices: [1],
-                deletedMaxYByIndex: [1: 300],
-                itemOffsetInsetTop: self.insetTop,
-                listOptsIn: true
-            ),
-            .upstream
-        )
-        XCTAssertEqual(
-            listViewTopDownInsert(
-                downHintAtIndexZero: true,
-                deletedItemIndices: [4],
-                deletedMaxYByIndex: [4: 500],
-                itemOffsetInsetTop: self.insetTop,
-                listOptsIn: false
-            ),
-            .upstream
-        )
-        XCTAssertEqual(
-            listViewTopDownInsert(
-                downHintAtIndexZero: true,
-                deletedItemIndices: [1, 2],
-                deletedMaxYByIndex: [1: 300, 2: 400],
-                itemOffsetInsetTop: self.insetTop,
-                listOptsIn: true
-            ),
-            .upstream
-        )
+    func testIndexFourPromotionKeepsTheEdge() {
+        let row: CGFloat = 76
+        let (list, _) = self.makeList(preserves: true)
+        self.populate(list, heights: Array(repeating: row, count: 8))
+        let anchor = self.scroll(list, by: 54)
+        self.promote(list, from: 4, height: row, hint: .Down)
+        XCTAssertEqual(self.topMinY(list), anchor, accuracy: 0.5)
+    }
+
+    func testThirdRowPromotionKeepsTheEdge() {
+        let row: CGFloat = 64
+        let (list, _) = self.makeList(preserves: true)
+        self.populate(list, heights: Array(repeating: row, count: 6))
+        let anchor = self.scroll(list, by: 54)
+        self.promote(list, from: 2, height: row, hint: .Down)
+        XCTAssertEqual(self.topMinY(list), anchor, accuracy: 0.5)
+        XCTAssertNotNil(list.itemNodeAtIndex(0))
+    }
+
+    func testOffScreenTopMatchesTheUnpreservedList() {
+        let row: CGFloat = 76
+        let (kept, _) = self.makeList(preserves: true)
+        let (plain, _) = self.makeList(preserves: false)
+        self.populate(kept, heights: Array(repeating: row, count: 20))
+        self.populate(plain, heights: Array(repeating: row, count: 20))
+        let delta = self.topMinY(kept) + row + 30
+        let keptAnchor = self.scroll(kept, by: delta)
+        let plainAnchor = self.scroll(plain, by: delta)
+        XCTAssertLessThanOrEqual(keptAnchor + row, 0)
+        self.promote(kept, from: 1, height: row, hint: .Down)
+        self.promote(plain, from: 1, height: row, hint: .Down)
+        XCTAssertEqual(self.topMinY(kept), self.topMinY(plain), accuracy: 0.5)
+        XCTAssertEqual(self.topMinY(kept), keptAnchor, accuracy: 0.5)
+        XCTAssertEqual(plainAnchor, keptAnchor, accuracy: 0.5)
+    }
+
+    func testNewPeerInsertWithoutADeleteIsNotForced() {
+        let row: CGFloat = 76
+        let (kept, _) = self.makeList(preserves: true)
+        let (plain, _) = self.makeList(preserves: false)
+        self.populate(kept, heights: Array(repeating: row, count: 4))
+        self.populate(plain, heights: Array(repeating: row, count: 4))
+        let _ = self.scroll(kept, by: 54)
+        let _ = self.scroll(plain, by: 54)
+        let insert = [ListViewInsertItem(index: 0, previousIndex: nil, item: FixedHeightRow(rowHeight: row), directionHint: .Down)]
+        self.perform(kept, insert: insert)
+        self.perform(plain, insert: insert)
+        XCTAssertEqual(self.topMinY(kept), self.topMinY(plain), accuracy: 0.5)
+    }
+
+    func testTwoDeletesAreNotForced() {
+        let row: CGFloat = 76
+        let (kept, _) = self.makeList(preserves: true)
+        let (plain, _) = self.makeList(preserves: false)
+        self.populate(kept, heights: Array(repeating: row, count: 6))
+        self.populate(plain, heights: Array(repeating: row, count: 6))
+        let _ = self.scroll(kept, by: 54)
+        let _ = self.scroll(plain, by: 54)
+        let deletes = [
+            ListViewDeleteItem(index: 1, directionHint: nil),
+            ListViewDeleteItem(index: 2, directionHint: nil)
+        ]
+        let insert = [ListViewInsertItem(index: 0, previousIndex: 1, item: FixedHeightRow(rowHeight: row), directionHint: .Down)]
+        self.perform(kept, delete: deletes, insert: insert)
+        self.perform(plain, delete: deletes, insert: insert)
+        XCTAssertEqual(self.topMinY(kept), self.topMinY(plain), accuracy: 0.5)
+    }
+
+    func testInsertBelowTheTopDoesNotMoveTheFirstRow() {
+        let row: CGFloat = 76
+        let (kept, _) = self.makeList(preserves: true)
+        let (plain, _) = self.makeList(preserves: false)
+        self.populate(kept, heights: Array(repeating: row, count: 8))
+        self.populate(plain, heights: Array(repeating: row, count: 8))
+        let keptTop = self.scroll(kept, by: 54 + 20)
+        let plainTop = self.scroll(plain, by: 54 + 20)
+        let delete = [ListViewDeleteItem(index: 4, directionHint: nil)]
+        let insert = [ListViewInsertItem(index: 3, previousIndex: 4, item: FixedHeightRow(rowHeight: row), directionHint: .Down)]
+        self.perform(kept, delete: delete, insert: insert)
+        self.perform(plain, delete: delete, insert: insert)
+        XCTAssertEqual(self.topMinY(kept), keptTop, accuracy: 0.5)
+        XCTAssertEqual(self.topMinY(plain), plainTop, accuracy: 0.5)
+    }
+
+    func testAnimatedInsertionStillCompletes() {
+        let row: CGFloat = 76
+        let (list, _) = self.makeList(preserves: true)
+        self.populate(list, heights: Array(repeating: row, count: 4))
+        let _ = self.scroll(list, by: 54)
+        self.promote(list, from: 1, height: row, hint: .Down, animated: true)
+        XCTAssertNotNil(list.itemNodeAtIndex(0))
+        XCTAssertNotNil(list.itemNodeAtIndex(3))
     }
 }

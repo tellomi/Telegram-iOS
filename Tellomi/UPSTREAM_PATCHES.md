@@ -34,11 +34,12 @@ Every `ChatListNode` sets `preservesTopDownInsert`: the main list, a folder, the
 | `submodules/Display/Source/ListViewTopDownInsert.swift` | The removed-maxY decision, shared with `removeNodeAtIndex`. |
 | `submodules/Display/Source/ListViewIntermediateState.swift` | `removeNodeAtIndex` uses that comparison. `insertionPoint` keeps index-0 `.Down` when the transaction says `forceIndexZeroDown`. |
 | `submodules/Display/Source/ListView.swift` | `preservesTopDownInsert`. The transaction calls `listViewTopDownInsert` before the delete. |
-| `submodules/Display/Tests/ListViewTopReorderTests.swift` | Calls `listViewTopDownInsert`, `removeNodeAtIndex`, `insertionPoint`, and `insertNode`. Upstream: the first two promotions each move the edge by one row, the third does not. Opted in: collapsed top, 2pt, 20pt, one row, two rows, 20.5pt, and a fully off-screen top all stay on the anchor. |
+| `submodules/Display/Tests/ListViewTopReorderTests.swift` | Enters `ListView.transaction` with `preservesTopDownInsert` on and off. It does not sample maxY or choose the direction. Upstream: the first two promotions each move the edge by one row, the third does not. Opted in: short lists, unequal heights, a collapsed search, 2pt, 20pt, 20.5pt, one row, and an index-4 promotion stay on the anchor. Two rows and a fully off-screen top match the upstream edge. A new-peer insert, two deletes, and an insert that is not index 0 are not forced. |
 | `submodules/Display/BUILD` | `//submodules/Display:ListViewTopReorderTests`, iPhone 17 / iOS 27.0. |
-| `submodules/ChatListUI/Sources/Node/ChatListTopReorderPreservation.swift` | The static. Not a server flag. |
-| `submodules/ChatListUI/Sources/Node/ChatListNode.swift` | Sets `preservesTopDownInsert` from that static on every chat list node. |
-| `.github/workflows/pr-tests.yml` | The existing PR test job runs that simulator target. The host predicate target is gone. |
+| `submodules/ChatListUI/Sources/Node/ChatListTopReorderPreservation.swift` | `install(on:)` writes the static onto the list. Not a server flag. |
+| `submodules/ChatListUI/Sources/Node/ChatListNode.swift` | `init` calls `install(on:)`. |
+| `submodules/ChatListUI/Tests/ChatListTopReorderInstallationTests.swift` | Constructs `ChatListNode.init` and then runs `ListView.transaction`. The test does not set the flag itself. |
+| `.github/workflows/pr-tests.yml` | The existing PR test job runs both simulator targets. The host predicate target is gone. |
 
 ## First login 2FA drops the permanent key, and Siri intents traps — 2026-11-15
 
