@@ -1,5 +1,27 @@
 # Upstream patches
 
+## Chat list rows slide under the title when an existing chat moves to the top — 2026-11-17
+
+ISSUE-I-CHATLIST-SCROLL-UNDER-TITLE-001. The list is already at the top and two peers take turns receiving messages. Each time the other peer becomes the first row, the rows move up by about one row and stay there. The title and the bottom tab do not move. After two promotions, two rows sit above the title.
+
+`release/ios` (`ebf2505b88`) and `master` (`c457d1c42c`) have the same `ListView.swift` (`f2dee38760ed93fb347eeb64ad1a753038655dde`) and `ChatListViewTransition.swift` (`8de41fe517ae83f0ce46796e0d7ed3503d2e6958`). `release/ios` only adds the release-guard check and the UI-baseline note on top of that master. This fix is against that master. It does not carry any other unmerged work.
+
+A normal message keeps `disableAnimations` true, so the reorder is not a height animation. `mergeListsStableWithUpdates` still reports an existing peer that moves to the front as a delete plus an insert with `previousIndex`. `preparedChatListNodeViewTransition` tags that insert `.Down` and leaves the delete hint nil. `ListViewState.insertionPoint` keeps an explicit `.Down` only when the anchor row's minY is at or below `itemOffsetInsets.top`.
+
+The chat list's layout inset includes the expanded search (`searchScrollHeight` is 54). With the search collapsed, the first row rests 54pt above that inset, on screen just under the title. The `.Down` hint is dropped and the insert defaults to `.Up`: the new row is placed one row above the current top, and the delete has already shifted the rows below that slot up. `snapToBounds` only closes a gap below the inset, so the negative offset stays. The next promotion stacks another row. Server `getDialogs` ordering was not the cause; the same visual step happens for a same-second swap and a later-second swap.
+
+Search expanded (the first row already at the layout inset) already honored `.Down`. A list scrolled further than the collapsed-search band does not take the extra honor, so it is not pulled back to the top. `ChatListTopReorderPreservation.enabled` turns the extra honor off.
+
+| File | Change |
+| --- | --- |
+| `submodules/ChatListUI/Sources/Node/ChatListTopReorderPreservation.swift` | The collapsed-header decision. |
+| `submodules/ChatListUI/Sources/Node/ChatListNode.swift` | Installs that decision on the chat list only. |
+| `submodules/Display/Source/ListViewIntermediateState.swift` | `insertionPoint` can keep a visible `.Down` hint above the layout inset. |
+| `submodules/Display/Source/ListView.swift` | `honorVisibleDownInsertion`. Nil on every list except the chat list. |
+| `submodules/ChatListUI/HostTests/ChatListTopReorderPreservationTests.swift` | The old `.Up` path stacks one row per promotion. Ten A/B promotions, a short list, and a long list stay on the collapsed edge. A scrolled list is not pulled to the top. |
+| `submodules/ChatListUI/BUILD` | Host `swift_test` `ChatListTopReorderPreservationTests`. |
+| `.github/workflows/pr-tests.yml` | The PR test job runs that host target. |
+
 ## First login 2FA drops the permanent key, and Siri intents traps — 2026-11-15
 
 TestFlight 14.0.6 (97), commit `6626dde7399e55c7f9dc5e7cf2f22634a1269430`, dSYM artifact `dsym-97` from TestFlight run 43657562468. The crash is `app.tellomi.chat.SiriIntents`, `EXC_BREAKPOINT` / `SIGTRAP`. Text-segment offsets (framework `__TEXT` vmaddr `0`, extension `__TEXT` vmaddr `0x100000000`):

@@ -196,6 +196,9 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
     public final var visualInsets: UIEdgeInsets?
     private var itemOffsetInsets: UIEdgeInsets?
     public final var dynamicVisualInsets: (() -> UIEdgeInsets)?
+    /// Chat list sets this so a `.Down` insert at the collapsed-search resting edge is kept.
+    /// Nil leaves the upstream hint gate unchanged.
+    public final var honorVisibleDownInsertion: ListViewVisibleDownHintDecision?
     public private(set) final var headerInsets = UIEdgeInsets()
     public private(set) final var scrollIndicatorInsets = UIEdgeInsets()
     private final var ensureTopInsetForOverlayHighlightedItems: CGFloat?
@@ -2376,7 +2379,7 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
                     assert(true)
                 }
                 
-                if let insertionPoint = state.insertionPoint(insertDirectionHints, itemCount: self.items.count) {
+                if let insertionPoint = state.insertionPoint(insertDirectionHints, itemCount: self.items.count, honorVisibleDownHint: self.honorVisibleDownInsertion) {
                     insertionItemIndexAndDirection = (insertionPoint.index, insertionPoint.direction)
                 }
                 
