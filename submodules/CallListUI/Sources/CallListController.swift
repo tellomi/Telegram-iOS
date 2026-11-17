@@ -140,18 +140,17 @@ public final class CallListController: TelegramBaseController {
             self.navigationItem.rightBarButtonItem = self.tabCallBarButtonItem()
             
             let icon: UIImage?
-            let selectedIcon: UIImage?
             if useSpecialTabBarIcons() {
                 icon = UIImage(bundleImageName: "Chat List/Tabs/Holiday/IconCalls")
-                selectedIcon = icon
             } else {
                 icon = UIImage(bundleImageName: "Chat List/Tabs/IconCalls")
-                selectedIcon = UIImage(bundleImageName: "Chat List/Tabs/IconCallsFilled")
             }
             self.tabBarItem.title = self.presentationData.strings.Calls_TabTitle
             self.tabBarItem.image = icon
-            self.tabBarItem.selectedImage = selectedIcon
-            self.tabBarItem.animationName = nil
+            self.tabBarItem.selectedImage = icon
+            if !self.presentationData.reduceMotion {
+                self.tabBarItem.animationName = "TabCalls"
+            }
         }
         
         self.segmentedTitleView.indexUpdated = { [weak self] index in
@@ -204,7 +203,11 @@ public final class CallListController: TelegramBaseController {
         self.segmentedTitleView.index = index
             
         self.tabBarItem.title = self.presentationData.strings.Calls_TabTitle
-        self.tabBarItem.animationName = nil
+        if !self.presentationData.reduceMotion {
+            self.tabBarItem.animationName = "TabCalls"
+        } else {
+            self.tabBarItem.animationName = nil
+        }
         self.navigationItem.backBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Back, style: .plain, target: nil, action: nil)
         switch self.mode {
             case .tab:

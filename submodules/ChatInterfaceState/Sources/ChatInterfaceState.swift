@@ -9,7 +9,6 @@ import AudioWaveform
 public enum ChatTextInputMediaRecordingButtonMode: Int32 {
     case audio = 0
     case video = 1
-    case dictation = 2
 }
 
 public struct ChatInterfaceSelectionState: Codable, Equatable {

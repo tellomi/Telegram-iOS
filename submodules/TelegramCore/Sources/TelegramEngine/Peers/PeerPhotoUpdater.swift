@@ -11,8 +11,7 @@ public enum UpdatePeerPhotoStatus {
 
 public enum UploadPeerPhotoError: Equatable {
     case generic
-    /// `photos.uploadProfilePhoto` (and the contact-photo request on the same path) failed.
-    /// `code` is the RPC error code. `description` is the RPC error text, such as `PHOTO_CROP_SIZE_SMALL`.
+    /// `photos.uploadProfilePhoto` failed. `code` is the RPC error code. `description` is the RPC text.
     case server(code: Int32, description: String)
 }
 

@@ -20,7 +20,6 @@ public enum ChatFinishMediaRecordingAction {
     case preview
     case pause
     case send(viewOnce: Bool)
-    case dictate
 }
 
 public final class ChatPanelInterfaceInteractionStatuses {

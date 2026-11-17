@@ -12,7 +12,6 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tellomi"))
 
-import check_server_config as checker  # noqa: E402
 import siri_entitlements as siri  # noqa: E402
 from extension_suffixes import siri_intents_suffix, targets  # noqa: E402
 
@@ -70,7 +69,18 @@ class HostBundleIdTests(unittest.TestCase):
 
 class BuildWiringTests(unittest.TestCase):
     def test_siri_intents_signs_its_own_entitlements(self) -> None:
-        checker.check_wiring()
+        # release/ios signs each extension with its own entitlements file.
+        # SiriIntents is the only one that may request com.apple.developer.siri,
+        # and only when telegram_siri_extension_entitlement is true.
+        build = (ROOT / "Telegram/BUILD").read_text(encoding="utf-8")
+        self.assertEqual(build.count('entitlements = ":IntentsExtensionEntitlements.entitlements"'), 1)
+        intents_at = build.find('name = "IntentsExtensionEntitlements"')
+        self.assertGreaterEqual(intents_at, 0)
+        intents_block = build[intents_at:build.find('name = "IntentsExtension"', intents_at)]
+        self.assertIn("intents_siri_fragment", intents_block)
+        self.assertIn("group.{telegram_bundle_id}", intents_block)
+        self.assertIn('intents_siri_fragment = "" if not telegram_siri_extension_entitlement', build)
+        self.assertEqual(build.count("<key>com.apple.developer.siri</key>"), 2)
 
 
 if __name__ == "__main__":

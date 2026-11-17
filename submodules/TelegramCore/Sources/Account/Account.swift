@@ -276,7 +276,7 @@ public class UnauthorizedAccount {
                 }
             }
             |> mapToSignal { localizationSettings, proxySettings, networkSettings, appConfiguration, networkEngine -> Signal<UnauthorizedAccount, NoError> in
-                return initializedNetwork(accountId: self.id, arguments: self.networkArguments, supplementary: false, datacenterId: Int(masterDatacenterId), keychain: keychain, basePath: self.basePath, testingEnvironment: self.testingEnvironment, languageCode: localizationSettings?.primaryComponent.languageCode, proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: false, appConfiguration: appConfiguration)
+                return initializedNetwork(accountId: self.id, arguments: self.networkArguments, supplementary: false, datacenterId: Int(masterDatacenterId), keychain: keychain, basePath: self.basePath, testingEnvironment: self.testingEnvironment, languageCode: tellomiNetworkLanguageCode(savedLanguageCode: localizationSettings?.primaryComponent.languageCode), proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: false, appConfiguration: appConfiguration)
                 |> map { network in
                     let updated = UnauthorizedAccount(accountManager: accountManager, networkArguments: self.networkArguments, id: self.id, rootPath: self.rootPath, basePath: self.basePath, testingEnvironment: self.testingEnvironment, postbox: self.postbox, network: network)
                     updated.shouldBeServiceTaskMaster.set(self.shouldBeServiceTaskMaster.get())
@@ -301,7 +301,35 @@ public enum AccountResult {
     case authorized(Account)
 }
 
-public func accountWithId(accountManager: AccountManager<TelegramAccountManagerTypes>, networkArguments: NetworkInitializationArguments, id: AccountRecordId, encryptionParameters: ValueBoxEncryptionParameters, supplementary: Bool, isSupportUser: Bool, rootPath: String, beginWithTestingEnvironment: Bool, backupData: AccountBackupData?, auxiliaryMethods: AccountAuxiliaryMethods, shouldKeepAutoConnection: Bool = true) -> Signal<AccountResult, NoError> {
+/// Reads the postbox now, then again after a short wait. `auth.checkPassword`
+/// commits `AuthorizedAccountState` immediately before the account record moves,
+/// and the open can still observe the previous unauthorized state.
+private func tellomiConfirmAuthorized(_ postbox: Postbox) -> Signal<Bool, NoError> {
+    let read = postbox.transaction { transaction -> Bool in
+        return transaction.getState() is AuthorizedAccountState
+    }
+    return read
+    |> mapToSignal { first -> Signal<Bool, NoError> in
+        if first {
+            return .single(true)
+        }
+        return read
+        |> delay(0.05, queue: Queue.concurrentDefaultQueue())
+        |> mapToSignal { second -> Signal<Bool, NoError> in
+            if second {
+                return .single(true)
+            }
+            return read
+            |> delay(0.2, queue: Queue.concurrentDefaultQueue())
+        }
+    }
+}
+
+/// `confirmAuthorization` waits briefly before opening a record as unauthorized.
+/// `auth.checkPassword` writes `AuthorizedAccountState` and then moves the record
+/// out of the auth slot. An open that still sees the old state must not build a
+/// second network (and a new permanent key) for that same postbox.
+public func accountWithId(accountManager: AccountManager<TelegramAccountManagerTypes>, networkArguments: NetworkInitializationArguments, id: AccountRecordId, encryptionParameters: ValueBoxEncryptionParameters, supplementary: Bool, isSupportUser: Bool, rootPath: String, beginWithTestingEnvironment: Bool, backupData: AccountBackupData?, auxiliaryMethods: AccountAuxiliaryMethods, shouldKeepAutoConnection: Bool = true, confirmAuthorization: Bool = false) -> Signal<AccountResult, NoError> {
     let path = "\(rootPath)/\(accountRecordIdPathName(id))"
     
     let postbox = openPostbox(
@@ -374,16 +402,26 @@ public func accountWithId(accountManager: AccountManager<TelegramAccountManagerT
                         if let accountState = accountState {
                             switch accountState {
                                 case let unauthorizedState as UnauthorizedAccountState:
-                                    return initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: Int(unauthorizedState.masterDatacenterId), keychain: keychain, basePath: path, testingEnvironment: unauthorizedState.isTestingEnvironment, languageCode: localizationSettings?.primaryComponent.languageCode, proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
+                                    let openUnauthorized = initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: Int(unauthorizedState.masterDatacenterId), keychain: keychain, basePath: path, testingEnvironment: unauthorizedState.isTestingEnvironment, languageCode: tellomiNetworkLanguageCode(savedLanguageCode: localizationSettings?.primaryComponent.languageCode), proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
                                         |> map { network -> AccountResult in
                                             return .unauthorized(UnauthorizedAccount(accountManager: accountManager, networkArguments: networkArguments, id: id, rootPath: rootPath, basePath: path, testingEnvironment: unauthorizedState.isTestingEnvironment, postbox: postbox, network: network, shouldKeepAutoConnection: shouldKeepAutoConnection))
                                         }
+                                    guard confirmAuthorization else {
+                                        return openUnauthorized
+                                    }
+                                    return tellomiConfirmAuthorized(postbox)
+                                    |> mapToSignal { isAuthorized -> Signal<AccountResult, NoError> in
+                                        guard isAuthorized else {
+                                            return openUnauthorized
+                                        }
+                                        return accountWithId(accountManager: accountManager, networkArguments: networkArguments, id: id, encryptionParameters: encryptionParameters, supplementary: supplementary, isSupportUser: isSupportUser, rootPath: rootPath, beginWithTestingEnvironment: beginWithTestingEnvironment, backupData: backupData, auxiliaryMethods: auxiliaryMethods, shouldKeepAutoConnection: shouldKeepAutoConnection, confirmAuthorization: false)
+                                    }
                                 case let authorizedState as AuthorizedAccountState:
                                     return postbox.transaction { transaction -> String? in
                                         return (transaction.getPeer(authorizedState.peerId) as? TelegramUser)?.phone
                                     }
                                     |> mapToSignal { phoneNumber in
-                                        return initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: Int(authorizedState.masterDatacenterId), keychain: keychain, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, languageCode: localizationSettings?.primaryComponent.languageCode, proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: phoneNumber, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
+                                        return initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: Int(authorizedState.masterDatacenterId), keychain: keychain, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, languageCode: tellomiNetworkLanguageCode(savedLanguageCode: localizationSettings?.primaryComponent.languageCode), proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: phoneNumber, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
                                         |> map { network -> AccountResult in
                                             return .authorized(Account(accountManager: accountManager, id: id, basePath: path, testingEnvironment: authorizedState.isTestingEnvironment, postbox: postbox, network: network, networkArguments: networkArguments, peerId: authorizedState.peerId, auxiliaryMethods: auxiliaryMethods, supplementary: supplementary, isSupportUser: isSupportUser))
                                         }
@@ -393,11 +431,11 @@ public func accountWithId(accountManager: AccountManager<TelegramAccountManagerT
                             }
                         }
                         
-                        // Release used to open datacenter 2. Tellomi's server has the
-                        // id in Tellomi/tellomi-server.json (1 for a stock Teamgram docker).
+                        // Release builds open datacenter 2. This server has one datacenter,
+                        // the id in Tellomi/tellomi-server.json.
                         let initialDatacenterId = Int(TellomiDefaultDatacenterId())
                         
-                        return initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: initialDatacenterId, keychain: keychain, basePath: path, testingEnvironment: beginWithTestingEnvironment, languageCode: localizationSettings?.primaryComponent.languageCode, proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
+                        return initializedNetwork(accountId: id, arguments: networkArguments, supplementary: supplementary, datacenterId: initialDatacenterId, keychain: keychain, basePath: path, testingEnvironment: beginWithTestingEnvironment, languageCode: tellomiNetworkLanguageCode(savedLanguageCode: localizationSettings?.primaryComponent.languageCode), proxySettings: proxySettings, networkSettings: networkSettings, networkEngine: networkEngine, phoneNumber: nil, useRequestTimeoutTimers: useRequestTimeoutTimers, appConfiguration: appConfig)
                         |> map { network -> AccountResult in
                             return .unauthorized(UnauthorizedAccount(accountManager: accountManager, networkArguments: networkArguments, id: id, rootPath: rootPath, basePath: path, testingEnvironment: beginWithTestingEnvironment, postbox: postbox, network: network, shouldKeepAutoConnection: shouldKeepAutoConnection))
                         }
@@ -1365,7 +1403,7 @@ public class Account {
         
         self.stateManager = AccountStateManager(accountPeerId: self.peerId, accountManager: accountManager, postbox: self.postbox, network: self.network, callSessionManager: self.callSessionManager, addIsContactUpdates: { [weak self] updates in
             self?.contactSyncManager?.addIsContactUpdates(updates)
-        }, shouldKeepOnlinePresence: self.shouldKeepOnlinePresence.get(), peerInputActivityManager: self.peerInputActivityManager, auxiliaryMethods: auxiliaryMethods)
+        }, shouldKeepOnlinePresence: self.shouldKeepOnlinePresence.get(), peerInputActivityManager: self.peerInputActivityManager, auxiliaryMethods: auxiliaryMethods, ignoresShortSentMessages: supplementary)
         
         self.viewTracker = AccountViewTracker(account: self)
         self.viewTracker.resetPeerHoleManagement = { [weak self] peerId in
@@ -1895,7 +1933,7 @@ public func standaloneStateManager(
                                     keychain: keychain,
                                     basePath: path,
                                     testingEnvironment: authorizedState.isTestingEnvironment,
-                                    languageCode: localizationSettings?.primaryComponent.languageCode,
+                                    languageCode: tellomiNetworkLanguageCode(savedLanguageCode: localizationSettings?.primaryComponent.languageCode),
                                     proxySettings: proxySettings,
                                     networkSettings: networkSettings,
                                     networkEngine: networkEngine,
@@ -1944,7 +1982,8 @@ public func standaloneStateManager(
                                         },
                                         shouldKeepOnlinePresence: .single(false),
                                         peerInputActivityManager: nil,
-                                        auxiliaryMethods: auxiliaryMethods
+                                        auxiliaryMethods: auxiliaryMethods,
+                                        ignoresShortSentMessages: true
                                     )
                                 }
                             }

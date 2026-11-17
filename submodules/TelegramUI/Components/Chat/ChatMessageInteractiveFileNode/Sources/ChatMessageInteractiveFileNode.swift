@@ -1361,7 +1361,6 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                                         component: AnyComponent(AudioTranscriptionButtonComponent(
                                             theme: buttonTheme,
                                             transcriptionState: effectiveAudioTranscriptionState,
-                                            languageCode: arguments.presentationData.strings.primaryComponent.languageCode,
                                             pressed: {
                                                 guard let strongSelf = self else {
                                                     return

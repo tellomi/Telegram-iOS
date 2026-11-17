@@ -916,7 +916,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             if let strongSelf = self, let presentationInterfaceState = strongSelf.presentationInterfaceState, let interfaceInteraction = strongSelf.interfaceInteraction {
                 let isVideo: Bool
                 switch presentationInterfaceState.interfaceState.mediaRecordingMode {
-                    case .audio, .dictation:
+                    case .audio:
                         isVideo = false
                     case .video:
                         isVideo = true
@@ -928,11 +928,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             if let strongSelf = self, let interfaceState = strongSelf.presentationInterfaceState, let interfaceInteraction = strongSelf.interfaceInteraction {
                 if let _ = interfaceState.inputTextPanelState.mediaRecordingState {
                     if sendMedia {
-                        if interfaceState.interfaceState.mediaRecordingMode == .dictation {
-                            interfaceInteraction.finishMediaRecording(.dictate)
-                        } else {
-                            interfaceInteraction.finishMediaRecording(.send(viewOnce: strongSelf.viewOnce))
-                        }
+                        interfaceInteraction.finishMediaRecording(.send(viewOnce: strongSelf.viewOnce))
                     } else {
                         strongSelf.audioRecordingRemoveAnimationState = .recordingToAttachButton
                         interfaceInteraction.finishMediaRecording(.dismiss)
@@ -3535,11 +3531,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
                 self.mediaRecordingAccessibilityArea = mediaRecordingAccessibilityArea
                 mediaRecordingAccessibilityArea.activate = { [weak self] in
                     if let self {
-                        if self.presentationInterfaceState?.interfaceState.mediaRecordingMode == .dictation {
-                            self.interfaceInteraction?.finishMediaRecording(.dictate)
-                        } else {
-                            self.interfaceInteraction?.finishMediaRecording(.send(viewOnce: self.viewOnce))
-                        }
+                        self.interfaceInteraction?.finishMediaRecording(.send(viewOnce: self.viewOnce))
                     }
                     return true
                 }

@@ -503,7 +503,10 @@ func inputPanelForChatPresentationIntefaceState(_ chatPresentationInterfaceState
                     return MediaItemNodeView(context: context, items: items, audioColorOverride: audioColors, cornerRadius: 4.0, showsControls: false)
                 }
                 panel.formulaRenderer = chatInputFormulaRenderResult
-                panel.isAIEnabled = TellomiFeatureGate.aiComposeEnabled(appConfiguration: context.currentAppConfiguration.with { $0 }, peerId: chatPresentationInterfaceState.chatLocation.peerId, killSwitchKey: "ios_disable_ai_chat")
+                if let data = context.currentAppConfiguration.with({ $0 }).data, let value = data["ios_disable_ai_chat"] as? Double, value == 1.0 {
+                } else if let peerId = chatPresentationInterfaceState.chatLocation.peerId, peerId.namespace != Namespaces.Peer.SecretChat {
+                    panel.isAIEnabled = true
+                }
                 panel.textInputAccessoryPanel = textInputAccessoryPanel
                 panel.textInputContextPanel = textInputContextPanel
                 panel.chatControllerInteraction = chatControllerInteraction

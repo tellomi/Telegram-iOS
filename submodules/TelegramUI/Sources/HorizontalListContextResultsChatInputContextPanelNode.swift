@@ -205,7 +205,7 @@ final class HorizontalListContextResultsChatInputContextPanelNode: ChatInputCont
                                 guard let packReference = packReference else {
                                     continue
                                 }
-                                menuItems.append(.action(ContextMenuActionItem(text: strongSelf.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/TellomiSticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
+                                menuItems.append(.action(ContextMenuActionItem(text: strongSelf.strings.StickerPack_ViewPack, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
                                     f(.default)
                                     
                                     if let strongSelf = self {

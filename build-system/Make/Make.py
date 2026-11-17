@@ -17,8 +17,6 @@ import RemoteBuild
 import TartBuild
 import GenerateProfiles
 import PostboxImportCheck
-import IconSizeCheck
-import ChatListSwipeCheck
 
 
 class ResolvedCodesigningData:
@@ -331,7 +329,7 @@ class BazelCommandLine:
         print(subprocess.list2cmdline(combined_arguments))
         call_executable(combined_arguments)
 
-    def invoke_test(self, test_target='Tests/AllTests'):
+    def invoke_test(self, test_target='Tests/AllTests', test_filter=None, test_args=None, test_output='errors'):
         combined_arguments = [
             self.build_environment.bazel_path
         ]
@@ -339,7 +337,12 @@ class BazelCommandLine:
         combined_arguments += ['test']
 
         combined_arguments += ['--cache_test_results=no']
-        combined_arguments += ['--test_output=errors']
+        combined_arguments += ['--test_output={}'.format(test_output or 'errors')]
+        if test_filter:
+            combined_arguments += ['--test_filter={}'.format(test_filter)]
+        if test_args:
+            for test_arg in test_args:
+                combined_arguments += ['--test_arg={}'.format(test_arg)]
 
         combined_arguments += [test_target]
 
@@ -504,24 +507,8 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
         enable_siri = codesigning_data.siri_entitlement is True
         siri_extension_entitlement = codesigning_data.siri_extension_entitlement is True
     if codesigning_data.aps_environment is None:
-        # build-system/fake-codesigning is the upstream Telegram team
-        # (C67CF9S4VU / ph.telegra.Telegraph). A fork whose configuration
-        # names a different team and bundle finds no main profile, so the
-        # aps-environment lookup returns None. An unsigned build
-        # (--disableProvisioningProfiles) does not embed those profiles;
-        # rules_apple ad-hoc signs instead. Leave the entitlement empty,
-        # which is also what Xcode-managed codesigning stores.
-        if getattr(arguments, 'disableProvisioningProfiles', False):
-            print('Provisioning profiles are disabled; continuing without an aps-environment entitlement.')
-            codesigning_data.aps_environment = ''
-        else:
-            print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
-            sys.exit(1)
-
-    if build_configuration.bundle_id == 'app.tellomi.chat' and not communication_notifications:
-        print('Communication notifications entitlement omitted: the provisioning profile has no com.apple.developer.usernotifications.communication key. Lock-screen notifications keep the app icon until that capability is enabled on the App ID and the profile is regenerated.')
-    elif build_configuration.bundle_id == 'app.tellomi.chat':
-        print('Communication notifications entitlement included.')
+        print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
+        sys.exit(1)
 
     if build_configuration.bundle_id == 'app.tellomi.chat':
         if enable_siri:
@@ -656,10 +643,6 @@ def resolve_watch_provisioning_profile(arguments, base_path):
 def build(bazel, arguments):
     if PostboxImportCheck.run(os.getcwd()) != 0:
         sys.exit(1)
-    if IconSizeCheck.run(os.getcwd()) != 0:
-        sys.exit(1)
-    if ChatListSwipeCheck.run(os.getcwd()) != 0:
-        sys.exit(1)
 
     bazel_command_line = BazelCommandLine(
         bazel=bazel,
@@ -684,8 +667,6 @@ def build(bazel, arguments):
     )
 
     bazel_command_line.set_configuration(arguments.configuration)
-    if getattr(arguments, 'disableProvisioningProfiles', False):
-        bazel_command_line.set_disable_provisioning_profiles()
     if arguments.embedWatchApp:
         if arguments.configuration in ('debug_arm64', 'release_arm64'):
             if arguments.watchApiId is None or arguments.watchApiHash is None:
@@ -705,6 +686,8 @@ def build(bazel, arguments):
     bazel_command_line.set_show_actions(arguments.showActions)
     bazel_command_line.set_enable_sandbox(arguments.sandbox)
     bazel_command_line.set_profile_swift(arguments.profileSwift)
+    if arguments.disableProvisioningProfiles:
+        bazel_command_line.set_disable_provisioning_profiles()
 
     bazel_command_line.set_split_swiftmodules(arguments.enableParallelSwiftmoduleGeneration)
 
@@ -747,10 +730,6 @@ def build(bazel, arguments):
 def test(bazel, arguments):
     if PostboxImportCheck.run(os.getcwd()) != 0:
         sys.exit(1)
-    if IconSizeCheck.run(os.getcwd()) != 0:
-        sys.exit(1)
-    if ChatListSwipeCheck.run(os.getcwd()) != 0:
-        sys.exit(1)
 
     bazel_command_line = BazelCommandLine(
         bazel=bazel,
@@ -774,7 +753,12 @@ def test(bazel, arguments):
     bazel_command_line.set_configuration('debug_sim_arm64')
     bazel_command_line.set_build_number('10000')
 
-    bazel_command_line.invoke_test(test_target=arguments.target)
+    bazel_command_line.invoke_test(
+        test_target=arguments.target,
+        test_filter=getattr(arguments, 'testFilter', None),
+        test_args=getattr(arguments, 'testArg', None),
+        test_output=getattr(arguments, 'testOutput', None)
+    )
 
 
 def query(bazel, arguments):
@@ -1012,6 +996,24 @@ if __name__ == '__main__':
         default='Tests/AllTests',
         help='Bazel test target to run (default: Tests/AllTests, the full suite).'
     )
+    testParser.add_argument(
+        '--testFilter',
+        type=str,
+        default=None,
+        help='Passed to bazel as --test_filter (for example MomentsRulesTests).'
+    )
+    testParser.add_argument(
+        '--testArg',
+        action='append',
+        default=None,
+        help='Passed to bazel as --test_arg. Repeat for more than one.'
+    )
+    testParser.add_argument(
+        '--testOutput',
+        type=str,
+        default='errors',
+        help='Passed to bazel as --test_output.'
+    )
 
     generateProjectParser = subparsers.add_parser('generateProject', help='Generate Xcode project')
     generateProjectParser.add_argument(
@@ -1099,12 +1101,7 @@ if __name__ == '__main__':
         '--disableProvisioningProfiles',
         action='store_true',
         default=False,
-        help='''
-            Do not embed provisioning profiles. A simulator build then
-            ad-hoc signs and does not need a certificate. A device build
-            still fails in rules_apple analysis: "Building for device, but
-            no provisioning_profile attribute was set."
-            '''
+        help='Build for the simulator without codesigning identities. A device build will fail.',
     )
     buildParser.add_argument(
         '--enableParallelSwiftmoduleGeneration',
