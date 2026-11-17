@@ -27,9 +27,19 @@ swift_library(
 swift_library(
     name = "DisplayTestsLib",
     testonly = True,
-    srcs = glob([
-        "Tests/**/*.swift",
-    ]),
+    srcs = glob(
+        ["Tests/**/*.swift"],
+        exclude = ["Tests/ListViewTopReorderTests.swift"],
+    ),
+    deps = [
+        ":Display",
+    ],
+)
+
+swift_library(
+    name = "ListViewTopReorderTestsLib",
+    testonly = True,
+    srcs = ["Tests/ListViewTopReorderTests.swift"],
     deps = [
         ":Display",
     ],
@@ -41,6 +51,26 @@ ios_test_runner(
     name = "DisplayTestRunner",
     device_type = "iPhone 17",
     os_version = "26.5",
+)
+
+# xcode-27 PR runners have iPhone 17 on iOS 27.0. The 26.5 runner above is for
+# the older Display suite and is not what this target uses.
+ios_test_runner(
+    name = "ListViewTopReorderTestRunner",
+    device_type = "iPhone 17",
+    os_version = "27.0",
+)
+
+ios_unit_test(
+    name = "ListViewTopReorderTests",
+    minimum_os_version = "15.0",
+    runner = ":ListViewTopReorderTestRunner",
+    deps = [
+        ":ListViewTopReorderTestsLib",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
 )
 
 ios_unit_test(

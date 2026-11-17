@@ -98,27 +98,6 @@ public enum ListViewItemOperationDirectionHint {
     case Down
 }
 
-/// Asked when an explicit insertion hint would otherwise be dropped because the
-/// anchor sits above `itemOffsetInsets.top`. Chat list uses this for the collapsed
-/// search resting edge. Other lists leave the decision nil.
-public struct ListViewVisibleDownHintRequest {
-    public let hintIsDown: Bool
-    public let anchorMinY: CGFloat
-    public let anchorMaxY: CGFloat
-    public let itemOffsetInsetTop: CGFloat
-    public let viewportHeight: CGFloat
-
-    public init(hintIsDown: Bool, anchorMinY: CGFloat, anchorMaxY: CGFloat, itemOffsetInsetTop: CGFloat, viewportHeight: CGFloat) {
-        self.hintIsDown = hintIsDown
-        self.anchorMinY = anchorMinY
-        self.anchorMaxY = anchorMaxY
-        self.itemOffsetInsetTop = itemOffsetInsetTop
-        self.viewportHeight = viewportHeight
-    }
-}
-
-public typealias ListViewVisibleDownHintDecision = (ListViewVisibleDownHintRequest) -> Bool
-
 public struct ListViewDeleteItem {
     public let index: Int
     public let directionHint: ListViewItemOperationDirectionHint?
@@ -340,7 +319,7 @@ enum ListViewStateNode {
     }
 }
 
-enum ListViewInsertionOffsetDirection {
+enum ListViewInsertionOffsetDirection: Equatable {
     case Up
     case Down
     
@@ -556,23 +535,14 @@ struct ListViewState {
         }
     }
     
-    private func honorsInsertionHint(_ hint: ListViewItemOperationDirectionHint, minY: CGFloat, maxY: CGFloat, aboveInset: Bool, honorVisibleDownHint: ListViewVisibleDownHintDecision?) -> Bool {
+    private func honorsInsertionHint(_ hint: ListViewItemOperationDirectionHint, insertionIndex: Int, aboveInset: Bool, forceIndexZeroDown: Bool) -> Bool {
         if aboveInset {
             return true
         }
-        guard let honorVisibleDownHint else {
-            return false
-        }
-        return honorVisibleDownHint(ListViewVisibleDownHintRequest(
-            hintIsDown: hint == .Down,
-            anchorMinY: minY,
-            anchorMaxY: maxY,
-            itemOffsetInsetTop: self.itemOffsetInsets.top,
-            viewportHeight: self.visibleSize.height
-        ))
+        return forceIndexZeroDown && hint == .Down && insertionIndex == 0
     }
 
-    func insertionPoint(_ insertDirectionHints: [Int: ListViewItemOperationDirectionHint], itemCount: Int, honorVisibleDownHint: ListViewVisibleDownHintDecision? = nil) -> ListViewInsertionPoint? {
+    func insertionPoint(_ insertDirectionHints: [Int: ListViewItemOperationDirectionHint], itemCount: Int, forceIndexZeroDown: Bool = false) -> ListViewInsertionPoint? {
         var fixedNode: (nodeIndex: Int, index: Int, frame: CGRect)?
         
         if let (fixedIndex, _) = self.scrollPosition {
@@ -632,8 +602,9 @@ struct ListViewState {
                         if currentUpperNode.frame.minY > -self.invisibleInset - CGFloat.ulpOfOne {
                             var directionHint: ListViewInsertionOffsetDirection?
                             if let hint = insertDirectionHints[currentUpperNode.index - 1] {
+                                let insertionIndex = currentUpperNode.index - 1
                                 let aboveInset = currentUpperNode.frame.minY > self.itemOffsetInsets.top - CGFloat.ulpOfOne
-                                if self.honorsInsertionHint(hint, minY: currentUpperNode.frame.minY, maxY: currentUpperNode.frame.maxY, aboveInset: aboveInset, honorVisibleDownHint: honorVisibleDownHint) {
+                                if self.honorsInsertionHint(hint, insertionIndex: insertionIndex, aboveInset: aboveInset, forceIndexZeroDown: forceIndexZeroDown) {
                                     directionHint = ListViewInsertionOffsetDirection(hint)
                                 }
                             }
@@ -649,8 +620,9 @@ struct ListViewState {
             if currentUpperNode.index != 0 && currentUpperNode.frame.minY > -self.invisibleInset - CGFloat.ulpOfOne {
                 var directionHint: ListViewInsertionOffsetDirection?
                 if let hint = insertDirectionHints[currentUpperNode.index - 1] {
+                    let insertionIndex = currentUpperNode.index - 1
                     let aboveInset = currentUpperNode.frame.minY >= self.itemOffsetInsets.top - CGFloat.ulpOfOne
-                    if self.honorsInsertionHint(hint, minY: currentUpperNode.frame.minY, maxY: currentUpperNode.frame.maxY, aboveInset: aboveInset, honorVisibleDownHint: honorVisibleDownHint) {
+                    if self.honorsInsertionHint(hint, insertionIndex: insertionIndex, aboveInset: aboveInset, forceIndexZeroDown: forceIndexZeroDown) {
                         directionHint = ListViewInsertionOffsetDirection(hint)
                     }
                 } else if currentUpperNode.frame.minY >= self.itemOffsetInsets.top - CGFloat.ulpOfOne && !fixedNodeIsStationary {
@@ -908,7 +880,7 @@ struct ListViewState {
                 self.nodes.insert(.Placeholder(frame: nodeFrame), at: index)
                 operations.append(.InsertDisappearingPlaceholder(index: index, referenceNode: referenceNode, offsetDirection: offsetDirection.inverted()))
             } else {
-                if nodeFrame.maxY > self.itemOffsetInsets.top - CGFloat.ulpOfOne {
+                if listViewNilHintRemovalMovesFollowingRows(removedMaxY: nodeFrame.maxY, itemOffsetInsetTop: self.itemOffsetInsets.top) {
                     if let direction = direction , direction == .Down && node.frame.minY < self.visibleSize.height - self.itemOffsetInsets.bottom + CGFloat.ulpOfOne {
                         for i in (0 ..< index).reversed() {
                             var frame = self.nodes[i].frame

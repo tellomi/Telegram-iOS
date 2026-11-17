@@ -1,26 +1,44 @@
 # Upstream patches
 
-## Chat list rows slide under the title when an existing chat moves to the top — 2026-11-17
+## Chat list rows slide under the title — 2026-11-17
 
-ISSUE-I-CHATLIST-SCROLL-UNDER-TITLE-001. The list is already at the top and two peers take turns receiving messages. Each time the other peer becomes the first row, the rows move up by about one row and stay there. The title and the bottom tab do not move. After two promotions, two rows sit above the title.
+ISSUE-I-CHATLIST-SCROLL-UNDER-TITLE-001. The list is already at the top. Two peers take turns receiving messages. The first two times the other peer becomes row 0, the rows move up by about one row and stay there. The title and the bottom tab do not move. The recording shows those two moves. It does not show an endless stack after that.
 
-`release/ios` (`ebf2505b88`) and `master` (`c457d1c42c`) have the same `ListView.swift` (`f2dee38760ed93fb347eeb64ad1a753038655dde`) and `ChatListViewTransition.swift` (`8de41fe517ae83f0ce46796e0d7ed3503d2e6958`). `release/ios` only adds the release-guard check and the UI-baseline note on top of that master. This fix is against that master. It does not carry any other unmerged work.
+`915d501731` was reviewed as FAIL and is not a release candidate. That commit's host test compiled a predicate and a handwritten delete/insert. It did not call `insertionPoint`, `removeNodeAtIndex`, or `insertNode`. Its 54pt band also left a 2pt and a 20pt scroll jumping by a full row. This note replaces that description.
 
-A normal message keeps `disableAnimations` true, so the reorder is not a height animation. `mergeListsStableWithUpdates` still reports an existing peer that moves to the front as a delete plus an insert with `previousIndex`. `preparedChatListNodeViewTransition` tags that insert `.Down` and leaves the delete hint nil. `ListViewState.insertionPoint` keeps an explicit `.Down` only when the anchor row's minY is at or below `itemOffsetInsets.top`.
+Checked against the trees, not the commit count. `origin/master` `c457d1c42c` is an ancestor of `origin/release/ios` `ebf2505b88` (`git merge-base --is-ancestor`). These three blobs match on both:
 
-The chat list's layout inset includes the expanded search (`searchScrollHeight` is 54). With the search collapsed, the first row rests 54pt above that inset, on screen just under the title. The `.Down` hint is dropped and the insert defaults to `.Up`: the new row is placed one row above the current top, and the delete has already shifted the rows below that slot up. `snapToBounds` only closes a gap below the inset, so the negative offset stays. The next promotion stacks another row. Server `getDialogs` ordering was not the cause; the same visual step happens for a same-second swap and a later-second swap.
+| File | Blob |
+| --- | --- |
+| `submodules/Display/Source/ListView.swift` | `f2dee38760ed93fb347eeb64ad1a753038655dde` |
+| `submodules/Display/Source/ListViewIntermediateState.swift` | `57a4b6952457c10db6f89236321a5fadfc6319a9` |
+| `submodules/ChatListUI/Sources/Node/ChatListViewTransition.swift` | `8de41fe517ae83f0ce46796e0d7ed3503d2e6958` |
 
-Search expanded (the first row already at the layout inset) already honored `.Down`. A list scrolled further than the collapsed-search band does not take the extra honor, so it is not pulled back to the top. `ChatListTopReorderPreservation.enabled` turns the extra honor off.
+`git diff --name-status origin/master...origin/release/ios` is only these five paths: `.github/workflows/release-guard.yml` and `Tellomi/check_release_guard.py` are added on release, and `.cursor/rules/telegram-native-first.mdc`, `AGENTS.md`, and `docs/TELLOMI.md` differ. Replacing `release/ios` with `master` would drop the two added files. This change does not do that.
+
+A normal message keeps `disableAnimations` true, so there is no `AnimateInsertion` height animation. `mergeListsStableWithUpdates` still reports the move as a delete plus an insert. `preparedChatListNodeViewTransition` sets `.Down` only for `.interactiveChanges`, and only for a contiguous run of visual indices that starts at 0. It does not look at `previousIndex`, so a new peer inserted at visual 0 gets the same hint as an existing one. `.reload` and `.holeChanges` do not set the hint. An insert that is not in that top run, including an unpinned chat moving up under pinned rows, does not get `.Down`.
+
+`ListViewState.insertionPoint` keeps that `.Down` only when the anchor minY is at or below `itemOffsetInsets.top`. With the search collapsed the first row rests 54pt above that inset, still on screen. The hint is dropped and the insert defaults to `.Up`. `removeNodeAtIndex` with a nil hint has already shifted the rows under the removed slot up when that slot's maxY still reaches the inset. `snapToBounds` only closes a gap. The visible edge moves up by one row. On this path the third promotion no longer moves the edge: the removed row's maxY is then above the inset, and the shift of the rows above it cancels the `.Up` insert. That is why the stack does not grow forever. The video is the first two moves.
+
+`deleteAndInsertItemsTransaction` reads the removed row's maxY before it deletes, and calls `listViewTopDownInsert`. That is the same comparison `removeNodeAtIndex` uses for a nil hint (`listViewNilHintRemovalMovesFollowingRows`). One `.Down` insert at index 0 and one delete of a later row:
+
+- The removed bottom still reaches the inset. The delete moves the rows under that slot up. The transaction forces `.Down`, so `insertionPoint` keeps the hint and `insertNode` pushes those rows back. The edge stays, including a 2pt or 20pt scroll and a one-row scroll whose second row still crosses the inset.
+- The removed bottom is already above the inset. The delete moves the rows above the slot down, and `.Up` puts the new row back on the old edge. Forcing `.Down` would move the edge down a row, so the hint is dropped. An off-screen top is this case.
+
+No `.Down` hint (`.reload`, `.holeChanges`), an insert that is not index 0, more than one delete, or a list that did not opt in, stays on the upstream gate. An unpinned chat moving under pinned rows is not a visual-0 insert, so it gets no `.Down` from `preparedChatListNodeViewTransition`.
+
+Every `ChatListNode` sets `preservesTopDownInsert`: the main list, a folder, the archive, a forum, and the peer picker. The rule still only runs for one index-0 `.Down` plus one later delete. `ChatListTopReorderPreservation.enabled` is a process-local static, default true. It is not a server switch.
 
 | File | Change |
 | --- | --- |
-| `submodules/ChatListUI/Sources/Node/ChatListTopReorderPreservation.swift` | The collapsed-header decision. |
-| `submodules/ChatListUI/Sources/Node/ChatListNode.swift` | Installs that decision on the chat list only. |
-| `submodules/Display/Source/ListViewIntermediateState.swift` | `insertionPoint` can keep a visible `.Down` hint above the layout inset. |
-| `submodules/Display/Source/ListView.swift` | `honorVisibleDownInsertion`. Nil on every list except the chat list. |
-| `submodules/ChatListUI/HostTests/ChatListTopReorderPreservationTests.swift` | The old `.Up` path stacks one row per promotion. Ten A/B promotions, a short list, and a long list stay on the collapsed edge. A scrolled list is not pulled to the top. |
-| `submodules/ChatListUI/BUILD` | Host `swift_test` `ChatListTopReorderPreservationTests`. |
-| `.github/workflows/pr-tests.yml` | The PR test job runs that host target. |
+| `submodules/Display/Source/ListViewTopDownInsert.swift` | The removed-maxY decision, shared with `removeNodeAtIndex`. |
+| `submodules/Display/Source/ListViewIntermediateState.swift` | `removeNodeAtIndex` uses that comparison. `insertionPoint` keeps index-0 `.Down` when the transaction says `forceIndexZeroDown`. |
+| `submodules/Display/Source/ListView.swift` | `preservesTopDownInsert`. The transaction calls `listViewTopDownInsert` before the delete. |
+| `submodules/Display/Tests/ListViewTopReorderTests.swift` | Calls `listViewTopDownInsert`, `removeNodeAtIndex`, `insertionPoint`, and `insertNode`. Upstream: the first two promotions each move the edge by one row, the third does not. Opted in: collapsed top, 2pt, 20pt, one row, two rows, 20.5pt, and a fully off-screen top all stay on the anchor. |
+| `submodules/Display/BUILD` | `//submodules/Display:ListViewTopReorderTests`, iPhone 17 / iOS 27.0. |
+| `submodules/ChatListUI/Sources/Node/ChatListTopReorderPreservation.swift` | The static. Not a server flag. |
+| `submodules/ChatListUI/Sources/Node/ChatListNode.swift` | Sets `preservesTopDownInsert` from that static on every chat list node. |
+| `.github/workflows/pr-tests.yml` | The existing PR test job runs that simulator target. The host predicate target is gone. |
 
 ## First login 2FA drops the permanent key, and Siri intents traps — 2026-11-15
 

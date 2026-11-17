@@ -113,7 +113,6 @@ jobs:
           # that fails fails the job. Feed proof is not in this list.
           host=(
             //submodules/ChatListUI:ChatListScrollAnchorTests
-            //submodules/ChatListUI:ChatListTopReorderPreservationTests
             //submodules/TellomiWallpapers:TellomiWallpapersTests
             //submodules/TelegramUIPreferences:TellomiTabNavigationDecisionsTests
             //submodules/TelegramUI/Components/Chat/ChatMessageInteractiveInstantVideoNode:RoundVideoTranscriptionDecisionTests
@@ -131,6 +130,7 @@ jobs:
             //submodules/TellomiDiscover:TellomiFeedChromeMotionTests
           )
           ios=(
+            //submodules/Display:ListViewTopReorderTests
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
             //submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode:PeerInfoPaneNodeTests
             //submodules/MtProtoKit:MtProtoKitTests

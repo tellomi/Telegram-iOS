@@ -1443,20 +1443,7 @@ public final class ChatListNode: ListViewImpl {
         self.verticalScrollIndicatorRespectsSideInsets = true
         
         self.keepMinimalScrollHeightWithTopInset = self.scrollHeightTopInset
-        self.honorVisibleDownInsertion = { request in
-            guard ChatListTopReorderPreservation.enabled else {
-                return false
-            }
-            return ChatListTopReorderPreservation.shouldHonorDownHint(
-                hintIsDown: request.hintIsDown,
-                anchorMinY: request.anchorMinY,
-                anchorMaxY: request.anchorMaxY,
-                itemOffsetInsetTop: request.itemOffsetInsetTop,
-                collapsedHeaderInset: ChatListNavigationBar.searchScrollHeight,
-                viewportMinY: 0,
-                viewportMaxY: request.viewportHeight
-            )
-        }
+        self.preservesTopDownInsert = ChatListTopReorderPreservation.enabled
         
         let nodeInteraction = ChatListNodeInteraction(context: context, animationCache: self.animationCache, animationRenderer: self.animationRenderer, activateSearch: { [weak self] in
             if let strongSelf = self, let activateSearch = strongSelf.activateSearch {

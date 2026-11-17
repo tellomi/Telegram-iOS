@@ -196,9 +196,9 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
     public final var visualInsets: UIEdgeInsets?
     private var itemOffsetInsets: UIEdgeInsets?
     public final var dynamicVisualInsets: (() -> UIEdgeInsets)?
-    /// Chat list sets this so a `.Down` insert at the collapsed-search resting edge is kept.
-    /// Nil leaves the upstream hint gate unchanged.
-    public final var honorVisibleDownInsertion: ListViewVisibleDownHintDecision?
+    /// Chat list sets this. A `.Down` insert at index 0 then follows `listViewTopDownInsert`
+    /// so the visible edge stays. Other lists leave it false.
+    public final var preservesTopDownInsert: Bool = false
     public private(set) final var headerInsets = UIEdgeInsets()
     public private(set) final var scrollIndicatorInsets = UIEdgeInsets()
     private final var ensureTopInsetForOverlayHighlightedItems: CGFloat?
@@ -2042,7 +2042,32 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
             }
             
             let animated = options.contains(.AnimateInsertion)
-            
+
+            var deletedMaxYByIndex: [Int: CGFloat] = [:]
+            for node in state.nodes {
+                guard let index = node.index, deleteIndexSet.contains(index) else {
+                    continue
+                }
+                deletedMaxYByIndex[index] = node.frame.maxY
+            }
+            let topDownInsert = listViewTopDownInsert(
+                downHintAtIndexZero: insertDirectionHints[0] == .Down,
+                deletedItemIndices: deleteIndices.map { $0.index },
+                deletedMaxYByIndex: deletedMaxYByIndex,
+                itemOffsetInsetTop: state.itemOffsetInsets.top,
+                listOptsIn: self.preservesTopDownInsert
+            )
+            let forceIndexZeroDown: Bool
+            switch topDownInsert {
+            case .forceDown:
+                forceIndexZeroDown = true
+            case .dropHint:
+                forceIndexZeroDown = false
+                insertDirectionHints[0] = nil
+            case .upstream:
+                forceIndexZeroDown = false
+            }
+
             var remapDeletion: [Int: Int] = [:]
             
             var i = 0
@@ -2142,7 +2167,7 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
                 print("deleteAndInsertItemsTransaction prepare \((CACurrentMediaTime() - startTime) * 1000.0) ms")
             }
             
-            self.fillMissingNodes(synchronous: options.contains(.Synchronous), synchronousLoads: options.contains(.PreferSynchronousResourceLoading), animated: animated, customAnimationTransition: updateSizeAndInsets?.customAnimationTransition, inputAnimatedInsertIndices: animated ? insertedIndexSet : Set<Int>(), insertDirectionHints: insertDirectionHints, inputState: state, inputPreviousNodes: previousNodes, inputOperations: operations, inputCompletion: { updatedState, operations in
+            self.fillMissingNodes(synchronous: options.contains(.Synchronous), synchronousLoads: options.contains(.PreferSynchronousResourceLoading), animated: animated, customAnimationTransition: updateSizeAndInsets?.customAnimationTransition, inputAnimatedInsertIndices: animated ? insertedIndexSet : Set<Int>(), insertDirectionHints: insertDirectionHints, forceIndexZeroDown: forceIndexZeroDown, inputState: state, inputPreviousNodes: previousNodes, inputOperations: operations, inputCompletion: { updatedState, operations in
                 
                 if self.debugInfo {
                     print("fillMissingNodes completion \((CACurrentMediaTime() - startTime) * 1000.0) ms")
@@ -2357,7 +2382,7 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
         }
     }
     
-    private func fillMissingNodes(synchronous: Bool, synchronousLoads: Bool, animated: Bool, customAnimationTransition: ControlledTransition?, inputAnimatedInsertIndices: Set<Int>, insertDirectionHints: [Int: ListViewItemOperationDirectionHint], inputState: ListViewState, inputPreviousNodes: [Int: QueueLocalObject<ListViewItemNode>], inputOperations: [ListViewStateOperation], inputCompletion: @escaping (ListViewState, [ListViewStateOperation]) -> Void) {
+    private func fillMissingNodes(synchronous: Bool, synchronousLoads: Bool, animated: Bool, customAnimationTransition: ControlledTransition?, inputAnimatedInsertIndices: Set<Int>, insertDirectionHints: [Int: ListViewItemOperationDirectionHint], forceIndexZeroDown: Bool = false, inputState: ListViewState, inputPreviousNodes: [Int: QueueLocalObject<ListViewItemNode>], inputOperations: [ListViewStateOperation], inputCompletion: @escaping (ListViewState, [ListViewStateOperation]) -> Void) {
         let animatedInsertIndices = inputAnimatedInsertIndices
         var state = inputState
         let previousNodes = inputPreviousNodes
@@ -2379,7 +2404,7 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
                     assert(true)
                 }
                 
-                if let insertionPoint = state.insertionPoint(insertDirectionHints, itemCount: self.items.count, honorVisibleDownHint: self.honorVisibleDownInsertion) {
+                if let insertionPoint = state.insertionPoint(insertDirectionHints, itemCount: self.items.count, forceIndexZeroDown: forceIndexZeroDown) {
                     insertionItemIndexAndDirection = (insertionPoint.index, insertionPoint.direction)
                 }
                 
@@ -2399,7 +2424,7 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
                             var updatedState = state
                             var updatedOperations = operations
                             updatedState.insertNode(index, node: node, layout: layout, apply: apply, offsetDirection: insertionItemIndexAndDirection.1, animated: animated && animatedInsertIndices.contains(index), operations: &updatedOperations, itemCount: self.items.count)
-                            self.fillMissingNodes(synchronous: synchronous, synchronousLoads: synchronousLoads, animated: animated, customAnimationTransition: customAnimationTransition, inputAnimatedInsertIndices: animatedInsertIndices, insertDirectionHints: insertDirectionHints, inputState: updatedState, inputPreviousNodes: previousNodes, inputOperations: updatedOperations, inputCompletion: completion)
+                            self.fillMissingNodes(synchronous: synchronous, synchronousLoads: synchronousLoads, animated: animated, customAnimationTransition: customAnimationTransition, inputAnimatedInsertIndices: animatedInsertIndices, insertDirectionHints: insertDirectionHints, forceIndexZeroDown: forceIndexZeroDown, inputState: updatedState, inputPreviousNodes: previousNodes, inputOperations: updatedOperations, inputCompletion: completion)
                         }
                     })
                     if !tailRecurse {
