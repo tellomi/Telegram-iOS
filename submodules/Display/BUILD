@@ -85,6 +85,23 @@ plist_fragment(
     <string>1</string>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+        <key>UISceneConfigurations</key>
+        <dict>
+            <key>UIWindowSceneSessionRoleApplication</key>
+            <array>
+                <dict>
+                    <key>UISceneConfigurationName</key>
+                    <string>Default</string>
+                    <key>UISceneDelegateClassName</key>
+                    <string>ListViewReorderHostSceneDelegate</string>
+                </dict>
+            </array>
+        </dict>
+    </dict>
     """,
 )
 
@@ -101,10 +118,9 @@ ios_application(
     visibility = ["//visibility:public"],
 )
 
-# Application tests install a host. On the PR runner a fresh iPhone 17 / 27.0
-# simulator reports booted, then "could not be booted in 60s", then xcodebuild
-# sits 150s without starting XCTest. The runner retries 3 times. The default
-# moderate timeout (~300s) kills that loop on attempt 1 (Terminated: 15).
+# xctestrunner exits 12 (TEST_NOT_START) unless stdout contains "Test Suite"
+# within startup_timeout_sec (150), and it retries that three times. The
+# moderate Bazel timeout kills the process on attempt 1.
 ios_unit_test(
     name = "ListViewTopReorderTests",
     minimum_os_version = "15.0",

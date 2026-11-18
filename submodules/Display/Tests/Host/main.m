@@ -2,26 +2,42 @@
 
 /// Application host for the list-reorder unit tests.
 ///
-/// The PR runner otherwise starts them as a logic test ("the app under test is
-/// not given"). In that process `CADisplayLink` comes back nil, and `ListView`
-/// stores it in a non-optional implicit unwrap. A real `UIApplication` with a
-/// key window is what the shipping app has when it creates the same link.
+/// xctestrunner waits for the literal "Test Suite" before it considers XCTest
+/// started. On head 37990d7418 both targets compiled, then xcodebuild printed
+/// "Testing started" and never "Test Suite" (exit 12, three attempts). That
+/// host created its window with initWithFrame: inside didFinishLaunching. The
+/// window is now attached to the scene xcodebuild connects, and the same
+/// object is stored on the delegate so the tests can read it.
 @interface ListViewReorderHostDelegate : UIResponder <UIApplicationDelegate>
+@property (nonatomic, strong) UIWindow *window;
+@end
+
+@interface ListViewReorderHostSceneDelegate : UIResponder <UIWindowSceneDelegate>
 @property (nonatomic, strong) UIWindow *window;
 @end
 
 @implementation ListViewReorderHostDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    CGRect bounds = UIScreen.mainScreen.bounds;
-    if (bounds.size.width < 1.0 || bounds.size.height < 1.0) {
-        bounds = CGRectMake(0.0, 0.0, 390.0, 844.0);
+    return YES;
+}
+
+@end
+
+@implementation ListViewReorderHostSceneDelegate
+
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
+    if (![scene isKindOfClass:[UIWindowScene class]]) {
+        return;
     }
-    UIWindow *window = [[UIWindow alloc] initWithFrame:bounds];
+    UIWindow *window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
     window.rootViewController = [[UIViewController alloc] init];
     [window makeKeyAndVisible];
     self.window = window;
-    return YES;
+    ListViewReorderHostDelegate *delegate = (ListViewReorderHostDelegate *)UIApplication.sharedApplication.delegate;
+    if ([delegate isKindOfClass:[ListViewReorderHostDelegate class]]) {
+        delegate.window = window;
+    }
 }
 
 @end
