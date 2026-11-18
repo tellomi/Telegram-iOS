@@ -1,5 +1,46 @@
 # Upstream patches
 
+## Chat list rows slide under the title — 2026-11-17
+
+ISSUE-I-CHATLIST-SCROLL-UNDER-TITLE-001. The list is already at the top. Two peers take turns receiving messages. The first two times the other peer becomes row 0, the rows move up by about one row and stay there. The title and the bottom tab do not move. The recording shows those two moves. It does not show an endless stack after that.
+
+`915d501731` was reviewed as FAIL and is not a release candidate. That commit's host test compiled a predicate and a handwritten delete/insert. It did not call `insertionPoint`, `removeNodeAtIndex`, or `insertNode`. Its 54pt band also left a 2pt and a 20pt scroll jumping by a full row. This note replaces that description.
+
+Checked against the trees, not the commit count. `origin/master` `c457d1c42c` is an ancestor of `origin/release/ios` `ebf2505b88` (`git merge-base --is-ancestor`). These three blobs match on both:
+
+| File | Blob |
+| --- | --- |
+| `submodules/Display/Source/ListView.swift` | `f2dee38760ed93fb347eeb64ad1a753038655dde` |
+| `submodules/Display/Source/ListViewIntermediateState.swift` | `57a4b6952457c10db6f89236321a5fadfc6319a9` |
+| `submodules/ChatListUI/Sources/Node/ChatListViewTransition.swift` | `8de41fe517ae83f0ce46796e0d7ed3503d2e6958` |
+
+`git diff --name-status origin/master...origin/release/ios` is only these five paths: `.github/workflows/release-guard.yml` and `Tellomi/check_release_guard.py` are added on release, and `.cursor/rules/telegram-native-first.mdc`, `AGENTS.md`, and `docs/TELLOMI.md` differ. Replacing `release/ios` with `master` would drop the two added files. This change does not do that.
+
+A normal message keeps `disableAnimations` true, so there is no `AnimateInsertion` height animation. `mergeListsStableWithUpdates` still reports the move as a delete plus an insert. `preparedChatListNodeViewTransition` sets `.Down` only for `.interactiveChanges`, and only for a contiguous run of visual indices that starts at 0. It does not look at `previousIndex`, so a new peer inserted at visual 0 gets the same hint as an existing one. `.reload` and `.holeChanges` do not set the hint. An insert that is not in that top run, including an unpinned chat moving up under pinned rows, does not get `.Down`.
+
+`ListViewState.insertionPoint` keeps that `.Down` only when the anchor minY is at or below `itemOffsetInsets.top`. With the search collapsed the first row rests 54pt above that inset, still on screen. The hint is dropped and the insert defaults to `.Up`. `removeNodeAtIndex` with a nil hint has already shifted the rows under the removed slot up when that slot's maxY still reaches the inset. `snapToBounds` only closes a gap. The visible edge moves up by one row. On this path the third promotion no longer moves the edge: the removed row's maxY is then above the inset, and the shift of the rows above it cancels the `.Up` insert. That is why the stack does not grow forever. The video is the first two moves.
+
+`deleteAndInsertItemsTransaction` reads the removed row's maxY before it deletes, and calls `listViewTopDownInsert`. That is the same comparison `removeNodeAtIndex` uses for a nil hint (`listViewNilHintRemovalMovesFollowingRows`). One `.Down` insert at index 0 and one delete of a later row:
+
+- The removed bottom still reaches the inset. The delete moves the rows under that slot up. The transaction forces `.Down`, so `insertionPoint` keeps the hint and `insertNode` pushes those rows back. The edge stays, including a 2pt or 20pt scroll and a one-row scroll whose second row still crosses the inset.
+- The removed bottom is already above the inset. The delete moves the rows above the slot down, and `.Up` puts the new row back on the old edge. Forcing `.Down` would move the edge down a row, so the hint is dropped. An off-screen top is this case.
+
+No `.Down` hint (`.reload`, `.holeChanges`), an insert that is not index 0, more than one delete, or a list that did not opt in, stays on the upstream gate. An unpinned chat moving under pinned rows is not a visual-0 insert, so it gets no `.Down` from `preparedChatListNodeViewTransition`.
+
+Every `ChatListNode` sets `preservesTopDownInsert`: the main list, a folder, the archive, a forum, and the peer picker. The rule still only runs for one index-0 `.Down` plus one later delete. `ChatListTopReorderPreservation.enabled` is a process-local static, default true. It is not a server switch.
+
+| File | Change |
+| --- | --- |
+| `submodules/Display/Source/ListViewTopDownInsert.swift` | The removed-maxY decision, shared with `removeNodeAtIndex`. |
+| `submodules/Display/Source/ListViewIntermediateState.swift` | `removeNodeAtIndex` uses that comparison. `insertionPoint` keeps index-0 `.Down` when the transaction says `forceIndexZeroDown`. |
+| `submodules/Display/Source/ListView.swift` | `preservesTopDownInsert`. The transaction calls `listViewTopDownInsert` before the delete. The display link is created the same way as before: `CADisplayLink(target:selector:)` is non-optional in the Xcode 27 SDK, added to the main run loop, and paused until an animation asks for frames. |
+| `submodules/Display/Tests/ListViewTopReorderTests.swift` | Enters `ListView.transaction` with `preservesTopDownInsert` on and off. It does not sample maxY or choose the direction. Upstream: the first two promotions each move the edge by one row, the third does not. Opted in: short lists, unequal heights, a collapsed search, 2pt, 20pt, 20.5pt, one row, and an index-4 promotion stay on the anchor. Two rows and a fully off-screen top match the upstream edge. A new-peer insert, two deletes, and an insert that is not index 0 are not forced. |
+| `submodules/Display/BUILD` | `//submodules/Display:ListViewTopReorderTests`, iPhone 17 / iOS 27.0. |
+| `submodules/ChatListUI/Sources/Node/ChatListTopReorderPreservation.swift` | `install(on:)` writes the static onto the list. Not a server flag. |
+| `submodules/ChatListUI/Sources/Node/ChatListNode.swift` | `init` calls `install(on:)`. |
+| `submodules/ChatListUI/Tests/ChatListTopReorderInstallationTests.swift` | Constructs `ChatListNode.init` and then runs `ListView.transaction`. The test does not set the flag itself. |
+| `.github/workflows/pr-tests.yml` | The existing PR test job runs both simulator targets. The host predicate target is gone. |
+
 ## First login 2FA drops the permanent key, and Siri intents traps — 2026-11-15
 
 TestFlight 14.0.6 (97), commit `6626dde7399e55c7f9dc5e7cf2f22634a1269430`, dSYM artifact `dsym-97` from TestFlight run 43657562468. The crash is `app.tellomi.chat.SiriIntents`, `EXC_BREAKPOINT` / `SIGTRAP`. Text-segment offsets (framework `__TEXT` vmaddr `0`, extension `__TEXT` vmaddr `0x100000000`):

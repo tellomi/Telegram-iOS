@@ -148,7 +148,14 @@ swift_library(
 swift_library(
     name = "ChatListUITestsLib",
     testonly = True,
-    srcs = glob(["Tests/**/*.swift"]),
+    srcs = glob(
+        ["Tests/**/*.swift"],
+        exclude = [
+            "Tests/ChatListTopReorderInstallationTests.swift",
+            "Tests/ReorderProbeAccountContext+Generated.swift",
+            "Tests/ReorderProbeSharedAccountContext+Generated.swift",
+        ],
+    ),
     deps = [
         ":ChatListUI",
         "//submodules/TelegramCore:TelegramCore",
@@ -157,6 +164,36 @@ swift_library(
         "//submodules/TelegramUIPreferences:TelegramUIPreferences",
         "//submodules/TelegramStringFormatting:TelegramStringFormatting",
         "//submodules/TextFormat:TextFormat",
+        "//submodules/AppBundle:AppBundle",
+    ],
+)
+
+swift_library(
+    name = "ChatListTopReorderInstallationTestsLib",
+    testonly = True,
+    srcs = [
+        "Tests/ChatListTopReorderInstallationTests.swift",
+        "Tests/ReorderProbeAccountContext+Generated.swift",
+        "Tests/ReorderProbeSharedAccountContext+Generated.swift",
+    ],
+    deps = [
+        ":ChatListUI",
+        "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
+        "//submodules/Postbox:Postbox",
+        "//submodules/TelegramCore:TelegramCore",
+        "//submodules/AccountContext",
+        "//submodules/TelegramPresentationData:TelegramPresentationData",
+        "//submodules/TelegramUIPreferences:TelegramUIPreferences",
+        "//submodules/Display:Display",
+        "//submodules/AsyncDisplayKit:AsyncDisplayKit",
+        "//submodules/DeviceLocationManager:DeviceLocationManager",
+        "//submodules/TemporaryCachedPeerDataManager:TemporaryCachedPeerDataManager",
+        "//submodules/InAppPurchaseManager:InAppPurchaseManager",
+        "//submodules/TelegramUI/Components/AnimationCache:AnimationCache",
+        "//submodules/TelegramUI/Components/MultiAnimationRenderer:MultiAnimationRenderer",
+        "//submodules/TextFormat:TextFormat",
+        "//submodules/WalletContext",
+        "//submodules/LottieSettings:LottieSettings",
         "//submodules/AppBundle:AppBundle",
     ],
 )
@@ -173,5 +210,22 @@ ios_unit_test(
     runner = ":ChatListUITestRunner",
     resources = ["//Telegram:InstantPagePreviewTestStrings"],
     deps = [":ChatListUITestsLib"],
+    visibility = ["//visibility:public"],
+)
+
+# xcode-27 PR runners have iPhone 17 on iOS 27.0.
+ios_test_runner(
+    name = "ChatListTopReorderInstallationTestRunner",
+    device_type = "iPhone 17",
+    os_version = "27.0",
+)
+
+# No test_host. See ListViewTopReorderTests: xcodebuild never prints Test Suite.
+ios_unit_test(
+    name = "ChatListTopReorderInstallationTests",
+    minimum_os_version = "15.0",
+    runner = ":ChatListTopReorderInstallationTestRunner",
+    resources = ["//Telegram:InstantPagePreviewTestStrings"],
+    deps = [":ChatListTopReorderInstallationTestsLib"],
     visibility = ["//visibility:public"],
 )

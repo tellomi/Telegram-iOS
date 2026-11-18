@@ -319,7 +319,7 @@ enum ListViewStateNode {
     }
 }
 
-enum ListViewInsertionOffsetDirection {
+enum ListViewInsertionOffsetDirection: Equatable {
     case Up
     case Down
     
@@ -535,7 +535,14 @@ struct ListViewState {
         }
     }
     
-    func insertionPoint(_ insertDirectionHints: [Int: ListViewItemOperationDirectionHint], itemCount: Int) -> ListViewInsertionPoint? {
+    private func honorsInsertionHint(_ hint: ListViewItemOperationDirectionHint, insertionIndex: Int, aboveInset: Bool, forceIndexZeroDown: Bool) -> Bool {
+        if aboveInset {
+            return true
+        }
+        return forceIndexZeroDown && hint == .Down && insertionIndex == 0
+    }
+
+    func insertionPoint(_ insertDirectionHints: [Int: ListViewItemOperationDirectionHint], itemCount: Int, forceIndexZeroDown: Bool = false) -> ListViewInsertionPoint? {
         var fixedNode: (nodeIndex: Int, index: Int, frame: CGRect)?
         
         if let (fixedIndex, _) = self.scrollPosition {
@@ -594,8 +601,12 @@ struct ListViewState {
                     if index != currentUpperNode.index - 1 {
                         if currentUpperNode.frame.minY > -self.invisibleInset - CGFloat.ulpOfOne {
                             var directionHint: ListViewInsertionOffsetDirection?
-                            if let hint = insertDirectionHints[currentUpperNode.index - 1] , currentUpperNode.frame.minY > self.itemOffsetInsets.top - CGFloat.ulpOfOne {
-                                directionHint = ListViewInsertionOffsetDirection(hint)
+                            if let hint = insertDirectionHints[currentUpperNode.index - 1] {
+                                let insertionIndex = currentUpperNode.index - 1
+                                let aboveInset = currentUpperNode.frame.minY > self.itemOffsetInsets.top - CGFloat.ulpOfOne
+                                if self.honorsInsertionHint(hint, insertionIndex: insertionIndex, aboveInset: aboveInset, forceIndexZeroDown: forceIndexZeroDown) {
+                                    directionHint = ListViewInsertionOffsetDirection(hint)
+                                }
                             }
                             return ListViewInsertionPoint(index: currentUpperNode.index - 1, point: CGPoint(x: 0.0, y: currentUpperNode.frame.minY), direction: directionHint ?? .Up)
                         } else {
@@ -609,7 +620,9 @@ struct ListViewState {
             if currentUpperNode.index != 0 && currentUpperNode.frame.minY > -self.invisibleInset - CGFloat.ulpOfOne {
                 var directionHint: ListViewInsertionOffsetDirection?
                 if let hint = insertDirectionHints[currentUpperNode.index - 1] {
-                    if currentUpperNode.frame.minY >= self.itemOffsetInsets.top - CGFloat.ulpOfOne {
+                    let insertionIndex = currentUpperNode.index - 1
+                    let aboveInset = currentUpperNode.frame.minY >= self.itemOffsetInsets.top - CGFloat.ulpOfOne
+                    if self.honorsInsertionHint(hint, insertionIndex: insertionIndex, aboveInset: aboveInset, forceIndexZeroDown: forceIndexZeroDown) {
                         directionHint = ListViewInsertionOffsetDirection(hint)
                     }
                 } else if currentUpperNode.frame.minY >= self.itemOffsetInsets.top - CGFloat.ulpOfOne && !fixedNodeIsStationary {
@@ -867,7 +880,7 @@ struct ListViewState {
                 self.nodes.insert(.Placeholder(frame: nodeFrame), at: index)
                 operations.append(.InsertDisappearingPlaceholder(index: index, referenceNode: referenceNode, offsetDirection: offsetDirection.inverted()))
             } else {
-                if nodeFrame.maxY > self.itemOffsetInsets.top - CGFloat.ulpOfOne {
+                if listViewNilHintRemovalMovesFollowingRows(removedMaxY: nodeFrame.maxY, itemOffsetInsetTop: self.itemOffsetInsets.top) {
                     if let direction = direction , direction == .Down && node.frame.minY < self.visibleSize.height - self.itemOffsetInsets.bottom + CGFloat.ulpOfOne {
                         for i in (0 ..< index).reversed() {
                             var frame = self.nodes[i].frame

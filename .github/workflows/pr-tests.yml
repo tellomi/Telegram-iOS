@@ -130,6 +130,8 @@ jobs:
             //submodules/TellomiDiscover:TellomiFeedChromeMotionTests
           )
           ios=(
+            //submodules/Display:ListViewTopReorderTests
+            //submodules/ChatListUI:ChatListTopReorderInstallationTests
             //submodules/TelegramUI/Components/TabBarLayout:TabBarLayoutTests
             //submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode:PeerInfoPaneNodeTests
             //submodules/MtProtoKit:MtProtoKitTests

@@ -1,6 +1,8 @@
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
-load("@build_bazel_rules_apple//apple:ios.bzl", "ios_unit_test")
+load("@build_bazel_rules_apple//apple:ios.bzl", "ios_application", "ios_unit_test")
 load("@build_bazel_rules_apple//apple/testing/default_runner:ios_test_runner.bzl", "ios_test_runner")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+load("//build-system/bazel-utils:plist_fragment.bzl", "plist_fragment")
 
 swift_library(
     name = "Display",
@@ -27,9 +29,19 @@ swift_library(
 swift_library(
     name = "DisplayTestsLib",
     testonly = True,
-    srcs = glob([
-        "Tests/**/*.swift",
-    ]),
+    srcs = glob(
+        ["Tests/**/*.swift"],
+        exclude = ["Tests/ListViewTopReorderTests.swift"],
+    ),
+    deps = [
+        ":Display",
+    ],
+)
+
+swift_library(
+    name = "ListViewTopReorderTestsLib",
+    testonly = True,
+    srcs = ["Tests/ListViewTopReorderTests.swift"],
     deps = [
         ":Display",
     ],
@@ -41,6 +53,85 @@ ios_test_runner(
     name = "DisplayTestRunner",
     device_type = "iPhone 17",
     os_version = "26.5",
+)
+
+# xcode-27 PR runners have iPhone 17 on iOS 27.0. The 26.5 runner above is for
+# the older Display suite and is not what this target uses.
+ios_test_runner(
+    name = "ListViewTopReorderTestRunner",
+    device_type = "iPhone 17",
+    os_version = "27.0",
+)
+
+objc_library(
+    name = "ListViewReorderTestHostLib",
+    testonly = True,
+    srcs = ["Tests/Host/main.m"],
+    sdk_frameworks = ["UIKit"],
+)
+
+# rules_apple plisttool sets version_keys_required for ios_application and
+# checks CFBundleVersion first, then CFBundleShortVersionString. "1" and "1.0"
+# match the validators in tools/plisttool/plisttool.py.
+plist_fragment(
+    name = "ListViewReorderTestHostInfo",
+    extension = "plist",
+    template = """
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>UIApplicationSupportsIndirectInputEvents</key>
+    <true/>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+        <key>UISceneConfigurations</key>
+        <dict>
+            <key>UIWindowSceneSessionRoleApplication</key>
+            <array>
+                <dict>
+                    <key>UISceneConfigurationName</key>
+                    <string>Default</string>
+                    <key>UISceneDelegateClassName</key>
+                    <string>ListViewReorderHostSceneDelegate</string>
+                </dict>
+            </array>
+        </dict>
+    </dict>
+    """,
+)
+
+# No provisioning profile: PR CI's configuration exports an empty provisioning
+# package when profiles are disabled. Simulator signing does not need one.
+ios_application(
+    name = "ListViewReorderTestHost",
+    testonly = True,
+    bundle_id = "org.telegram.ListViewReorderTestHost",
+    families = ["iphone"],
+    minimum_os_version = "15.0",
+    infoplists = [":ListViewReorderTestHostInfo"],
+    deps = [":ListViewReorderTestHostLib"],
+    visibility = ["//visibility:public"],
+)
+
+# No test_host. On head 2bb0f279c7 xcodebuild test-without-building still
+# exited 12 after the leftover bootstatus process was stopped: three attempts,
+# no "Test Suite". The same job's hostless tests print Test Suite and pass.
+# xctestrunner only uses that simctl spawn path when no app is given.
+ios_unit_test(
+    name = "ListViewTopReorderTests",
+    minimum_os_version = "15.0",
+    runner = ":ListViewTopReorderTestRunner",
+    deps = [
+        ":ListViewTopReorderTestsLib",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
 )
 
 ios_unit_test(
