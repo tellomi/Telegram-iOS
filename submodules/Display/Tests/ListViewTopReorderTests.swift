@@ -1,7 +1,23 @@
+import Darwin
 import UIKit
 import XCTest
 import SwiftSignalKit
 @testable import Display
+
+private func reorderDiag(_ step: String) {
+    fputs("reorder-diag: \(step)\n", stderr)
+    fflush(stderr)
+}
+
+private let reorderTrapHandler: @convention(c) (Int32) -> Void = { _ in
+    fputs("reorder-diag: caught-signal\n", stderr)
+    let storage = UnsafeMutablePointer<UnsafeMutableRawPointer?>.allocate(capacity: 64)
+    let count = backtrace(storage, 64)
+    backtrace_symbols_fd(storage, count, STDERR_FILENO)
+    fflush(stderr)
+    storage.deallocate()
+    _exit(11)
+}
 
 /// One row of fixed height. The list lays it out through the normal item path.
 private final class FixedHeightRow: ListViewItem {
@@ -37,15 +53,25 @@ final class ListViewTopReorderTests: XCTestCase {
         super.tearDown()
     }
 
-    /// simctl spawn reaches Test Suite. `UIApplication.shared` in that process
-    /// traps before the list is built (head 5d73f74cc3). A screen window is
-    /// installed first so `ListView.init` creates its display link against a key window.
+    /// Line probe for head 2dab5041: the first case trapped with signal 5 before
+    /// `reorder-diag: host window ready`, so `UIScreen.main` and `UIWindow` were
+    /// not separated. Each step is flushed before the call. A caught SIGTRAP
+    /// writes a backtrace. The frame assertions are unchanged.
     private func hostContentView() -> UIView {
+        signal(SIGTRAP, reorderTrapHandler)
+        signal(SIGABRT, reorderTrapHandler)
+        reorderDiag("before UIScreen.main")
         let screen = UIScreen.main.bounds
+        reorderDiag("after UIScreen.main \(screen.width)x\(screen.height)")
         let frame = screen.width > 1 ? screen : CGRect(x: 0, y: 0, width: self.width, height: self.height)
+        reorderDiag("before UIWindow(frame:)")
         let window = UIWindow(frame: frame)
+        reorderDiag("after UIWindow(frame:)")
+        reorderDiag("before rootViewController")
         window.rootViewController = UIViewController()
+        reorderDiag("before makeKeyAndVisible")
         window.makeKeyAndVisible()
+        reorderDiag("after makeKeyAndVisible key=\(window.isKeyWindow)")
         self.retainedWindow = window
         XCTAssertTrue(window.isKeyWindow)
         let view = window.rootViewController?.view
