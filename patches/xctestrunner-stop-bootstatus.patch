@@ -1,0 +1,27 @@
+--- a/xctestrunner/test_runner/ios_test_runner.py	2026-11-18 02:06:46.265249959 +0000
++++ b/xctestrunner/test_runner/ios_test_runner.py	2026-11-18 02:06:46.285250230 +0000
+@@ -200,12 +200,23 @@
+             signing_options=_GetJson(args.signing_options_json_path))
+         session.SetLaunchOptions(_GetJson(args.launch_options_json_path))
+         if not hostless:
++          boot_status = simulator_obj.BootStatus()
+           try:
+-            simulator_obj.BootStatus().wait(timeout=60)
++            boot_status.wait(timeout=60)
+           except subprocess.TimeoutExpired:
+             logging.warning(
+                 'The simulator %s could not be booted in 60s. Will try to run '
+                 'test directly.', simulator_id)
++            # Popen.wait(timeout=) leaves the child running. xcodebuild then
++            # never prints "Test Suite" (runner exit 12) while that bootstatus
++            # still holds the simulator, including on the later retries.
++            try:
++              boot_status.kill()
++            except ProcessLookupError:
++              pass
++            boot_status.wait()
++            logging.warning(
++                'Stopped leftover simctl bootstatus before xcodebuild.')
+         return session.RunTest(simulator_id, os_version=os_version)
+       finally:
+         simulator_obj.Delete()

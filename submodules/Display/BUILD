@@ -118,9 +118,10 @@ ios_application(
     visibility = ["//visibility:public"],
 )
 
-# xctestrunner exits 12 (TEST_NOT_START) unless stdout contains "Test Suite"
-# within startup_timeout_sec (150), and it retries that three times. The
-# moderate Bazel timeout kills the process on attempt 1.
+# xctestrunner exits 12 unless stdout contains "Test Suite" within 150s, and
+# it retries that three times. The moderate Bazel timeout kills attempt 1.
+# patches/xctestrunner-stop-bootstatus.patch reaps the bootstatus it leaves
+# running, which is what kept those attempts from printing "Test Suite".
 ios_unit_test(
     name = "ListViewTopReorderTests",
     minimum_os_version = "15.0",
