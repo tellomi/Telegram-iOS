@@ -220,13 +220,11 @@ ios_test_runner(
     os_version = "27.0",
 )
 
-# Same simulator-start timeout as ListViewTopReorderTests. See that target.
+# No test_host. See ListViewTopReorderTests: xcodebuild never prints Test Suite.
 ios_unit_test(
     name = "ChatListTopReorderInstallationTests",
     minimum_os_version = "15.0",
     runner = ":ChatListTopReorderInstallationTestRunner",
-    test_host = "//submodules/Display:ListViewReorderTestHost",
-    timeout = "long",
     resources = ["//Telegram:InstantPagePreviewTestStrings"],
     deps = [":ChatListTopReorderInstallationTestsLib"],
     visibility = ["//visibility:public"],

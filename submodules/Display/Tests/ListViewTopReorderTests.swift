@@ -30,18 +30,25 @@ final class ListViewTopReorderTests: XCTestCase {
     private let width: CGFloat = 390
     private let height: CGFloat = 800
     private let insetTop: CGFloat = 200
+    private var retainedWindow: UIWindow?
 
-    /// The host plist has no scene manifest and creates the window with
-    /// `initWithFrame:`. That window is `UIApplicationDelegate.window`. It is
-    /// not required to appear in `UIWindowScene.windows`.
+    override func tearDown() {
+        self.retainedWindow = nil
+        super.tearDown()
+    }
+
+    /// simctl spawn reaches Test Suite. `UIApplication.shared` in that process
+    /// traps before the list is built (head 5d73f74cc3). A screen window is
+    /// installed first so `ListView.init` creates its display link against a key window.
     private func hostContentView() -> UIView {
-        let delegateWindow = UIApplication.shared.delegate?.window ?? nil
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let sceneWindow = scenes.flatMap { $0.windows }.first { $0.isKeyWindow } ?? scenes.flatMap { $0.windows }.first
-        let window = delegateWindow ?? sceneWindow
-        XCTAssertNotNil(window, "host delegate window and scene windows are both nil")
-        XCTAssertTrue(window?.isKeyWindow == true)
-        let view = window?.rootViewController?.view
+        let screen = UIScreen.main.bounds
+        let frame = screen.width > 1 ? screen : CGRect(x: 0, y: 0, width: self.width, height: self.height)
+        let window = UIWindow(frame: frame)
+        window.rootViewController = UIViewController()
+        window.makeKeyAndVisible()
+        self.retainedWindow = window
+        XCTAssertTrue(window.isKeyWindow)
+        let view = window.rootViewController?.view
         XCTAssertNotNil(view)
         return view!
     }

@@ -205,16 +205,6 @@ local_path_override(
 )
 
 bazel_dep(name = "rules_apple", repo_name = "build_bazel_rules_apple")
-
-# Same pin as rules_apple. The patch reaps `simctl bootstatus` when its 60s
-# wait expires. Otherwise that process keeps the simulator, and xcodebuild
-# never prints "Test Suite" (exit 12).
-bazel_dep(name = "xctestrunner", version = "0.2.16-20260212-4c6f493")
-single_version_override(
-    module_name = "xctestrunner",
-    patches = ["//patches:xctestrunner-stop-bootstatus.patch"],
-    patch_strip = 1,
-)
 local_path_override(
     module_name = "rules_apple",
     path = "./build-system/bazel-rules/rules_apple",

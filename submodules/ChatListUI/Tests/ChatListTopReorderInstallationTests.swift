@@ -83,6 +83,14 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
     private let insetTop: CGFloat = 200
     private let row: CGFloat = 76
     private let dateFormat = PresentationDateTimeFormat(timeFormat: .military, dateFormat: .dayFirst, dateSeparator: ".", dateSuffix: "", requiresFullYear: false, decimalSeparator: ".", groupingSeparator: "")
+    private var retainedWindow: UIWindow?
+
+    override func tearDown() {
+        self.retainedWindow = nil
+        ChatListTopReorderPreservation.returnAfterInstall = false
+        ChatListTopReorderPreservation.enabled = true
+        super.tearDown()
+    }
 
     override class func setUp() {
         super.setUp()
@@ -104,13 +112,14 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
     }
 
     private func hostContentView() -> UIView {
-        let delegateWindow = UIApplication.shared.delegate?.window ?? nil
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let sceneWindow = scenes.flatMap { $0.windows }.first { $0.isKeyWindow } ?? scenes.flatMap { $0.windows }.first
-        let window = delegateWindow ?? sceneWindow
-        XCTAssertNotNil(window, "host delegate window and scene windows are both nil")
-        XCTAssertTrue(window?.isKeyWindow == true)
-        let view = window?.rootViewController?.view
+        let screen = UIScreen.main.bounds
+        let frame = screen.width > 1 ? screen : CGRect(x: 0, y: 0, width: self.width, height: self.height)
+        let window = UIWindow(frame: frame)
+        window.rootViewController = UIViewController()
+        window.makeKeyAndVisible()
+        self.retainedWindow = window
+        XCTAssertTrue(window.isKeyWindow)
+        let view = window.rootViewController?.view
         XCTAssertNotNil(view)
         return view!
     }
@@ -209,12 +218,6 @@ final class ChatListTopReorderInstallationTests: XCTestCase {
             delete: [ListViewDeleteItem(index: index, directionHint: nil)],
             insert: [ListViewInsertItem(index: 0, previousIndex: index, item: FixedHeightRow(rowHeight: self.row), directionHint: .Down)]
         )
-    }
-
-    override func tearDown() {
-        ChatListTopReorderPreservation.returnAfterInstall = false
-        ChatListTopReorderPreservation.enabled = true
-        super.tearDown()
     }
 
     func testInstalledNodeKeepsTheCollapsedAnchor() {

@@ -118,16 +118,14 @@ ios_application(
     visibility = ["//visibility:public"],
 )
 
-# xctestrunner exits 12 unless stdout contains "Test Suite" within 150s, and
-# it retries that three times. The moderate Bazel timeout kills attempt 1.
-# patches/xctestrunner-stop-bootstatus.patch reaps the bootstatus it leaves
-# running, which is what kept those attempts from printing "Test Suite".
+# No test_host. On head 2bb0f279c7 xcodebuild test-without-building still
+# exited 12 after the leftover bootstatus process was stopped: three attempts,
+# no "Test Suite". The same job's hostless tests print Test Suite and pass.
+# xctestrunner only uses that simctl spawn path when no app is given.
 ios_unit_test(
     name = "ListViewTopReorderTests",
     minimum_os_version = "15.0",
     runner = ":ListViewTopReorderTestRunner",
-    test_host = ":ListViewReorderTestHost",
-    timeout = "long",
     deps = [
         ":ListViewTopReorderTestsLib",
     ],
